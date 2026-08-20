@@ -1,0 +1,6 @@
+{
+  "name": "RonPay - Community & Bawm Payment Studio",
+  "description": "RonPay Mizo Community and Bawm payments, Ralna, Khawlsak, Rikrum, Kumtluang QR Creator Studio, UPI transfers, bill payments, and transaction reports.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
