@@ -34,7 +34,8 @@ import {
   ExternalLink,
   ArrowRight,
   Pause,
-  Play
+  Play,
+  Users
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { BILL_SERVICES } from '../data/initialData';
@@ -53,6 +54,7 @@ interface HomeScreenProps {
   creatorProfile: CreatorProfile;
   announcement?: AnnouncementBanner;
   onOpenReports: () => void;
+  onOpenMemberRoll?: () => void;
   onShowBalance: () => void;
   onShowBankTransfer: () => void;
   onOpenPhonePePortal?: () => void;
@@ -72,6 +74,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   creatorProfile,
   announcement,
   onOpenReports,
+  onOpenMemberRoll,
   onShowBalance,
   onShowBankTransfer,
   onOpenPhonePePortal,

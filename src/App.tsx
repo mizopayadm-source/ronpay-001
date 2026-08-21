@@ -57,6 +57,7 @@ import { AdminDashboardModal } from './components/AdminDashboardModal';
 import { QRShareModal } from './components/QRShareModal';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BiometricAuthModal } from './components/BiometricAuthModal';
+import { KumtluangMemberManagerModal } from './components/KumtluangMemberManagerModal';
 import { Language } from './utils/translations';
 import { Home, QrCode, FileText, User, Zap } from 'lucide-react';
 
@@ -116,6 +117,8 @@ export default function App() {
   });
   const [isPeknaSulhnuOpen, setIsPeknaSulhnuOpen] = useState<boolean>(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
+  const [isMemberRollOpen, setIsMemberRollOpen] = useState<boolean>(false);
+  const [memberRollInitialTab, setMemberRollInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('quick_entry');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareCampaign, setShareCampaign] = useState<Campaign | null>(null);
 
@@ -587,6 +590,7 @@ export default function App() {
               creatorProfile={creatorProfile}
               announcement={announcement}
               onOpenReports={() => navigateTo('screen-export-reports')}
+              onOpenMemberRoll={() => setIsMemberRollOpen(true)}
               onShowBalance={() => alert('💰 RonPay Wallet Balance: ₹12,450.00\nLinked Bank: State Bank of India (Aizawl Main Branch)')}
               onShowBankTransfer={() => alert('🏦 Bank Settlement Transfer:\nInstant IMPS / NEFT settlement active.')}
               onOpenPhonePePortal={() => setIsPhonePeModalOpen(true)}
@@ -650,6 +654,10 @@ export default function App() {
               onUpdateCampaign={handleUpdateCampaign}
               onSelectCampaign={handleSelectCampaignFromExplorer}
               onUpdateCreatorProfile={handleUpdateCreatorProfile}
+              onOpenMemberRoll={(tab) => {
+                if (tab) setMemberRollInitialTab(tab);
+                setIsMemberRollOpen(true);
+              }}
             />
           )}
 
@@ -664,6 +672,10 @@ export default function App() {
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
               onOpenImagePreview={handleOpenImagePreview}
+              onOpenMemberRoll={(tab) => {
+                if (tab) setMemberRollInitialTab(tab);
+                setIsMemberRollOpen(true);
+              }}
             />
           )}
 
@@ -901,6 +913,24 @@ export default function App() {
           onClose={() => {
             setIsShareModalOpen(false);
             setShareCampaign(null);
+          }}
+        />
+
+        {/* Kumtluang Member Roll & Quick Entry Modal */}
+        <KumtluangMemberManagerModal
+          isOpen={isMemberRollOpen}
+          initialTab={memberRollInitialTab}
+          onClose={() => {
+            setIsMemberRollOpen(false);
+            setTransactions(getStoredTransactions());
+          }}
+          language={language}
+          creatorProfile={creatorProfile}
+          campaigns={campaigns}
+          transactions={transactions}
+          onDataUpdated={() => {
+            setTransactions(getStoredTransactions());
+            setCampaigns(getStoredCampaigns());
           }}
         />
 

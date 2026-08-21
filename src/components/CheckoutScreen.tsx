@@ -18,12 +18,23 @@ import {
   Zap,
   CheckCircle2,
   Maximize2,
-  AlertCircle
+  AlertCircle,
+  Users,
+  UserPlus,
+  UserCheck,
+  Search,
+  Plus,
+  X,
+  ChevronRight,
+  Edit3,
+  Trash2,
+  Save
 } from 'lucide-react';
-import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig } from '../types';
+import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
+import { getMembers, addOrUpdateMember } from '../utils/storage';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -56,6 +67,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
 
+  // Kumtluang Member & Family Sub-ID State
+  const [donorPhone, setDonorPhone] = useState<string>('');
+  const [donorSection, setDonorSection] = useState<string>('Bial 1 (Vengchhak)');
+  const [phoneSearchQuery, setPhoneSearchQuery] = useState<string>('');
+  const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
+  const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId (e.g. EBE-1460-01)
+  const [isNewMemberMode, setIsNewMemberMode] = useState<boolean>(false);
+  const [newRegName, setNewRegName] = useState<string>('');
+  const [newRegPhone, setNewRegPhone] = useState<string>('');
+  const [newRegSection, setNewRegSection] = useState<string>('Bial 1 (Vengchhak)');
+  const [isCustomSection, setIsCustomSection] = useState<boolean>(false);
+  const [customSectionText, setCustomSectionText] = useState<string>('');
+  const [newDependentName, setNewDependentName] = useState<string>('');
+  const [newDependentRelation, setNewDependentRelation] = useState<string>('Nupui');
+  const [showAddDependentInput, setShowAddDependentInput] = useState<boolean>(false);
+
+  // Inline Member Edit State (for updating member details right on checkout screen)
+  const [isEditingMember, setIsEditingMember] = useState<boolean>(false);
+  const [editMemberName, setEditMemberName] = useState<string>('');
+  const [editMemberPhone, setEditMemberPhone] = useState<string>('');
+  const [editMemberSection, setEditMemberSection] = useState<string>('');
+  const [isEditCustomSection, setIsEditCustomSection] = useState<boolean>(false);
+  const [editCustomSectionText, setEditCustomSectionText] = useState<string>('');
+  const [editMemberDependents, setEditMemberDependents] = useState<MemberDependent[]>([]);
+  const [editMemberSuccessMsg, setEditMemberSuccessMsg] = useState<string>('');
+
   const t = TRANSLATIONS[language];
 
   // Kumtluang period & frequency selection
@@ -83,16 +120,218 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     ? `${selectedQuarter} ${selectedYear}`
     : `${selectedYear} (Kumtluan)`;
 
-  // Initialize subcategories from campaign if available
+  // Derive Org Code helper
+  const deriveOrgCode = (orgName?: string, title?: string): string => {
+    const text = (orgName || title || 'KOHHRAN').toUpperCase();
+    if (text.includes('EBENEZER') || text.includes('EBE')) return 'EBE';
+    if (text.includes('BCM')) return 'BCM';
+    if (text.includes('YMA')) return 'YMA';
+    if (text.includes('SYNOD')) return 'SYN';
+    if (text.includes('CHANMARI')) return 'CHM';
+    if (text.includes('BUNGKAWN')) return 'BKN';
+    if (text.includes('DAWRPUI')) return 'DWP';
+    if (text.includes('ZOTLANG')) return 'ZTL';
+    if (text.includes('RAMHLUN')) return 'RMH';
+    const clean = text.replace(/[^A-Z]/g, '');
+    return clean.substring(0, 3) || 'MEM';
+  };
+
+  // Initialize subcategories from campaign & Auto-load default member for Kumtluang
   useEffect(() => {
-    if (category === 'kumtluang' && campaign?.subCategories && campaign.subCategories.length > 0) {
-      const initialMap: { [key: string]: number } = {};
-      campaign.subCategories.forEach((cat, idx) => {
-        initialMap[cat] = (idx + 1) * 100;
-      });
-      setSubcatAmounts(initialMap);
+    if (category === 'kumtluang') {
+      if (campaign?.subCategories && campaign.subCategories.length > 0) {
+        const initialMap: { [key: string]: number } = {};
+        campaign.subCategories.forEach((cat, idx) => {
+          initialMap[cat] = (idx + 1) * 100;
+        });
+        setSubcatAmounts(initialMap);
+      }
+
+      // Auto-load member from local storage if available
+      const allMembers = getMembers();
+      if (allMembers.length > 0 && !selectedMember && !donorName) {
+        const defaultM = allMembers[0];
+        setSelectedMember(defaultM);
+        setDonorName(defaultM.name);
+        setDonorPhone(defaultM.fullPhone || `943614${defaultM.phoneLast4}`);
+        setDonorSection(defaultM.section || 'Section A');
+        setPhoneSearchQuery(defaultM.phoneLast4);
+        setSelectedPayerType('primary');
+      }
     }
   }, [category, campaign]);
+
+  const handlePhoneSearch = (query: string) => {
+    setPhoneSearchQuery(query);
+    const cleanQ = query.trim();
+    if (!cleanQ) {
+      setSelectedMember(null);
+      setIsNewMemberMode(false);
+      return;
+    }
+    const allMembers = getMembers();
+    const match = allMembers.find(m => 
+      m.phoneLast4 === cleanQ || 
+      (m.fullPhone && m.fullPhone.endsWith(cleanQ)) ||
+      m.id.toLowerCase() === cleanQ.toLowerCase() ||
+      m.name.toLowerCase().includes(cleanQ.toLowerCase()) ||
+      (m.dependents && m.dependents.some(d => d.subId.toLowerCase() === cleanQ.toLowerCase() || d.name.toLowerCase().includes(cleanQ.toLowerCase())))
+    );
+
+    if (match) {
+      setSelectedMember(match);
+      setDonorName(match.name);
+      setDonorPhone(match.fullPhone || '');
+      setDonorSection(match.section || 'Section A');
+      setSelectedPayerType('primary');
+      setIsNewMemberMode(false);
+    } else {
+      setSelectedMember(null);
+      if (cleanQ.length >= 2) {
+        setIsNewMemberMode(true);
+        if (/^\d+$/.test(cleanQ)) {
+          setNewRegPhone(cleanQ.length === 10 ? cleanQ : `943600${cleanQ}`);
+        }
+      }
+    }
+  };
+
+  const handleQuickRegisterSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newRegName.trim()) {
+      alert('Khawngaihin Member Hming chhu lut rawh le.');
+      return;
+    }
+    const cleanPhone = newRegPhone.replace(/\D/g, '');
+    const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : Math.floor(1000 + Math.random() * 9000).toString();
+    const orgCode = deriveOrgCode(campaign?.orgName, campaign?.title);
+    const newId = `${orgCode}-${phoneLast4}`;
+
+    const sectionToUse = isCustomSection 
+      ? (customSectionText.trim() || 'General') 
+      : (newRegSection || 'General');
+
+    const newMember: MemberRecord = {
+      id: newId,
+      name: newRegName.trim(),
+      orgCode: orgCode,
+      phoneLast4: phoneLast4,
+      fullPhone: cleanPhone || `943600${phoneLast4}`,
+      section: sectionToUse,
+      isFamilyHead: true,
+      dependents: [],
+      createdAt: new Date().toISOString()
+    };
+
+    addOrUpdateMember(newMember);
+    setSelectedMember(newMember);
+    setDonorName(newMember.name);
+    setDonorPhone(newMember.fullPhone || '');
+    setDonorSection(newMember.section || 'General');
+    setPhoneSearchQuery(phoneLast4);
+    setSelectedPayerType('primary');
+    setIsNewMemberMode(false);
+    setNewRegName('');
+  };
+
+  const handleAddDependent = () => {
+    if (!selectedMember || !newDependentName.trim()) return;
+    const nextIdx = (selectedMember.dependents?.length || 0) + 1;
+    const subId = `${selectedMember.id}-${nextIdx.toString().padStart(2, '0')}`;
+    const newDep: MemberDependent = {
+      subId: subId,
+      name: `${newDependentName.trim()} (${newDependentRelation})`,
+      relation: newDependentRelation
+    };
+    const updatedDependents = [...(selectedMember.dependents || []), newDep];
+    const updatedMember: MemberRecord = {
+      ...selectedMember,
+      dependents: updatedDependents
+    };
+    addOrUpdateMember(updatedMember);
+    setSelectedMember(updatedMember);
+    setSelectedPayerType(subId);
+    setDonorName(newDep.name);
+    setNewDependentName('');
+    setShowAddDependentInput(false);
+  };
+
+  const handleStartMemberEdit = () => {
+    if (!selectedMember) return;
+    setEditMemberName(selectedMember.name);
+    setEditMemberPhone(selectedMember.fullPhone || selectedMember.phoneLast4);
+    
+    const currentSec = selectedMember.section || '';
+    const isCustom = campaign?.definedSections && campaign.definedSections.length > 0
+      ? !campaign.definedSections.includes(currentSec)
+      : false;
+    
+    if (isCustom && currentSec) {
+      setIsEditCustomSection(true);
+      setEditCustomSectionText(currentSec);
+      setEditMemberSection('__custom__');
+    } else {
+      setIsEditCustomSection(false);
+      setEditMemberSection(currentSec || campaign?.definedSections?.[0] || 'General');
+    }
+
+    setEditMemberDependents(selectedMember.dependents ? JSON.parse(JSON.stringify(selectedMember.dependents)) : []);
+    setIsEditingMember(true);
+  };
+
+  const handleSaveMemberEdit = () => {
+    if (!selectedMember || !editMemberName.trim()) {
+      alert('Member hming hi a ruak thei lo.');
+      return;
+    }
+
+    const cleanPhone = editMemberPhone.replace(/\D/g, '');
+    const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : selectedMember.phoneLast4;
+    const finalSection = isEditCustomSection 
+      ? (editCustomSectionText.trim() || 'General') 
+      : (editMemberSection || 'General');
+
+    const updated: MemberRecord = {
+      ...selectedMember,
+      name: editMemberName.trim(),
+      fullPhone: cleanPhone || selectedMember.fullPhone,
+      phoneLast4: phoneLast4,
+      section: finalSection,
+      dependents: editMemberDependents
+    };
+
+    addOrUpdateMember(updated);
+    setSelectedMember(updated);
+    if (selectedPayerType === 'primary') {
+      setDonorName(updated.name);
+    } else {
+      const activeDep = updated.dependents?.find(d => d.subId === selectedPayerType);
+      if (activeDep) {
+        setDonorName(activeDep.name);
+      } else {
+        setSelectedPayerType('primary');
+        setDonorName(updated.name);
+      }
+    }
+    setDonorSection(finalSection);
+    setDonorPhone(updated.fullPhone || '');
+    setIsEditingMember(false);
+    setEditMemberSuccessMsg('Member data fel takin update a ni ta!');
+    setTimeout(() => setEditMemberSuccessMsg(''), 3500);
+  };
+
+  const handlePayerChange = (payerType: string) => {
+    setSelectedPayerType(payerType);
+    if (!selectedMember) return;
+    if (payerType === 'primary') {
+      setDonorName(selectedMember.name);
+    } else {
+      const dep = selectedMember.dependents?.find(d => d.subId === payerType);
+      if (dep) {
+        setDonorName(dep.name);
+      }
+    }
+  };
 
   const handleAnonymousToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
@@ -197,6 +436,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
             category: category,
             donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
+            donorPhone: donorPhone.trim() || undefined,
+            donorVeng: donorSection.trim() || undefined,
+            memberId: category === 'kumtluang' && selectedMember ? selectedMember.id : undefined,
+            subId: category === 'kumtluang' && selectedPayerType !== 'primary' ? selectedPayerType : undefined,
+            isDependent: category === 'kumtluang' && selectedPayerType !== 'primary',
             isAnonymous: isAnonymous,
             amount: subtotal,
             platformFee: platformFee,
@@ -223,6 +467,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
         category: category,
         donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
+        donorPhone: donorPhone.trim() || undefined,
+        donorVeng: donorSection.trim() || undefined,
+        memberId: category === 'kumtluang' && selectedMember ? selectedMember.id : undefined,
+        subId: category === 'kumtluang' && selectedPayerType !== 'primary' ? selectedPayerType : undefined,
+        isDependent: category === 'kumtluang' && selectedPayerType !== 'primary',
         isAnonymous: isAnonymous,
         amount: subtotal,
         platformFee: 0,
@@ -555,8 +804,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         {/* Donor Information & Privacy */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs space-y-3">
           <div className="flex justify-between items-center">
-            <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-              Donor Information
+            <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              {category === 'kumtluang' ? (
+                <>
+                  <Users className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Kumtluang Member / Donor Info</span>
+                </>
+              ) : (
+                'Donor Information'
+              )}
             </h4>
             <label className="flex items-center gap-1.5 cursor-pointer text-[10.5px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition">
               <input
@@ -569,20 +825,488 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </label>
           </div>
 
-          {!isAnonymous && (
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                I Hming Pum (Donor Full Name) *
-              </label>
-              <input
-                type="text"
-                required
-                value={donorName}
-                onChange={(e) => setDonorName(e.target.value)}
-                placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-              />
+          {/* KUMTLUANG SPECIFIC: Member ID & Phone Lookup, Auto-Registration & Dual User Selection */}
+          {category === 'kumtluang' && !isAnonymous ? (
+            <div className="space-y-3 pt-1">
+              {/* 1. Quick Search / Member Recognition Bar */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-600 block">
+                    Phone Number (10 digits) / Member ID / Hming zawng rawh:
+                  </label>
+                  {selectedMember && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMember(null);
+                        setPhoneSearchQuery('');
+                        setIsNewMemberMode(true);
+                      }}
+                      className="text-[9.5px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                    >
+                      + Member thar / ID la nei lo
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={phoneSearchQuery}
+                    onChange={(e) => handlePhoneSearch(e.target.value)}
+                    placeholder="e.g. 1460 / 9436141460 / Rammuanpuia / EBE-1460"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-8 pr-8 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600 transition"
+                  />
+                  {phoneSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => handlePhoneSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. When Member is FOUND: Show Verified Card + Dual User / Dependent Selector */}
+              {selectedMember ? (
+                <div className="bg-blue-50/70 border border-blue-200 p-3.5 rounded-2xl space-y-3">
+                  {/* Success Toast for Edit */}
+                  {editMemberSuccessMsg && (
+                    <div className="p-2 bg-emerald-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs animate-fadeIn">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <span>{editMemberSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-xs text-slate-900">{selectedMember.name}</span>
+                          <span className="text-[9.5px] bg-blue-600 text-white font-black px-2 py-0.5 rounded-md">
+                            {selectedMember.id}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {selectedMember.section || 'General'} • Ph: {selectedMember.fullPhone || selectedMember.phoneLast4}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditingMember) {
+                          setIsEditingMember(false);
+                        } else {
+                          handleStartMemberEdit();
+                        }
+                      }}
+                      className="text-[10.5px] font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100/60 border border-blue-200 px-2.5 py-1 rounded-xl flex items-center gap-1 shadow-2xs cursor-pointer transition"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>{isEditingMember ? 'Cancel' : 'Edit Info'}</span>
+                    </button>
+                  </div>
+
+                  {/* INLINE MEMBER EDIT FORM (Edit Member details, section & dependents right here) */}
+                  {isEditingMember ? (
+                    <div className="p-3 bg-white rounded-2xl border-2 border-blue-400 space-y-2.5 animate-fadeIn shadow-xs">
+                      <div className="flex items-center justify-between border-b border-blue-100 pb-1.5">
+                        <span className="text-xs font-black text-blue-950 flex items-center gap-1">
+                          <Edit3 className="w-3.5 h-3.5 text-blue-600" /> Member Info Edit Rawh
+                        </span>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
+                          ID: {selectedMember.id}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                            Member Hming (Full Name) *
+                          </label>
+                          <input
+                            type="text"
+                            value={editMemberName}
+                            onChange={(e) => setEditMemberName(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                            placeholder="Hming..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                            Phone Number
+                          </label>
+                          <input
+                            type="tel"
+                            value={editMemberPhone}
+                            onChange={(e) => setEditMemberPhone(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                            placeholder="Mobile no..."
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                        </label>
+                        <select
+                          value={isEditCustomSection ? '__custom__' : editMemberSection}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setIsEditCustomSection(true);
+                            } else {
+                              setIsEditCustomSection(false);
+                              setEditMemberSection(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                        >
+                          {(campaign?.definedSections && campaign.definedSections.length > 0
+                            ? campaign.definedSections
+                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>
+                              {sec}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                        </select>
+                      </div>
+
+                      {isEditCustomSection && (
+                        <div>
+                          <label className="text-[10px] font-bold text-blue-900 block mb-0.5">
+                            Custom {campaign?.sectionLabel || 'Bial / Section'} Ziak Rawh:
+                          </label>
+                          <input
+                            type="text"
+                            value={editCustomSectionText}
+                            onChange={(e) => setEditCustomSectionText(e.target.value)}
+                            placeholder="e.g. Bial 5 / Hmar Veng..."
+                            className="w-full bg-white border-2 border-blue-400 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                          />
+                        </div>
+                      )}
+
+                      {/* Dependents list in Edit Mode */}
+                      {editMemberDependents.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-[10px] font-bold text-slate-700 block">
+                            Chhungte Sub-IDs ({editMemberDependents.length}):
+                          </label>
+                          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                            {editMemberDependents.map((dep, idx) => (
+                              <div
+                                key={dep.subId || idx}
+                                className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs"
+                              >
+                                <span className="font-mono text-[9px] font-bold text-blue-700 bg-blue-100 px-1 py-0.5 rounded shrink-0">
+                                  {dep.subId}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={dep.name}
+                                  onChange={(e) => {
+                                    const next = [...editMemberDependents];
+                                    next[idx].name = e.target.value;
+                                    setEditMemberDependents(next);
+                                  }}
+                                  className="flex-1 bg-white border border-slate-200 rounded-lg p-1 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-blue-600"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditMemberDependents(editMemberDependents.filter((_, i) => i !== idx));
+                                  }}
+                                  className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 rounded-md cursor-pointer shrink-0"
+                                  title="Sub-ID hi paih rawh"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingMember(false)}
+                          className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveMemberEdit}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Vawng Rawh (Save)
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Dual User & Dependent Selector (Tunge Thawh Dawn?) */}
+                  <div className="border-t border-blue-200/80 pt-2.5 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10.5px] font-black text-blue-950 block">
+                        Tunge Thawh Dawn? (Payer Selection):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddDependentInput(!showAddDependentInput)}
+                        className="text-[10px] font-bold text-blue-700 hover:text-blue-900 flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Chhungte Sub-ID belh
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {/* Primary Head of Family */}
+                      <button
+                        type="button"
+                        onClick={() => handlePayerChange('primary')}
+                        className={`p-2 rounded-xl text-left border text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                          selectedPayerType === 'primary'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <span className="block truncate">{selectedMember.name}</span>
+                          <span className={`text-[9.5px] block ${selectedPayerType === 'primary' ? 'text-blue-100' : 'text-slate-400'}`}>
+                            Hotu • {selectedMember.id}
+                          </span>
+                        </div>
+                        {selectedPayerType === 'primary' && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+
+                      {/* Dependents list */}
+                      {selectedMember.dependents && selectedMember.dependents.map((dep) => (
+                        <button
+                          key={dep.subId}
+                          type="button"
+                          onClick={() => handlePayerChange(dep.subId)}
+                          className={`p-2 rounded-xl text-left border text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                            selectedPayerType === dep.subId
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                              : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span className="block truncate">{dep.name}</span>
+                            <span className={`text-[9.5px] block ${selectedPayerType === dep.subId ? 'text-blue-100' : 'text-slate-400'}`}>
+                              {dep.relation || 'Chhungte'} • {dep.subId}
+                            </span>
+                          </div>
+                          {selectedPayerType === dep.subId && <Check className="w-4 h-4 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Inline Add Dependent Mini Form */}
+                    {showAddDependentInput && (
+                      <div className="p-2.5 bg-white rounded-xl border border-blue-200 space-y-2 mt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-blue-900 uppercase">
+                            Chhungte Sub-ID Thar Siamna:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddDependentInput(false)}
+                            className="text-slate-400 hover:text-slate-600 text-[10px]"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9.5px] text-slate-500 font-bold block mb-0.5">Hming *</label>
+                            <input
+                              type="text"
+                              value={newDependentName}
+                              onChange={(e) => setNewDependentName(e.target.value)}
+                              placeholder="e.g. Lalrinhlui"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9.5px] text-slate-500 font-bold block mb-0.5">Inlaichinna</label>
+                            <select
+                              value={newDependentRelation}
+                              onChange={(e) => setNewDependentRelation(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                            >
+                              <option value="Nupui">Nupui</option>
+                              <option value="Pasal">Pasal</option>
+                              <option value="Fa">Fa (Fapa/Fanu)</option>
+                              <option value="Nu">Nu</option>
+                              <option value="Pa">Pa</option>
+                              <option value="Nau">Nau / Unau</option>
+                            </select>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddDependent}
+                          disabled={!newDependentName.trim()}
+                          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Sub-ID Siam & Thlang Nghal
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : isNewMemberMode || phoneSearchQuery.length >= 2 ? (
+                /* 3. When Member is NOT Found / ID la nei lo tan: Auto Instant Registration */
+                <div className="bg-amber-50/70 border border-amber-300/80 p-3.5 rounded-2xl space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 bg-amber-500 text-white rounded-lg">
+                      <UserPlus className="w-3.5 h-3.5" />
+                    </span>
+                    <div>
+                      <h5 className="text-xs font-black text-amber-950">
+                        ID la nei lo tan (Instant Auto-Registration)
+                      </h5>
+                      <p className="text-[10px] text-amber-800 font-medium">
+                        I hming leh phone i ziah zawh veleh Member ID auto-siam a ni ang a, hemi page-ah hian i lut nghal ang.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                        I Hming Pum (Full Name) *
+                      </label>
+                      <input
+                        type="text"
+                        value={newRegName}
+                        onChange={(e) => {
+                          setNewRegName(e.target.value);
+                          setDonorName(e.target.value);
+                        }}
+                        placeholder="e.g. Vanlalruati / C. Lalhmangaiha"
+                        className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          Phone (10 digits) *
+                        </label>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          value={newRegPhone}
+                          onChange={(e) => {
+                            setNewRegPhone(e.target.value);
+                            setDonorPhone(e.target.value);
+                          }}
+                          placeholder="e.g. 9436123456"
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                        </label>
+                        <select
+                          value={isCustomSection ? '__custom__' : newRegSection}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setIsCustomSection(true);
+                            } else {
+                              setIsCustomSection(false);
+                              setNewRegSection(e.target.value);
+                              setDonorSection(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
+                        >
+                          {(campaign?.definedSections && campaign.definedSections.length > 0
+                            ? campaign.definedSections
+                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>
+                              {sec}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {isCustomSection && (
+                      <div className="pt-1">
+                        <label className="text-[10px] font-bold text-blue-900 block mb-0.5">
+                          Custom {campaign?.sectionLabel || 'Bial / Section'} Hming Ziak Rawh:
+                        </label>
+                        <input
+                          type="text"
+                          value={customSectionText}
+                          onChange={(e) => {
+                            setCustomSectionText(e.target.value);
+                            setDonorSection(e.target.value);
+                          }}
+                          placeholder="e.g. Bial 5 / Section E / Hmar Veng..."
+                          className="w-full bg-white border-2 border-blue-400 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    )}
+
+                    {newRegPhone.length >= 4 && (
+                      <div className="text-[10px] font-bold text-blue-900 bg-blue-100/70 p-2 rounded-lg flex items-center justify-between border border-blue-200">
+                        <span>I Member ID Tur:</span>
+                        <span className="font-black text-blue-700 font-mono text-xs">
+                          {deriveOrgCode(campaign?.orgName, campaign?.title)}-{newRegPhone.slice(-4)}
+                        </span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuickRegisterSubmit()}
+                      disabled={!newRegName.trim() || newRegPhone.length < 4}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>ID Siam & Hemi Page-ah Lut Nghal</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
+          ) : (
+            /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum) */
+            !isAnonymous && (
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                  I Hming Pum (Donor Full Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={donorName}
+                  onChange={(e) => setDonorName(e.target.value)}
+                  placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                />
+              </div>
+            )
           )}
 
           {category !== 'kumtluang' && (

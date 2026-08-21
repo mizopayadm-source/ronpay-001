@@ -32,7 +32,11 @@ import {
   HelpCircle,
   Megaphone,
   Target,
-  TrendingUp
+  TrendingUp,
+  Users,
+  UserPlus,
+  CreditCard,
+  Printer
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
@@ -52,6 +56,7 @@ interface CreateQRScreenProps {
   onUpdateCampaign?: (campaign: Campaign) => void;
   onSelectCampaign?: (campaign: Campaign) => void;
   onUpdateCreatorProfile?: (updated: CreatorProfile) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
 }
 
 export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
@@ -67,6 +72,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   onUpdateCampaign,
   onSelectCampaign,
   onUpdateCreatorProfile,
+  onOpenMemberRoll,
 }) => {
   // Creator Profile Editing State
   const [isEditingCreatorProfile, setIsEditingCreatorProfile] = useState<boolean>(false);
@@ -121,6 +127,11 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [kumtluangVeng, setKumtluangVeng] = useState<string>('');
   const [kumtluangSubcats, setKumtluangSubcats] = useState<string[]>([]);
   const [newSubcatName, setNewSubcatName] = useState<string>('');
+  const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>('Bial / Unit');
+  const [kumtluangSections, setKumtluangSections] = useState<string[]>([
+    'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung'
+  ]);
+  const [newSectionName, setNewSectionName] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
   const [kumtluangValidity, setKumtluangValidity] = useState<string>('');
@@ -372,6 +383,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       orgName: selectedCategory === 'kumtluang' ? kumtluangOrg : undefined,
       subCategories: selectedCategory === 'kumtluang' ? kumtluangSubcats : undefined,
       trxnFeeBearer: selectedCategory === 'kumtluang' ? kumtluangFeeBearer : undefined,
+      sectionLabel: selectedCategory === 'kumtluang' ? kumtluangSectionLabel : undefined,
+      definedSections: selectedCategory === 'kumtluang' ? kumtluangSections : undefined,
 
       // Per-Creator Category Rate Overrides (e.g. Mr A Ralna=0%, Rikrum=0.5%)
       customPlatformFeePercent: creatorProfile.categoryCustomOverrides?.[selectedCategory]?.platformFeePercent !== undefined
@@ -984,8 +997,19 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
 
           {selectedCategory === 'kumtluang' && (
             <div className="space-y-3 p-3.5 rounded-2xl bg-blue-50/50 border border-blue-200">
-              <div className="flex items-center gap-1.5 text-blue-900 font-extrabold text-[11px] uppercase border-b border-blue-200 pb-1">
-                <InfinityIcon className="w-3.5 h-3.5" /> Kumtluang Bawm Details
+              <div className="flex items-center justify-between border-b border-blue-200 pb-1.5 flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 text-blue-900 font-extrabold text-[11px] uppercase">
+                  <InfinityIcon className="w-3.5 h-3.5" /> Kumtluang Bawm Details & Member Roll
+                </div>
+                {onOpenMemberRoll && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberRoll('members_list')}
+                    className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+                  >
+                    <Users className="w-3 h-3" /> Open Member Roll
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1057,6 +1081,118 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                       Add
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-blue-600" />
+                    Bial / Section / Veng Dropdown Setup
+                  </label>
+                  <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md">
+                    Pre-defined Dropdown
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Member-ten spelling error an neih loh nan leh data sorting a fel fai sa nan, dropdown a an thlan tur Bial / Section list duansa a ni.
+                </p>
+
+                {/* Preset Quick Chooser */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Bial / Unit');
+                      setKumtluangSections(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                  >
+                    ⛪ Kohhran (Bial 1-4)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Section / Veng');
+                      setKumtluangSections(['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    🏛️ YMA / NGO (Section A-D)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Veng / Area');
+                      setKumtluangSections(['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition cursor-pointer"
+                  >
+                    🏘️ Veng / Area
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Label Hming (Dynamic Label)
+                    </label>
+                    <input
+                      type="text"
+                      value={kumtluangSectionLabel}
+                      onChange={(e) => setKumtluangSectionLabel(e.target.value)}
+                      placeholder="e.g. Bial / Unit emaw Section / Veng"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Add New ({kumtluangSections.length} sections)
+                    </label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                        placeholder="+ Bial/Section..."
+                        className="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
+                            setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
+                            setNewSectionName('');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section List Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangSections.map((sec, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>{sec}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangSections(kumtluangSections.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
                 </div>
               </div>
 
@@ -1427,19 +1563,32 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                     })()}
 
                     {/* Actions Bar */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(camp)}
-                        className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
-                          camp.status === 'active'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                        }`}
-                      >
-                        <Clock className="w-3 h-3" />
-                        {camp.status === 'active' ? 'Mark as Expired' : 'Reactivate QR'}
-                      </button>
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(camp)}
+                          className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
+                            camp.status === 'active'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          {camp.status === 'active' ? 'Mark as Expired' : 'Reactivate QR'}
+                        </button>
+
+                        {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                          <button
+                            type="button"
+                            onClick={onOpenMemberRoll}
+                            className="text-[10.5px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+                            title="Open Member Roll & Manual Entry Portal"
+                          >
+                            <Users className="w-3 h-3" /> Member Roll & Cash Entry
+                          </button>
+                        )}
+                      </div>
 
                       {onSelectCampaign && (
                         <button

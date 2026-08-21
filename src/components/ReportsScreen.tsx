@@ -40,19 +40,24 @@ import {
   Zap,
   Banknote,
   MessageSquare,
-  Target
+  Target,
+  Printer
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { 
   exportTransactionsToCSV, 
   exportFormattedExcel,
   printTransactionsPDF, 
+  exportMasterLedgerPrint,
+  exportMemberCategoryMatrixPrint,
+  exportMemberPassbookVerticalPrint,
   buildKumtluangMatrix,
   computeMonthlyDistribution,
   MonthRangeConfig,
   ALL_MONTH_NAMES_SHORT,
   TargetExportInfo
 } from '../utils/export';
+import { getMembers } from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 
 interface ReportsScreenProps {
@@ -65,6 +70,7 @@ interface ReportsScreenProps {
   onUpdateTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transactionId: string) => void;
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
 }
 
 export const ReportsScreen: React.FC<ReportsScreenProps> = ({
@@ -77,6 +83,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onUpdateTransaction,
   onDeleteTransaction,
   onOpenImagePreview,
+  onOpenMemberRoll,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('kumtluang');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
@@ -98,6 +105,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const [chartEndMonth, setChartEndMonth] = useState<string>('Mar');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [showExportOptions, setShowExportOptions] = useState<boolean>(false);
+  const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
+  const [reportMemberId, setReportMemberId] = useState<string>('');
 
   // Memoized month range config (From startMonth Upto endMonth)
   const monthRangeConfig = useMemo<MonthRangeConfig>(() => ({
@@ -386,6 +395,48 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       alert('🔒 Transaction Report download hi QR Creator chauhin an ti thei.');
       return;
     }
+
+    const allMembers = getMembers();
+
+    if (reportPrintStyle === 'master_ledger') {
+      exportMasterLedgerPrint(allMembers, transactions, headerTitle, creatorProfile.orgName || 'Church Organization');
+      showExportSuccessToast('Format 1: Master Ledger Printout', allMembers.length);
+      return;
+    }
+
+    if (reportPrintStyle === 'member_matrix') {
+      if (!reportMemberId) {
+        alert('Khawngaihin member thlang hmasa rawh le.');
+        return;
+      }
+      const m = allMembers.find(x => x.id === reportMemberId);
+      const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
+        ? selectedCampaignObj.subCategories
+        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+      if (m) {
+        exportMemberCategoryMatrixPrint(m, defaultCategories, transactions, creatorProfile.orgName || 'Church Organization');
+        showExportSuccessToast(`Format 2: Category Matrix (${m.name})`, 1);
+      }
+      return;
+    }
+
+    if (reportPrintStyle === 'member_passbook') {
+      if (!reportMemberId) {
+        alert('Khawngaihin member thlang hmasa rawh le.');
+        return;
+      }
+      const m = allMembers.find(x => x.id === reportMemberId);
+      const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
+        ? selectedCampaignObj.subCategories
+        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+      if (m) {
+        exportMemberPassbookVerticalPrint(m, defaultCategories, transactions, creatorProfile.orgName || 'Church Organization');
+        showExportSuccessToast(`Format 3: Mimal Passbook (${m.name})`, 1);
+      }
+      return;
+    }
+
+    // Default Standard PDF Statement
     if (sortedTransactions.length === 0) {
       alert('⚠️ No transactions to export for the selected filter.');
       return;
@@ -406,6 +457,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         targetInfo: activeTargetInfo || undefined
       }
     );
+    showExportSuccessToast('PDF Statement', sortedTransactions.length);
   };
 
   const toggleNameSort = () => {
@@ -1041,6 +1093,43 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </div>
               )}
 
+              {/* Print Style Selector */}
+              <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                    <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>🖨️ Statement Print Style Thlanna:</span>
+                  </label>
+                  <select
+                    value={reportPrintStyle}
+                    onChange={(e) => setReportPrintStyle(e.target.value as any)}
+                    className="bg-white border-2 border-indigo-400 rounded-xl px-2.5 py-1.5 text-xs font-black text-indigo-950 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  >
+                    <option value="standard_pdf">Standard Audit Statement (Official PDF with Chart & Seal)</option>
+                    <option value="master_ledger">Format 1: Kohhran / Pawl Master Ledger (Thla 12 Grid)</option>
+                    <option value="member_matrix">Format 2: Mimal Record (Horizontal Category Matrix)</option>
+                    <option value="member_passbook">Format 3: Mimal Passbook (Vertical Passbook Card)</option>
+                  </select>
+                </div>
+
+                {/* If personal member format selected, show Member selector */}
+                {(reportPrintStyle === 'member_matrix' || reportPrintStyle === 'member_passbook') && (
+                  <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
+                    <span className="text-[11px] font-bold text-indigo-900 shrink-0">Member Thlang Rawh:</span>
+                    <select
+                      value={reportMemberId}
+                      onChange={(e) => setReportMemberId(e.target.value)}
+                      className="flex-1 bg-white border border-indigo-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                    >
+                      <option value="">-- Member Thlang Rawh --</option>
+                      {getMembers().map(m => (
+                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
               {/* Action Export Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {/* Formatted Excel */}
@@ -1066,11 +1155,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 {/* Formatted PDF */}
                 <button
                   onClick={handleDownloadPDF}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 text-xs"
-                  title="Print formatted PDF statement with header banner, optional bar graph, table, and verification seal"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 text-xs"
+                  title="Print selected report style"
                 >
-                  <FileText className="w-4 h-4 shrink-0 text-indigo-200" />
-                  <span>Print PDF Statement</span>
+                  <Printer className="w-4 h-4 shrink-0 text-indigo-200" />
+                  <span>
+                    {reportPrintStyle === 'standard_pdf' && 'Print PDF Statement'}
+                    {reportPrintStyle === 'master_ledger' && 'Print Format 1: Master Ledger'}
+                    {reportPrintStyle === 'member_matrix' && 'Print Format 2: Category Matrix'}
+                    {reportPrintStyle === 'member_passbook' && 'Print Format 3: Mimal Passbook'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -1086,7 +1180,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     Kumtluang Bawm Matrix View
                   </h3>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {onOpenMemberRoll && (
+                    <button
+                      onClick={() => onOpenMemberRoll('members_list')}
+                      className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                      title="Open Kumtluang Member Roll & Quick Entry Portal"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>Member Roll & Cash Entry</span>
+                    </button>
+                  )}
                   <button
                     onClick={toggleNameSort}
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${

@@ -1540,45 +1540,254 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* Direct UPI Apps Quick Option */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[10px] font-bold text-slate-600 block">
-                Direct UPI Apps (Instant Launch):
-              </span>
-              <div className="grid grid-cols-3 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                    const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                    window.location.href = upiString;
-                  }}
-                  className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer"
-                >
-                  <span>PhonePe</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                    const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                    window.location.href = upiString;
-                  }}
-                  className="bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer"
-                >
-                  <span>Paytm</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                    const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                    window.location.href = upiString;
-                  }}
-                  className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer"
-                >
-                  <span>Google Pay</span>
-                </button>
+            {/* Direct Official Portals & Direct UPI Payment Links (Real Working Links) */}
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-indigo-600" /> Official Portal & App Direct Links:
+                </span>
+                <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded">
+                  Live External
+                </span>
+              </div>
+
+              {/* Service specific real direct links */}
+              {service.id === 'electricity' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://power.mizoram.gov.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-amber-50 border border-amber-200 p-2 rounded-xl text-center font-bold text-amber-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-600" />
+                      <span>P&ED Mizoram Portal</span>
+                    </a>
+                    <a
+                      href="https://mizorampower.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-amber-50 border border-amber-200 p-2 rounded-xl text-center font-bold text-amber-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3 text-amber-600" />
+                      <span>Online Consumer Portal</span>
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://paytm.com/electricity-bill-payment/mizoram/power-electricity-department-mizoram"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>⚡ Paytm P&ED Mizoram</span>
+                    </a>
+                    <a
+                      href="https://www.phonepe.com/recharge-bill-payment/electricity-bill-payment/mizoram/power-and-electricity-department-mizoram"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>⚡ PhonePe P&ED Mizoram</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {service.id === 'fastag' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://www.ihmcl.co.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-orange-50 border border-orange-200 p-2 rounded-xl text-center font-bold text-orange-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <Car className="w-3.5 h-3.5 text-orange-600" />
+                      <span>IHMCL FASTag Portal</span>
+                    </a>
+                    <a
+                      href="https://netc.org.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-orange-50 border border-orange-200 p-2 rounded-xl text-center font-bold text-orange-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3 text-orange-600" />
+                      <span>NETC / NPCI Portal</span>
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://paytm.com/fastag-recharge"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>🚗 Paytm FASTag Recharge</span>
+                    </a>
+                    <a
+                      href="https://www.phonepe.com/recharge-bill-payment/fastag-recharge"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>🚗 PhonePe FASTag Top-Up</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {service.id === 'water' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://phed.mizoram.gov.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-cyan-50 border border-cyan-200 p-2 rounded-xl text-center font-bold text-cyan-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <Droplet className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>PHED Mizoram Portal</span>
+                    </a>
+                    <a
+                      href="https://phedwater.mizoram.gov.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-cyan-50 border border-cyan-200 p-2 rounded-xl text-center font-bold text-cyan-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3 text-cyan-600" />
+                      <span>PHE Online Bill Desk</span>
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://paytm.com/water-bill-payment"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>💧 Paytm Water Bill</span>
+                    </a>
+                    <a
+                      href="https://www.phonepe.com/recharge-bill-payment/water-bill-payment"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
+                    >
+                      <span>💧 PhonePe Water Bill</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {service.id === 'municipal_tax' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <a
+                      href="https://amcmizoram.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-emerald-50 border border-emerald-200 p-2 rounded-xl text-center font-bold text-emerald-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <Landmark className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>AMC Official Portal</span>
+                    </a>
+                    <a
+                      href="https://amcmizoram.com/tax-payment"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white hover:bg-emerald-50 border border-emerald-200 p-2 rounded-xl text-center font-bold text-emerald-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3 text-emerald-600" />
+                      <span>AMC Property Tax Desk</span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {service.id === 'mobile' && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  <a
+                    href="https://paytm.com/recharge"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
+                  >
+                    <span>📱 Paytm Mobile Recharge</span>
+                  </a>
+                  <a
+                    href="https://www.phonepe.com/recharge-bill-payment/mobile-recharge"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
+                  >
+                    <span>📱 PhonePe Mobile Recharge</span>
+                  </a>
+                </div>
+              )}
+
+              {service.id === 'dth' && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  <a
+                    href="https://paytm.com/dth-recharge"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
+                  >
+                    <span>📺 Paytm DTH Recharge</span>
+                  </a>
+                  <a
+                    href="https://www.phonepe.com/recharge-bill-payment/dth-recharge"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
+                  >
+                    <span>📺 PhonePe DTH Recharge</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Direct UPI Apps Quick Option */}
+              <div className="pt-1 border-t border-slate-200">
+                <span className="text-[9.5px] font-bold text-slate-600 block mb-1">
+                  Emaw UPI App hmangin pe tlang nghal rawh:
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
+                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
+                      window.location.href = upiString;
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
+                  >
+                    <span>PhonePe UPI</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
+                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
+                      window.location.href = upiString;
+                    }}
+                    className="bg-sky-500 hover:bg-sky-600 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
+                  >
+                    <span>Paytm UPI</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
+                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
+                      window.location.href = upiString;
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
+                  >
+                    <span>GPay UPI</span>
+                  </button>
+                </div>
               </div>
             </div>
 

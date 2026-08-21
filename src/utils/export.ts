@@ -1,4 +1,4 @@
-import { Transaction } from '../types';
+import { Transaction, MemberRecord } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
 
 export interface MatrixRow {
@@ -1350,5 +1350,354 @@ export const printTransactionsPDF = (
   setTimeout(() => {
     printWindow.print();
   }, 250);
+};
+
+/**
+ * Format 1: Master 12-Month Table Print
+ */
+export const exportMasterLedgerPrint = (
+  members: MemberRecord[],
+  transactions: Transaction[],
+  campaignTitle: string,
+  orgName: string
+) => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  const rowsHtml = members.map((member, idx) => {
+    const memberTxns = transactions.filter(t => 
+      (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
+      (t.remark && t.remark.includes(member.id))
+    );
+
+    let rowTotal = 0;
+    const monthCols = months.map(m => {
+      const monthTxns = memberTxns.filter(t => {
+        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+        const d = new Date(t.timestamp);
+        return months[d.getMonth()] === m;
+      });
+      const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-family: monospace; color: #1e3a8a; font-size: 11px;">${member.id}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px;">${member.name}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #64748b; font-size: 10px;">${member.section || '-'}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0f2fe; color: #0369a1; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const monthTotalCols = months.map(m => `
+    <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; font-family: monospace; font-size: 11px;">
+      ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+    </td>
+  `).join('');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Master Ledger • ${orgName}</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #1e293b; color: white; padding: 8px 6px; font-size: 10px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 900;">${orgName}</h1>
+            <h2 style="margin: 3px 0 0 0; font-size: 13px; color: #475569;">${campaignTitle} — Master Ledger 12 Months</h2>
+          </div>
+          <div style="text-align: right; font-size: 10px; color: #64748b;">
+            <div>Printed on: ${new Date().toLocaleDateString('en-IN')}</div>
+            <div>Total Members: ${members.length}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th style="width: 75px;">ID</th>
+              <th>NAME</th>
+              <th>SEC</th>
+              ${months.map(m => `<th style="width: 45px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 65px; background: #0284c7;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="4" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px; color: #0f172a;">
+                G TOTAL (GRAND TOTAL):
+              </td>
+              ${monthTotalCols}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #0284c7; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 250);
+};
+
+/**
+ * Format 2: Member Category Matrix Print (Horizontal)
+ */
+export const exportMemberCategoryMatrixPrint = (
+  member: MemberRecord,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string
+) => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const memberTxns = transactions.filter(t => 
+    (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
+    (t.remark && t.remark.includes(member.id))
+  );
+
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  const rowsHtml = categories.map((cat, idx) => {
+    let rowTotal = 0;
+    const monthCols = months.map(m => {
+      const txs = memberTxns.filter(t => {
+        const matchesCat = (t.subCategory && t.subCategory.toLowerCase() === cat.toLowerCase()) ||
+          (t.remark && t.remark.toLowerCase().includes(cat.toLowerCase()));
+        if (!matchesCat) return false;
+
+        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+        const d = new Date(t.timestamp);
+        return months[d.getMonth()] === m;
+      });
+      const sum = txs.reduce((acc, t) => acc + (t.amount || 0), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #1e3a8a;">${cat}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0f2fe; color: #0369a1; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Mimal Record • ${member.name} (${member.id})</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          th { background: #1e293b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 1.5px solid #1e3a8a; border-radius: 8px; padding: 14px; margin-bottom: 12px; background: #f8fafc; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 10px; color: #64748b; font-weight: bold; text-transform: uppercase;">${orgName}</div>
+              <h1 style="margin: 2px 0 0 0; font-size: 18px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
+              <div style="font-size: 11px; color: #334155; margin-top: 2px;">Section: ${member.section || 'N/A'} • Phone: ${member.fullPhone || `****${member.phoneLast4}`}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 10px; color: #64748b; font-weight: bold;">UNIQUE MEMBER ID</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac;">${member.id}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>HEAD / CATEGORY</th>
+              ${months.map(m => `<th style="width: 48px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 70px; background: #0284c7;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${months.map(m => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #0284c7; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 250);
+};
+
+/**
+ * Format 3: Member Passbook Vertical Card Print
+ */
+export const exportMemberPassbookVerticalPrint = (
+  member: MemberRecord,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string
+) => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+
+  const memberTxns = transactions.filter(t => 
+    (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
+    (t.remark && t.remark.includes(member.id))
+  );
+
+  let grandTotal = 0;
+  const categoryTotals: { [cat: string]: number } = {};
+  categories.forEach(c => { categoryTotals[c] = 0; });
+
+  const rowsHtml = months.map((month, idx) => {
+    let monthTotal = 0;
+    const catCols = categories.map(cat => {
+      const txs = memberTxns.filter(t => {
+        const matchesCat = (t.subCategory && t.subCategory.toLowerCase() === cat.toLowerCase()) ||
+          (t.remark && t.remark.toLowerCase().includes(cat.toLowerCase()));
+        if (!matchesCat) return false;
+
+        if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
+        const d = new Date(t.timestamp);
+        return months[d.getMonth()] === month;
+      });
+      const sum = txs.reduce((acc, t) => acc + (t.amount || 0), 0);
+      monthTotal += sum;
+      categoryTotals[cat] += sum;
+      return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += monthTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #1e3a8a;">${month}</td>
+        ${catCols}
+        <td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0f2fe; color: #0369a1; font-family: monospace; font-size: 11px;">
+          ${monthTotal > 0 ? monthTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Passbook Card • ${member.name} (${member.id})</title>
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          th { background: #1e293b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 2px solid #0f172a; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">${orgName}</div>
+              <h1 style="margin: 2px 0 0 0; font-size: 20px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
+              <div style="font-size: 12px; color: #334155; margin-top: 2px;">Section: ${member.section || 'N/A'} • Phone: ${member.fullPhone || `****${member.phoneLast4}`}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 10px; color: #64748b; font-weight: bold;">UNIQUE ID</div>
+              <div style="font-size: 18px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac;">${member.id}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px;">#</th>
+              <th style="width: 80px;">MONTH</th>
+              ${categories.map(c => `<th>${c.toUpperCase()}</th>`).join('')}
+              <th style="width: 85px; background: #0284c7;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${categories.map(c => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${categoryTotals[c] > 0 ? categoryTotals[c].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #0284c7; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 250);
 };
 

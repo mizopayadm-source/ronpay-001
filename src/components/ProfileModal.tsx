@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   UserCheck, 
@@ -19,7 +19,11 @@ import {
   Unlock,
   Edit3,
   Check,
-  User
+  User,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -57,15 +61,37 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [editName, setEditName] = useState(creatorProfile.name || '');
   const [editOrgName, setEditOrgName] = useState(creatorProfile.orgName || '');
   const [editDesignation, setEditDesignation] = useState(creatorProfile.designation || '');
+  const [editAvatarUrl, setEditAvatarUrl] = useState(creatorProfile.avatarUrl || '');
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEditName(creatorProfile.name || '');
     setEditOrgName(creatorProfile.orgName || '');
     setEditDesignation(creatorProfile.designation || '');
+    setEditAvatarUrl(creatorProfile.avatarUrl || '');
   }, [creatorProfile]);
 
   if (!isOpen) return null;
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size (under 2.5MB for local base64 storage)
+    if (file.size > 2.5 * 1024 * 1024) {
+      alert('Thlalak hi 2.5MB aia lian a ni lo tur a ni.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setEditAvatarUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +105,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       name: editName.trim(),
       orgName: editOrgName.trim() || 'Community Member',
       designation: editDesignation.trim() || 'Creator Member',
+      avatarUrl: editAvatarUrl.trim() || undefined,
     };
 
     if (onUpdateProfile) {
@@ -103,16 +130,36 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {saveSuccessNotice && (
           <div className="p-2.5 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 animate-fadeIn">
             <Check className="w-4 h-4 shrink-0" />
-            <span>Hming leh Profile thar hlawhtling takin vawn a ni ta!</span>
+            <span>Hming, Profile leh Thlalak hlawhtling takin vawn a ni ta!</span>
           </div>
         )}
 
         {/* Header / Avatar View */}
         {!isEditing ? (
           <div className="text-center space-y-1.5 relative">
-            <div className="w-14 h-14 bg-gradient-to-tr from-indigo-900 to-purple-900 text-white rounded-2xl flex items-center justify-center mx-auto text-xl font-black shadow-md border-2 border-amber-300">
-              {creatorProfile.name ? creatorProfile.name.charAt(0).toUpperCase() : 'R'}
+            <div className="relative inline-block mx-auto">
+              {creatorProfile.avatarUrl ? (
+                <img
+                  src={creatorProfile.avatarUrl}
+                  alt={creatorProfile.name}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-amber-300 mx-auto"
+                />
+              ) : (
+                <div className="w-16 h-16 bg-gradient-to-tr from-indigo-900 to-purple-900 text-white rounded-2xl flex items-center justify-center mx-auto text-2xl font-black shadow-md border-2 border-amber-300">
+                  {creatorProfile.name ? creatorProfile.name.charAt(0).toUpperCase() : 'R'}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="absolute -bottom-1 -right-1 p-1 bg-amber-400 text-slate-950 rounded-lg shadow-xs hover:bg-amber-300 transition cursor-pointer border border-white"
+                title="Profile Pic / Hming thlakna"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
             </div>
+
             <div className="flex items-center justify-center gap-1.5">
               <h3 className="font-black text-slate-900 text-base">{creatorProfile.name || 'RonPay User'}</h3>
               <button
@@ -132,7 +179,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               onClick={() => setIsEditing(true)}
               className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/80 hover:bg-indigo-100 px-3 py-1 rounded-full border border-indigo-200 inline-flex items-center gap-1 cursor-pointer transition mt-0.5"
             >
-              <Edit3 className="w-3 h-3" /> Hming / Profile Edit
+              <Edit3 className="w-3 h-3" /> Profile & Pic Edit
             </button>
           </div>
         ) : (
@@ -149,6 +196,66 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               >
                 Cancel
               </button>
+            </div>
+
+            {/* Profile Picture Change Section */}
+            <div className="bg-white p-2.5 rounded-xl border border-indigo-100 space-y-2">
+              <label className="text-[10px] font-extrabold text-slate-700 uppercase flex items-center justify-between">
+                <span>Profile Picture / Kohhran Logo</span>
+                {editAvatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setEditAvatarUrl('')}
+                    className="text-rose-500 hover:text-rose-700 text-[9.5px] font-bold flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove
+                  </button>
+                )}
+              </label>
+
+              <div className="flex items-center gap-3">
+                {editAvatarUrl ? (
+                  <img
+                    src={editAvatarUrl}
+                    alt="Preview"
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 rounded-xl object-cover border-2 border-indigo-300 shrink-0 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-400 shrink-0">
+                    <ImageIcon className="w-6 h-6" />
+                  </div>
+                )}
+
+                <div className="flex-1 space-y-1">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[10.5px] border border-indigo-200 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Thlalak Thlang Rawh (Gallery)
+                  </button>
+                  <p className="text-[9px] text-slate-400 leading-tight">PNG, JPG, WebP (Max 2.5MB)</p>
+                </div>
+              </div>
+
+              {/* Or Paste URL */}
+              <div>
+                <input
+                  type="url"
+                  value={editAvatarUrl}
+                  onChange={(e) => setEditAvatarUrl(e.target.value)}
+                  placeholder="Emaw Image Web Link / URL paste rawh..."
+                  className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10.5px] font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
             </div>
 
             <div>

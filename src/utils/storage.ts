@@ -1,10 +1,11 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
 const CREATOR_PROFILE_KEY = 'ronpay_creator_profile_v2';
 const CREATORS_LIST_KEY = 'ronpay_creators_list_v2';
+const MEMBERS_LIST_KEY = 'ronpay_kumtluang_members_v1';
 const PRICING_CONFIG_KEY = 'ronpay_pricing_config_v1';
 const CAMPAIGNS_LAST_SYNC_KEY = 'ronpay_campaigns_last_sync_v1';
 const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
@@ -543,5 +544,91 @@ export const restoreFullDatabaseBackup = (
   } catch (err: any) {
     return { success: false, error: err.message || 'JSON parsing failure.' };
   }
+};
+
+export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
+  {
+    id: 'EBE-1460',
+    name: 'Rammuanpuia Ralte',
+    orgCode: 'EBE',
+    phoneLast4: '1460',
+    fullPhone: '9436141460',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'EBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
+      { subId: 'EBE-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
+    ],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'EBE-8622',
+    name: 'Lalduhawma Fanai',
+    orgCode: 'EBE',
+    phoneLast4: '8622',
+    fullPhone: '9862358622',
+    section: 'Section B',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'EBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
+      { subId: 'EBE-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
+    ],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'EBE-3120',
+    name: 'Zonunsanga Hnamte',
+    orgCode: 'EBE',
+    phoneLast4: '3120',
+    fullPhone: '8794563120',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: new Date().toISOString()
+  }
+];
+
+export const getMembers = (): MemberRecord[] => {
+  try {
+    const raw = localStorage.getItem(MEMBERS_LIST_KEY);
+    if (!raw) {
+      localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(INITIAL_DEFAULT_MEMBERS));
+      return INITIAL_DEFAULT_MEMBERS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    return INITIAL_DEFAULT_MEMBERS;
+  }
+};
+
+export const saveMembers = (members: MemberRecord[]): void => {
+  try {
+    localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
+  } catch (e) {
+    console.error('Failed to save members to localStorage', e);
+  }
+};
+
+export const addOrUpdateMember = (member: MemberRecord): void => {
+  const list = getMembers();
+  const idx = list.findIndex(m => m.id === member.id);
+  if (idx >= 0) {
+    list[idx] = member;
+  } else {
+    list.unshift(member);
+  }
+  saveMembers(list);
+};
+
+export const deleteMember = (memberId: string): void => {
+  const list = getMembers();
+  const filtered = list.filter(m => m.id !== memberId);
+  saveMembers(filtered);
+};
+
+export const saveTransaction = (tx: Transaction): void => {
+  const current = getStoredTransactions();
+  const updated = [tx, ...current];
+  saveStoredTransactions(updated);
 };
 

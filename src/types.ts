@@ -64,6 +64,8 @@ export interface Campaign {
   orgName?: string;
   subCategories?: string[];
   trxnFeeBearer?: 'user_paid' | 'org_paid';
+  sectionLabel?: string; // e.g. "Bial / Unit", "Section / Veng", "Bial / Section"
+  definedSections?: string[]; // Pre-defined dropdown list by Creator/Admin (e.g. ["Bial 1", "Bial 2", "Bial 3", "Bial 4", "General"])
   
   // Per-Campaign / Per-Creator Category Rate Overrides
   customPlatformFeePercent?: number;
@@ -76,6 +78,11 @@ export interface Transaction {
   campaignTitle: string;
   category: BawmCategory;
   donorName: string;
+  donorPhone?: string;
+  donorVeng?: string;
+  memberId?: string;
+  subId?: string;
+  isDependent?: boolean;
   isAnonymous: boolean;
   amount: number;
   platformFee: number;
@@ -83,11 +90,38 @@ export interface Transaction {
   paymentMethod: PaymentMethod;
   status: 'completed' | 'pending_verification';
   subCategoryBreakdown?: { [key: string]: number };
+  subCategory?: string;
   periodType?: 'monthly' | 'quarterly' | 'yearly';
+  periodMonth?: string;
+  periodYear?: string;
   periodLabel?: string;
   remark?: string;
+  referenceNo?: string;
   timestamp: string;
   txHash: string;
+  isSynced?: boolean;
+  createdAt?: string;
+  platformFeeBearer?: 'user_paid' | 'org_paid';
+}
+
+export interface MemberDependent {
+  subId: string; // e.g. EBE-1460-01
+  name: string;
+  relation?: string; // e.g. Fa, Nupui, Nu, Nau
+}
+
+export interface MemberRecord {
+  id: string; // e.g. EBE-1460, BCM-8622
+  name: string;
+  orgCode: string; // e.g. EBE, BCM, YMA
+  phoneLast4: string; // e.g. 1460
+  fullPhone?: string;
+  avatarUrl?: string;
+  section?: string;
+  familyHeadName?: string;
+  isFamilyHead?: boolean;
+  dependents?: MemberDependent[];
+  createdAt: string;
 }
 
 export interface CreatorProfile {
@@ -102,6 +136,7 @@ export interface CreatorProfile {
   isAdmin?: boolean;
   isBlocked?: boolean;
   rejectionReason?: string;
+  avatarUrl?: string;
   approvedCategories: BawmCategory[];
   createdQRsCount: number;
   trialExpiresAt?: string;
