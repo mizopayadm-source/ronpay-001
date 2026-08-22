@@ -54,7 +54,7 @@ interface HomeScreenProps {
   creatorProfile: CreatorProfile;
   announcement?: AnnouncementBanner;
   onOpenReports: () => void;
-  onOpenMemberRoll?: () => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
   onShowBalance: () => void;
   onShowBankTransfer: () => void;
   onOpenPhonePePortal?: () => void;
@@ -575,7 +575,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </button>
 
           {/* Kumtluang Bawm */}
-          <button
+          <div
             onClick={() => onSelectBawm('kumtluang')}
             className="bg-blue-50 hover:bg-blue-100/90 border border-blue-200/80 p-3 rounded-2xl text-left transition flex flex-col justify-between group cursor-pointer shadow-xs active:scale-[0.98]"
           >
@@ -588,13 +588,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <p className="text-[9px] text-blue-700 font-medium">NGO, Kohhran & Pawl Directory</p>
               </div>
             </div>
-            <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] text-blue-800 bg-blue-100/90 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-blue-200">
-                <Search className="w-2.5 h-2.5" /> Browse & Select Heads
+            <div className="flex items-center justify-between w-full gap-1.5">
+              <span className="text-[9px] text-blue-800 bg-blue-100/90 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 border border-blue-200 truncate">
+                <Search className="w-2.5 h-2.5 shrink-0" /> Browse Heads
               </span>
-              <ChevronRight className="w-3.5 h-3.5 text-blue-500 group-hover:translate-x-0.5 transition-transform" />
+              {onOpenMemberRoll && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenMemberRoll('members_list');
+                  }}
+                  className="text-[8.5px] font-black text-white bg-blue-600 hover:bg-blue-700 px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
+                  title="Open Member Roll"
+                >
+                  <Users className="w-2.5 h-2.5" /> Roll
+                </button>
+              )}
             </div>
-          </button>
+          </div>
         </div>
       </div>
 

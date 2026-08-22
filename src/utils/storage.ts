@@ -679,7 +679,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'EBE',
     phoneLast4: '1460',
     fullPhone: '9436141460',
-    section: 'Section A',
+    section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [
       { subId: 'EBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
@@ -694,7 +694,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'EBE',
     phoneLast4: '8622',
     fullPhone: '9862358622',
-    section: 'Section B',
+    section: 'Bial 2 (Vengthlang)',
     isFamilyHead: true,
     dependents: [
       { subId: 'EBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
@@ -709,9 +709,38 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'EBE',
     phoneLast4: '3120',
     fullPhone: '8794563120',
-    section: 'Section A',
+    section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'KTL-5510',
+    campaignId: 'cmp-kumtluang-2',
+    name: 'Vanlalhruaia Chhangte',
+    orgCode: 'KTL',
+    phoneLast4: '5510',
+    fullPhone: '9862555510',
+    section: 'Bial I (Khatla South)',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'KTL-5510-01', name: 'Lallawmsangi (Nupui)', relation: 'Nupui' },
+      { subId: 'KTL-5510-02', name: 'Lalremruata (Fapa)', relation: 'Fa' }
+    ],
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'KTL-7234',
+    campaignId: 'cmp-kumtluang-2',
+    name: 'C. Lalmuanpuia',
+    orgCode: 'KTL',
+    phoneLast4: '7234',
+    fullPhone: '9436127234',
+    section: 'Bial II (Khatla North)',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'KTL-7234-01', name: 'Zomuanpuii (Nupui)', relation: 'Nupui' }
+    ],
     createdAt: new Date().toISOString()
   }
 ];
@@ -731,19 +760,28 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       return allMembers;
     }
 
-    // Filter strictly by campaignId
+    // Filter strictly by campaignId or fallback to campaign orgCode
+    const campaigns = getStoredCampaigns();
+    const targetCampaign = campaigns.find(c => c.id === campaignId);
+
     return allMembers.filter(m => {
       if (m.campaignId) {
         return m.campaignId === campaignId;
       }
-      // Backward compatibility: default seed members belong to cmp-kumtluang-1
+      // Backward compatibility: check orgCode matching
+      if (targetCampaign && m.orgCode && targetCampaign.orgCode && m.orgCode.toUpperCase() === targetCampaign.orgCode.toUpperCase()) {
+        return true;
+      }
       if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') {
+        return true;
+      }
+      if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') {
         return true;
       }
       return false;
     });
   } catch (e) {
-    return campaignId && campaignId !== 'cmp-kumtluang-1' ? [] : INITIAL_DEFAULT_MEMBERS;
+    return campaignId && campaignId !== 'all' && campaignId !== 'cmp-kumtluang-1' ? [] : INITIAL_DEFAULT_MEMBERS;
   }
 };
 

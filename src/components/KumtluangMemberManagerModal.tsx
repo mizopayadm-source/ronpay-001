@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, 
   UserPlus, 
@@ -16,14 +16,25 @@ import {
   Camera,
   Upload,
   User,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Building2,
+  Filter,
+  FileSpreadsheet,
+  FileText,
+  Calendar,
+  Layers,
+  Award,
+  DollarSign
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, addOrUpdateMember, deleteMember, saveTransaction } from '../utils/storage';
 import { 
   exportMasterLedgerPrint, 
   exportMemberCategoryMatrixPrint, 
-  exportMemberPassbookVerticalPrint 
+  exportMemberPassbookVerticalPrint,
+  printTransactionsPDF,
+  exportFormattedExcel,
+  exportKumtluangMatrixToCSV
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -51,11 +62,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('quick_entry');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
+  // Active Global QR / Bawm Filter ('all' or campaign.id)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
+
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+  const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
   const [selectedMonth, setSelectedMonth] = useState<string>('August');
   const [selectedYear, setSelectedYear] = useState<string>('2026');
@@ -64,6 +78,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [entrySuccess, setEntrySuccess] = useState<string | null>(null);
 
   // New Member Registration State
+  const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
   const [newHming, setNewHming] = useState<string>('');
   const [newOrgCode, setNewOrgCode] = useState<string>('BCM');
   const [newPhone4, setNewPhone4] = useState<string>('');
@@ -78,6 +93,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Editing Member State
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
+  const [editCampaignId, setEditCampaignId] = useState<string>('');
   const [editName, setEditName] = useState<string>('');
   const [editOrgCode, setEditOrgCode] = useState<string>('');
   const [editPhone4, setEditPhone4] = useState<string>('');
@@ -93,9 +109,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const newFileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Print Styles Selector State
-  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook'>('style1_master');
+  // Print Styles & Configuration State
+  const [printOrgScope, setPrintOrgScope] = useState<string>('all');
+  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
   const [printMemberId, setPrintMemberId] = useState<string>('');
+  const [printYear, setPrintYear] = useState<string>('2026');
+  const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
+  const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
@@ -107,44 +127,86 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const defaultCategories = ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
 
+  // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
     if (isOpen) {
       if (initialTab) {
         setActiveTab(initialTab);
       }
       const initialCamp = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
-      const campId = selectedCampaignId || initialCamp?.id || '';
-      setSelectedCampaignId(campId);
-      const mList = getMembers(campId);
+      const defaultId = initialCamp?.id || 'all';
+      
+      // Keep selectedCampaignId if already set, else default to first campaign or 'all'
+      const activeId = selectedCampaignId && selectedCampaignId !== '' ? selectedCampaignId : defaultId;
+      setSelectedCampaignId(activeId);
+      setQuickEntryCampaignId(initialCamp?.id || campaigns[0]?.id || '');
+      setRegTargetCampaignId(initialCamp?.id || campaigns[0]?.id || '');
+      setPrintOrgScope(activeId);
+
+      const mList = getMembers(activeId);
       setMembers(mList);
+
       if (initialCamp?.orgCode) {
         setNewOrgCode(initialCamp.orgCode);
       }
     }
   }, [isOpen, campaigns, initialTab]);
 
-  // When selectedCampaignId changes, reload scoped members and set orgCode
+  // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
-    if (selectedCampaignId) {
-      const camp = campaigns.find(c => c.id === selectedCampaignId);
-      setMembers(getMembers(selectedCampaignId));
-      if (camp?.orgCode) {
-        setNewOrgCode(camp.orgCode);
+    if (isOpen && selectedCampaignId) {
+      const mList = getMembers(selectedCampaignId);
+      setMembers(mList);
+
+      if (selectedCampaignId !== 'all') {
+        const camp = campaigns.find(c => c.id === selectedCampaignId);
+        if (camp) {
+          setQuickEntryCampaignId(camp.id);
+          setRegTargetCampaignId(camp.id);
+          setPrintOrgScope(camp.id);
+          if (camp.orgCode) {
+            setNewOrgCode(camp.orgCode);
+          }
+        }
+      } else {
+        setPrintOrgScope('all');
+        const firstCamp = campaigns[0];
+        if (firstCamp) {
+          setQuickEntryCampaignId(firstCamp.id);
+          setRegTargetCampaignId(firstCamp.id);
+          if (firstCamp.orgCode) {
+            setNewOrgCode(firstCamp.orgCode);
+          }
+        }
       }
       setSelectedMember(null);
     }
-  }, [selectedCampaignId, campaigns]);
+  }, [selectedCampaignId, isOpen, campaigns]);
+
+  // When regTargetCampaignId changes during member creation, auto sync prefix
+  useEffect(() => {
+    if (regTargetCampaignId) {
+      const camp = campaigns.find(c => c.id === regTargetCampaignId);
+      if (camp?.orgCode) {
+        setNewOrgCode(camp.orgCode);
+      }
+    }
+  }, [regTargetCampaignId, campaigns]);
 
   if (!isOpen) return null;
 
-  const currentCampaign = campaigns.find(c => c.id === selectedCampaignId) || campaigns[0];
-  const campaignCategories = (currentCampaign?.subCategories && currentCampaign.subCategories.length > 0)
-    ? currentCampaign.subCategories
+  // Active campaign object based on quick entry / active filter
+  const activeScopedCampaign = (selectedCampaignId !== 'all' 
+    ? campaigns.find(c => c.id === selectedCampaignId) 
+    : campaigns.find(c => c.id === quickEntryCampaignId)) || campaigns[0];
+
+  const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
+    ? activeScopedCampaign.subCategories
     : defaultCategories;
 
-  const resolvedOrgTitle = currentCampaign?.orgName || currentCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
-  const resolvedLogoUrl = currentCampaign?.imageUrl || creatorProfile.logoUrl;
-  const resolvedLocation = currentCampaign?.location || creatorProfile.address;
+  const resolvedOrgTitle = activeScopedCampaign?.orgName || activeScopedCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
+  const resolvedLogoUrl = activeScopedCampaign?.imageUrl || creatorProfile.logoUrl;
+  const resolvedLocation = activeScopedCampaign?.location || creatorProfile.address;
 
   // Image compressor handler for photo upload
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
@@ -180,6 +242,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setSelectedMember(m);
     setSelectedPayerType('primary');
     setQuickPhone4(m.phoneLast4);
+    if (m.campaignId) {
+      setQuickEntryCampaignId(m.campaignId);
+    }
   };
 
   const handleSaveQuickPayment = (e: React.FormEvent) => {
@@ -205,12 +270,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
     }
 
+    const targetCampaign = campaigns.find(c => c.id === quickEntryCampaignId) || activeScopedCampaign;
     const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
 
     const newTx: Transaction = {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      campaignId: selectedCampaignId || currentCampaign?.id || 'manual',
-      campaignTitle: currentCampaign?.title || 'Kumtluang Bawm',
+      campaignId: targetCampaign?.id || 'manual',
+      campaignTitle: targetCampaign?.title || 'Kumtluang Bawm',
       category: 'kumtluang',
       donorName: payerName,
       donorPhone: selectedMember.fullPhone || `****${selectedMember.phoneLast4}`,
@@ -259,7 +325,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewPhone4(cleaned);
     if (cleaned.length >= 4) {
       const p4 = cleaned.slice(-4);
-      const exists = members.find(m => m.orgCode === newOrgCode.toUpperCase() && m.phoneLast4 === p4);
+      const allList = getMembers('all');
+      const exists = allList.find(m => m.orgCode === newOrgCode.toUpperCase() && m.phoneLast4 === p4);
       if (exists) {
         setDuplicateWarning(`Hriattirna: ${newOrgCode}-${p4} (${exists.name}) hi a awm sa tawh a, duplicate awm lohnan enchiang rawh.`);
       } else {
@@ -281,7 +348,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return;
     }
 
-    const org = newOrgCode.trim().toUpperCase() || 'EBE';
+    const targetCamp = campaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || campaigns[0];
+    const org = (newOrgCode.trim().toUpperCase() || targetCamp?.orgCode || 'EBE');
     const p4 = newPhone4.slice(-4);
     const generatedId = `${org}-${p4}`;
 
@@ -294,7 +362,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
     const newM: MemberRecord = {
       id: generatedId,
-      campaignId: selectedCampaignId || currentCampaign?.id,
+      campaignId: targetCamp?.id || 'cmp-kumtluang-1',
       name: newHming.trim(),
       orgCode: org,
       phoneLast4: p4,
@@ -307,12 +375,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
 
     addOrUpdateMember(newM);
+    
+    // Explicitly reload members scoped to the current dropdown filter
     const updated = getMembers(selectedCampaignId);
     setMembers(updated);
+
     setRegSuccess(`Member thar [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
     setSelectedMember(newM);
     setSelectedPayerType('primary');
     setQuickPhone4(newM.phoneLast4);
+    if (targetCamp?.id) {
+      setQuickEntryCampaignId(targetCamp.id);
+    }
     
     // Reset form
     setNewHming('');
@@ -326,13 +400,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     
     setTimeout(() => {
       setRegSuccess(null);
-      setActiveTab('quick_entry');
-    }, 2000);
+      setActiveTab('members_list');
+    }, 1800);
   };
 
   // Open Edit Member Modal
   const handleOpenEdit = (m: MemberRecord) => {
     setEditingMember(m);
+    setEditCampaignId(m.campaignId || campaigns[0]?.id || '');
     setEditName(m.name);
     setEditOrgCode(m.orgCode);
     setEditPhone4(m.phoneLast4);
@@ -346,8 +421,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const handleAddEditDependent = () => {
     if (!editDepName.trim() || !editingMember) return;
     const nextIdx = editDependents.length + 1;
+    const org = editOrgCode.trim().toUpperCase() || editingMember.orgCode;
+    const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
+    const baseId = `${org}-${p4}`;
+
     const newDep: MemberDependent = {
-      subId: `${editingMember.id}-${String(nextIdx).padStart(2, '0')}`,
+      subId: `${baseId}-${String(nextIdx).padStart(2, '0')}`,
       name: editDepName.trim(),
       relation: editDepRel
     };
@@ -374,14 +453,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       subId: `${newId}-${String(idx + 1).padStart(2, '0')}`
     }));
 
-    // If ID changed, delete old one and add new
+    // If ID changed, delete old one
     if (newId !== editingMember.id) {
       deleteMember(editingMember.id, editingMember.campaignId || selectedCampaignId);
     }
 
     const updatedM: MemberRecord = {
       id: newId,
-      campaignId: editingMember.campaignId || selectedCampaignId || currentCampaign?.id,
+      campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
       name: editName.trim() || editingMember.name,
       orgCode: org,
       phoneLast4: p4,
@@ -417,62 +496,138 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   };
 
+  // Calculate campaign member counts for the dropdown badges
+  const allMembersList = useMemo(() => getMembers('all'), [members, isOpen]);
+
+  const campaignCounts = useMemo(() => {
+    const counts: { [campId: string]: number } = {};
+    campaigns.forEach(c => {
+      counts[c.id] = allMembersList.filter(m => m.campaignId === c.id || m.orgCode === c.orgCode).length;
+    });
+    return counts;
+  }, [campaigns, allMembersList]);
+
+  // Filtered members for Member Roll Table
+  const filteredTableMembers = useMemo(() => {
+    return members.filter(m => {
+      if (!dirSearch.trim()) return true;
+      const q = dirSearch.toLowerCase().trim();
+      const matchName = m.name.toLowerCase().includes(q);
+      const matchId = m.id.toLowerCase().includes(q);
+      const matchPhone = m.phoneLast4.includes(q) || (m.fullPhone && m.fullPhone.includes(q));
+      const matchSec = m.section && m.section.toLowerCase().includes(q);
+      const matchDep = m.dependents && m.dependents.some(d => d.name.toLowerCase().includes(q) || d.subId.toLowerCase().includes(q));
+      return matchName || matchId || matchPhone || matchSec || matchDep;
+    });
+  }, [members, dirSearch]);
+
+  // Target campaign for Print Tab
+  const printTargetCampaign = printOrgScope !== 'all' 
+    ? campaigns.find(c => c.id === printOrgScope) 
+    : undefined;
+
+  const printTargetTransactions = useMemo(() => {
+    if (printOrgScope === 'all') return transactions;
+    return transactions.filter(t => t.campaignId === printOrgScope || (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title));
+  }, [transactions, printOrgScope, printTargetCampaign]);
+
+  const printTargetMembers = useMemo(() => {
+    return getMembers(printOrgScope);
+  }, [printOrgScope, members]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fadeIn overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden my-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden my-4 sm:my-6 flex flex-col max-h-[94vh]">
         
-        {/* Top Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-xs overflow-hidden">
+        {/* Top Header with Vibrant Gradient & Live Stats */}
+        <div className="px-5 py-3.5 sm:px-6 sm:py-4 bg-gradient-to-r from-slate-950 via-indigo-950 to-blue-950 text-white flex items-center justify-between shrink-0 border-b border-indigo-900/50">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-xs overflow-hidden shrink-0">
               {resolvedLogoUrl ? (
                 <img src={resolvedLogoUrl} alt="Logo" className="w-full h-full object-cover" />
               ) : (
-                <Users className="w-5 h-5" />
+                <Building2 className="w-5 h-5 text-amber-400" />
               )}
             </div>
-            <div>
-              <h3 className="font-black text-base tracking-wide flex items-center gap-2">
-                <span>{currentCampaign?.title || 'Kumtluang Bawm'} • Member Roll & Treasurer Portal</span>
-                <span className="text-[9.5px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
-                  12-Month Matrix
+            <div className="min-w-0">
+              <h3 className="font-black text-sm sm:text-base tracking-wide flex items-center gap-2 truncate">
+                <span className="truncate">{resolvedOrgTitle}</span>
+                <span className="text-[9px] sm:text-[9.5px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full shrink-0">
+                  Master Roll
                 </span>
               </h3>
-              <p className="text-xs text-blue-200/80">
-                {resolvedOrgTitle} {resolvedLocation ? `• ${resolvedLocation}` : ''} • Family Head & Dependent Sub-IDs
+              <p className="text-[11px] sm:text-xs text-blue-200/80 truncate">
+                {selectedCampaignId === 'all' ? `All Campaigns (${allMembersList.length} Enrolled)` : `${activeScopedCampaign?.title || 'Active Bawm'} • Prefix [${activeScopedCampaign?.orgCode || 'QR'}]`}
               </p>
             </div>
           </div>
           <button 
             type="button"
+            id="close-kumtluang-modal-btn"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0"
+            title="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* PROMINENT TOP-LEVEL QR / BAWM FILTER BAR */}
+        <div className="bg-indigo-50/70 border-b border-indigo-100 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Filter className="w-4 h-4 text-indigo-700 shrink-0" />
+            <label htmlFor="active-bawm-dropdown" className="text-xs font-black text-indigo-950 uppercase tracking-wider shrink-0">
+              Select Active QR / Bawm:
+            </label>
+          </div>
+          
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <select
+                id="active-bawm-dropdown"
+                value={selectedCampaignId}
+                onChange={(e) => setSelectedCampaignId(e.target.value)}
+                className="w-full pl-3.5 pr-8 py-2 bg-white border-2 border-indigo-400/80 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate"
+              >
+                <option value="all">
+                  🌐 All Lists (Bawm Zawng Zawng) — Consolidated Master Roll ({allMembersList.length} Members)
+                </option>
+                {campaigns.map(camp => (
+                  <option key={camp.id} value={camp.id}>
+                    🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}] — {campaignCounts[camp.id] || 0} Members
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-indigo-700">
+                <ChevronDown className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 gap-2 pt-2 overflow-x-auto">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-1 sm:gap-2 pt-2 overflow-x-auto shrink-0 no-scrollbar">
           <button
             type="button"
+            id="tab-btn-quick-entry"
             onClick={() => setActiveTab('quick_entry')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'quick_entry'
-                ? 'border-blue-600 text-blue-700 bg-white rounded-t-xl shadow-xs'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
-            <span>Treasurer Quick Entry (Digit 4)</span>
+            <span>Quick Entry (Digit 4)</span>
           </button>
 
           <button
             type="button"
+            id="tab-btn-register-member"
             onClick={() => setActiveTab('register_member')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'register_member'
-                ? 'border-blue-600 text-blue-700 bg-white rounded-t-xl shadow-xs'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -482,753 +637,1025 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
           <button
             type="button"
+            id="tab-btn-print-reports"
             onClick={() => setActiveTab('print_reports')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'print_reports'
-                ? 'border-blue-600 text-blue-700 bg-white rounded-t-xl shadow-xs'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Statement Print (Styles 1, 2, 3)</span>
+            <span>Statement Print (4 Formats)</span>
           </button>
 
           <button
             type="button"
+            id="tab-btn-members-list"
             onClick={() => setActiveTab('members_list')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'members_list'
-                ? 'border-blue-600 text-blue-700 bg-white rounded-t-xl shadow-xs'
+                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Member Roll & Edit ({members.length})</span>
+            <span>Member Roll ({filteredTableMembers.length})</span>
           </button>
         </div>
 
-        {/* TAB 1: QUICK ENTRY */}
-        {activeTab === 'quick_entry' && (
-          <div className="p-6 space-y-6">
-            {entrySuccess && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{entrySuccess}</span>
-              </div>
-            )}
+        {/* SCROLLABLE MAIN CONTENT BODY */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-              
-              {/* Left Column: 4-Digit Search & Member Selection */}
-              <div className="md:col-span-5 space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Phone Last 4 Digits / Hming / Sub-ID <span className="text-blue-600">*</span>
-                  </label>
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      value={quickPhone4}
-                      onChange={(e) => {
-                        setQuickPhone4(e.target.value);
-                        if (!e.target.value) setSelectedMember(null);
-                      }}
-                      placeholder="e.g. 1460, 8622, Rammuanpuia..."
-                      className="w-full pl-9 pr-3 py-2.5 bg-white border border-blue-300 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Digit 4 emaw Hming chhutin Member an lo lang nghal ang.
-                  </p>
-                </div>
-
-                {/* Auto-suggest list */}
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {searchResults.map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => handleSelectQuickMember(m)}
-                      className={`w-full text-left p-2.5 rounded-xl border transition flex items-center justify-between cursor-pointer ${
-                        selectedMember?.id === m.id
-                          ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
-                          : 'bg-white text-slate-800 border-slate-200 hover:bg-blue-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs ${
-                          selectedMember?.id === m.id ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}>
-                          {m.avatarUrl ? (
-                            <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span>{m.name.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div>
-                          <div className="text-xs font-black flex items-center gap-1.5 flex-wrap">
-                            <span>{m.name}</span>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${selectedMember?.id === m.id ? 'bg-blue-800 text-blue-100' : 'bg-slate-100 text-slate-700'}`}>
-                              {m.id}
-                            </span>
-                            {m.dependents && m.dependents.length > 0 && (
-                              <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${selectedMember?.id === m.id ? 'bg-blue-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
-                                +{m.dependents.length} Chhungte
-                              </span>
-                            )}
-                          </div>
-                          <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-blue-100' : 'text-slate-500'}`}>
-                            Phone: ****{m.phoneLast4} • {m.section || 'General'}
-                          </div>
-                        </div>
-                      </div>
-                      {selectedMember?.id === m.id && <Check className="w-4 h-4 text-white shrink-0" />}
-                    </button>
-                  ))}
-
-                  {quickPhone4 && searchResults.length === 0 && (
-                    <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2">
-                      <p className="text-xs text-amber-800 font-bold">He Phone / Hming hi Roll-ah a la awm lo</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewPhone4(quickPhone4.slice(-4));
-                          setActiveTab('register_member');
-                        }}
-                        className="text-xs font-black text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        + Member thar atan register nghal rawh
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Column: Payment Form */}
-              <div className="md:col-span-7 space-y-4">
-                <form onSubmit={handleSaveQuickPayment} className="space-y-4">
-                  {/* Selected Member Header Card */}
-                  <div className={`p-4 rounded-2xl border ${
-                    selectedMember 
-                      ? 'bg-blue-50/90 border-blue-200 text-blue-950' 
-                      : 'bg-slate-50 border-slate-200 text-slate-500'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {selectedMember && (
-                          <div className="w-11 h-11 rounded-2xl overflow-hidden bg-white border border-blue-200 shadow-xs shrink-0 flex items-center justify-center font-black text-blue-900 text-base">
-                            {selectedMember.avatarUrl ? (
-                              <img src={selectedMember.avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <span>{selectedMember.name.charAt(0).toUpperCase()}</span>
-                            )}
-                          </div>
-                        )}
-                        <div>
-                          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Chhungkaw Hotu (Family Head)</div>
-                          <div className="text-sm font-black text-slate-900">
-                            {selectedMember ? selectedMember.name : 'Khawngaihin vei lam atangin member thlang rawh'}
-                          </div>
-                        </div>
-                      </div>
-                      {selectedMember && (
-                        <span className="font-mono text-xs font-black px-2.5 py-1 bg-blue-600 text-white rounded-xl shadow-xs">
-                          {selectedMember.id}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Dual-User Selector (Family Head vs Dependents) */}
-                    {selectedMember && selectedMember.dependents && selectedMember.dependents.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-blue-200/60 space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-blue-900 block">
-                          Tunge Thawh Dawn? (Select Payer Member):
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPayerType('primary')}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                              selectedPayerType === 'primary'
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-white text-slate-700 border border-slate-300 hover:bg-blue-50'
-                            }`}
-                          >
-                            <span>{selectedMember.name} (Hotu)</span>
-                            <span className="text-[9px] font-mono opacity-80">{selectedMember.id}</span>
-                          </button>
-
-                          {selectedMember.dependents.map(dep => (
-                            <button
-                              key={dep.subId}
-                              type="button"
-                              onClick={() => setSelectedPayerType(dep.subId)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                                selectedPayerType === dep.subId
-                                  ? 'bg-blue-600 text-white shadow-xs'
-                                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-blue-50'
-                              }`}
-                            >
-                              <span>{dep.name}</span>
-                              <span className="text-[9px] font-mono opacity-80">{dep.subId}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Campaign / Bawm Dropdown */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Kumtluang Bawm</label>
-                    <select
-                      value={selectedCampaignId}
-                      onChange={(e) => setSelectedCampaignId(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      {campaigns.map(c => (
-                        <option key={c.id} value={c.id}>{c.title}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Category & Month */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Sub-Category</label>
-                      <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-blue-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        {campaignCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Thla (Month)</label>
-                      <select
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        {monthsList.map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Amount & Remark */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Pek Zat (Amount ₹) <span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
-                        <input
-                          type="number"
-                          value={entryAmount}
-                          onChange={(e) => setEntryAmount(e.target.value)}
-                          className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
-                      <input
-                        type="text"
-                        value={entryRemark}
-                        onChange={(e) => setEntryRemark(e.target.value)}
-                        placeholder="e.g. Inkhawm thawh / Cash"
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={!selectedMember}
-                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)</span>
-                  </button>
-                </form>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: REGISTER MEMBER / FAMILY TREE */}
-        {activeTab === 'register_member' && (
-          <div className="p-6 max-w-xl mx-auto space-y-4">
-            {regSuccess && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{regSuccess}</span>
-              </div>
-            )}
-
-            {duplicateWarning && (
-              <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-2 text-xs font-bold text-amber-900 animate-fadeIn">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{duplicateWarning}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleRegisterMember} className="space-y-4 bg-slate-50 p-6 rounded-3xl border border-slate-200">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                  Chhungkaw Hotu & Dependents Registration
-                </h4>
-                <p className="text-xs text-slate-500">
-                  Chhungkaw Hotu pui ber hming leh phone hmangin Unique ID a insiam ang a, phone nei lo chhungte tana Sub-ID siam theih a ni.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Chhungkaw Hotu Hming (Family Head Full Name) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newHming}
-                  onChange={(e) => setNewHming(e.target.value)}
-                  placeholder="e.g. Rammuanpuia Ralte"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Pawl Code (3 Letters) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    value={newOrgCode}
-                    onChange={(e) => setNewOrgCode(e.target.value.toUpperCase())}
-                    placeholder="e.g. EBE / BCM / YMA"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Phone No. Last 4 Digits <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    value={newPhone4}
-                    onChange={(e) => handlePhoneChange(e.target.value)}
-                    placeholder="e.g. 1460"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Preview of generated ID */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between text-xs">
-                <span className="text-blue-900 font-bold">Auto-Generated Primary ID:</span>
-                <span className="font-mono font-black text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-300">
-                  {newOrgCode.toUpperCase() || 'EBE'}-{newPhone4 ? newPhone4.slice(-4) : 'XXXX'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Full Phone (Optional)</label>
-                  <input
-                    type="tel"
-                    value={newFullPhone}
-                    onChange={(e) => setNewFullPhone(e.target.value)}
-                    placeholder="e.g. 9436141460"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    {currentCampaign?.sectionLabel || 'Section / Bial / Veng'}
-                  </label>
-                  <select
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- Thlang Rawh ({currentCampaign?.sectionLabel || 'Bial / Section'}) --</option>
-                    {(currentCampaign?.definedSections && currentCampaign.definedSections.length > 0
-                      ? currentCampaign.definedSections
-                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                    ).map((sec, idx) => (
-                      <option key={idx} value={sec}>
-                        {sec}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Member Profile Photo Upload (Optional) */}
-              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-blue-600" />
-                    <span>Mimal Thlalak / Profile Photo (Optional)</span>
-                  </label>
-                  <span className="text-[10px] text-slate-500 font-medium">Statement Print-ah a lang ang</span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 relative group">
-                    {newAvatarUrl ? (
-                      <img src={newAvatarUrl} alt="Member Avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-6 h-6 text-slate-400" />
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5 flex-1">
-                    <input
-                      ref={newFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handlePhotoSelect(e, false)}
-                      className="hidden"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => newFileInputRef.current?.click()}
-                        disabled={isCompressing}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>{newAvatarUrl ? 'Thlak Rawh' : 'Thlalak Thlang Rawh'}</span>
-                      </button>
-                      {newAvatarUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setNewAvatarUrl('')}
-                          className="px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
-                        >
-                          Paih Rawh
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-500">
-                      Auto-compressed under 100KB (Phone memory ti rit lo turin)
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dependents Addition Section */}
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 uppercase">
-                    + Dependents (Phone nei hrang lo chhungte)
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-semibold">Sub-ID Auto Generate</span>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={depNameInput}
-                    onChange={(e) => setDepNameInput(e.target.value)}
-                    placeholder="Chhungte Hming (e.g. Lalrinchhani)"
-                    className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  <select
-                    value={depRelInput}
-                    onChange={(e) => setDepRelInput(e.target.value)}
-                    className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  >
-                    <option value="Nupui">Nupui</option>
-                    <option value="Pasal">Pasal</option>
-                    <option value="Fa">Fa</option>
-                    <option value="Nu">Nu</option>
-                    <option value="Pa">Pa</option>
-                    <option value="Nau">Nau</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleAddDraftDependent}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {newDependents.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    {newDependents.map((dep, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.2 rounded">
-                            {newOrgCode || 'EBE'}-{newPhone4.slice(-4) || 'XXXX'}-{String(idx + 1).padStart(2, '0')}
-                          </span>
-                          <span className="font-bold text-slate-900">{dep.name}</span>
-                          <span className="text-[10px] text-slate-500">({dep.relation})</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDraftDependent(idx)}
-                          className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Chhungkaw Record Vawng Rawh (Save & Register)</span>
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* TAB 3: STATEMENT PRINT WITH "PRINT STYLE" SELECTION */}
-        {activeTab === 'print_reports' && (
-          <div className="p-6 space-y-6">
-            <div className="text-center max-w-lg mx-auto space-y-1">
-              <h4 className="text-sm font-black text-slate-900 uppercase">
-                Statement Print na Hmun (Print Styles 1, 2, 3)
-              </h4>
-              <p className="text-xs text-slate-500">
-                Print Style thlang la, Master Sheet emaw Mimal Passbook / Matrix Printout A4 format-ah a lo chhuak ang.
-              </p>
-            </div>
-
-            {/* Print Style Selection Bar */}
-            <div className="max-w-2xl mx-auto bg-slate-50 p-4 rounded-3xl border border-slate-200 space-y-4">
-              <div>
-                <label className="text-xs font-black text-slate-800 block mb-1.5">
-                  🖨️ Print Style Thlanna (Select Report Format):
-                </label>
-                <select
-                  value={printStyle}
-                  onChange={(e) => setPrintStyle(e.target.value as any)}
-                  className="w-full p-3 bg-white border-2 border-blue-400 rounded-2xl text-xs font-black text-blue-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="style1_master">Format 1: Kohhran / Pawl Master Ledger (Member zawng zawng Thla 12 Grid)</option>
-                  <option value="style2_matrix">Format 2: Mimal Record (Horizontal Category Matrix - Thla 12)</option>
-                  <option value="style3_passbook">Format 3: Mimal Passbook (Vertical Passbook Card - Thla 12)</option>
-                </select>
-              </div>
-
-              {/* If Mimal format, show Member selector */}
-              {(printStyle === 'style2_matrix' || printStyle === 'style3_passbook') && (
-                <div className="animate-fadeIn">
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Member Thlang Rawh (Select Member for Personal Statement):
-                  </label>
-                  <select
-                    value={printMemberId}
-                    onChange={(e) => setPrintMemberId(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
-                  >
-                    <option value="">-- Member Thlang Rawh --</option>
-                    {members.map(m => (
-                      <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
-                    ))}
-                  </select>
+          {/* TAB 1: QUICK ENTRY */}
+          {activeTab === 'quick_entry' && (
+            <div className="space-y-6">
+              {entrySuccess && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{entrySuccess}</span>
                 </div>
               )}
 
-              {/* Action Print Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (printStyle === 'style1_master') {
-                    exportMasterLedgerPrint(
-                      members, 
-                      transactions, 
-                      currentCampaign?.title || 'Kumtluang Bawm', 
-                      resolvedOrgTitle,
-                      resolvedLogoUrl,
-                      resolvedLocation
-                    );
-                  } else if (printStyle === 'style2_matrix') {
-                    if (!printMemberId) {
-                      alert('Khawngaihin member thlang hmasa rawh le.');
-                      return;
-                    }
-                    const m = members.find(x => x.id === printMemberId);
-                    if (m) {
-                      exportMemberCategoryMatrixPrint(
-                        m, 
-                        campaignCategories, 
-                        transactions, 
-                        resolvedOrgTitle,
-                        resolvedLogoUrl,
-                        resolvedLocation
-                      );
-                    }
-                  } else if (printStyle === 'style3_passbook') {
-                    if (!printMemberId) {
-                      alert('Khawngaihin member thlang hmasa rawh le.');
-                      return;
-                    }
-                    const m = members.find(x => x.id === printMemberId);
-                    if (m) {
-                      exportMemberPassbookVerticalPrint(
-                        m, 
-                        campaignCategories, 
-                        transactions, 
-                        resolvedOrgTitle,
-                        resolvedLogoUrl,
-                        resolvedLocation
-                      );
-                    }
-                  }
-                }}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 cursor-pointer active:scale-95"
-              >
-                <Printer className="w-4 h-4" />
-                <span>
-                  {printStyle === 'style1_master' && 'Print Format 1: Master Ledger (Landscape)'}
-                  {printStyle === 'style2_matrix' && 'Print Format 2: Category Matrix'}
-                  {printStyle === 'style3_passbook' && 'Print Format 3: Mimal Passbook Slip'}
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                
+                {/* Left Column: 4-Digit Search & Member Selection */}
+                <div className="md:col-span-5 space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Phone Last 4 Digits / Hming / Sub-ID <span className="text-indigo-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        id="quick-entry-search-input"
+                        value={quickPhone4}
+                        onChange={(e) => {
+                          setQuickPhone4(e.target.value);
+                          if (!e.target.value) setSelectedMember(null);
+                        }}
+                        placeholder="e.g. 1460, 8622, Rammuanpuia..."
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-indigo-300 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Digit 4 emaw Hming chhutin Member an lo lang nghal ang.
+                    </p>
+                  </div>
 
-        {/* TAB 4: MEMBER ROLL & EDIT / DELETE */}
-        {activeTab === 'members_list' && (
-          <div className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  value={dirSearch}
-                  onChange={(e) => setDirSearch(e.target.value)}
-                  placeholder="Hming, ID, Section zawnna..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('register_member')}
-                className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>+ Member Thar Chhinchhiah</span>
-              </button>
-            </div>
-
-            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-96 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Member ID</th>
-                    <th className="p-3">Chhungkaw Hotu & Dependents</th>
-                    <th className="p-3">Phone (Last 4)</th>
-                    <th className="p-3">Section / Bial</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {members
-                    .filter(m => !dirSearch || m.name.toLowerCase().includes(dirSearch.toLowerCase()) || m.id.toLowerCase().includes(dirSearch.toLowerCase()) || m.phoneLast4.includes(dirSearch))
-                    .map(m => (
-                      <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 font-mono font-bold text-blue-700">{m.id}</td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700">
+                  {/* Auto-suggest list */}
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {searchResults.map(m => {
+                      const memberCamp = campaigns.find(c => c.id === m.campaignId);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleSelectQuickMember(m)}
+                          className={`w-full text-left p-2.5 rounded-xl border transition flex items-center justify-between cursor-pointer ${
+                            selectedMember?.id === m.id
+                              ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
+                              : 'bg-white text-slate-800 border-slate-200 hover:bg-indigo-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs ${
+                              selectedMember?.id === m.id ? 'bg-indigo-800 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}>
                               {m.avatarUrl ? (
                                 <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
                               ) : (
                                 <span>{m.name.charAt(0).toUpperCase()}</span>
                               )}
                             </div>
-                            <div>
-                              <div className="font-bold text-slate-900">{m.name}</div>
-                              {m.dependents && m.dependents.length > 0 && (
-                                <div className="text-[10px] text-slate-500 mt-0.5 space-x-1">
-                                  {m.dependents.map(d => (
-                                    <span key={d.subId} className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-mono">
-                                      {d.name} ({d.subId.split('-').pop()})
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                            <div className="min-w-0">
+                              <div className="text-xs font-black flex items-center gap-1.5 flex-wrap">
+                                <span className="truncate">{m.name}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${selectedMember?.id === m.id ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-100 text-slate-700'}`}>
+                                  {m.id}
+                                </span>
+                                {memberCamp && selectedCampaignId === 'all' && (
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${selectedMember?.id === m.id ? 'bg-indigo-700 text-indigo-100' : 'bg-blue-100 text-blue-800'}`}>
+                                    {memberCamp.orgCode || memberCamp.title}
+                                  </span>
+                                )}
+                                {m.dependents && m.dependents.length > 0 && (
+                                  <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${selectedMember?.id === m.id ? 'bg-indigo-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                                    +{m.dependents.length} Chhungte
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-indigo-100' : 'text-slate-500'}`}>
+                                Phone: ****{m.phoneLast4} • {m.section || 'General'}
+                              </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="p-3 text-slate-600 font-mono">****{m.phoneLast4}</td>
-                        <td className="p-3 text-slate-600">{m.section || '-'}</td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleSelectQuickMember(m);
-                                setActiveTab('quick_entry');
-                              }}
-                              className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg font-bold text-[10.5px] transition cursor-pointer"
-                              title="Add Quick Payment"
-                            >
-                              + Pay
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(m)}
-                              className="p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                              title="Edit Member Details"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMember(m.id, m.name)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title="Delete Member"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          {selectedMember?.id === m.id && <Check className="w-4 h-4 text-white shrink-0" />}
+                        </button>
+                      );
+                    })}
+
+                    {quickPhone4 && searchResults.length === 0 && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2">
+                        <p className="text-xs text-amber-800 font-bold">He Phone / Hming hi Roll-ah a la awm lo</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewPhone4(quickPhone4.slice(-4));
+                            setActiveTab('register_member');
+                          }}
+                          className="text-xs font-black text-indigo-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          + Member thar atan register nghal rawh
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Payment Form */}
+                <div className="md:col-span-7 space-y-4">
+                  <form onSubmit={handleSaveQuickPayment} className="space-y-4">
+                    {/* Selected Member Header Card */}
+                    <div className={`p-4 rounded-2xl border ${
+                      selectedMember 
+                        ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950' 
+                        : 'bg-slate-50 border-slate-200 text-slate-500'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {selectedMember && (
+                            <div className="w-11 h-11 rounded-2xl overflow-hidden bg-white border border-indigo-200 shadow-xs shrink-0 flex items-center justify-center font-black text-indigo-900 text-base">
+                              {selectedMember.avatarUrl ? (
+                                <img src={selectedMember.avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span>{selectedMember.name.charAt(0).toUpperCase()}</span>
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Chhungkaw Hotu (Family Head)</div>
+                            <div className="text-sm font-black text-slate-900">
+                              {selectedMember ? selectedMember.name : 'Khawngaihin vei lam atangin member thlang rawh'}
+                            </div>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+                        </div>
+                        {selectedMember && (
+                          <span className="font-mono text-xs font-black px-2.5 py-1 bg-indigo-600 text-white rounded-xl shadow-xs">
+                            {selectedMember.id}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Dual-User Selector (Family Head vs Dependents) */}
+                      {selectedMember && selectedMember.dependents && selectedMember.dependents.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-indigo-200/60 space-y-1.5">
+                          <label className="text-[10px] uppercase font-black text-indigo-900 block">
+                            Tunge Thawh Dawn? (Select Payer Member):
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPayerType('primary')}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                                selectedPayerType === 'primary'
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-indigo-50'
+                              }`}
+                            >
+                              <span>{selectedMember.name} (Hotu)</span>
+                              <span className="text-[9px] font-mono opacity-80">{selectedMember.id}</span>
+                            </button>
+
+                            {selectedMember.dependents.map(dep => (
+                              <button
+                                key={dep.subId}
+                                type="button"
+                                onClick={() => setSelectedPayerType(dep.subId)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                                  selectedPayerType === dep.subId
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-indigo-50'
+                                  }`}
+                              >
+                                <span>{dep.name}</span>
+                                <span className="text-[9px] font-mono opacity-80">{dep.subId}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Campaign / Bawm Dropdown */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Kumtluang Bawm / Campaign Target</label>
+                      <select
+                        value={quickEntryCampaignId}
+                        onChange={(e) => setQuickEntryCampaignId(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        {campaigns.map(c => (
+                          <option key={c.id} value={c.id}>{c.title} [{c.orgCode || 'QR'}]</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Category & Month */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
+                        <select
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {campaignCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Thla (Month)</label>
+                        <select
+                          value={selectedMonth}
+                          onChange={(e) => setSelectedMonth(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {monthsList.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Amount & Remark */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Pek Zat (Amount ₹) <span className="text-red-500">*</span></label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
+                          <input
+                            type="number"
+                            value={entryAmount}
+                            onChange={(e) => setEntryAmount(e.target.value)}
+                            className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
+                        <input
+                          type="text"
+                          value={entryRemark}
+                          onChange={(e) => setEntryRemark(e.target.value)}
+                          placeholder="e.g. Inkhawm thawh / Cash"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!selectedMember}
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)</span>
+                    </button>
+                  </form>
+                </div>
+
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* TAB 2: REGISTER MEMBER / FAMILY TREE */}
+          {activeTab === 'register_member' && (
+            <div className="max-w-xl mx-auto space-y-4">
+              {regSuccess && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{regSuccess}</span>
+                </div>
+              )}
+
+              {duplicateWarning && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-2 text-xs font-bold text-amber-900 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{duplicateWarning}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleRegisterMember} className="space-y-4 bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-indigo-600" />
+                    <span>Chhungkaw Hotu & Dependents Registration</span>
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Chhungkaw Hotu pui ber hming leh phone hmangin Unique ID a insiam ang a, phone nei lo chhungte tana Sub-ID siam theih a ni.
+                  </p>
+                </div>
+
+                {/* Target Bawm Selector */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Select Target QR / Bawm (He Member hi eng Bawm-ah nge enroll dawn?): <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={regTargetCampaignId}
+                    onChange={(e) => setRegTargetCampaignId(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    required
+                  >
+                    {campaigns.map(c => (
+                      <option key={c.id} value={c.id}>
+                        🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Chhungkaw Hotu Hming (Family Head Full Name) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newHming}
+                    onChange={(e) => setNewHming(e.target.value)}
+                    placeholder="e.g. Rammuanpuia Ralte"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Pawl Code (Prefix) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={5}
+                      value={newOrgCode}
+                      onChange={(e) => setNewOrgCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. EBE / BCM / YMA"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Phone No. Last 4 Digits <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={newPhone4}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="e.g. 1460"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Preview of generated ID */}
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between text-xs">
+                  <span className="text-indigo-900 font-bold">Auto-Generated Primary ID:</span>
+                  <span className="font-mono font-black text-indigo-950 bg-white px-2.5 py-1 rounded-lg border border-indigo-300">
+                    {newOrgCode.toUpperCase() || 'EBE'}-{newPhone4 ? newPhone4.slice(-4) : 'XXXX'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Full Phone (Optional)</label>
+                    <input
+                      type="tel"
+                      value={newFullPhone}
+                      onChange={(e) => setNewFullPhone(e.target.value)}
+                      placeholder="e.g. 9436141460"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Section / Bial / Veng
+                    </label>
+                    <select
+                      value={newSection}
+                      onChange={(e) => setNewSection(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="">-- Thlang Rawh (Bial / Section) --</option>
+                      {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
+                        ? activeScopedCampaign.definedSections
+                        : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                      ).map((sec, idx) => (
+                        <option key={idx} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Member Profile Photo Upload */}
+                <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 text-indigo-600" />
+                      <span>Mimal Thlalak / Profile Photo (Optional)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-medium">Statement Print-ah a lang ang</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                      {newAvatarUrl ? (
+                        <img src={newAvatarUrl} alt="Member Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 flex-1">
+                      <input
+                        ref={newFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePhotoSelect(e, false)}
+                        className="hidden"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => newFileInputRef.current?.click()}
+                          disabled={isCompressing}
+                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{newAvatarUrl ? 'Thlak Rawh' : 'Thlalak Thlang Rawh'}</span>
+                        </button>
+                        {newAvatarUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setNewAvatarUrl('')}
+                            className="px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                          >
+                            Paih Rawh
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Auto-compressed under 100KB (Phone memory ti rit lo turin)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dependents Addition Section */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900 uppercase">
+                      + Dependents (Phone nei hrang lo chhungte)
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold">Sub-ID Auto Generate</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={depNameInput}
+                      onChange={(e) => setDepNameInput(e.target.value)}
+                      placeholder="Chhungte Hming (e.g. Lalrinchhani)"
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <select
+                      value={depRelInput}
+                      onChange={(e) => setDepRelInput(e.target.value)}
+                      className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                    >
+                      <option value="Nupui">Nupui</option>
+                      <option value="Pasal">Pasal</option>
+                      <option value="Fa">Fa</option>
+                      <option value="Nu">Nu</option>
+                      <option value="Pa">Pa</option>
+                      <option value="Nau">Nau</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddDraftDependent}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {newDependents.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      {newDependents.map((dep, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded">
+                              {newOrgCode || 'EBE'}-{newPhone4.slice(-4) || 'XXXX'}-{String(idx + 1).padStart(2, '0')}
+                            </span>
+                            <span className="font-bold text-slate-900">{dep.name}</span>
+                            <span className="text-[10px] text-slate-500">({dep.relation})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDraftDependent(idx)}
+                            className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Chhungkaw Record Vawng Rawh (Save & Link to Roll)</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 3: STATEMENT PRINT WITH ORG SELECTOR & STANDARD AUDIT STATEMENT */}
+          {activeTab === 'print_reports' && (
+            <div className="max-w-2xl mx-auto space-y-6">
+              <div className="text-center space-y-1">
+                <h4 className="text-sm font-black text-slate-900 uppercase flex items-center justify-center gap-2">
+                  <Printer className="w-4 h-4 text-indigo-600" />
+                  <span>Financial Statement & Report Print Portal</span>
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Audit Statement, Kohhran Master Ledger, emaw Mimal Passbook A4 format-ah a lo chhuak ang.
+                </p>
+              </div>
+
+              {/* Print Configuration Box */}
+              <div className="bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200 space-y-4">
+                
+                {/* 1. Org / Campaign Selector for Printing */}
+                <div>
+                  <label className="text-xs font-black text-slate-800 block mb-1.5 flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-indigo-600" />
+                    <span>1. Print Tur Organization / Bawm Thlanna:</span>
+                  </label>
+                  <select
+                    value={printOrgScope}
+                    onChange={(e) => setPrintOrgScope(e.target.value)}
+                    className="w-full p-2.5 bg-white border-2 border-indigo-300 rounded-xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="all">🌐 All Campaigns (Consolidated Report — {transactions.length} Txns / {allMembersList.length} Members)</option>
+                    {campaigns.map(camp => (
+                      <option key={camp.id} value={camp.id}>
+                        🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Format Selection (4 Formats) */}
+                <div>
+                  <label className="text-xs font-black text-slate-800 block mb-1.5 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-indigo-600" />
+                    <span>2. Report Format & Print Style:</span>
+                  </label>
+                  <select
+                    value={printStyle}
+                    onChange={(e) => setPrintStyle(e.target.value as any)}
+                    className="w-full p-3 bg-white border-2 border-indigo-500 rounded-2xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="style1_master">
+                      📋 Format 1: Kohhran / Pawl Master Ledger (Member zawng zawng Thla 12 Grid - Landscape)
+                    </option>
+                    <option value="style4_audit">
+                      📊 Format 2: Standard Financial Audit Statement (Official Letterhead, Online/Cash Badges & Signatures)
+                    </option>
+                    <option value="style2_matrix">
+                      📑 Format 3: Mimal Record (Horizontal Category Matrix - Thla 12)
+                    </option>
+                    <option value="style3_passbook">
+                      💳 Format 4: Mimal Passbook Slip (Vertical Card Slip)
+                    </option>
+                  </select>
+                </div>
+
+                {/* If Mimal format, show Member selector */}
+                {(printStyle === 'style2_matrix' || printStyle === 'style3_passbook') && (
+                  <div className="animate-fadeIn p-3 bg-white border border-indigo-200 rounded-2xl space-y-1">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Member Thlang Rawh (Select Member for Personal Statement):
+                    </label>
+                    <select
+                      value={printMemberId}
+                      onChange={(e) => setPrintMemberId(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                    >
+                      <option value="">-- Member Thlang Rawh ({printTargetMembers.length} Available) --</option>
+                      {printTargetMembers.map(m => (
+                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Audit Statement Options */}
+                {printStyle === 'style4_audit' && (
+                  <div className="animate-fadeIn p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                    <div className="text-xs font-black text-indigo-950 uppercase tracking-wide flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Audit Statement Configuration</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-700">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeSignatures}
+                          onChange={(e) => setIncludeSignatures(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span>Include Official Signatures (Recorder, Treasurer, Secretary)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeMonthlyChart}
+                          onChange={(e) => setIncludeMonthlyChart(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span>Include Monthly Trend Visual Chart</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Print Button */}
+                <button
+                  type="button"
+                  id="execute-statement-print-btn"
+                  onClick={() => {
+                    const activeCamp = printOrgScope !== 'all' ? campaigns.find(c => c.id === printOrgScope) : undefined;
+                    const orgDisplay = activeCamp?.orgName || activeCamp?.title || creatorProfile.orgName || creatorProfile.name || 'RONPAY ORGANIZATION';
+                    const logoDisplay = activeCamp?.imageUrl || creatorProfile.logoUrl;
+                    const locationDisplay = activeCamp?.location || creatorProfile.address;
+
+                    if (printStyle === 'style1_master') {
+                      exportMasterLedgerPrint(
+                        printTargetMembers, 
+                        printTargetTransactions, 
+                        activeCamp?.title || 'Consolidated Kumtluang Master Roll', 
+                        orgDisplay,
+                        logoDisplay,
+                        locationDisplay
+                      );
+                    } else if (printStyle === 'style4_audit') {
+                      printTransactionsPDF(
+                        printTargetTransactions,
+                        'Financial Audit Statement',
+                        true,
+                        activeCamp?.title || 'All Campaigns',
+                        `Financial Year ${printYear}`,
+                        logoDisplay,
+                        'name-asc',
+                        {
+                          name: creatorProfile.name,
+                          orgName: orgDisplay,
+                          phone: creatorProfile.phone || '',
+                          address: locationDisplay
+                        },
+                        {
+                          includeMonthlyChart,
+                          includeSignatures,
+                          preparedByTitle: 'Prepared by (Treasurer / Recorder)',
+                          verifiedByTitle: 'Verified by (Auditor / Finance)',
+                          approvedByTitle: 'Approved by (Leader / Secretary)',
+                          targetInfo: activeCamp?.targetAmount ? {
+                            targetAmount: activeCamp.targetAmount,
+                            targetPeriod: activeCamp.targetPeriod || 'total',
+                            periodLabel: activeCamp.targetPeriod || 'Goal',
+                            campaignTitle: activeCamp.title
+                          } : undefined
+                        }
+                      );
+                    } else if (printStyle === 'style2_matrix') {
+                      if (!printMemberId) {
+                        alert('Khawngaihin member thlang hmasa rawh le.');
+                        return;
+                      }
+                      const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
+                      if (m) {
+                        exportMemberCategoryMatrixPrint(
+                          m, 
+                          campaignCategories, 
+                          printTargetTransactions, 
+                          orgDisplay,
+                          logoDisplay,
+                          locationDisplay
+                        );
+                      }
+                    } else if (printStyle === 'style3_passbook') {
+                      if (!printMemberId) {
+                        alert('Khawngaihin member thlang hmasa rawh le.');
+                        return;
+                      }
+                      const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
+                      if (m) {
+                        exportMemberPassbookVerticalPrint(
+                          m, 
+                          campaignCategories, 
+                          printTargetTransactions, 
+                          orgDisplay,
+                          logoDisplay,
+                          locationDisplay
+                        );
+                      }
+                    }
+                  }}
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 cursor-pointer active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>
+                    {printStyle === 'style1_master' && 'Print Format 1: Master Ledger (Landscape Grid)'}
+                    {printStyle === 'style4_audit' && 'Print Format 2: Official Financial Audit Statement (PDF)'}
+                    {printStyle === 'style2_matrix' && 'Print Format 3: Mimal Category Matrix'}
+                    {printStyle === 'style3_passbook' && 'Print Format 4: Mimal Passbook Card Slip'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: MEMBER ROLL & EDIT / DELETE WITH DYNAMIC FILTERING */}
+          {activeTab === 'members_list' && (
+            <div className="space-y-4">
+              {/* Filter Banner & Top Controls */}
+              <div className="bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-200 space-y-3">
+                
+                {/* Active QR Scope Status Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 shrink-0">
+                      Active View:
+                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {selectedCampaignId === 'all' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-blue-100 text-blue-950 border border-blue-200 truncate">
+                          🌐 Consolidated Master Roll (All Organizations)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-100 text-indigo-950 border border-indigo-200 truncate">
+                          🏛️ {activeScopedCampaign?.orgName || activeScopedCampaign?.title || 'Selected Bawm'} [{activeScopedCampaign?.orgCode || 'QR'}]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label htmlFor="table-quick-qr-filter" className="text-[10.5px] font-bold text-slate-600 shrink-0">
+                      Filter QR:
+                    </label>
+                    <select
+                      id="table-quick-qr-filter"
+                      value={selectedCampaignId}
+                      onChange={(e) => setSelectedCampaignId(e.target.value)}
+                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="all">🌐 All Lists ({allMembersList.length})</option>
+                      {campaigns.map(c => (
+                        <option key={c.id} value={c.id}>
+                          🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title} ({campaignCounts[c.id] || 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Search Bar and Action Counter */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      id="member-roll-filter-search-input"
+                      value={dirSearch}
+                      onChange={(e) => setDirSearch(e.target.value)}
+                      placeholder="Hming, ID, Phone, Section zawnna..."
+                      className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    {dirSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setDirSearch('')}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200">
+                      {filteredTableMembers.length} {filteredTableMembers.length === 1 ? 'Member' : 'Members'} Listed
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('register_member')}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Add Member</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Members Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider sticky top-0 z-10">
+                      <tr>
+                        <th className="p-3">Member ID</th>
+                        {selectedCampaignId === 'all' && (
+                          <th className="p-3">QR / Bawm</th>
+                        )}
+                        <th className="p-3">Chhungkaw Hotu & Dependents</th>
+                        <th className="p-3">Phone (Last 4)</th>
+                        <th className="p-3">Section / Bial</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {filteredTableMembers.map(m => {
+                        const memberCamp = campaigns.find(c => c.id === m.campaignId);
+                        return (
+                          <tr key={m.id} className="hover:bg-indigo-50/40 transition-colors">
+                            <td className="p-3 font-mono font-black text-indigo-700">
+                              <span className="bg-indigo-50 px-2 py-1 rounded-md border border-indigo-200/80">
+                                {m.id}
+                              </span>
+                            </td>
+
+                            {selectedCampaignId === 'all' && (
+                              <td className="p-3">
+                                <span className="inline-block bg-blue-100 text-blue-900 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-blue-200">
+                                  {memberCamp?.orgName || memberCamp?.title || m.orgCode || 'General'}
+                                </span>
+                              </td>
+                            )}
+
+                            <td className="p-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700 shadow-xs">
+                                  {m.avatarUrl ? (
+                                    <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span>{m.name.charAt(0).toUpperCase()}</span>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-slate-900">{m.name}</div>
+                                  {m.dependents && m.dependents.length > 0 && (
+                                    <div className="text-[10px] text-slate-500 mt-0.5 space-x-1 flex flex-wrap gap-1">
+                                      {m.dependents.map(d => (
+                                        <span key={d.subId} className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-mono">
+                                          {d.name} ({d.subId.split('-').pop()})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="p-3 text-slate-600 font-mono font-bold">
+                              {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
+                            </td>
+
+                            <td className="p-3 text-slate-600 font-medium">
+                              {m.section ? (
+                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
+                                  {m.section}
+                                </span>
+                              ) : '-'}
+                            </td>
+
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleSelectQuickMember(m);
+                                    setActiveTab('quick_entry');
+                                  }}
+                                  className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg font-black text-[10.5px] transition cursor-pointer shadow-2xs"
+                                  title="Add Quick Payment"
+                                >
+                                  + Pay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(m)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Edit Member Details"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMember(m.id, m.name)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Delete Member"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {filteredTableMembers.length === 0 && (
+                        <tr>
+                          <td colSpan={selectedCampaignId === 'all' ? 6 : 5} className="p-8 text-center text-slate-400">
+                            <div className="max-w-md mx-auto space-y-3">
+                              <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                              <div className="space-y-1">
+                                <p className="text-xs font-black text-slate-700">
+                                  {dirSearch ? 'Zawnna mil Member hmuh a ni lo.' : 'He QR/Bawm-ah hian Member an la awm lo.'}
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {selectedCampaignId !== 'all'
+                                    ? `[${activeScopedCampaign?.orgName || activeScopedCampaign?.title || 'Selected Bawm'}] ah hian member an la in register lo.`
+                                    : 'Member an la awm lo.'}
+                                </p>
+                              </div>
+                              
+                              <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                                {selectedCampaignId !== 'all' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedCampaignId('all')}
+                                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                                  >
+                                    🌐 All Lists En Rawh
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDirSearch('');
+                                    setActiveTab('register_member');
+                                  }}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                                >
+                                  + Member thar chhinchhiah rawh
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
 
       </div>
 
       {/* EDIT MEMBER MODAL (For correcting mistakes) */}
       {editingMember && (
         <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-5 border border-slate-200 shadow-2xl space-y-4 my-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-slate-200 shadow-2xl space-y-4 my-auto">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center shadow-xs">
                   <Edit3 className="w-4 h-4" />
                 </div>
                 <div>
@@ -1246,6 +1673,30 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              {/* Linked Bawm */}
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  Linked Campaign / QR Bawm
+                </label>
+                <select
+                  value={editCampaignId}
+                  onChange={(e) => {
+                    setEditCampaignId(e.target.value);
+                    const c = campaigns.find(x => x.id === e.target.value);
+                    if (c?.orgCode) {
+                      setEditOrgCode(c.orgCode);
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                >
+                  {campaigns.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.orgName || c.title} [{c.orgCode || 'QR'}]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
                   Chhungkaw Hotu Hming *
@@ -1255,14 +1706,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
 
               {/* Photo Upload in Edit Modal */}
               <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <label className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                  <Camera className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Mimal Thlalak / Profile Photo</span>
                 </label>
                 <div className="flex items-center gap-3">
@@ -1306,13 +1757,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Pawl Code (e.g. BCM, EBE)
+                    Pawl Code (Prefix)
                   </label>
                   <input
                     type="text"
                     value={editOrgCode}
                     onChange={(e) => setEditOrgCode(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 uppercase focus:outline-none focus:bg-white focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 uppercase focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
 
@@ -1325,7 +1776,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     maxLength={4}
                     value={editPhone4}
                     onChange={(e) => setEditPhone4(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
               </div>
@@ -1339,29 +1790,29 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     type="tel"
                     value={editFullPhone}
                     onChange={(e) => setEditFullPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
 
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    {currentCampaign?.sectionLabel || 'Section / Bial'}
+                    Section / Bial
                   </label>
                   <select
                     value={editSection}
                     onChange={(e) => setEditSection(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   >
                     <option value="">-- Thlang Rawh --</option>
-                    {(currentCampaign?.definedSections && currentCampaign.definedSections.length > 0
-                      ? currentCampaign.definedSections
+                    {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
+                      ? activeScopedCampaign.definedSections
                       : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
                     ).map((sec, idx) => (
                       <option key={idx} value={sec}>
                         {sec}
                       </option>
                     ))}
-                    {editSection && !currentCampaign?.definedSections?.includes(editSection) && (
+                    {editSection && !activeScopedCampaign?.definedSections?.includes(editSection) && (
                       <option value={editSection}>{editSection} (Existing)</option>
                     )}
                   </select>
@@ -1398,7 +1849,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <button
                     type="button"
                     onClick={handleAddEditDependent}
-                    className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
+                    className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer"
                   >
                     + Add
                   </button>
@@ -1409,7 +1860,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     {editDependents.map((dep) => (
                       <div key={dep.subId} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                          <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
                             {dep.subId}
                           </span>
                           <span className="font-bold text-slate-900">{dep.name}</span>
@@ -1438,7 +1889,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
                 >
                   <Check className="w-4 h-4" /> Vawng / Save Changes
                 </button>

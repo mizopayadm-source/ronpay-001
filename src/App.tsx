@@ -590,7 +590,10 @@ export default function App() {
               creatorProfile={creatorProfile}
               announcement={announcement}
               onOpenReports={() => navigateTo('screen-export-reports')}
-              onOpenMemberRoll={() => setIsMemberRollOpen(true)}
+              onOpenMemberRoll={(tab) => {
+                if (tab) setMemberRollInitialTab(tab);
+                setIsMemberRollOpen(true);
+              }}
               onShowBalance={() => alert('💰 RonPay Wallet Balance: ₹12,450.00\nLinked Bank: State Bank of India (Aizawl Main Branch)')}
               onShowBankTransfer={() => alert('🏦 Bank Settlement Transfer:\nInstant IMPS / NEFT settlement active.')}
               onOpenPhonePePortal={() => setIsPhonePeModalOpen(true)}
@@ -613,6 +616,10 @@ export default function App() {
               onPreviewImage={handleOpenImagePreview}
               onShareCampaign={handleShareCampaign}
               onCategoryChange={(cat) => setCurrentCategory(cat)}
+              onOpenMemberRoll={(tab) => {
+                if (tab) setMemberRollInitialTab(tab);
+                setIsMemberRollOpen(true);
+              }}
               language={language}
             />
           )}

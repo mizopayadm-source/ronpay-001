@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 
 // Initialize Express App
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

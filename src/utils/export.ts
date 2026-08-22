@@ -51,6 +51,62 @@ export interface PDFExportOptions {
 }
 
 /**
+ * Universal safe print trigger that works reliably in iFrames and prevents popup blocking
+ */
+export const printHtmlSafely = (html: string, docTitle: string = 'Print Document') => {
+  try {
+    let frame = document.getElementById('ronpay-print-frame') as HTMLIFrameElement;
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = 'ronpay-print-frame';
+      frame.style.position = 'fixed';
+      frame.style.right = '0';
+      frame.style.bottom = '0';
+      frame.style.width = '0';
+      frame.style.height = '0';
+      frame.style.border = '0';
+      frame.style.visibility = 'hidden';
+      document.body.appendChild(frame);
+    }
+    const frameDoc = frame.contentWindow?.document || frame.contentDocument;
+    if (frameDoc) {
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+      setTimeout(() => {
+        try {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        } catch (e) {
+          console.warn('Iframe print error fallback to window.open', e);
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); }, 250);
+          }
+        }
+      }, 350);
+      return;
+    }
+  } catch (err) {
+    console.warn('Iframe print failed, falling back to window.open', err);
+  }
+
+  // Fallback to window.open if iframe is unavailable
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  }
+};
+
+/**
  * Returns the ordered array of month abbreviations for a given From - Upto month configuration.
  */
 export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {

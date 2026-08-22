@@ -48,6 +48,7 @@ interface BawmExplorerScreenProps {
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
   onShareCampaign?: (campaign: Campaign) => void;
   onCategoryChange?: (category: BawmCategory) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
   language?: Language;
 }
 
@@ -62,6 +63,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   onPreviewImage,
   onShareCampaign,
   onCategoryChange,
+  onOpenMemberRoll,
   language = 'mizo',
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory | 'all'>(category || 'all');
@@ -411,6 +413,16 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                 Active Verified QRs: <span className="font-black text-slate-900">{categoryCounts[selectedCategory]}</span>
               </p>
             </div>
+
+            {selectedCategory === 'kumtluang' && onOpenMemberRoll && (
+              <button
+                type="button"
+                onClick={() => onOpenMemberRoll('members_list')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-xl text-[10.5px] border border-indigo-500 shadow-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shrink-0"
+              >
+                <Users className="w-3.5 h-3.5" /> {language === 'english' ? 'Member Roll & Statements' : 'Member Roll & Statement'}
+              </button>
+            )}
 
             <button
               onClick={() => onStartScanner(selectedCategory)}
