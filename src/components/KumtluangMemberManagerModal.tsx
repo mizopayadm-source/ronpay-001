@@ -47,6 +47,7 @@ interface KumtluangMemberManagerModalProps {
   transactions: Transaction[];
   initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports';
   onDataUpdated: () => void;
+  onOpenCreateQR?: () => void;
 }
 
 export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalProps> = ({
@@ -57,10 +58,53 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   campaigns,
   transactions,
   initialTab = 'members_list',
-  onDataUpdated
+  onDataUpdated,
+  onOpenCreateQR
 }) => {
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
+
+  // Calculate scoped campaigns for this creator (or all if admin)
+  const allowedCampaigns = useMemo(() => {
+    if (creatorProfile.isAdmin) {
+      return campaigns;
+    }
+    const cleanPhone = (creatorProfile.phone || '').trim();
+    const cleanName = (creatorProfile.name || '').trim().toLowerCase();
+    const cleanOrg = (creatorProfile.orgName || '').trim().toLowerCase();
+
+    const matched = campaigns.filter(c => {
+      if (c.createdBy && (c.createdBy === cleanPhone || c.createdBy.toLowerCase() === cleanName)) {
+        return true;
+      }
+      if (cleanOrg && c.orgName && (c.orgName.toLowerCase().includes(cleanOrg) || cleanOrg.includes(c.orgName.toLowerCase()))) {
+        return true;
+      }
+      if (cleanPhone && cleanPhone.length >= 4 && (c.upiId?.includes(cleanPhone.slice(-4)) || (c.createdBy && c.createdBy.includes(cleanPhone.slice(-4))))) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matched.length > 0) return matched;
+
+    // Fallback: return Kumtluang category campaigns or all active campaigns
+    const kumtluangCamps = campaigns.filter(c => c.category === 'kumtluang');
+    return kumtluangCamps.length > 0 ? kumtluangCamps : campaigns;
+  }, [campaigns, creatorProfile]);
+
+  const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
+  const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
+
+  // Helper to filter any members array to only this creator's scope
+  const filterMembersForScope = (list: MemberRecord[]) => {
+    if (creatorProfile.isAdmin) return list;
+    return list.filter(m => {
+      if (m.campaignId && allowedCampaignIds.has(m.campaignId)) return true;
+      if (m.orgCode && allowedOrgCodes.has(m.orgCode.toUpperCase())) return true;
+      return false;
+    });
+  };
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
@@ -131,33 +175,35 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab || 'members_list');
-      const initialCamp = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
+      const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
       const defaultId = initialCamp?.id || 'all';
       
       // Keep selectedCampaignId if already set, else default to first campaign or 'all'
-      const activeId = selectedCampaignId && selectedCampaignId !== '' ? selectedCampaignId : defaultId;
+      const activeId = selectedCampaignId && (selectedCampaignId === 'all' || allowedCampaignIds.has(selectedCampaignId)) 
+        ? selectedCampaignId 
+        : defaultId;
       setSelectedCampaignId(activeId);
-      setQuickEntryCampaignId(initialCamp?.id || campaigns[0]?.id || '');
-      setRegTargetCampaignId(initialCamp?.id || campaigns[0]?.id || '');
+      setQuickEntryCampaignId(initialCamp?.id || allowedCampaigns[0]?.id || '');
+      setRegTargetCampaignId(initialCamp?.id || allowedCampaigns[0]?.id || '');
       setPrintOrgScope(activeId);
 
-      const mList = getMembers(activeId);
+      const mList = filterMembersForScope(getMembers(activeId));
       setMembers(mList);
 
       if (initialCamp?.orgCode) {
         setNewOrgCode(initialCamp.orgCode);
       }
     }
-  }, [isOpen, campaigns, initialTab]);
+  }, [isOpen, allowedCampaigns, initialTab]);
 
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
     if (isOpen && selectedCampaignId) {
-      const mList = getMembers(selectedCampaignId);
+      const mList = filterMembersForScope(getMembers(selectedCampaignId));
       setMembers(mList);
 
       if (selectedCampaignId !== 'all') {
-        const camp = campaigns.find(c => c.id === selectedCampaignId);
+        const camp = allowedCampaigns.find(c => c.id === selectedCampaignId);
         if (camp) {
           setQuickEntryCampaignId(camp.id);
           setRegTargetCampaignId(camp.id);
@@ -168,7 +214,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         }
       } else {
         setPrintOrgScope('all');
-        const firstCamp = campaigns[0];
+        const firstCamp = allowedCampaigns[0];
         if (firstCamp) {
           setQuickEntryCampaignId(firstCamp.id);
           setRegTargetCampaignId(firstCamp.id);
@@ -179,22 +225,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       setSelectedMember(null);
     }
-  }, [selectedCampaignId, isOpen, campaigns]);
+  }, [selectedCampaignId, isOpen, allowedCampaigns]);
 
   // When regTargetCampaignId changes during member creation, auto sync prefix
   useEffect(() => {
     if (regTargetCampaignId) {
-      const camp = campaigns.find(c => c.id === regTargetCampaignId);
+      const camp = allowedCampaigns.find(c => c.id === regTargetCampaignId);
       if (camp?.orgCode) {
         setNewOrgCode(camp.orgCode);
       }
     }
-  }, [regTargetCampaignId, campaigns]);
+  }, [regTargetCampaignId, allowedCampaigns]);
 
   // Active campaign object based on quick entry / active filter
   const activeScopedCampaign = (selectedCampaignId !== 'all' 
-    ? campaigns.find(c => c.id === selectedCampaignId) 
-    : campaigns.find(c => c.id === quickEntryCampaignId)) || campaigns[0];
+    ? allowedCampaigns.find(c => c.id === selectedCampaignId) 
+    : allowedCampaigns.find(c => c.id === quickEntryCampaignId)) || allowedCampaigns[0];
 
   const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
     ? activeScopedCampaign.subCategories
@@ -344,7 +390,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return;
     }
 
-    const targetCamp = campaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || campaigns[0];
+    const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
     const org = (newOrgCode.trim().toUpperCase() || targetCamp?.orgCode || 'EBE');
     const p4 = newPhone4.slice(-4);
     const generatedId = `${org}-${p4}`;
@@ -493,15 +539,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   };
 
   // Calculate campaign member counts for the dropdown badges
-  const allMembersList = useMemo(() => getMembers('all'), [members, isOpen]);
+  const allMembersList = useMemo(() => {
+    const rawAll = getMembers('all');
+    return filterMembersForScope(rawAll);
+  }, [members, isOpen, allowedCampaigns, creatorProfile]);
 
   const campaignCounts = useMemo(() => {
     const counts: { [campId: string]: number } = {};
-    campaigns.forEach(c => {
-      counts[c.id] = allMembersList.filter(m => m.campaignId === c.id || m.orgCode === c.orgCode).length;
+    allowedCampaigns.forEach(c => {
+      counts[c.id] = allMembersList.filter(m => m.campaignId === c.id || (c.orgCode && m.orgCode === c.orgCode)).length;
     });
     return counts;
-  }, [campaigns, allMembersList]);
+  }, [allowedCampaigns, allMembersList]);
 
   // Filtered members for Member Roll Table
   const filteredTableMembers = useMemo(() => {
@@ -519,17 +568,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Target campaign for Print Tab
   const printTargetCampaign = printOrgScope !== 'all' 
-    ? campaigns.find(c => c.id === printOrgScope) 
+    ? allowedCampaigns.find(c => c.id === printOrgScope) 
     : undefined;
 
   const printTargetTransactions = useMemo(() => {
-    if (printOrgScope === 'all') return transactions;
+    if (printOrgScope === 'all') {
+      if (creatorProfile.isAdmin) return transactions;
+      return transactions.filter(t => allowedCampaignIds.has(t.campaignId));
+    }
     return transactions.filter(t => t.campaignId === printOrgScope || (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title));
-  }, [transactions, printOrgScope, printTargetCampaign]);
+  }, [transactions, printOrgScope, printTargetCampaign, allowedCampaignIds, creatorProfile]);
 
   const printTargetMembers = useMemo(() => {
-    return getMembers(printOrgScope);
-  }, [printOrgScope, members]);
+    return filterMembersForScope(getMembers(printOrgScope));
+  }, [printOrgScope, members, allowedCampaigns]);
 
   if (!isOpen) return null;
 
@@ -538,65 +590,84 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden my-4 sm:my-6 flex flex-col max-h-[94vh]">
         
         {/* Top Header with Vibrant Gradient & Live Stats */}
-        <div className="px-5 py-3.5 sm:px-6 sm:py-4 bg-gradient-to-r from-slate-950 via-indigo-950 to-blue-950 text-white flex items-center justify-between shrink-0 border-b border-indigo-900/50">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white flex items-center justify-between shrink-0 border-b border-indigo-900/50">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-xs overflow-hidden shrink-0">
-              {resolvedLogoUrl ? (
-                <img src={resolvedLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+            {/* Creator Photo / Avatar */}
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full ring-2 ring-indigo-400/50 bg-slate-800 flex items-center justify-center text-white shadow-md overflow-hidden shrink-0">
+              {creatorProfile.avatarUrl ? (
+                <img src={creatorProfile.avatarUrl} alt={creatorProfile.name || 'Creator'} className="w-full h-full object-cover" />
+              ) : creatorProfile.logoUrl ? (
+                <img src={creatorProfile.logoUrl} alt={creatorProfile.name || 'Creator'} className="w-full h-full object-cover" />
               ) : (
-                <Building2 className="w-5 h-5 text-amber-400" />
+                <div className="w-full h-full bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center font-black text-sm sm:text-base tracking-wider text-white">
+                  {(creatorProfile.name || 'CR').split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'CR'}
+                </div>
               )}
             </div>
+
+            {/* Creator Name & Details */}
             <div className="min-w-0">
-              <h3 className="font-black text-sm sm:text-base tracking-wide flex items-center gap-2 truncate">
-                <span className="truncate">{resolvedOrgTitle}</span>
-                <span className="text-[9px] sm:text-[9.5px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full shrink-0">
-                  Master Roll
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-black text-sm sm:text-base tracking-wide text-white truncate">
+                  {creatorProfile.name || 'Authenticated Creator'}
+                </h3>
+                <span className="text-[9px] sm:text-[10px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full shrink-0 shadow-xs">
+                  {creatorProfile.isAdmin ? 'Admin Master Roll' : (creatorProfile.designation || 'Creator Verified')}
                 </span>
-              </h3>
-              <p className="text-[11px] sm:text-xs text-blue-200/80 truncate">
-                {selectedCampaignId === 'all' ? `All Campaigns (${allMembersList.length} Enrolled)` : `${activeScopedCampaign?.title || 'Active Bawm'} • Prefix [${activeScopedCampaign?.orgCode || 'QR'}]`}
+              </div>
+              <p className="text-[11px] sm:text-xs text-indigo-200/90 truncate flex items-center gap-1.5 mt-0.5">
+                <span className="font-semibold text-slate-200 truncate">{creatorProfile.orgName || 'RonPay Verified Creator'}</span>
+                <span className="text-indigo-400 shrink-0">•</span>
+                <span className="text-indigo-300 font-mono text-[10px] sm:text-[11px] shrink-0">{creatorProfile.phone || 'Verified'}</span>
               </p>
             </div>
           </div>
+          
           <button 
             type="button"
             id="close-kumtluang-modal-btn"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0"
+            className="p-2 sm:p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0 ml-2"
             title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
         {/* PROMINENT TOP-LEVEL QR / BAWM FILTER BAR */}
-        <div className="bg-indigo-50/70 border-b border-indigo-100 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+        <div className="bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-slate-50 border-b border-indigo-100 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <Filter className="w-4 h-4 text-indigo-700 shrink-0" />
-            <label htmlFor="active-bawm-dropdown" className="text-xs font-black text-indigo-950 uppercase tracking-wider shrink-0">
-              Select Active QR / Bawm:
-            </label>
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Filter className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="active-bawm-dropdown" className="text-xs font-black text-indigo-950 uppercase tracking-wider block">
+                Select Active QR / Bawm:
+              </label>
+              <p className="text-[10px] text-slate-500 truncate hidden sm:block">
+                Choose a specific Bawm to manage, or select All Lists
+              </p>
+            </div>
           </div>
           
-          <div className="flex-1 max-w-md">
+          <div className="flex-1 max-w-md w-full">
             <div className="relative">
               <select
                 id="active-bawm-dropdown"
                 value={selectedCampaignId}
                 onChange={(e) => setSelectedCampaignId(e.target.value)}
-                className="w-full pl-3.5 pr-8 py-2 bg-white border-2 border-indigo-400/80 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate"
+                className="w-full pl-3.5 pr-8 py-2.5 bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate"
               >
                 <option value="all">
                   🌐 All Lists (Bawm Zawng Zawng) — Consolidated Master Roll ({allMembersList.length} Members)
                 </option>
-                {campaigns.map(camp => (
+                {allowedCampaigns.map(camp => (
                   <option key={camp.id} value={camp.id}>
                     🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}] — {campaignCounts[camp.id] || 0} Members
                   </option>
                 ))}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-indigo-700">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-700">
                 <ChevronDown className="w-4 h-4" />
               </div>
             </div>
@@ -604,12 +675,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-1 sm:gap-2 pt-2 overflow-x-auto shrink-0 no-scrollbar">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-1.5 sm:gap-2 pt-2 overflow-x-auto shrink-0 no-scrollbar">
           <button
             type="button"
             id="tab-btn-quick-entry"
             onClick={() => setActiveTab('quick_entry')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'quick_entry'
                 ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -623,7 +694,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             type="button"
             id="tab-btn-register-member"
             onClick={() => setActiveTab('register_member')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'register_member'
                 ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -637,7 +708,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             type="button"
             id="tab-btn-print-reports"
             onClick={() => setActiveTab('print_reports')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'print_reports'
                 ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -651,7 +722,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             type="button"
             id="tab-btn-members-list"
             onClick={() => setActiveTab('members_list')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
               activeTab === 'members_list'
                 ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -854,7 +925,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         onChange={(e) => setQuickEntryCampaignId(e.target.value)}
                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       >
-                        {campaigns.map(c => (
+                        {allowedCampaigns.map(c => (
                           <option key={c.id} value={c.id}>{c.title} [{c.orgCode || 'QR'}]</option>
                         ))}
                       </select>
@@ -971,7 +1042,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     required
                   >
-                    {campaigns.map(c => (
+                    {allowedCampaigns.map(c => (
                       <option key={c.id} value={c.id}>
                         🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
                       </option>
@@ -1221,8 +1292,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     onChange={(e) => setPrintOrgScope(e.target.value)}
                     className="w-full p-2.5 bg-white border-2 border-indigo-300 rounded-xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
-                    <option value="all">🌐 All Campaigns (Consolidated Report — {transactions.length} Txns / {allMembersList.length} Members)</option>
-                    {campaigns.map(camp => (
+                    <option value="all">🌐 All Campaigns (Consolidated Report — {printTargetTransactions.length} Txns / {allMembersList.length} Members)</option>
+                    {allowedCampaigns.map(camp => (
                       <option key={camp.id} value={camp.id}>
                         🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
                       </option>
@@ -1488,8 +1559,98 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
               </div>
 
-              {/* Members Table */}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              {/* Mobile Cards View (sm/md screens) */}
+              <div className="block md:hidden space-y-3">
+                {filteredTableMembers.map(m => {
+                  const memberCamp = campaigns.find(c => c.id === m.campaignId);
+                  return (
+                    <div key={m.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700 shadow-xs">
+                            {m.avatarUrl ? (
+                              <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{m.name.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 text-sm truncate">{m.name}</div>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
+                                {m.id}
+                              </span>
+                              {m.section && (
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                                  {m.section}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {selectedCampaignId === 'all' && (
+                          <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-lg text-[9.5px] font-bold shrink-0">
+                            {memberCamp?.orgCode || 'QR'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                        <span className="font-mono text-[11px]">
+                          📱 {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
+                        </span>
+                        {m.dependents && m.dependents.length > 0 && (
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {m.dependents.length} Chhungte
+                          </span>
+                        )}
+                      </div>
+
+                      {m.dependents && m.dependents.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {m.dependents.map(d => (
+                            <span key={d.subId} className="inline-block bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-mono text-[10px]">
+                              {d.name} ({d.relation})
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSelectQuickMember(m);
+                            setActiveTab('quick_entry');
+                          }}
+                          className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition cursor-pointer shadow-xs text-center"
+                        >
+                          + Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(m)}
+                          className="px-3 py-2 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMember(m.id, m.name)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Members Table (Desktop / Tablet) */}
+              <div className="hidden md:block border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider sticky top-0 z-10">
@@ -1680,14 +1841,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   value={editCampaignId}
                   onChange={(e) => {
                     setEditCampaignId(e.target.value);
-                    const c = campaigns.find(x => x.id === e.target.value);
+                    const c = allowedCampaigns.find(x => x.id === e.target.value);
                     if (c?.orgCode) {
                       setEditOrgCode(c.orgCode);
                     }
                   }}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 >
-                  {campaigns.map(c => (
+                  {allowedCampaigns.map(c => (
                     <option key={c.id} value={c.id}>
                       {c.orgName || c.title} [{c.orgCode || 'QR'}]
                     </option>

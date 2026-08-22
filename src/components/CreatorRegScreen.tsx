@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
+import { getStoredCreatorsList } from '../utils/storage';
 
 interface CreatorRegScreenProps {
   onBack: () => void;
@@ -124,22 +125,37 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       return;
     }
 
-    // Demo Creator login authentication
-    const activeProfile: CreatorProfile = {
-      name: creatorProfile.name || (loginPhone === '9862300000' ? 'Lalthianghlima (YMA Secretary)' : 'QR Creator Officer'),
-      orgName: creatorProfile.orgName || 'YMA Bungkawn Branch / BCM Ebenezer',
-      designation: creatorProfile.designation || 'General Secretary',
-      phone: loginPhone.trim(),
-      isPhoneVerified: true,
-      isApproved: true,
-      authDocName: creatorProfile.authDocName || 'Official_Approval_Letter.pdf',
-      approvedCategories: creatorProfile.approvedCategories.length > 0 
-        ? creatorProfile.approvedCategories 
-        : ['ralna', 'khawlsak', 'rikrum', 'kumtluang'],
-      createdQRsCount: creatorProfile.createdQRsCount || 3,
-    };
+    // Registered Creator login authentication matching
+    const registeredCreators = getStoredCreatorsList();
+    const matchedCreator = registeredCreators.find(c => c.phone === cleanInput || c.phone.replace(/\D/g, '') === cleanInput.replace(/\D/g, ''));
 
-    onSuccess(activeProfile, activeProfile.approvedCategories[0] || 'ralna');
+    let activeProfile: CreatorProfile;
+    if (matchedCreator) {
+      activeProfile = {
+        ...matchedCreator,
+        isPhoneVerified: true,
+        isApproved: true,
+        approvedCategories: matchedCreator.approvedCategories && matchedCreator.approvedCategories.length > 0 
+          ? matchedCreator.approvedCategories 
+          : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+      };
+    } else {
+      activeProfile = {
+        name: creatorProfile.name || (loginPhone === '9862599881' ? 'Rev. Dr. R. Zothansanga' : (loginPhone === '9862300000' ? 'Lalthianghlima (YMA Secretary)' : 'QR Creator Officer')),
+        orgName: creatorProfile.orgName || (loginPhone === '9862599881' ? 'BCM Ebenezer, Zobawk Local Church' : 'YMA Bungkawn Branch / BCM Ebenezer'),
+        designation: creatorProfile.designation || (loginPhone === '9862599881' ? 'Pastor / Secretary' : 'General Secretary'),
+        phone: loginPhone.trim(),
+        isPhoneVerified: true,
+        isApproved: true,
+        authDocName: creatorProfile.authDocName || 'Official_Approval_Letter.pdf',
+        approvedCategories: creatorProfile.approvedCategories.length > 0 
+          ? creatorProfile.approvedCategories 
+          : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+        createdQRsCount: creatorProfile.createdQRsCount || 3,
+      };
+    }
+
+    onSuccess(activeProfile, activeProfile.approvedCategories[0] || 'kumtluang');
   };
 
   // Handle Registration submission

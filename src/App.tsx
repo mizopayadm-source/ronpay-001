@@ -132,6 +132,12 @@ export default function App() {
   const [isBiometricSessionUnlocked, setIsBiometricSessionUnlocked] = useState<boolean>(false);
 
   const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => {
+    // Enforce Creator Authentication: Non-logged in users must login/register as Creator first
+    if (!creatorProfile.isApproved && !creatorProfile.isAdmin) {
+      alert('🔒 Creator Login A Ngai:\nMember Roll, Member Registration leh Passbook enkawl tur hian Creator-a i luh (Login) hmasak a ngai e. Khawngaihin i Creator Account-ah lut rawh le.');
+      navigateTo('screen-creator-reg');
+      return;
+    }
     setMemberRollInitialTab(tab || 'members_list');
     setIsMemberRollOpen(true);
   };
@@ -683,6 +689,7 @@ export default function App() {
             <SuccessScreen
               transaction={latestTransaction}
               onGoHome={() => navigateTo('screen-home')}
+              onExploreMore={() => navigateTo('screen-bawm-explorer')}
             />
           )}
 
@@ -941,6 +948,10 @@ export default function App() {
           creatorProfile={creatorProfile}
           campaigns={campaigns}
           transactions={transactions}
+          onOpenCreateQR={() => {
+            setIsMemberRollOpen(false);
+            navigateTo('screen-create-qr');
+          }}
           onDataUpdated={() => {
             setTransactions(getStoredTransactions());
             setCampaigns(getStoredCampaigns());

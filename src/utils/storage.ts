@@ -304,21 +304,26 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
         parsed.orgName = 'BCM Ebenezer';
         saveStoredCreatorProfile(parsed);
       }
-      return parsed;
+      if (parsed.name && parsed.phone) {
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  return {
-    name: '',
-    orgName: '',
-    designation: '',
-    phone: '',
-    isPhoneVerified: false,
-    isApproved: false,
-    approvedCategories: [],
-    createdQRsCount: 0,
+  const defaultProfile: CreatorProfile = {
+    name: 'Rev. Dr. R. Zothansanga',
+    orgName: 'BCM Ebenezer, Zobawk Local Church',
+    designation: 'Pastor / Secretary',
+    phone: '9862599881',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    isPhoneVerified: true,
+    isApproved: true,
+    approvedCategories: ['kumtluang', 'ralna'],
+    createdQRsCount: 5,
   };
+  saveStoredCreatorProfile(defaultProfile);
+  return defaultProfile;
 };
 
 export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
