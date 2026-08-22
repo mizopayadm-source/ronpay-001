@@ -78,7 +78,11 @@ import {
   getStoredAuditLogs,
   getStoredAnnouncement,
   saveStoredAnnouncement,
-  DEFAULT_ANNOUNCEMENT_ITEMS
+  DEFAULT_ANNOUNCEMENT_ITEMS,
+  isPrefixCodeTaken,
+  suggestAlternativePrefixes,
+  derivePrefixFromText,
+  migrateCampaignMembersPrefix
 } from '../utils/storage';
 
 interface AdminDashboardModalProps {
@@ -509,17 +513,41 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     e.preventDefault();
     if (!editingCampaign) return;
 
-    onUpdateCampaign(editingCampaign);
+    const originalCamp = campaigns.find(c => c.id === editingCampaign.id);
+    const oldPrefix = (originalCamp?.orgCode || '').trim().toUpperCase();
+    const finalPrefix = (editingCampaign.orgCode || '').trim().toUpperCase() || oldPrefix || derivePrefixFromText(editingCampaign.orgName || editingCampaign.title);
+
+    if (isPrefixCodeTaken(finalPrefix, editingCampaign.id)) {
+      const suggestions = suggestAlternativePrefixes(finalPrefix);
+      alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+      return;
+    }
+
+    let migratedCount = 0;
+    if (oldPrefix && finalPrefix && oldPrefix !== finalPrefix) {
+      migratedCount = migrateCampaignMembersPrefix(editingCampaign.id, oldPrefix, finalPrefix);
+    }
+
+    const campaignToSave: Campaign = {
+      ...editingCampaign,
+      orgCode: finalPrefix
+    };
+
+    onUpdateCampaign(campaignToSave);
     recordAuditLog(
       'Admin Edited Campaign Post',
-      `Admin updated details of post/campaign '${editingCampaign.title}' (${editingCampaign.id}). Category: ${editingCampaign.category}, Status: ${editingCampaign.status}.`,
+      `Admin updated details of post/campaign '${campaignToSave.title}' (${campaignToSave.id}). Category: ${campaignToSave.category}, Prefix: ${finalPrefix}, Status: ${campaignToSave.status}.`,
       'campaign',
-      editingCampaign.id
+      campaignToSave.id
     );
     setLogsList(getStoredAuditLogs());
-    const campTitle = editingCampaign.title;
+    const campTitle = campaignToSave.title;
     setEditingCampaign(null);
-    alert(`✅ CAMPAIGN POST UPDATED!\n\n'${campTitle}' has been successfully updated.`);
+    if (migratedCount > 0) {
+      alert(`✅ CAMPAIGN POST UPDATED!\n\n'${campTitle}' has been updated. Prefix code changed to [${finalPrefix}] and ${migratedCount} registered members were automatically migrated to '${finalPrefix}-XXXX'.`);
+    } else {
+      alert(`✅ CAMPAIGN POST UPDATED!\n\n'${campTitle}' has been successfully updated.`);
+    }
   };
 
   // Announcement Save
@@ -2587,6 +2615,86 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         className="w-full mt-1 p-2 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800"
                         placeholder="BCM Ebenezer, Zobawk"
                       />
+                    </div>
+
+                    {/* Prefix Code Editor */}
+                    <div className="bg-white p-2.5 rounded-xl border border-indigo-200 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black text-indigo-950 uppercase tracking-wider">
+                          Bawm Prefix Code (System-wide Unique)
+                        </label>
+                        <span className="text-[9.5px] font-mono font-bold text-indigo-700">
+                          Sample: {(editingCampaign.orgCode || 'EBE').toUpperCase()}-7890
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={editingCampaign.orgCode || ''}
+                          onChange={(e) => setEditingCampaign({
+                            ...editingCampaign,
+                            orgCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                          })}
+                          className={`w-24 bg-slate-50 border-2 rounded-xl p-1.5 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
+                            editingCampaign.orgCode?.trim() && isPrefixCodeTaken(editingCampaign.orgCode.trim(), editingCampaign.id)
+                              ? 'border-rose-500 text-rose-700 bg-rose-50'
+                              : editingCampaign.orgCode?.trim()
+                              ? 'border-emerald-500 text-emerald-700 bg-emerald-50'
+                              : 'border-slate-300 text-slate-900 focus:border-indigo-500'
+                          }`}
+                        />
+                        <div className="flex-1 text-[10px] leading-tight">
+                          {editingCampaign.orgCode?.trim() && isPrefixCodeTaken(editingCampaign.orgCode.trim(), editingCampaign.id) ? (
+                            <span className="text-rose-600 font-bold">⚠️ Already taken by another Bawm!</span>
+                          ) : (
+                            <span className="text-emerald-700 font-bold">✓ Unique Prefix</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Quick Sync with Org Name button */}
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = editingCampaign.orgName?.trim() || editingCampaign.title?.trim() || 'BAW';
+                            const derived = derivePrefixFromText(text);
+                            if (isPrefixCodeTaken(derived, editingCampaign.id)) {
+                              const alts = suggestAlternativePrefixes(text);
+                              setEditingCampaign({ ...editingCampaign, orgCode: alts[0] || derived });
+                            } else {
+                              setEditingCampaign({ ...editingCampaign, orgCode: derived });
+                            }
+                          }}
+                          className="text-[9.5px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition cursor-pointer"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5 text-indigo-600" />
+                          <span>🔄 Org Name atangin Sync / Thlak Thung rawh</span>
+                        </button>
+                        <span className="text-[8.5px] text-slate-400 font-medium">Member te ID auto-update nghal ang</span>
+                      </div>
+
+                      {editingCampaign.orgCode?.trim() && isPrefixCodeTaken(editingCampaign.orgCode.trim(), editingCampaign.id) && (
+                        <div className="bg-rose-50 p-2 rounded-lg border border-rose-200 space-y-1">
+                          <div className="text-[9.5px] font-bold text-rose-900 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-600" />
+                            <span>Available Suggestions:</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {suggestAlternativePrefixes(editingCampaign.orgCode || editingCampaign.orgName || '').map((alt) => (
+                              <button
+                                key={alt}
+                                type="button"
+                                onClick={() => setEditingCampaign({ ...editingCampaign, orgCode: alt })}
+                                className="bg-white hover:bg-rose-100 border border-rose-300 text-rose-900 font-mono font-black text-[10px] px-2 py-0.5 rounded shadow-2xs cursor-pointer"
+                              >
+                                {alt} (Free)
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>

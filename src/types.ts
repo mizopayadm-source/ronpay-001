@@ -62,6 +62,7 @@ export interface Campaign {
   
   // Kumtluang specific
   orgName?: string;
+  orgCode?: string; // System-wide UNIQUE Prefix Code e.g. BET, EBE, KTL, BCM
   subCategories?: string[];
   trxnFeeBearer?: 'user_paid' | 'org_paid';
   sectionLabel?: string; // e.g. "Bial / Unit", "Section / Veng", "Bial / Section"
@@ -111,9 +112,10 @@ export interface MemberDependent {
 }
 
 export interface MemberRecord {
-  id: string; // e.g. EBE-1460, BCM-8622
+  id: string; // e.g. EBE-1460, BCM-8622, BET-7890
+  campaignId?: string; // Isolated strictly to this specific Bawm / Campaign
   name: string;
-  orgCode: string; // e.g. EBE, BCM, YMA
+  orgCode: string; // e.g. EBE, BCM, YMA, BET
   phoneLast4: string; // e.g. 1460
   fullPhone?: string;
   avatarUrl?: string;

@@ -1353,13 +1353,15 @@ export const printTransactionsPDF = (
 };
 
 /**
- * Format 1: Master 12-Month Table Print
+ * Format 1: Master 12-Month Table Print (All Members)
  */
 export const exportMasterLedgerPrint = (
   members: MemberRecord[],
   transactions: Transaction[],
   campaignTitle: string,
-  orgName: string
+  orgName: string,
+  logoUrl?: string,
+  location?: string
 ) => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const printWindow = window.open('', '_blank');
@@ -1390,11 +1392,15 @@ export const exportMasterLedgerPrint = (
 
     grandTotal += rowTotal;
 
+    const avatarThumbnail = member.avatarUrl
+      ? `<img src="${member.avatarUrl}" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid #cbd5e1;" />`
+      : '';
+
     return `
       <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px; color: #64748b;">${idx + 1}</td>
         <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-family: monospace; color: #1e3a8a; font-size: 11px;">${member.id}</td>
-        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px;">${member.name}</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #0f172a;">${avatarThumbnail}${member.name}</td>
         <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #64748b; font-size: 10px;">${member.section || '-'}</td>
         ${monthCols}
         <td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0f2fe; color: #0369a1; font-family: monospace; font-size: 11px;">
@@ -1410,28 +1416,43 @@ export const exportMasterLedgerPrint = (
     </td>
   `).join('');
 
+  const logoHeader = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1.5px solid #1e3a8a; margin-right: 12px;" />`
+    : '';
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
       <head>
         <title>Master Ledger • ${orgName}</title>
+        <meta charset="utf-8" />
         <style>
           @page { size: A4 landscape; margin: 8mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
-          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th { background: #1e293b; color: white; padding: 8px 6px; font-size: 10px; text-transform: uppercase; border: 1px solid #0f172a; }
-          .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
+          .header-left { display: flex; align-items: center; }
+          @media print {
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
         </style>
       </head>
       <body>
         <div class="header">
-          <div>
-            <h1 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 900;">${orgName}</h1>
-            <h2 style="margin: 3px 0 0 0; font-size: 13px; color: #475569;">${campaignTitle} — Master Ledger 12 Months</h2>
+          <div class="header-left">
+            ${logoHeader}
+            <div>
+              <h1 style="margin: 0; font-size: 18px; color: #1e3a8a; font-weight: 900; text-transform: uppercase;">${orgName}</h1>
+              <h2 style="margin: 2px 0 0 0; font-size: 12.5px; color: #475569;">${campaignTitle} — Master Ledger 12 Months</h2>
+              ${location ? `<div style="font-size: 10px; color: #b45309; font-weight: 700; margin-top: 2px;">📍 ${location}</div>` : ''}
+            </div>
           </div>
           <div style="text-align: right; font-size: 10px; color: #64748b;">
-            <div>Printed on: ${new Date().toLocaleDateString('en-IN')}</div>
-            <div>Total Members: ${members.length}</div>
+            <div>Printed Date: <b>${formatDateDDMMYYYY(new Date())}</b></div>
+            <div>Total Active Members: <b>${members.length}</b></div>
+            <div style="color: #047857; font-weight: 900; margin-top: 2px;">Grand Total: ₹${grandTotal.toLocaleString('en-IN')}</div>
           </div>
         </div>
 
@@ -1471,12 +1492,15 @@ export const exportMasterLedgerPrint = (
 
 /**
  * Format 2: Member Category Matrix Print (Horizontal)
+ * Displays Member Photo if uploaded, or clean Initials / Blank card if not.
  */
 export const exportMemberCategoryMatrixPrint = (
   member: MemberRecord,
   categories: string[],
   transactions: Transaction[],
-  orgName: string
+  orgName: string,
+  logoUrl?: string,
+  location?: string
 ) => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const printWindow = window.open('', '_blank');
@@ -1523,30 +1547,53 @@ export const exportMemberCategoryMatrixPrint = (
     `;
   }).join('');
 
+  // Member photo vs blank initials
+  const memberPhotoHtml = member.avatarUrl 
+    ? `<img src="${member.avatarUrl}" style="width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 2px solid #1e3a8a; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.1);" />`
+    : `<div style="width: 72px; height: 72px; border-radius: 12px; background: #e2e8f0; border: 1.5px dashed #94a3b8; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 900; font-size: 20px; flex-shrink: 0;">${member.name.charAt(0) || 'M'}</div>`;
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 36px; height: 36px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid #cbd5e1;" />`
+    : '';
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
       <head>
         <title>Mimal Record • ${member.name} (${member.id})</title>
+        <meta charset="utf-8" />
         <style>
           @page { size: A4 landscape; margin: 10mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
-          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
           th { background: #1e293b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
-          .card { border: 1.5px solid #1e3a8a; border-radius: 8px; padding: 14px; margin-bottom: 12px; background: #f8fafc; }
+          .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; background: #f8fafc; }
+          @media print {
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
         </style>
       </head>
       <body>
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 10px; color: #64748b; font-weight: bold; text-transform: uppercase;">${orgName}</div>
-              <h1 style="margin: 2px 0 0 0; font-size: 18px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
-              <div style="font-size: 11px; color: #334155; margin-top: 2px;">Section: ${member.section || 'N/A'} • Phone: ${member.fullPhone || `****${member.phoneLast4}`}</div>
+            <div style="display: flex; align-items: center; gap: 14px;">
+              ${memberPhotoHtml}
+              <div>
+                <div style="font-size: 10.5px; color: #475569; font-weight: bold; text-transform: uppercase; display: flex; align-items: center;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 20px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Section: <b>${member.section || 'N/A'}</b> • Phone: <b>${member.fullPhone || `****${member.phoneLast4}`}</b>
+                  ${member.dependents && member.dependents.length > 0 ? ` • Dependents: <b>${member.dependents.map(d => `${d.name} (${d.relation})`).join(', ')}</b>` : ''}
+                </div>
+              </div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 10px; color: #64748b; font-weight: bold;">UNIQUE MEMBER ID</div>
-              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac;">${member.id}</div>
+              <div style="font-size: 9.5px; color: #64748b; font-weight: bold; text-transform: uppercase;">UNIQUE MEMBER ID</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac; margin-top: 3px;">${member.id}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
             </div>
           </div>
         </div>
@@ -1587,12 +1634,15 @@ export const exportMemberCategoryMatrixPrint = (
 
 /**
  * Format 3: Member Passbook Vertical Card Print
+ * Displays Member Photo if uploaded, or clean Initials / Blank card if not.
  */
 export const exportMemberPassbookVerticalPrint = (
   member: MemberRecord,
   categories: string[],
   transactions: Transaction[],
-  orgName: string
+  orgName: string,
+  logoUrl?: string,
+  location?: string
 ) => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const printWindow = window.open('', '_blank');
@@ -1639,30 +1689,53 @@ export const exportMemberPassbookVerticalPrint = (
     `;
   }).join('');
 
+  // Member photo vs blank initials
+  const memberPhotoHtml = member.avatarUrl 
+    ? `<img src="${member.avatarUrl}" style="width: 74px; height: 74px; border-radius: 12px; object-fit: cover; border: 2px solid #1e3a8a; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.1);" />`
+    : `<div style="width: 74px; height: 74px; border-radius: 12px; background: #e2e8f0; border: 1.5px dashed #94a3b8; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 900; font-size: 22px; flex-shrink: 0;">${member.name.charAt(0) || 'M'}</div>`;
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 36px; height: 36px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid #cbd5e1;" />`
+    : '';
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
       <head>
         <title>Passbook Card • ${member.name} (${member.id})</title>
+        <meta charset="utf-8" />
         <style>
           @page { size: A4 portrait; margin: 12mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
           table { width: 100%; border-collapse: collapse; margin-top: 14px; }
           th { background: #1e293b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
-          .card { border: 2px solid #0f172a; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+          .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #f8fafc; }
+          @media print {
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
         </style>
       </head>
       <body>
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">${orgName}</div>
-              <h1 style="margin: 2px 0 0 0; font-size: 20px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
-              <div style="font-size: 12px; color: #334155; margin-top: 2px;">Section: ${member.section || 'N/A'} • Phone: ${member.fullPhone || `****${member.phoneLast4}`}</div>
+            <div style="display: flex; align-items: center; gap: 14px;">
+              ${memberPhotoHtml}
+              <div>
+                <div style="font-size: 11px; color: #475569; font-weight: bold; text-transform: uppercase; display: flex; align-items: center;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 20px; color: #1e3a8a; font-weight: 900;">${member.name}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Section: <b>${member.section || 'N/A'}</b> • Phone: <b>${member.fullPhone || `****${member.phoneLast4}`}</b>
+                  ${member.dependents && member.dependents.length > 0 ? ` • Dependents: <b>${member.dependents.map(d => `${d.name} (${d.relation})`).join(', ')}</b>` : ''}
+                </div>
+              </div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 10px; color: #64748b; font-weight: bold;">UNIQUE ID</div>
-              <div style="font-size: 18px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac;">${member.id}</div>
+              <div style="font-size: 9.5px; color: #64748b; font-weight: bold; text-transform: uppercase;">UNIQUE MEMBER ID</div>
+              <div style="font-size: 18px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac; margin-top: 3px;">${member.id}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
             </div>
           </div>
         </div>

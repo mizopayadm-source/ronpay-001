@@ -122,8 +122,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Derive Org Code helper
   const deriveOrgCode = (orgName?: string, title?: string): string => {
+    if (campaign?.orgCode) return campaign.orgCode;
     const text = (orgName || title || 'KOHHRAN').toUpperCase();
     if (text.includes('EBENEZER') || text.includes('EBE')) return 'EBE';
+    if (text.includes('BETHEL') || text.includes('BET')) return 'BET';
+    if (text.includes('KHATLA') || text.includes('KTL')) return 'KTL';
     if (text.includes('BCM')) return 'BCM';
     if (text.includes('YMA')) return 'YMA';
     if (text.includes('SYNOD')) return 'SYN';
@@ -132,11 +135,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (text.includes('DAWRPUI')) return 'DWP';
     if (text.includes('ZOTLANG')) return 'ZTL';
     if (text.includes('RAMHLUN')) return 'RMH';
+    if (text.includes('KANAN')) return 'KNN';
+    if (text.includes('BAWNGKAWN')) return 'BGK';
+    if (text.includes('MISSION')) return 'MSV';
     const clean = text.replace(/[^A-Z]/g, '');
     return clean.substring(0, 3) || 'MEM';
   };
 
-  // Initialize subcategories from campaign & Auto-load default member for Kumtluang
+  // Initialize subcategories from campaign & Auto-load default member for this specific Kumtluang campaign
   useEffect(() => {
     if (category === 'kumtluang') {
       if (campaign?.subCategories && campaign.subCategories.length > 0) {
@@ -147,16 +153,22 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         setSubcatAmounts(initialMap);
       }
 
-      // Auto-load member from local storage if available
-      const allMembers = getMembers();
-      if (allMembers.length > 0 && !selectedMember && !donorName) {
-        const defaultM = allMembers[0];
+      // Auto-load member from local storage ONLY for this specific Bawm/Campaign
+      const bawmMembers = campaign?.id ? getMembers(campaign.id) : getMembers();
+      if (bawmMembers.length > 0 && !selectedMember && !donorName) {
+        const defaultM = bawmMembers[0];
         setSelectedMember(defaultM);
         setDonorName(defaultM.name);
         setDonorPhone(defaultM.fullPhone || `943614${defaultM.phoneLast4}`);
         setDonorSection(defaultM.section || 'Section A');
         setPhoneSearchQuery(defaultM.phoneLast4);
         setSelectedPayerType('primary');
+      } else if (bawmMembers.length === 0) {
+        setSelectedMember(null);
+        setDonorName('');
+        setDonorPhone('');
+        setDonorSection('');
+        setPhoneSearchQuery('');
       }
     }
   }, [category, campaign]);
@@ -169,8 +181,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setIsNewMemberMode(false);
       return;
     }
-    const allMembers = getMembers();
-    const match = allMembers.find(m => 
+    // Search strictly within this campaign's members
+    const bawmMembers = campaign?.id ? getMembers(campaign.id) : getMembers();
+    const match = bawmMembers.find(m => 
       m.phoneLast4 === cleanQ || 
       (m.fullPhone && m.fullPhone.endsWith(cleanQ)) ||
       m.id.toLowerCase() === cleanQ.toLowerCase() ||
@@ -204,7 +217,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
     const cleanPhone = newRegPhone.replace(/\D/g, '');
     const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : Math.floor(1000 + Math.random() * 9000).toString();
-    const orgCode = deriveOrgCode(campaign?.orgName, campaign?.title);
+    const orgCode = campaign?.orgCode || deriveOrgCode(campaign?.orgName, campaign?.title);
     const newId = `${orgCode}-${phoneLast4}`;
 
     const sectionToUse = isCustomSection 
@@ -213,6 +226,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     const newMember: MemberRecord = {
       id: newId,
+      campaignId: campaign?.id,
       name: newRegName.trim(),
       orgCode: orgCode,
       phoneLast4: phoneLast4,

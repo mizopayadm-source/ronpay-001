@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   ArrowUpRight, 
   Ribbon, 
   HandHeart, 
-  AlertTriangle, 
+  AlertTriangle,
+  AlertCircle,
   Infinity as InfinityIcon, 
   Upload, 
   Image as ImageIcon, 
@@ -36,11 +37,13 @@ import {
   Users,
   UserPlus,
   CreditCard,
-  Printer
+  Printer,
+  RefreshCw
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus } from '../utils/date';
+import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
 
 interface CreateQRScreenProps {
@@ -125,6 +128,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   // Kumtluang fields
   const [kumtluangOrg, setKumtluangOrg] = useState<string>('');
   const [kumtluangVeng, setKumtluangVeng] = useState<string>('');
+  const [prefixCode, setPrefixCode] = useState<string>('');
+  const [prefixUserEdited, setPrefixUserEdited] = useState<boolean>(false);
   const [kumtluangSubcats, setKumtluangSubcats] = useState<string[]>([]);
   const [newSubcatName, setNewSubcatName] = useState<string>('');
   const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>('Bial / Unit');
@@ -136,6 +141,23 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
   const [kumtluangValidity, setKumtluangValidity] = useState<string>('');
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>('user_paid');
+
+  // Auto-suggest unique prefix when org name changes if user hasn't explicitly edited
+  useEffect(() => {
+    if (!prefixUserEdited && kumtluangOrg.trim().length >= 2) {
+      const derived = derivePrefixFromText(kumtluangOrg);
+      if (isPrefixCodeTaken(derived)) {
+        const alts = suggestAlternativePrefixes(kumtluangOrg);
+        if (alts.length > 0) {
+          setPrefixCode(alts[0]);
+        } else {
+          setPrefixCode(derived);
+        }
+      } else {
+        setPrefixCode(derived);
+      }
+    }
+  }, [kumtluangOrg, prefixUserEdited]);
 
   // Filter creator's campaigns
   const myCampaigns = campaigns.filter(c => {
@@ -345,6 +367,17 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       location = kumtluangVeng.trim() || 'Aizawl, Mizoram';
     }
 
+    // System-wide Unique Prefix Code Enforcement
+    const derivedPrefix = prefixCode.trim() 
+      ? prefixCode.trim().toUpperCase() 
+      : derivePrefixFromText(selectedCategory === 'kumtluang' ? kumtluangOrg : title);
+
+    if (isPrefixCodeTaken(derivedPrefix)) {
+      const suggestions = suggestAlternativePrefixes(derivedPrefix);
+      alert(`⚠️ Prefix Code "${derivedPrefix}" hi Bawm dangin an hmang tawh a ni (Already Taken)!\n\nKhawngaihin prefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+      return;
+    }
+
     const newCampaign: Campaign = {
       id: 'cmp-' + Date.now(),
       category: selectedCategory,
@@ -359,6 +392,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
       createdBy: creatorProfile.phone || creatorProfile.name,
+      orgCode: derivedPrefix,
 
       // Specifics
       mitthiHming: selectedCategory === 'ralna' ? ralnaMitthiHming : undefined,
@@ -1034,6 +1068,106 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:border-blue-600 text-xs"
                   />
                 </div>
+              </div>
+
+              {/* System-wide Unique Prefix Code Setting */}
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <QrCode className="w-3.5 h-3.5 text-blue-600" /> Bawm Prefix Code (System-wide Unique) *
+                  </label>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Sample Member ID: <span className="font-mono text-blue-600 font-black">{(prefixCode || 'BET').toUpperCase()}-7890</span>
+                  </span>
+                </div>
+
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={prefixCode}
+                    onChange={(e) => {
+                      setPrefixUserEdited(true);
+                      setPrefixCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                    }}
+                    placeholder="e.g. BET, EBE"
+                    className={`w-28 bg-slate-50 border-2 rounded-xl p-2 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
+                      prefixCode.trim() && isPrefixCodeTaken(prefixCode.trim())
+                        ? 'border-rose-500 text-rose-700 bg-rose-50'
+                        : prefixCode.trim()
+                        ? 'border-emerald-500 text-emerald-700 bg-emerald-50'
+                        : 'border-slate-300 text-slate-900 focus:border-blue-500'
+                    }`}
+                  />
+                  <div className="flex-1 text-[11px] leading-tight">
+                    {!prefixCode.trim() ? (
+                      <span className="text-slate-500 font-medium">Bawm tana unique prefix code (hawrawp 3-4) chhu lut rawh le.</span>
+                    ) : isPrefixCodeTaken(prefixCode.trim()) ? (
+                      <div className="text-rose-600 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Already Taken! Bawm dangin he prefix hi an hmang tawh.</span>
+                      </div>
+                    ) : (
+                      <div className="text-emerald-700 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Unique & Available! Hemi Bawm pual liau liauvin a lock ang.</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Sync / Re-derive from Org Name button */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = kumtluangOrg.trim() || 'BAW';
+                      const derived = derivePrefixFromText(text);
+                      setPrefixUserEdited(false);
+                      if (isPrefixCodeTaken(derived)) {
+                        const alts = suggestAlternativePrefixes(text);
+                        setPrefixCode(alts[0] || derived);
+                      } else {
+                        setPrefixCode(derived);
+                      }
+                    }}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3 text-blue-600" />
+                    <span>🔄 Org Name atangin Sync / Thlak Thung rawh</span>
+                  </button>
+                  <span className="text-[9px] text-slate-400 font-medium">Duhtawkin manual-in a thlak theih reng bawk</span>
+                </div>
+
+                {/* Dynamic Suggestions if Taken */}
+                {prefixCode.trim() && isPrefixCodeTaken(prefixCode.trim()) && (
+                  <div className="bg-rose-50/90 p-2.5 rounded-xl border border-rose-200 space-y-1.5 animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-900">
+                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      <span>Rawtna / Alternative Suggestions (Hmet la i thlang nghal ang):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestAlternativePrefixes(prefixCode || kumtluangOrg).map((alt) => (
+                        <button
+                          key={alt}
+                          type="button"
+                          onClick={() => {
+                            setPrefixUserEdited(true);
+                            setPrefixCode(alt);
+                          }}
+                          className="bg-white hover:bg-rose-100 border border-rose-300 hover:border-rose-400 text-rose-900 font-mono font-black text-xs px-2.5 py-1 rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          <span>{alt}</span>
+                          <span className="text-[9px] text-emerald-700 font-bold font-sans">✓ Free</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-[9.5px] text-slate-500 leading-tight">
+                  He Prefix hi Bawm dang Member ID nen a in-overlap loh nan system-ah UNIQUE-a lock a ni ang. Phone number ngai hmang pawhin Bawm tharah registration thar a ngai zel ang.
+                </p>
               </div>
 
               {/* Fund Heads / Sub-Categories */}
@@ -1779,6 +1913,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   
   // Kumtluang specifics
   const [orgName, setOrgName] = useState<string>(campaign.orgName || '');
+  const [editOrgCode, setEditOrgCode] = useState<string>(
+    campaign.orgCode || derivePrefixFromText(campaign.orgName || campaign.title || 'BAW')
+  );
   const [subCategories, setSubCategories] = useState<string[]>(
     campaign.subCategories && campaign.subCategories.length > 0 
       ? campaign.subCategories 
@@ -1828,6 +1965,19 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const finalPrefix = editOrgCode.trim().toUpperCase() || campaign.orgCode || derivePrefixFromText(orgName || title);
+    if (isPrefixCodeTaken(finalPrefix, campaign.id)) {
+      const suggestions = suggestAlternativePrefixes(finalPrefix);
+      alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+      return;
+    }
+
+    const oldPrefix = (campaign.orgCode || '').trim().toUpperCase();
+    let migratedCount = 0;
+    if (oldPrefix && oldPrefix !== finalPrefix) {
+      migratedCount = migrateCampaignMembersPrefix(campaign.id, oldPrefix, finalPrefix);
+    }
+
     const updated: Campaign = {
       ...campaign,
       title: title.trim(),
@@ -1838,6 +1988,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       status: status,
       gpsCoords: gpsCoords.trim(),
       imageUrl: imageUrl || undefined,
+      orgCode: finalPrefix,
       
       mitthiHming: campaign.category === 'ralna' ? mitthiHming.trim() : undefined,
       age: campaign.category === 'ralna' && age ? parseInt(age) : undefined,
@@ -1857,6 +2008,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
     };
 
     onSave(updated);
+    if (migratedCount > 0) {
+      alert(`✅ BAWM DETAILS & PREFIX UPDATED!\n\nBawm Prefix chu [${finalPrefix}] ah thlak fel a ni a, he Bawm a member awmsa (${migratedCount}) te ID pawh '${finalPrefix}-XXXX' ah auto-migrate/update fel nghal a ni e!`);
+    }
   };
 
   return (
@@ -2146,6 +2300,83 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                   placeholder="e.g. BCM Ebenezer, Zobawk"
                   className="w-full bg-white border border-blue-300 rounded-xl p-2 font-bold text-slate-900 focus:border-blue-600"
                 />
+              </div>
+
+              {/* Unique Prefix Code Editor */}
+              <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-blue-950 uppercase tracking-wider">
+                    Bawm Prefix Code (System-wide Unique)
+                  </label>
+                  <span className="text-[9.5px] font-mono font-bold text-blue-700">
+                    Sample: {editOrgCode.trim().toUpperCase() || 'EBE'}-7890
+                  </span>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={editOrgCode}
+                    onChange={(e) => setEditOrgCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    className={`w-24 bg-slate-50 border-2 rounded-xl p-1.5 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
+                      editOrgCode.trim() && isPrefixCodeTaken(editOrgCode.trim(), campaign.id)
+                        ? 'border-rose-500 text-rose-700 bg-rose-50'
+                        : editOrgCode.trim()
+                        ? 'border-emerald-500 text-emerald-700 bg-emerald-50'
+                        : 'border-slate-300 text-slate-900 focus:border-blue-500'
+                    }`}
+                  />
+                  <div className="flex-1 text-[10px] leading-tight">
+                    {editOrgCode.trim() && isPrefixCodeTaken(editOrgCode.trim(), campaign.id) ? (
+                      <span className="text-rose-600 font-bold">⚠️ Already taken by another Bawm!</span>
+                    ) : (
+                      <span className="text-emerald-700 font-bold">✓ Unique Prefix locked</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Sync with Org Name button */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = orgName.trim() || title.trim() || 'BAW';
+                      const derived = derivePrefixFromText(text);
+                      if (isPrefixCodeTaken(derived, campaign.id)) {
+                        const alts = suggestAlternativePrefixes(text);
+                        setEditOrgCode(alts[0] || derived);
+                      } else {
+                        setEditOrgCode(derived);
+                      }
+                    }}
+                    className="text-[9.5px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5 text-blue-600" />
+                    <span>🔄 Org Name atangin Sync / Thlak Thung rawh</span>
+                  </button>
+                  <span className="text-[8.5px] text-slate-400 font-medium">Member awm sa te ID auto-update nghal ang</span>
+                </div>
+
+                {editOrgCode.trim() && isPrefixCodeTaken(editOrgCode.trim(), campaign.id) && (
+                  <div className="bg-rose-50 p-2 rounded-lg border border-rose-200 space-y-1">
+                    <div className="text-[9.5px] font-bold text-rose-900 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      <span>Available Suggestions:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {suggestAlternativePrefixes(editOrgCode || orgName).map((alt) => (
+                        <button
+                          key={alt}
+                          type="button"
+                          onClick={() => setEditOrgCode(alt)}
+                          className="bg-white hover:bg-rose-100 border border-rose-300 text-rose-900 font-mono font-black text-[10px] px-2 py-0.5 rounded shadow-2xs cursor-pointer"
+                        >
+                          {alt} (Free)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Fund Heads List */}

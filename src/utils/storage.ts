@@ -124,7 +124,21 @@ export const getStoredCampaigns = (): Campaign[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Ensure every campaign has an orgCode populated
+        let hasChanges = false;
+        const normalized = parsed.map((camp: Campaign) => {
+          if (!camp.orgCode) {
+            const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
+            const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
+            hasChanges = true;
+            return { ...camp, orgCode: derived };
+          }
+          return camp;
+        });
+        if (hasChanges) {
+          localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(normalized));
+        }
+        return normalized;
       }
     }
   } catch (e) {
@@ -133,9 +147,120 @@ export const getStoredCampaigns = (): Campaign[] => {
   return INITIAL_CAMPAIGNS;
 };
 
+// Helper to derive 3-letter prefix from string
+export const derivePrefixFromText = (text?: string): string => {
+  if (!text) return 'MEM';
+  const upper = text.toUpperCase();
+  if (upper.includes('EBENEZER') || upper.includes('EBE')) return 'EBE';
+  if (upper.includes('BETHEL') || upper.includes('BET')) return 'BET';
+  if (upper.includes('KHATLA') || upper.includes('KTL')) return 'KTL';
+  if (upper.includes('BCM')) return 'BCM';
+  if (upper.includes('YMA')) return 'YMA';
+  if (upper.includes('SYNOD')) return 'SYN';
+  if (upper.includes('CHANMARI')) return 'CHM';
+  if (upper.includes('BUNGKAWN')) return 'BKN';
+  if (upper.includes('DAWRPUI')) return 'DWP';
+  if (upper.includes('ZOTLANG')) return 'ZTL';
+  if (upper.includes('RAMHLUN')) return 'RMH';
+  if (upper.includes('KANAN')) return 'KNN';
+  if (upper.includes('BAWNGKAWN')) return 'BGK';
+  if (upper.includes('MISSION')) return 'MSV';
+  
+  const clean = upper.replace(/[^A-Z]/g, '');
+  return clean.substring(0, 3) || 'BAW';
+};
+
+// System-wide Unique Prefix Code Validator
+export const isPrefixCodeTaken = (prefix: string, excludeCampaignId?: string): boolean => {
+  const clean = prefix.trim().toUpperCase();
+  if (!clean) return false;
+  const campaigns = getStoredCampaigns();
+  return campaigns.some(c => c.id !== excludeCampaignId && (c.orgCode || '').trim().toUpperCase() === clean);
+};
+
+// Dynamic Alternative Prefix Generator with clean suggestions
+export const suggestAlternativePrefixes = (baseTextOrPrefix: string, excludeCampaignId?: string): string[] => {
+  const campaigns = getStoredCampaigns();
+  const existingPrefixes = new Set(
+    campaigns
+      .filter(c => c.id !== excludeCampaignId && c.orgCode)
+      .map(c => c.orgCode!.trim().toUpperCase())
+  );
+
+  const clean = baseTextOrPrefix.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const candidates: string[] = [];
+
+  if (clean.length >= 3) {
+    // 1. Standard first 3 letters (e.g. BET)
+    candidates.push(clean.substring(0, 3));
+    
+    // 2. Consonants only (e.g. BTH, BTN for Bethani / Bethel)
+    const consonants = clean.replace(/[AEIOU]/g, '');
+    if (consonants.length >= 3) candidates.push(consonants.substring(0, 3));
+    if (consonants.length >= 2 && clean.length >= 3) {
+      candidates.push(consonants.substring(0, 2) + clean.charAt(2));
+      candidates.push(consonants.substring(0, 2) + clean.charAt(clean.length - 1));
+    }
+    
+    // 3. First, Middle, Last letter (e.g. BNI for Bethani)
+    if (clean.length >= 4) {
+      candidates.push(clean.charAt(0) + clean.charAt(Math.floor(clean.length / 2)) + clean.charAt(clean.length - 1));
+      candidates.push(clean.charAt(0) + clean.substring(clean.length - 2));
+      candidates.push(clean.substring(0, 2) + clean.charAt(clean.length - 1));
+      candidates.push(clean.substring(0, 4));
+    }
+  } else if (clean.length > 0) {
+    candidates.push(clean.padEnd(3, 'X'));
+  }
+
+  // 4. Fallbacks with clean suffixes (e.g. BT1, BT2, BTH1)
+  const base2 = clean.length >= 2 ? clean.substring(0, 2) : (clean || 'B');
+  for (let i = 1; i <= 9; i++) {
+    candidates.push(`${base2}${i}`);
+    if (clean.length >= 3) {
+      candidates.push(`${clean.substring(0, 2)}${clean.charAt(clean.length - 1)}${i}`);
+    }
+  }
+
+  // Filter out any taken prefix and duplicate entries
+  const available: string[] = [];
+  for (const cand of candidates) {
+    const candUpper = cand.toUpperCase();
+    if (candUpper.length >= 2 && !existingPrefixes.has(candUpper) && !available.includes(candUpper)) {
+      available.push(candUpper);
+      if (available.length >= 4) break;
+    }
+  }
+
+  // If still empty, supply unique synthetic prefixes
+  let counter = 1;
+  while (available.length < 3 && counter < 100) {
+    const synth = `${base2}${counter.toString().padStart(2, '0')}`;
+    if (!existingPrefixes.has(synth) && !available.includes(synth)) {
+      available.push(synth);
+    }
+    counter++;
+  }
+
+  return available;
+};
+
 export const saveStoredCampaigns = (campaigns: Campaign[]) => {
   try {
-    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(campaigns));
+    // Enforce unique prefix codes across all campaigns
+    const seenPrefixes = new Set<string>();
+    const sanitized = campaigns.map(c => {
+      let code = (c.orgCode || derivePrefixFromText(c.orgName || c.title)).trim().toUpperCase();
+      if (seenPrefixes.has(code)) {
+        // Auto disambiguate collision if saving
+        const alts = suggestAlternativePrefixes(code, c.id);
+        code = alts[0] || `${code.substring(0, 2)}${Math.floor(Math.random() * 9 + 1)}`;
+      }
+      seenPrefixes.add(code);
+      return { ...c, orgCode: code };
+    });
+
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
     setLastSyncTime(new Date().toISOString());
   } catch (e) {
     console.error('Failed to save campaigns', e);
@@ -549,6 +674,7 @@ export const restoreFullDatabaseBackup = (
 export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   {
     id: 'EBE-1460',
+    campaignId: 'cmp-kumtluang-1',
     name: 'Rammuanpuia Ralte',
     orgCode: 'EBE',
     phoneLast4: '1460',
@@ -563,6 +689,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'EBE-8622',
+    campaignId: 'cmp-kumtluang-1',
     name: 'Lalduhawma Fanai',
     orgCode: 'EBE',
     phoneLast4: '8622',
@@ -577,6 +704,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'EBE-3120',
+    campaignId: 'cmp-kumtluang-1',
     name: 'Zonunsanga Hnamte',
     orgCode: 'EBE',
     phoneLast4: '3120',
@@ -588,16 +716,34 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   }
 ];
 
-export const getMembers = (): MemberRecord[] => {
+export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
+    let allMembers: MemberRecord[] = [];
     const raw = localStorage.getItem(MEMBERS_LIST_KEY);
     if (!raw) {
       localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(INITIAL_DEFAULT_MEMBERS));
-      return INITIAL_DEFAULT_MEMBERS;
+      allMembers = INITIAL_DEFAULT_MEMBERS;
+    } else {
+      allMembers = JSON.parse(raw);
     }
-    return JSON.parse(raw);
+
+    if (!campaignId || campaignId === 'all') {
+      return allMembers;
+    }
+
+    // Filter strictly by campaignId
+    return allMembers.filter(m => {
+      if (m.campaignId) {
+        return m.campaignId === campaignId;
+      }
+      // Backward compatibility: default seed members belong to cmp-kumtluang-1
+      if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') {
+        return true;
+      }
+      return false;
+    });
   } catch (e) {
-    return INITIAL_DEFAULT_MEMBERS;
+    return campaignId && campaignId !== 'cmp-kumtluang-1' ? [] : INITIAL_DEFAULT_MEMBERS;
   }
 };
 
@@ -610,20 +756,56 @@ export const saveMembers = (members: MemberRecord[]): void => {
 };
 
 export const addOrUpdateMember = (member: MemberRecord): void => {
-  const list = getMembers();
-  const idx = list.findIndex(m => m.id === member.id);
+  const allList = getMembers(); // Load all members across all Bawms
+  const idx = allList.findIndex(m => 
+    m.id === member.id && 
+    (!member.campaignId || !m.campaignId || m.campaignId === member.campaignId)
+  );
   if (idx >= 0) {
-    list[idx] = member;
+    allList[idx] = member;
   } else {
-    list.unshift(member);
+    allList.unshift(member);
   }
-  saveMembers(list);
+  saveMembers(allList);
 };
 
-export const deleteMember = (memberId: string): void => {
-  const list = getMembers();
-  const filtered = list.filter(m => m.id !== memberId);
+export const deleteMember = (memberId: string, campaignId?: string): void => {
+  const allList = getMembers();
+  const filtered = allList.filter(m => {
+    if (m.id !== memberId) return true;
+    if (campaignId && m.campaignId && m.campaignId !== campaignId) return true;
+    return false;
+  });
   saveMembers(filtered);
+};
+
+export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
+  if (!campaignId || !newPrefix) return 0;
+  const cleanOld = (oldPrefix || '').trim().toUpperCase();
+  const cleanNew = newPrefix.trim().toUpperCase();
+  if (cleanOld && cleanOld === cleanNew) return 0;
+
+  const allMembers = getMembers();
+  let migratedCount = 0;
+  const updatedMembers = allMembers.map(m => {
+    const isThisCampaign = m.campaignId === campaignId || (!m.campaignId && cleanOld && m.orgCode === cleanOld);
+    if (isThisCampaign) {
+      migratedCount++;
+      const p4 = m.phoneLast4 || (m.id.includes('-') ? m.id.split('-')[1] : m.id.slice(-4));
+      return {
+        ...m,
+        campaignId,
+        orgCode: cleanNew,
+        id: `${cleanNew}-${p4}`
+      };
+    }
+    return m;
+  });
+
+  if (migratedCount > 0) {
+    saveMembers(updatedMembers);
+  }
+  return migratedCount;
 };
 
 export const saveTransaction = (tx: Transaction): void => {

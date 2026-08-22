@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   UserPlus, 
@@ -12,7 +12,11 @@ import {
   Trash2, 
   CheckCircle2, 
   AlertCircle,
-  ChevronDown
+  ChevronDown,
+  Camera,
+  Upload,
+  User,
+  Image as ImageIcon
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, addOrUpdateMember, deleteMember, saveTransaction } from '../utils/storage';
@@ -21,6 +25,7 @@ import {
   exportMemberCategoryMatrixPrint, 
   exportMemberPassbookVerticalPrint 
 } from '../utils/export';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface KumtluangMemberManagerModalProps {
   isOpen: boolean;
@@ -64,6 +69,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [newPhone4, setNewPhone4] = useState<string>('');
   const [newFullPhone, setNewFullPhone] = useState<string>('');
   const [newSection, setNewSection] = useState<string>('');
+  const [newAvatarUrl, setNewAvatarUrl] = useState<string>('');
   const [newDependents, setNewDependents] = useState<{ name: string; relation: string }[]>([]);
   const [depNameInput, setDepNameInput] = useState<string>('');
   const [depRelInput, setDepRelInput] = useState<string>('Fa');
@@ -77,9 +83,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editPhone4, setEditPhone4] = useState<string>('');
   const [editFullPhone, setEditFullPhone] = useState<string>('');
   const [editSection, setEditSection] = useState<string>('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState<string>('');
   const [editDependents, setEditDependents] = useState<MemberDependent[]>([]);
   const [editDepName, setEditDepName] = useState<string>('');
   const [editDepRel, setEditDepRel] = useState<string>('Fa');
+
+  // Loading state for image compression
+  const [isCompressing, setIsCompressing] = useState<boolean>(false);
+  const newFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Print Styles Selector State
   const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook'>('style1_master');
@@ -100,17 +112,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (initialTab) {
         setActiveTab(initialTab);
       }
-      const mList = getMembers();
+      const initialCamp = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
+      const campId = selectedCampaignId || initialCamp?.id || '';
+      setSelectedCampaignId(campId);
+      const mList = getMembers(campId);
       setMembers(mList);
-      if (campaigns.length > 0) {
-        const kumCampaign = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
-        setSelectedCampaignId(kumCampaign.id);
-        if (kumCampaign.orgCode) {
-          setNewOrgCode(kumCampaign.orgCode);
-        }
+      if (initialCamp?.orgCode) {
+        setNewOrgCode(initialCamp.orgCode);
       }
     }
   }, [isOpen, campaigns, initialTab]);
+
+  // When selectedCampaignId changes, reload scoped members and set orgCode
+  useEffect(() => {
+    if (selectedCampaignId) {
+      const camp = campaigns.find(c => c.id === selectedCampaignId);
+      setMembers(getMembers(selectedCampaignId));
+      if (camp?.orgCode) {
+        setNewOrgCode(camp.orgCode);
+      }
+      setSelectedMember(null);
+    }
+  }, [selectedCampaignId, campaigns]);
 
   if (!isOpen) return null;
 
@@ -118,6 +141,30 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const campaignCategories = (currentCampaign?.subCategories && currentCampaign.subCategories.length > 0)
     ? currentCampaign.subCategories
     : defaultCategories;
+
+  const resolvedOrgTitle = currentCampaign?.orgName || currentCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
+  const resolvedLogoUrl = currentCampaign?.imageUrl || creatorProfile.logoUrl;
+  const resolvedLocation = currentCampaign?.location || creatorProfile.address;
+
+  // Image compressor handler for photo upload
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressing(true);
+      const compressedBase64 = await compressImageFile(file, 320, 320, 0.75);
+      if (isEdit) {
+        setEditAvatarUrl(compressedBase64);
+      } else {
+        setNewAvatarUrl(compressedBase64);
+      }
+    } catch (err) {
+      console.error('Failed to compress avatar photo', err);
+      alert('Thlalak load a buai deuh a ni, thlalak dang thlang rawh le.');
+    } finally {
+      setIsCompressing(false);
+    }
+  };
 
   // Auto-search members by last 4 digits, name or ID
   const searchResults = quickPhone4.trim().length >= 2 
@@ -247,18 +294,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
     const newM: MemberRecord = {
       id: generatedId,
+      campaignId: selectedCampaignId || currentCampaign?.id,
       name: newHming.trim(),
       orgCode: org,
       phoneLast4: p4,
       fullPhone: newFullPhone.trim() || undefined,
       section: newSection.trim() || undefined,
+      avatarUrl: newAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: formattedDependents,
       createdAt: new Date().toISOString()
     };
 
     addOrUpdateMember(newM);
-    const updated = getMembers();
+    const updated = getMembers(selectedCampaignId);
     setMembers(updated);
     setRegSuccess(`Member thar [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
     setSelectedMember(newM);
@@ -270,6 +319,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewPhone4('');
     setNewFullPhone('');
     setNewSection('');
+    setNewAvatarUrl('');
     setNewDependents([]);
     setDuplicateWarning(null);
     onDataUpdated();
@@ -288,6 +338,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setEditPhone4(m.phoneLast4);
     setEditFullPhone(m.fullPhone || '');
     setEditSection(m.section || '');
+    setEditAvatarUrl(m.avatarUrl || '');
     setEditDependents(m.dependents || []);
   };
 
@@ -325,23 +376,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
     // If ID changed, delete old one and add new
     if (newId !== editingMember.id) {
-      deleteMember(editingMember.id);
+      deleteMember(editingMember.id, editingMember.campaignId || selectedCampaignId);
     }
 
     const updatedM: MemberRecord = {
       id: newId,
+      campaignId: editingMember.campaignId || selectedCampaignId || currentCampaign?.id,
       name: editName.trim() || editingMember.name,
       orgCode: org,
       phoneLast4: p4,
       fullPhone: editFullPhone.trim() || undefined,
       section: editSection.trim() || undefined,
+      avatarUrl: editAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: updatedDeps,
       createdAt: editingMember.createdAt
     };
 
     addOrUpdateMember(updatedM);
-    const updated = getMembers();
+    const updated = getMembers(selectedCampaignId);
     setMembers(updated);
     if (selectedMember?.id === editingMember.id) {
       setSelectedMember(updatedM);
@@ -354,8 +407,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Delete Member
   const handleDeleteMember = (memberId: string, memberName: string) => {
     if (window.confirm(`Member "${memberName}" (${memberId}) hi paih (delete) i chiang em?`)) {
-      deleteMember(memberId);
-      const updated = getMembers();
+      deleteMember(memberId, selectedCampaignId);
+      const updated = getMembers(selectedCampaignId);
       setMembers(updated);
       if (selectedMember?.id === memberId) {
         setSelectedMember(null);
@@ -371,18 +424,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         {/* Top Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-xs">
-              <Users className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-xs overflow-hidden">
+              {resolvedLogoUrl ? (
+                <img src={resolvedLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <Users className="w-5 h-5" />
+              )}
             </div>
             <div>
               <h3 className="font-black text-base tracking-wide flex items-center gap-2">
-                <span>Kumtluang Bawm • Member Roll & Treasurer Portal</span>
+                <span>{currentCampaign?.title || 'Kumtluang Bawm'} • Member Roll & Treasurer Portal</span>
                 <span className="text-[9.5px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
                   12-Month Matrix
                 </span>
               </h3>
               <p className="text-xs text-blue-200/80">
-                {creatorProfile.orgName || 'Church / Organization'} • Family Head & Dependent Sub-IDs
+                {resolvedOrgTitle} {resolvedLocation ? `• ${resolvedLocation}` : ''} • Family Head & Dependent Sub-IDs
               </p>
             </div>
           </div>
@@ -499,20 +556,31 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           : 'bg-white text-slate-800 border-slate-200 hover:bg-blue-50'
                       }`}
                     >
-                      <div>
-                        <div className="text-xs font-black flex items-center gap-1.5 flex-wrap">
-                          <span>{m.name}</span>
-                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${selectedMember?.id === m.id ? 'bg-blue-800 text-blue-100' : 'bg-slate-100 text-slate-700'}`}>
-                            {m.id}
-                          </span>
-                          {m.dependents && m.dependents.length > 0 && (
-                            <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${selectedMember?.id === m.id ? 'bg-blue-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
-                              +{m.dependents.length} Chhungte
-                            </span>
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs ${
+                          selectedMember?.id === m.id ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {m.avatarUrl ? (
+                            <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{m.name.charAt(0).toUpperCase()}</span>
                           )}
                         </div>
-                        <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-blue-100' : 'text-slate-500'}`}>
-                          Phone: ****{m.phoneLast4} • {m.section || 'General'}
+                        <div>
+                          <div className="text-xs font-black flex items-center gap-1.5 flex-wrap">
+                            <span>{m.name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${selectedMember?.id === m.id ? 'bg-blue-800 text-blue-100' : 'bg-slate-100 text-slate-700'}`}>
+                              {m.id}
+                            </span>
+                            {m.dependents && m.dependents.length > 0 && (
+                              <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${selectedMember?.id === m.id ? 'bg-blue-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                                +{m.dependents.length} Chhungte
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-blue-100' : 'text-slate-500'}`}>
+                            Phone: ****{m.phoneLast4} • {m.section || 'General'}
+                          </div>
                         </div>
                       </div>
                       {selectedMember?.id === m.id && <Check className="w-4 h-4 text-white shrink-0" />}
@@ -547,10 +615,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       : 'bg-slate-50 border-slate-200 text-slate-500'
                   }`}>
                     <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Chhungkaw Hotu (Family Head)</div>
-                        <div className="text-sm font-black text-slate-900">
-                          {selectedMember ? selectedMember.name : 'Khawngaihin vei lam atangin member thlang rawh'}
+                      <div className="flex items-center gap-3">
+                        {selectedMember && (
+                          <div className="w-11 h-11 rounded-2xl overflow-hidden bg-white border border-blue-200 shadow-xs shrink-0 flex items-center justify-center font-black text-blue-900 text-base">
+                            {selectedMember.avatarUrl ? (
+                              <img src={selectedMember.avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{selectedMember.name.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Chhungkaw Hotu (Family Head)</div>
+                          <div className="text-sm font-black text-slate-900">
+                            {selectedMember ? selectedMember.name : 'Khawngaihin vei lam atangin member thlang rawh'}
+                          </div>
                         </div>
                       </div>
                       {selectedMember && (
@@ -801,6 +880,60 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
               </div>
 
+              {/* Member Profile Photo Upload (Optional) */}
+              <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-blue-600" />
+                    <span>Mimal Thlalak / Profile Photo (Optional)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">Statement Print-ah a lang ang</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                    {newAvatarUrl ? (
+                      <img src={newAvatarUrl} alt="Member Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-6 h-6 text-slate-400" />
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    <input
+                      ref={newFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handlePhotoSelect(e, false)}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => newFileInputRef.current?.click()}
+                        disabled={isCompressing}
+                        className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{newAvatarUrl ? 'Thlak Rawh' : 'Thlalak Thlang Rawh'}</span>
+                      </button>
+                      {newAvatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setNewAvatarUrl('')}
+                          className="px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          Paih Rawh
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Auto-compressed under 100KB (Phone memory ti rit lo turin)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Dependents Addition Section */}
               <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -927,21 +1060,46 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 type="button"
                 onClick={() => {
                   if (printStyle === 'style1_master') {
-                    exportMasterLedgerPrint(members, transactions, currentCampaign?.title || 'Kumtluang Bawm', creatorProfile.orgName || 'Church Organization');
+                    exportMasterLedgerPrint(
+                      members, 
+                      transactions, 
+                      currentCampaign?.title || 'Kumtluang Bawm', 
+                      resolvedOrgTitle,
+                      resolvedLogoUrl,
+                      resolvedLocation
+                    );
                   } else if (printStyle === 'style2_matrix') {
                     if (!printMemberId) {
                       alert('Khawngaihin member thlang hmasa rawh le.');
                       return;
                     }
                     const m = members.find(x => x.id === printMemberId);
-                    if (m) exportMemberCategoryMatrixPrint(m, campaignCategories, transactions, creatorProfile.orgName || 'Church Organization');
+                    if (m) {
+                      exportMemberCategoryMatrixPrint(
+                        m, 
+                        campaignCategories, 
+                        transactions, 
+                        resolvedOrgTitle,
+                        resolvedLogoUrl,
+                        resolvedLocation
+                      );
+                    }
                   } else if (printStyle === 'style3_passbook') {
                     if (!printMemberId) {
                       alert('Khawngaihin member thlang hmasa rawh le.');
                       return;
                     }
                     const m = members.find(x => x.id === printMemberId);
-                    if (m) exportMemberPassbookVerticalPrint(m, campaignCategories, transactions, creatorProfile.orgName || 'Church Organization');
+                    if (m) {
+                      exportMemberPassbookVerticalPrint(
+                        m, 
+                        campaignCategories, 
+                        transactions, 
+                        resolvedOrgTitle,
+                        resolvedLogoUrl,
+                        resolvedLocation
+                      );
+                    }
                   }
                 }}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 cursor-pointer active:scale-95"
@@ -999,16 +1157,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-3 font-mono font-bold text-blue-700">{m.id}</td>
                         <td className="p-3">
-                          <div className="font-bold text-slate-900">{m.name}</div>
-                          {m.dependents && m.dependents.length > 0 && (
-                            <div className="text-[10px] text-slate-500 mt-0.5 space-x-1">
-                              {m.dependents.map(d => (
-                                <span key={d.subId} className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-mono">
-                                  {d.name} ({d.subId.split('-').pop()})
-                                </span>
-                              ))}
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700">
+                              {m.avatarUrl ? (
+                                <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span>{m.name.charAt(0).toUpperCase()}</span>
+                              )}
                             </div>
-                          )}
+                            <div>
+                              <div className="font-bold text-slate-900">{m.name}</div>
+                              {m.dependents && m.dependents.length > 0 && (
+                                <div className="text-[10px] text-slate-500 mt-0.5 space-x-1">
+                                  {m.dependents.map(d => (
+                                    <span key={d.subId} className="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-mono">
+                                      {d.name} ({d.subId.split('-').pop()})
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="p-3 text-slate-600 font-mono">****{m.phoneLast4}</td>
                         <td className="p-3 text-slate-600">{m.section || '-'}</td>
@@ -1088,6 +1257,50 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
                 />
+              </div>
+
+              {/* Photo Upload in Edit Modal */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <label className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Mimal Thlalak / Profile Photo</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl border border-slate-300 bg-white overflow-hidden shrink-0 flex items-center justify-center">
+                    {editAvatarUrl ? (
+                      <img src={editAvatarUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={editFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handlePhotoSelect(e, true)}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      disabled={isCompressing}
+                      className="px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{editAvatarUrl ? 'Thlak Rawh' : 'Thlalak Dah Rawh'}</span>
+                    </button>
+                    {editAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditAvatarUrl('')}
+                        className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                      >
+                        Paih Rawh
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -397,9 +397,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
 
     const allMembers = getMembers();
+    const resolvedOrgName = selectedCampaignObj?.orgName || selectedCampaignObj?.title || creatorProfile.orgName || creatorProfile.name || 'RonPay Organization';
+    const resolvedLogoUrl = activeCampaignImage || creatorProfile.logoUrl;
+    const resolvedLocation = headerLocation;
 
     if (reportPrintStyle === 'master_ledger') {
-      exportMasterLedgerPrint(allMembers, transactions, headerTitle, creatorProfile.orgName || 'Church Organization');
+      exportMasterLedgerPrint(
+        allMembers, 
+        transactions, 
+        selectedCampaignObj?.title || headerTitle, 
+        resolvedOrgName,
+        resolvedLogoUrl,
+        resolvedLocation
+      );
       showExportSuccessToast('Format 1: Master Ledger Printout', allMembers.length);
       return;
     }
@@ -414,7 +424,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         ? selectedCampaignObj.subCategories
         : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
       if (m) {
-        exportMemberCategoryMatrixPrint(m, defaultCategories, transactions, creatorProfile.orgName || 'Church Organization');
+        exportMemberCategoryMatrixPrint(
+          m, 
+          defaultCategories, 
+          transactions, 
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation
+        );
         showExportSuccessToast(`Format 2: Category Matrix (${m.name})`, 1);
       }
       return;
@@ -430,7 +447,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         ? selectedCampaignObj.subCategories
         : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
       if (m) {
-        exportMemberPassbookVerticalPrint(m, defaultCategories, transactions, creatorProfile.orgName || 'Church Organization');
+        exportMemberPassbookVerticalPrint(
+          m, 
+          defaultCategories, 
+          transactions, 
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation
+        );
         showExportSuccessToast(`Format 3: Mimal Passbook (${m.name})`, 1);
       }
       return;
