@@ -833,7 +833,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
-                    {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile?.isAdmin) && onOpenMemberRoll && (
                       <button
                         type="button"
                         onClick={(e) => {

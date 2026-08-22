@@ -43,7 +43,7 @@ import {
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus } from '../utils/date';
-import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix } from '../utils/storage';
+import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
 
 interface CreateQRScreenProps {
@@ -159,13 +159,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     }
   }, [kumtluangOrg, prefixUserEdited]);
 
-  // Filter creator's campaigns
-  const myCampaigns = campaigns.filter(c => {
-    if (c.createdBy && (c.createdBy === creatorProfile.phone || c.createdBy === creatorProfile.name)) {
-      return true;
-    }
-    return creatorProfile.approvedCategories.includes(c.category);
-  });
+  // Filter creator's campaigns strictly to what THIS creator individually created
+  const myCampaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
 
   const displayedCampaigns = myCampaigns.filter(c => {
     if (manageFilter === 'all') return true;

@@ -57,7 +57,7 @@ import {
   ALL_MONTH_NAMES_SHORT,
   TargetExportInfo
 } from '../utils/export';
-import { getMembers } from '../utils/storage';
+import { getMembers, isCampaignCreator } from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 
 interface ReportsScreenProps {
@@ -117,15 +117,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Check if current user is an authenticated QR creator
   const isCreator = Boolean(creatorProfile.isApproved && creatorProfile.phone);
 
-  // Filter campaigns strictly owned/created by this creator
+  // Filter campaigns strictly owned/created by this creator (no cross-creator leakage)
   const creatorCampaigns = campaigns.filter(c => {
     if (!isCreator) return false;
-    // Match by creator phone or createdBy or name or creator's approved category
-    if (c.createdBy && (c.createdBy === creatorProfile.phone || c.createdBy === creatorProfile.name)) {
-      return true;
-    }
-    // Also include campaigns in creator's approved categories if created
-    return creatorProfile.approvedCategories.includes(c.category);
+    return isCampaignCreator(c, creatorProfile);
   });
 
   const creatorCampaignIds = new Set(creatorCampaigns.map(c => c.id));

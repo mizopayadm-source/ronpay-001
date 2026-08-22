@@ -27,7 +27,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, addOrUpdateMember, deleteMember, saveTransaction } from '../utils/storage';
+import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
 import { 
   exportMasterLedgerPrint, 
   exportMemberCategoryMatrixPrint, 
@@ -64,33 +64,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
-  // Calculate scoped campaigns for this creator (or all if admin)
+  // Calculate scoped campaigns strictly owned/created by this creator (or all if admin)
   const allowedCampaigns = useMemo(() => {
     if (creatorProfile.isAdmin) {
       return campaigns;
     }
-    const cleanPhone = (creatorProfile.phone || '').trim();
-    const cleanName = (creatorProfile.name || '').trim().toLowerCase();
-    const cleanOrg = (creatorProfile.orgName || '').trim().toLowerCase();
-
-    const matched = campaigns.filter(c => {
-      if (c.createdBy && (c.createdBy === cleanPhone || c.createdBy.toLowerCase() === cleanName)) {
-        return true;
-      }
-      if (cleanOrg && c.orgName && (c.orgName.toLowerCase().includes(cleanOrg) || cleanOrg.includes(c.orgName.toLowerCase()))) {
-        return true;
-      }
-      if (cleanPhone && cleanPhone.length >= 4 && (c.upiId?.includes(cleanPhone.slice(-4)) || (c.createdBy && c.createdBy.includes(cleanPhone.slice(-4))))) {
-        return true;
-      }
-      return false;
-    });
-
-    if (matched.length > 0) return matched;
-
-    // Fallback: return Kumtluang category campaigns or all active campaigns
-    const kumtluangCamps = campaigns.filter(c => c.category === 'kumtluang');
-    return kumtluangCamps.length > 0 ? kumtluangCamps : campaigns;
+    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
   }, [campaigns, creatorProfile]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
@@ -735,7 +714,30 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-white">
-
+          {allowedCampaigns.length === 0 ? (
+            <div className="max-w-md mx-auto py-12 text-center space-y-4">
+              <div className="w-16 h-16 bg-indigo-50 border border-indigo-200 rounded-3xl flex items-center justify-center mx-auto text-indigo-600 shadow-xs">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">Bawm Siam a la awm lo</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  I account ({creatorProfile.name || creatorProfile.phone}) hian Kumtluang / Organization Bawm siam i la nei lo a ni. Creator tin hian mahni mimal siam theuh chauh an enkawl thei a ni.
+                </p>
+              </div>
+              {onOpenCreateQR && (
+                <button
+                  type="button"
+                  onClick={onOpenCreateQR}
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-2xl text-xs shadow-md transition cursor-pointer"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ Bawm Thar Siam Rawh</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
           {/* TAB 1: QUICK ENTRY */}
           {activeTab === 'quick_entry' && (
             <div className="space-y-6">
@@ -1802,6 +1804,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
               </div>
             </div>
+          )}
+
+          </>
           )}
 
         </div>

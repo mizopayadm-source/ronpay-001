@@ -461,21 +461,40 @@ export const isUserPaidTransaction = (
 
 /**
  * Checks if the currently active user/creator is the verified owner/creator of a given campaign.
- * Target goals & progress are private and exclusively visible to the campaign's creator.
+ * Target goals, progress, edit/delete privileges & member roll managers are strictly private
+ * and exclusively accessible to the individual creator who created the campaign (or Admin).
  */
 export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
   if (!creatorProfile || !creatorProfile.isApproved) return false;
-  if (!camp.createdBy) return false;
+  if (creatorProfile.isAdmin) return true;
+  if (!camp) return false;
 
-  const creatorPhone = creatorProfile.phone?.trim();
-  const creatorName = creatorProfile.name?.trim().toLowerCase();
-  const campCreatedBy = camp.createdBy.trim();
+  const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '');
+  const creatorName = (creatorProfile.name || '').trim().toLowerCase();
+  const campCreatedBy = (camp.createdBy || '').trim();
+  const campCreatedByDigits = campCreatedBy.replace(/\D/g, '');
   const campCreatedByLower = campCreatedBy.toLowerCase();
 
-  if (creatorPhone && campCreatedBy === creatorPhone) return true;
-  if (creatorName && campCreatedByLower === creatorName) return true;
-  if (creatorPhone && campCreatedBy.includes(creatorPhone)) return true;
-  if (creatorName && campCreatedByLower.includes(creatorName)) return true;
+  // 1. Strict Phone Match (Exact or 10-digit match)
+  if (creatorPhone && creatorPhone.length >= 6) {
+    if (campCreatedByDigits === creatorPhone || campCreatedBy.includes(creatorProfile.phone?.trim() || '')) {
+      return true;
+    }
+  }
+
+  // 2. Strict Full Name Match
+  if (creatorName && creatorName.length >= 3) {
+    if (campCreatedByLower === creatorName) {
+      return true;
+    }
+  }
+
+  // 3. Strict Organization Match (for organization accounts)
+  const creatorOrg = (creatorProfile.orgName || '').trim().toLowerCase();
+  const campOrg = (camp.orgName || '').trim().toLowerCase();
+  if (creatorOrg && campOrg && creatorOrg.length >= 5 && (creatorOrg === campOrg || campCreatedByLower === creatorOrg)) {
+    return true;
+  }
 
   return false;
 };

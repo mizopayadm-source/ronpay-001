@@ -725,7 +725,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin) && onOpenMemberRoll && (
                       <button
                         type="button"
                         onClick={(e) => {
