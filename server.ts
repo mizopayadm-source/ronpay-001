@@ -308,25 +308,14 @@ app.get('/api/phonepe/webhook-logs', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 async function startServer() {
   const distPath = path.join(process.cwd(), 'dist');
-  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
-  const isProduction = process.env.NODE_ENV === 'production' || hasDist;
 
-  if (!isProduction) {
-    try {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
-      });
-      app.use(vite.middlewares);
-    } catch (err) {
-      console.warn('Vite middleware could not be loaded, defaulting to static files:', err);
-      if (hasDist) {
-        app.use(express.static(distPath));
-        app.get('*', (req: Request, res: Response) => {
-          res.sendFile(path.join(distPath, 'index.html'));
-        });
-      }
-    }
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
   } else {
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
@@ -340,22 +329,18 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`RonPay Server running on http://0.0.0.0:${PORT} (PID: ${process.pid}, NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
+    console.log(`RonPay Server running on http://0.0.0.0:${PORT} (NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
   });
 
   // Graceful shutdown handling
   process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server');
     server.close(() => {
-      console.log('HTTP server closed');
       process.exit(0);
     });
   });
 
   process.on('SIGINT', () => {
-    console.log('SIGINT signal received: closing HTTP server');
     server.close(() => {
-      console.log('HTTP server closed');
       process.exit(0);
     });
   });

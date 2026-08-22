@@ -56,10 +56,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   creatorProfile,
   campaigns,
   transactions,
-  initialTab,
+  initialTab = 'members_list',
   onDataUpdated
 }) => {
-  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('quick_entry');
+  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
@@ -130,9 +130,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
     if (isOpen) {
-      if (initialTab) {
-        setActiveTab(initialTab);
-      }
+      setActiveTab(initialTab || 'members_list');
       const initialCamp = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
       const defaultId = initialCamp?.id || 'all';
       
@@ -192,8 +190,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
     }
   }, [regTargetCampaignId, campaigns]);
-
-  if (!isOpen) return null;
 
   // Active campaign object based on quick entry / active filter
   const activeScopedCampaign = (selectedCampaignId !== 'all' 
@@ -534,6 +530,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const printTargetMembers = useMemo(() => {
     return getMembers(printOrgScope);
   }, [printOrgScope, members]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn overflow-y-auto">

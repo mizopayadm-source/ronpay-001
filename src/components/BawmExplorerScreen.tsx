@@ -435,21 +435,32 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
           </div>
         </div>
       ) : (
-        <div className="p-3.5 bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-800/80 shadow-xs flex items-center justify-between gap-3">
-          <div className="space-y-0.5">
+        <div className="p-3.5 bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-800/80 shadow-xs flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <h2 className="font-black text-xs text-white">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <h2 className="font-black text-xs text-white truncate">
                 {language === 'english' ? 'All Community Bawm Directory' : 'Mizoram Community Bawm Hrang Hrang'}
               </h2>
             </div>
-            <p className="text-[10.5px] text-slate-300">
+            <p className="text-[10.5px] text-slate-300 line-clamp-1">
               {language === 'english' ? 'Explore and contribute to verified causes across all Mizoram districts' : 'Mizoram puma chhiatni, tanpuina, rikrum leh Kohhran bawm verified-te zawnna'}
             </p>
           </div>
-          <span className="text-[10px] bg-amber-400/20 text-amber-300 font-extrabold px-2.5 py-1 rounded-lg border border-amber-400/30 shrink-0">
-            {filteredCampaigns.length} Active
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenMemberRoll && (
+              <button
+                type="button"
+                onClick={() => onOpenMemberRoll('members_list')}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-[10.5px] border border-blue-500 shadow-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shrink-0"
+              >
+                <Users className="w-3.5 h-3.5" /> Member Roll
+              </button>
+            )}
+            <span className="text-[10px] bg-amber-400/20 text-amber-300 font-extrabold px-2.5 py-1 rounded-lg border border-amber-400/30 shrink-0">
+              {filteredCampaigns.length} Active
+            </span>
+          </div>
         </div>
       )}
 
@@ -810,9 +821,9 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                 )}
 
                 {/* Action Strip with Share QR & 'Pekna-ah lut rawh' */}
-                <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[10.5px]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-medium font-mono text-[9.5px] truncate max-w-[140px] sm:max-w-none">
+                <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[10.5px] flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-500 font-medium font-mono text-[9.5px] truncate max-w-[120px] sm:max-w-none">
                       UPI: {camp.upiId}
                     </span>
                     <button
@@ -822,6 +833,19 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
+                    {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenMemberRoll('members_list');
+                        }}
+                        className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
+                        title="Open Member Roll"
+                      >
+                        <Users className="w-3 h-3" /> Roll
+                      </button>
+                    )}
                   </div>
 
                   {expired ? (

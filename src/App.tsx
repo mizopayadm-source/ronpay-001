@@ -59,7 +59,7 @@ import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BiometricAuthModal } from './components/BiometricAuthModal';
 import { KumtluangMemberManagerModal } from './components/KumtluangMemberManagerModal';
 import { Language } from './utils/translations';
-import { Home, QrCode, FileText, User, Zap } from 'lucide-react';
+import { Home, QrCode, FileText, User, Zap, Users } from 'lucide-react';
 
 export default function App() {
   // Navigation State
@@ -118,7 +118,7 @@ export default function App() {
   const [isPeknaSulhnuOpen, setIsPeknaSulhnuOpen] = useState<boolean>(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
   const [isMemberRollOpen, setIsMemberRollOpen] = useState<boolean>(false);
-  const [memberRollInitialTab, setMemberRollInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('quick_entry');
+  const [memberRollInitialTab, setMemberRollInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('members_list');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareCampaign, setShareCampaign] = useState<Campaign | null>(null);
 
@@ -130,6 +130,11 @@ export default function App() {
   const [isBiometricPromptOpen, setIsBiometricPromptOpen] = useState<boolean>(false);
   const [pendingSecureTarget, setPendingSecureTarget] = useState<'sulhnu' | 'profile' | null>(null);
   const [isBiometricSessionUnlocked, setIsBiometricSessionUnlocked] = useState<boolean>(false);
+
+  const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => {
+    setMemberRollInitialTab(tab || 'members_list');
+    setIsMemberRollOpen(true);
+  };
 
   const handleOpenSecureHistory = () => {
     if (biometricEnabled && !isBiometricSessionUnlocked) {
@@ -590,10 +595,7 @@ export default function App() {
               creatorProfile={creatorProfile}
               announcement={announcement}
               onOpenReports={() => navigateTo('screen-export-reports')}
-              onOpenMemberRoll={(tab) => {
-                if (tab) setMemberRollInitialTab(tab);
-                setIsMemberRollOpen(true);
-              }}
+              onOpenMemberRoll={handleOpenMemberRoll}
               onShowBalance={() => alert('💰 RonPay Wallet Balance: ₹12,450.00\nLinked Bank: State Bank of India (Aizawl Main Branch)')}
               onShowBankTransfer={() => alert('🏦 Bank Settlement Transfer:\nInstant IMPS / NEFT settlement active.')}
               onOpenPhonePePortal={() => setIsPhonePeModalOpen(true)}
@@ -616,10 +618,7 @@ export default function App() {
               onPreviewImage={handleOpenImagePreview}
               onShareCampaign={handleShareCampaign}
               onCategoryChange={(cat) => setCurrentCategory(cat)}
-              onOpenMemberRoll={(tab) => {
-                if (tab) setMemberRollInitialTab(tab);
-                setIsMemberRollOpen(true);
-              }}
+              onOpenMemberRoll={handleOpenMemberRoll}
               language={language}
             />
           )}
@@ -661,10 +660,7 @@ export default function App() {
               onUpdateCampaign={handleUpdateCampaign}
               onSelectCampaign={handleSelectCampaignFromExplorer}
               onUpdateCreatorProfile={handleUpdateCreatorProfile}
-              onOpenMemberRoll={(tab) => {
-                if (tab) setMemberRollInitialTab(tab);
-                setIsMemberRollOpen(true);
-              }}
+              onOpenMemberRoll={handleOpenMemberRoll}
             />
           )}
 
@@ -679,10 +675,7 @@ export default function App() {
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
               onOpenImagePreview={handleOpenImagePreview}
-              onOpenMemberRoll={(tab) => {
-                if (tab) setMemberRollInitialTab(tab);
-                setIsMemberRollOpen(true);
-              }}
+              onOpenMemberRoll={handleOpenMemberRoll}
             />
           )}
 
@@ -702,11 +695,11 @@ export default function App() {
         </main>
 
         {/* Bottom Persistent Navigation Bar */}
-        <nav className="bg-white border-t border-slate-200/90 px-6 py-2.5 flex justify-between items-center text-slate-400 text-xs shadow-lg shrink-0">
+        <nav className="bg-white border-t border-slate-200/90 px-3 sm:px-6 py-2.5 flex justify-around items-center text-slate-400 text-xs shadow-lg shrink-0">
           <button
             onClick={() => navigateTo('screen-home')}
-            className={`flex flex-col items-center transition cursor-pointer ${
-              currentScreen === 'screen-home' ? 'text-indigo-600 font-extrabold' : 'hover:text-indigo-600'
+            className={`flex flex-col items-center transition cursor-pointer px-1.5 ${
+              currentScreen === 'screen-home' && !isMemberRollOpen ? 'text-indigo-600 font-extrabold' : 'hover:text-indigo-600'
             }`}
           >
             <Home className="w-4 h-4" />
@@ -714,9 +707,22 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => handleOpenMemberRoll('members_list')}
+            className={`flex flex-col items-center transition cursor-pointer px-1.5 ${
+              isMemberRollOpen ? 'text-blue-600 font-black' : 'hover:text-blue-600 text-blue-700'
+            }`}
+          >
+            <div className="relative">
+              <Users className="w-4 h-4 text-blue-600" />
+              <span className="w-1.5 h-1.5 bg-blue-600 rounded-full absolute -top-0.5 -right-1" />
+            </div>
+            <span className="text-[9px] mt-0.5 font-bold">Roll</span>
+          </button>
+
+          <button
             onClick={handleCreateQRNav}
-            className={`flex flex-col items-center transition cursor-pointer ${
-              currentScreen === 'screen-create-qr' || currentScreen === 'screen-creator-reg' 
+            className={`flex flex-col items-center transition cursor-pointer px-1.5 ${
+              (currentScreen === 'screen-create-qr' || currentScreen === 'screen-creator-reg') && !isMemberRollOpen
                 ? 'text-amber-600 font-extrabold' 
                 : 'hover:text-amber-600'
             }`}
@@ -727,8 +733,8 @@ export default function App() {
 
           <button
             onClick={() => navigateTo('screen-export-reports')}
-            className={`flex flex-col items-center transition cursor-pointer ${
-              currentScreen === 'screen-export-reports' ? 'text-indigo-600 font-extrabold' : 'hover:text-indigo-600'
+            className={`flex flex-col items-center transition cursor-pointer px-1.5 ${
+              currentScreen === 'screen-export-reports' && !isMemberRollOpen ? 'text-indigo-600 font-extrabold' : 'hover:text-indigo-600'
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -737,7 +743,7 @@ export default function App() {
 
           <button
             onClick={handleOpenSecureProfile}
-            className="flex flex-col items-center hover:text-indigo-600 transition cursor-pointer"
+            className="flex flex-col items-center hover:text-indigo-600 transition cursor-pointer px-1.5"
           >
             <User className="w-4 h-4" />
             <span className="text-[9px] mt-0.5">Profile</span>

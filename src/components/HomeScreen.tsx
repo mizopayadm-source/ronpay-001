@@ -346,17 +346,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             Instant Pay
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-5 gap-1 sm:gap-2 text-center">
           {/* Scan Any QR */}
           <button 
             onClick={() => onStartScanner('any')}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-lg mb-1.5 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs border border-indigo-100">
-              <QrCode className="w-5 h-5" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs border border-indigo-100">
+              <QrCode className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[10.5px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate w-full">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate w-full">
               {t.scanQR}
+            </span>
+          </button>
+
+          {/* Member Roll & Entry Quick Action */}
+          <button 
+            onClick={() => onOpenMemberRoll && onOpenMemberRoll('members_list')}
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
+          >
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-200 relative">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white" />
+            </div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-blue-800 group-hover:text-blue-600 transition-colors truncate w-full">
+              Member Roll
             </span>
           </button>
 
@@ -365,10 +379,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             onClick={onShowBankTransfer}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-lg mb-1.5 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs border border-emerald-100">
-              <Building2 className="w-5 h-5" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs border border-emerald-100">
+              <Building2 className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[10.5px] font-bold text-slate-700 group-hover:text-emerald-600 transition-colors truncate w-full">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-emerald-600 transition-colors truncate w-full">
               {t.toBank}
             </span>
           </button>
@@ -378,22 +392,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             onClick={onCreateQRClick}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
           >
-            <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-lg mb-1.5 group-hover:bg-amber-500 group-hover:text-white transition-all shadow-xs border border-amber-100 relative">
-              <PlusCircle className="w-5 h-5" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-amber-500 group-hover:text-white transition-all shadow-xs border border-amber-100 relative">
+              <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
               {creatorProfile.isApproved && (() => {
                 const exp = getCreatorExpiryStatus(creatorProfile);
                 if (exp.isExpiringSoon || exp.isExpired) {
                   return (
                     <span 
                       title={exp.isExpired ? "Creator Trial/Plan Expired" : `Expiring in ${exp.daysRemaining} days!`}
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" 
+                      className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" 
                     />
                   );
                 }
                 return null;
               })()}
             </div>
-            <span className="text-[10.5px] font-bold text-slate-700 group-hover:text-amber-600 transition-colors truncate w-full">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-amber-600 transition-colors truncate w-full">
               {t.createQR}
             </span>
           </button>
@@ -403,10 +417,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             onClick={onShowBalance}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-lg mb-1.5 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-100">
-              <Wallet className="w-5 h-5" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-100">
+              <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[10.5px] font-bold text-slate-700 group-hover:text-blue-600 transition-colors truncate w-full">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-blue-600 transition-colors truncate w-full">
               {t.checkBalance}
             </span>
           </button>
@@ -711,6 +725,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                    {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenMemberRoll('members_list');
+                        }}
+                        title="Open Member Roll"
+                        className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                      >
+                        <Users className="w-3 h-3" /> Roll
+                      </button>
+                    )}
+
                     {onShareCampaign && (
                       <button
                         onClick={(e) => {
