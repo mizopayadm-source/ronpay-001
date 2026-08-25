@@ -1,6 +1,14 @@
 import QRCode from 'qrcode';
 import { Campaign } from '../types';
 
+export const DEFAULT_WEB_PORTAL_DOMAIN = 'https://ronpay-001-smoky.vercel.app';
+
+export const getCampaignWebPortalUrl = (campaignId: string, customDomain?: string): string => {
+  const base = customDomain || (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost') ? window.location.origin : DEFAULT_WEB_PORTAL_DOMAIN);
+  const cleanBase = base.replace(/\/+$/, '');
+  return `${cleanBase}/?campaignId=${encodeURIComponent(campaignId)}`;
+};
+
 export const generateQRCodeDataUrl = async (text: string): Promise<string> => {
   try {
     const dataUrl = await QRCode.toDataURL(text, {
@@ -20,7 +28,13 @@ export const generateQRCodeDataUrl = async (text: string): Promise<string> => {
   }
 };
 
-export const generateBawmQRDataUrl = async (campaign: Campaign): Promise<string> => {
+export const generateBawmQRDataUrl = async (campaign: Campaign, mode: 'auto' | 'upi' | 'web' = 'auto'): Promise<string> => {
+  // If mode is 'web' or if auto and it's kumtluang, generate Web Portal link QR
+  if (mode === 'web' || (mode === 'auto' && campaign.category === 'kumtluang')) {
+    const portalUrl = getCampaignWebPortalUrl(campaign.id);
+    return generateQRCodeDataUrl(portalUrl);
+  }
+
   const upiPayload = createUPIPaymentString(
     campaign.upiId || 'ronpay@axl',
     campaign.title || 'RonPay Bawm',
@@ -40,3 +54,4 @@ export const createUPIPaymentString = (upiId: string, name: string, amount?: num
   }
   return str;
 };
+
