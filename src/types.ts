@@ -206,6 +206,32 @@ export interface AnnouncementItem {
   linkText?: string;
   linkAction?: string;
   badge?: string;
+  badgeBgColor?: string;
+  badgeTextColor?: string;
+  
+  // Height & Media Aspect Settings
+  bannerHeightPreset?: 'auto' | 'compact' | 'medium' | 'tall' | 'extra_tall' | 'custom';
+  bannerCustomHeightPx?: number; // e.g. 180, 220, 260, 320
+  mediaFit?: 'cover' | 'contain' | 'fill';
+
+  // Background & Theme styling
+  bgTheme?: 'auto' | 'red_urgent' | 'indigo_royal' | 'amber_gold' | 'emerald_forest' | 'midnight_dark' | 'sunset_glow' | 'ocean_blue' | 'rose_berry' | 'gold_vip' | 'clean_light' | 'custom';
+  customBgColor?: string; // hex or css
+  customGradientFrom?: string;
+  customGradientTo?: string;
+
+  // Text Styling & Formatting
+  textColor?: string; // e.g. '#ffffff', '#0f172a', '#fef08a'
+  titleColor?: string;
+  textAlignment?: 'left' | 'center' | 'right';
+  fontSizePreset?: 'small' | 'normal' | 'large';
+
+  // Rich media banner / Canva / Animation / Image additions
+  bannerMediaUrl?: string; // Canva link, image URL, GIF, or base64 data URL
+  mediaType?: 'auto' | 'canva' | 'image' | 'gif' | 'embed' | 'none';
+  mediaLayout?: 'hero_top' | 'side_thumb' | 'full_card' | 'background_overlay';
+  mediaCaption?: string;
+  openInNewTab?: boolean;
 }
 
 export interface AnnouncementBanner {
@@ -220,6 +246,22 @@ export interface AnnouncementBanner {
   rotationSpeedSeconds?: number;
   autoRotate?: boolean;
   items?: AnnouncementItem[];
+
+  // Global Height & Layout Override for all slides
+  globalHeightPreset?: 'auto' | 'compact' | 'medium' | 'tall' | 'extra_tall' | 'custom';
+  globalCustomHeightPx?: number;
+  globalMediaFit?: 'cover' | 'contain' | 'fill';
+
+  // Global Theme & Background
+  globalBgTheme?: 'auto' | 'red_urgent' | 'indigo_royal' | 'amber_gold' | 'emerald_forest' | 'midnight_dark' | 'sunset_glow' | 'ocean_blue' | 'rose_berry' | 'gold_vip' | 'clean_light' | 'custom';
+  globalCustomBgColor?: string;
+  globalCustomGradientFrom?: string;
+  globalCustomGradientTo?: string;
+
+  // Rich media for banner level
+  bannerMediaUrl?: string;
+  mediaType?: 'auto' | 'canva' | 'image' | 'gif' | 'embed' | 'none';
+  mediaLayout?: 'hero_top' | 'side_thumb' | 'full_card' | 'background_overlay';
   createdAt: string;
   updatedAt?: string;
 }

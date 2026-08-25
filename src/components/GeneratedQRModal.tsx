@@ -81,40 +81,176 @@ export const GeneratedQRModal: React.FC<GeneratedQRModalProps> = ({
 
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
         <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
           <title>RonPay QR - ${campaign.title}</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; text-align: center; padding: 40px 20px; color: #1e1b4b; background: #ffffff; }
-            .card { border: 3px solid #1e1b4b; padding: 30px; border-radius: 24px; display: inline-block; max-width: 380px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); background: #ffffff; }
-            img { width: 220px; height: 220px; border-radius: 14px; margin: 15px 0; }
-            h2 { margin: 0 0 4px; font-size: 20px; font-weight: 900; color: #0f172a; }
-            .badge { font-size: 11px; color: #1e40af; background: #dbeafe; border: 1px solid #bfdbfe; padding: 5px 14px; border-radius: 20px; font-weight: 900; display: inline-block; text-transform: uppercase; margin-bottom: 8px; }
-            .status-badge { font-size: 10px; color: #92400e; background: #fef3c7; border: 1px solid #fde68a; padding: 3px 10px; border-radius: 12px; font-weight: bold; display: inline-block; margin-bottom: 8px; }
-            .portal-note { font-size: 11px; font-weight: 600; color: #1e3a8a; background: #eff6ff; padding: 10px; border-radius: 12px; margin-top: 10px; border: 1px solid #bfdbfe; line-height: 1.4; text-align: left; }
-            .meta { font-size: 12px; color: #475569; margin: 6px 0; }
-            .footer { font-size: 9.5px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 15px; }
+            *, *:before, *:after { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              text-align: center;
+              padding: 16px 12px;
+              background: #f1f5f9;
+              min-height: 100vh;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: flex-start;
+              color: #0f172a;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .action-bar {
+              display: flex;
+              gap: 10px;
+              margin-bottom: 16px;
+              width: 100%;
+              max-width: 360px;
+              justify-content: center;
+            }
+            .btn-action {
+              flex: 1;
+              background: #4f46e5;
+              color: #ffffff;
+              border: none;
+              padding: 10px 14px;
+              border-radius: 12px;
+              font-weight: 800;
+              font-size: 13px;
+              cursor: pointer;
+              box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+            }
+            .btn-close {
+              background: #e2e8f0;
+              color: #334155;
+              border: none;
+              padding: 10px 16px;
+              border-radius: 12px;
+              font-weight: 700;
+              font-size: 13px;
+              cursor: pointer;
+            }
+            .card {
+              border: 3px solid #1e1b4b;
+              padding: 24px 18px;
+              border-radius: 24px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              text-align: center;
+              width: 100%;
+              max-width: 360px;
+              box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+              background: #ffffff;
+              margin: 0 auto;
+            }
+            .badge {
+              font-size: 11px;
+              color: #1e40af;
+              background: #dbeafe;
+              border: 1px solid #bfdbfe;
+              padding: 5px 14px;
+              border-radius: 20px;
+              font-weight: 900;
+              display: inline-block;
+              text-transform: uppercase;
+              margin-bottom: 8px;
+              max-width: 100%;
+              word-break: break-word;
+            }
+            .status-badge {
+              font-size: 10px;
+              color: #92400e;
+              background: #fef3c7;
+              border: 1px solid #fde68a;
+              padding: 3px 10px;
+              border-radius: 12px;
+              font-weight: bold;
+              display: inline-block;
+              margin-bottom: 8px;
+            }
+            h2 {
+              margin: 4px 0;
+              font-size: 20px;
+              font-weight: 900;
+              color: #0f172a;
+              line-height: 1.25;
+              word-break: break-word;
+            }
+            .meta {
+              font-size: 12px;
+              color: #475569;
+              margin: 6px 0;
+              word-break: break-all;
+            }
+            .qr-box {
+              background: #ffffff;
+              padding: 12px;
+              border-radius: 18px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+              border: 1px solid #e2e8f0;
+              width: 100%;
+              max-width: 250px;
+              margin: 10px auto;
+            }
+            .qr-box img {
+              width: 100%;
+              max-width: 226px;
+              height: auto;
+              aspect-ratio: 1 / 1;
+              display: block;
+              border-radius: 8px;
+            }
+            .portal-note {
+              font-size: 11px;
+              font-weight: 600;
+              color: #1e3a8a;
+              background: #eff6ff;
+              padding: 10px;
+              border-radius: 12px;
+              margin-top: 10px;
+              border: 1px solid #bfdbfe;
+              line-height: 1.4;
+              text-align: center;
+              width: 100%;
+            }
+            .footer {
+              font-size: 9.5px;
+              color: #94a3b8;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 10px;
+              margin-top: 15px;
+              width: 100%;
+            }
+            @media print {
+              body { background: #ffffff; padding: 0; }
+              .action-bar { display: none !important; }
+              .card { box-shadow: none; border: 3px solid #1e1b4b; max-width: 100%; page-break-inside: avoid; }
+            }
           </style>
         </head>
         <body>
+          <div class="action-bar">
+            <button class="btn-action" onclick="window.print()">🖨️ Print / Save PDF</button>
+            <button class="btn-close" onclick="window.close()">✖ Close</button>
+          </div>
           <div class="card">
             <div class="badge">${badgeText}</div>
-            <br />
             <div class="status-badge">STATUS: WAITING FOR APPROVAL</div>
             <h2>${campaign.title}</h2>
-            <div class="meta">Location: <b>${campaign.location}</b></div>
-            <div>
+            <div class="meta">Location: <b>${campaign.location || 'Mizoram'}</b></div>
+            <div class="qr-box">
               <img src="${qrDataUrl}" alt="RonPay QR" />
             </div>
             <div class="portal-note">${instructions}</div>
             <div class="meta">UPI ID: <b>${campaign.upiId}</b></div>
-            <div class="footer">Powered by RonPay - Community & Bawm Payment System (Mizoram)</div>
+            <div class="footer">Powered by RonPay - Community & Church Payment System (Mizoram)</div>
           </div>
-          <script>
-            window.onload = function() {
-              setTimeout(function() { window.print(); window.close(); }, 300);
-            };
-          </script>
         </body>
       </html>
     `);

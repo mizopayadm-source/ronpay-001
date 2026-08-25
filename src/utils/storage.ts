@@ -20,7 +20,10 @@ export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
     message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
     linkText: 'Bawm Explorer En Rawh',
     linkAction: 'explore_bawm',
-    badge: 'URGENT'
+    badge: 'URGENT',
+    bannerMediaUrl: 'https://www.canva.com/design/DAHTTgdvhsU/77qJSQZdradri_piWLrIzw/view?embed',
+    mediaType: 'canva',
+    mediaLayout: 'hero_top'
   },
   {
     id: 'ann-2',
@@ -30,7 +33,10 @@ export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
     message: 'PhonePe, Paytm, Google Pay leh BBPS hmangin Electric, FASTag, Water Bill leh Fees te awlsam takin pek fel nghal zung zung theih a ni e.',
     linkText: 'Bill Payments En Rawh',
     linkAction: 'open_bill_service',
-    badge: 'BBPS LIVE'
+    badge: 'BBPS LIVE',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=800&auto=format&fit=crop',
+    mediaType: 'image',
+    mediaLayout: 'hero_top'
   },
   {
     id: 'ann-3',
@@ -50,7 +56,10 @@ export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
     message: 'Kohhran Inkhawmpui, Fellowship leh Khawtlang thiltih hrang hrang pualin Kumtluang & Khawlsak Bawm siam a remchang e.',
     linkText: 'Kumtluang Bawm En Rawh',
     linkAction: 'kumtluang_bawm',
-    badge: 'EVENT'
+    badge: 'EVENT',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579?q=80&w=800&auto=format&fit=crop',
+    mediaType: 'image',
+    mediaLayout: 'hero_top'
   }
 ];
 

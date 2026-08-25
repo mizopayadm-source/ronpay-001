@@ -41,7 +41,7 @@ export const getCustomDomain = (): string => {
       return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
     }
   }
-  return 'https://ronpay-001-smoky.vercel.app/';
+  return 'https://ronpay-001-pi.vercel.app/';
 };
 
 export const generateCampaignWebLink = (campaignId: string, customDomain?: string): string => {

@@ -57,6 +57,43 @@ export const isCampaignExpired = (validityDate?: string, status?: string): boole
 };
 
 /**
+ * Returns YYYY-MM-DD for current date (or with day offset).
+ */
+export const getCurrentDateString = (daysOffset = 0): string => {
+  const d = new Date();
+  if (daysOffset !== 0) {
+    d.setDate(d.getDate() + daysOffset);
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Returns YYYY-MM-01 for current month's start.
+ */
+export const getCurrentMonthStartString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-01`;
+};
+
+/**
+ * Returns YYYY-MM-DD for current month's end.
+ */
+export const getCurrentMonthEndString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1;
+  const lastDay = new Date(year, month, 0).getDate();
+  const strMonth = String(month).padStart(2, '0');
+  const strDay = String(lastDay).padStart(2, '0');
+  return `${year}-${strMonth}-${strDay}`;
+};
+
+/**
  * Returns a local ISO string formatted for input[type="datetime-local"] (YYYY-MM-DDTHH:mm).
  * Defaults to Today's date with end of day time (23:59).
  */

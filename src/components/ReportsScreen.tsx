@@ -58,7 +58,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getMembers, isCampaignCreator } from '../utils/storage';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
 
 interface ReportsScreenProps {
   transactions: Transaction[];
@@ -88,8 +88,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const [selectedFilter, setSelectedFilter] = useState<string>('kumtluang');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>('2026-08-01');
-  const [endDate, setEndDate] = useState<string>('2026-08-31');
+  const [startDate, setStartDate] = useState<string>(() => getCurrentMonthStartString());
+  const [endDate, setEndDate] = useState<string>(() => getCurrentMonthEndString());
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'>('date-desc');
   

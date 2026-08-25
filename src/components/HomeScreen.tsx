@@ -38,6 +38,7 @@ import {
   Users
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
+import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BILL_SERVICES } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
@@ -138,20 +139,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const handleActionLink = (action?: string) => {
     if (!action) return;
-    if (action === 'action_bawm_explorer') {
+    if (action === 'action_bawm_explorer' || action === 'explore_bawm') {
       onSelectBawm('ralna');
-    } else if (action === 'action_bill_payment') {
+    } else if (action === 'action_bill_payment' || action === 'open_bill_service') {
       const el = document.getElementById('quick-bill-recharge-section');
       if (el) {
         el.scrollIntoView({ behavior: 'smooth' });
       } else if (BILL_SERVICES.length > 0) {
         onOpenBillService(BILL_SERVICES[0]);
       }
-    } else if (action === 'action_creator_studio') {
+    } else if (action === 'action_creator_studio' || action === 'create_qr') {
       onCreateQRClick();
-    } else if (action === 'action_kumtluang') {
+    } else if (action === 'action_kumtluang' || action === 'kumtluang_bawm') {
       onSelectBawm('kumtluang');
-    } else if (action.startsWith('http://') || action.startsWith('https://')) {
+    } else if (action.startsWith('http://') || action.startsWith('https://') || action.includes('canva.com')) {
       window.open(action, '_blank');
     }
   };
@@ -185,138 +186,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="space-y-4 pb-6 animate-fadeIn">
-      {/* Admin Custom Live Rotating Announcement Banner */}
-      {announcement && announcement.isActive && !isAnnouncementDismissed && bannerItems.length > 0 && (
-        <div 
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-          className={`p-3.5 sm:p-4 rounded-2xl border shadow-sm relative overflow-hidden transition-all text-white ${
-            activeItem.type === 'urgent'
-              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-red-500 shadow-red-200/50'
-              : activeItem.type === 'info'
-              ? 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 border-indigo-500 shadow-indigo-200/50'
-              : activeItem.type === 'notice'
-              ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 border-amber-500 shadow-amber-200/50'
-              : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 border-emerald-500 shadow-emerald-200/50'
-          } ${animationStyle === 'pulse' ? 'animate-pulse' : ''}`}
-        >
-          {/* Top Row: Icon, Type Badge, Counter, Navigation & Close */}
-          <div className="flex items-start justify-between gap-2.5">
-            <div className="flex items-start gap-2.5 min-w-0 flex-1">
-              <span className="p-1.5 bg-white/20 rounded-xl shrink-0 backdrop-blur-xs mt-0.5 shadow-2xs">
-                <Megaphone className="w-4 h-4 text-white" />
-              </span>
-              
-              <div className="space-y-1 min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[8.5px] font-black uppercase px-2 py-0.2 rounded-full bg-white/25 text-white tracking-wider">
-                    {activeItem.badge || activeItem.type || 'NOTICE'}
-                  </span>
-                  
-                  {bannerItems.length > 1 && (
-                    <span className="text-[8.5px] font-mono font-bold bg-black/25 text-white/90 px-1.5 py-0.2 rounded-full">
-                      {currentAnnounceIdx + 1}/{bannerItems.length}
-                    </span>
-                  )}
-
-                  {animationStyle === 'marquee' && (
-                    <span className="text-[8px] bg-amber-400 text-slate-950 font-black uppercase px-1 rounded-sm">
-                      Ticker
-                    </span>
-                  )}
-                </div>
-
-                {/* Animated Body Content */}
-                {animationStyle === 'marquee' ? (
-                  <div className="overflow-hidden whitespace-nowrap py-0.5">
-                    <div className="inline-block animate-marquee font-bold text-xs">
-                      <span className="text-amber-200 mr-2">[{activeItem.title}]</span>
-                      <span>{activeItem.message}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`transition-all duration-300 ${
-                    animationStyle === 'fade' ? 'animate-fadeIn' : 
-                    animationStyle === 'slide' ? 'animate-fadeIn' : ''
-                  }`}>
-                    <h4 className="text-xs sm:text-sm font-black tracking-wide leading-tight text-white drop-shadow-xs">
-                      {activeItem.title}
-                    </h4>
-                    <p className="text-[11px] sm:text-xs text-white/95 leading-snug mt-0.5">
-                      {activeItem.message}
-                    </p>
-                  </div>
-                )}
-
-                {/* Optional Action Button / Link */}
-                {activeItem.linkText && (
-                  <div className="pt-1">
-                    <button
-                      onClick={() => handleActionLink(activeItem.linkAction)}
-                      className="inline-flex items-center gap-1 bg-white text-slate-900 hover:bg-amber-300 hover:text-slate-950 font-black text-[10.5px] px-2.5 py-1 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
-                    >
-                      <span>{activeItem.linkText}</span>
-                      <ArrowRight className="w-3 h-3 text-slate-700" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Controls: Prev/Next & Dismiss */}
-            <div className="flex items-center gap-1 shrink-0">
-              {bannerItems.length > 1 && (
-                <div className="flex items-center bg-black/20 rounded-xl p-0.5 backdrop-blur-xs">
-                  <button
-                    onClick={handlePrevAnnounce}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
-                    title="Previous announcement"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsPaused(!isPaused)}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
-                    title={isPaused ? "Play auto-rotation" : "Pause auto-rotation"}
-                  >
-                    {isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-                  </button>
-                  <button
-                    onClick={handleNextAnnounce}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
-                    title="Next announcement"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              <button
-                onClick={() => setIsAnnouncementDismissed(true)}
-                className="p-1.5 rounded-xl bg-black/20 hover:bg-black/40 text-white/80 hover:text-white transition cursor-pointer"
-                title="Dismiss announcement"
-              >
-                <CloseIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Dots Indicator for multiple items */}
-          {bannerItems.length > 1 && (
-            <div className="flex items-center justify-center gap-1.5 pt-2 mt-1 border-t border-white/15">
-              {bannerItems.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setCurrentAnnounceIdx(idx)}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    currentAnnounceIdx === idx ? 'w-5 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
-                  }`}
-                  title={`Go to item ${idx + 1}`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Admin Custom Live Rotating Announcement Banner with Canva & Media support */}
+      {announcement && announcement.isActive && (
+        <AnnouncementBannerCard
+          announcement={announcement}
+          onActionLink={handleActionLink}
+        />
       )}
 
       {/* 0. No App Download Required Notice */}

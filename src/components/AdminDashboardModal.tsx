@@ -62,7 +62,14 @@ import {
   PhoneCall,
   MapPin,
   CreditCard,
-  ShieldAlert
+  ShieldAlert,
+  Zap,
+  Palette,
+  Type,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  SlidersHorizontal
 } from 'lucide-react';
 import { 
   Campaign, 
@@ -75,7 +82,7 @@ import {
   AnnouncementBanner,
   AnnouncementItem
 } from '../types';
-import { formatDateDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { 
   exportFullDatabaseBackup, 
@@ -91,6 +98,14 @@ import {
   migrateCampaignMembersPrefix,
   getStoredCreatorsList
 } from '../utils/storage';
+import { AnnouncementBannerCard } from './AnnouncementBannerCard';
+import { 
+  parseMediaUrl, 
+  ANNOUNCEMENT_MEDIA_PRESETS,
+  ANNOUNCEMENT_BG_THEMES,
+  ANNOUNCEMENT_HEIGHT_PRESETS
+} from '../utils/media';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface AdminDashboardModalProps {
   isOpen: boolean;
@@ -158,7 +173,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'pending' | 'upgrades' | 'approved' | 'blocked'>('all');
   
   // Campaigns sub-filter
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected'>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
   // Rates / Pricing state
@@ -339,8 +354,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingCreators = activeCreatorsList.filter(c => !c.isApproved);
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
+  const activeCampaigns = campaigns.filter(c => c.status === 'active' && !isCampaignExpired(c.validityDate, c.status));
+  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
-  const activeCampaigns = campaigns.filter(c => c.status === 'active');
 
   // Quick 1-Click Approve for pending creator applications
   const handleQuickApproveCreator = (creator: CreatorProfile) => {
@@ -810,7 +826,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && c.status !== 'active') return false;
+    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status))) return false;
+    if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
     if (searchQuery.trim()) {
@@ -1065,12 +1082,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         { key: 'all', label: `All (${campaigns.length})` },
                         { key: 'pending', label: `Pending Review (${pendingCampaigns.length})` },
                         { key: 'active', label: `Active QRs (${activeCampaigns.length})` },
+                        { key: 'expired', label: `Expired QRs (${expiredCampaigns.length})` },
                         { key: 'rejected', label: `Rejected (${rejectedCampaigns.length})` },
                       ].map(f => (
                         <button
                           key={f.key}
                           onClick={() => setCampaignFilter(f.key as any)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
                             campaignFilter === f.key
                               ? 'bg-slate-900 text-white shadow-xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1103,7 +1121,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {filteredCampaigns.map(camp => {
                         const isPending = camp.status === 'pending_approval';
-                        const isActive = camp.status === 'active';
+                        const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
+                        const isActive = camp.status === 'active' && !isExpired;
                         const isRejected = camp.status === 'rejected';
                         const catInfo = BAWM_CONFIG[camp.category];
 
@@ -1117,6 +1136,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             className={`p-4 rounded-2xl border transition shadow-2xs space-y-3 ${
                               isPending
                                 ? 'bg-amber-50/70 border-2 border-amber-300 ring-2 ring-amber-100'
+                                : isExpired
+                                ? 'bg-rose-50/50 border-rose-200'
                                 : isRejected
                                 ? 'bg-rose-50/60 border-rose-200 opacity-90'
                                 : 'bg-white border-slate-200 hover:border-indigo-300'
@@ -1124,13 +1145,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           >
                             <div className="flex justify-between items-start gap-2">
                               <div>
-                                <div className="flex items-center gap-1.5 mb-1">
+                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                                   <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200">
                                     {catInfo?.name || camp.category}
                                   </span>
                                   {isPending && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
                                       ⚠️ PENDING REVIEW
+                                    </span>
+                                  )}
+                                  {isExpired && (
+                                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5 text-rose-600" /> EXPIRED QR
                                     </span>
                                   )}
                                   {isActive && (
@@ -1186,7 +1212,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                               {camp.targetAmount && (
                                 <p><span className="text-slate-400 font-bold">Target Goal:</span> <strong className="text-indigo-600">₹{camp.targetAmount.toLocaleString()}</strong></p>
                               )}
-                              <p><span className="text-slate-400 font-bold">UPI ID:</span> <span className="font-mono font-bold text-slate-700">{camp.upiId}</span></p>
+                              <p className="flex justify-between items-center">
+                                <span><span className="text-slate-400 font-bold">UPI ID:</span> <span className="font-mono font-bold text-slate-700">{camp.upiId}</span></span>
+                                {camp.validityDate && (
+                                  <span className="text-[10.5px] text-slate-500">
+                                    Validity: <strong className={isExpired ? 'text-rose-600' : 'text-slate-700'}>{formatDateDDMMYYYY(camp.validityDate)}</strong>
+                                  </span>
+                                )}
+                              </p>
                               {camp.approvalRemarks && (
                                 <p className="text-rose-600 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200">
                                   Remark: {camp.approvalRemarks}
@@ -1204,7 +1237,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 <Edit3 className="w-3.5 h-3.5" /> Edit Post
                               </button>
 
-                              {isPending ? (
+                              {isPending && (
                                 <>
                                   <button
                                     onClick={() => handleApproveCampaignClick(camp)}
@@ -1219,32 +1252,73 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                     Reject
                                   </button>
                                 </>
-                              ) : (
-                                <>
-                                  {isRejected && (
-                                    <button
-                                      onClick={() => handleApproveCampaignClick(camp)}
-                                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-1.5 rounded-xl text-xs transition cursor-pointer"
-                                    >
-                                      Re-Approve & Activate
-                                    </button>
-                                  )}
-                                  {onDeleteCampaign && (
-                                    <button
-                                      onClick={() => {
-                                        if (confirm(`Are you sure you want to delete campaign '${camp.title}'?`)) {
-                                          onDeleteCampaign(camp.id);
-                                          recordAuditLog('Campaign Deleted', `Deleted campaign '${camp.title}' (${camp.id}).`, 'campaign', camp.id);
-                                          setLogsList(getStoredAuditLogs());
-                                        }
-                                      }}
-                                      className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto"
-                                      title="Delete Campaign"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </>
+                              )}
+
+                              {isExpired && (
+                                <button
+                                  onClick={() => {
+                                    const now = new Date();
+                                    now.setDate(now.getDate() + 30);
+                                    const updated: Campaign = {
+                                      ...camp,
+                                      status: 'active',
+                                      validityDate: now.toISOString(),
+                                      approvalRemarks: 'Reactivated and approved by Admin (+30 Days)'
+                                    };
+                                    if (onUpdateCampaign) onUpdateCampaign(updated);
+                                    recordAuditLog('Campaign Reactivated', `Admin reactivated expired campaign '${camp.title}' (${camp.id}) with +30 days validity.`, 'campaign', camp.id);
+                                    setLogsList(getStoredAuditLogs());
+                                    alert(`⚡ "${camp.title}" chu Admin-in a reactivate a, +30 days validity pek a ni e!`);
+                                  }}
+                                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black py-1.5 rounded-xl text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                                >
+                                  <Zap className="w-3.5 h-3.5 text-amber-300" /> Reactivate (+30 Days)
+                                </button>
+                              )}
+
+                              {isActive && (
+                                <button
+                                  onClick={() => {
+                                    const updated: Campaign = {
+                                      ...camp,
+                                      status: 'expired',
+                                      approvalRemarks: 'Marked as expired by Admin'
+                                    };
+                                    if (onUpdateCampaign) onUpdateCampaign(updated);
+                                    recordAuditLog('Campaign Expired', `Admin marked campaign '${camp.title}' as expired.`, 'campaign', camp.id);
+                                    setLogsList(getStoredAuditLogs());
+                                    alert(`⏸️ "${camp.title}" chu Expired a dah a ni e.`);
+                                  }}
+                                  className="px-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold py-1.5 rounded-xl text-xs transition border border-amber-200 cursor-pointer"
+                                  title="Mark as Expired (Close collections)"
+                                >
+                                  Mark Expired
+                                </button>
+                              )}
+
+                              {isRejected && (
+                                <button
+                                  onClick={() => handleApproveCampaignClick(camp)}
+                                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-1.5 rounded-xl text-xs transition cursor-pointer"
+                                >
+                                  Re-Approve & Activate
+                                </button>
+                              )}
+
+                              {onDeleteCampaign && (
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete campaign '${camp.title}'?`)) {
+                                      onDeleteCampaign(camp.id);
+                                      recordAuditLog('Campaign Deleted', `Deleted campaign '${camp.title}' (${camp.id}).`, 'campaign', camp.id);
+                                      setLogsList(getStoredAuditLogs());
+                                    }
+                                  }}
+                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto"
+                                  title="Delete Campaign"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               )}
                             </div>
                           </div>
@@ -1886,80 +1960,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
 
                       {localAnnouncement.isActive ? (
-                        <div className={`p-4 rounded-2xl border shadow-sm relative overflow-hidden transition-all text-white ${
-                          previewItem.type === 'urgent'
-                            ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-red-500'
-                            : previewItem.type === 'info'
-                            ? 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 border-indigo-500'
-                            : previewItem.type === 'notice'
-                            ? 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 border-amber-500'
-                            : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 border-emerald-500'
-                        } ${localAnnouncement.animationStyle === 'pulse' ? 'animate-pulse' : ''}`}>
-                          <div className="flex items-start justify-between gap-2.5">
-                            <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                              <span className="p-1.5 bg-white/20 rounded-xl shrink-0 backdrop-blur-xs mt-0.5">
-                                <Megaphone className="w-4 h-4 text-white" />
-                              </span>
-                              <div className="space-y-1 flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[8.5px] font-black uppercase px-2 py-0.2 rounded-full bg-white/25 text-white tracking-wider">
-                                    {previewItem.badge || previewItem.type?.toUpperCase() || 'NOTICE'}
-                                  </span>
-                                  <span className="text-[8.5px] font-mono bg-black/25 text-white/90 px-1.5 py-0.2 rounded-full">
-                                    #{previewAnnounceIdx + 1}
-                                  </span>
-                                  {localAnnouncement.animationStyle === 'marquee' && (
-                                    <span className="text-[8px] bg-amber-300 text-slate-950 font-black uppercase px-1 rounded-sm">
-                                      Ticker
-                                    </span>
-                                  )}
-                                </div>
-
-                                {localAnnouncement.animationStyle === 'marquee' ? (
-                                  <div className="overflow-hidden whitespace-nowrap py-0.5">
-                                    <div className="inline-block animate-marquee font-bold text-xs">
-                                      <span className="text-amber-200 mr-2">[{previewItem.title}]</span>
-                                      <span>{previewItem.message}</span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <h4 className="text-xs sm:text-sm font-black leading-tight">{previewItem.title}</h4>
-                                    <p className="text-[11px] text-white/95 leading-snug mt-0.5">{previewItem.message}</p>
-                                  </div>
-                                )}
-
-                                {previewItem.linkText && (
-                                  <div className="pt-1">
-                                    <span className="inline-flex items-center gap-1 bg-white text-slate-900 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-xs">
-                                      {previewItem.linkText}
-                                      <ArrowRight className="w-3 h-3 text-slate-700" />
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Dots */}
-                          {currentItems.length > 1 && (
-                            <div className="flex items-center justify-center gap-1.5 pt-2 mt-2 border-t border-white/20">
-                              {currentItems.map((item, idx) => (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setPreviewAnnounceIdx(idx);
-                                    setActiveEditingItemId(item.id);
-                                  }}
-                                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                                    previewAnnounceIdx === idx ? 'w-5 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
-                                  }`}
-                                  title={`Switch to item ${idx + 1}`}
-                                />
-                              ))}
-                            </div>
-                          )}
+                        <div className="rounded-2xl overflow-hidden border border-slate-200">
+                          <AnnouncementBannerCard
+                            announcement={{
+                              ...localAnnouncement,
+                              items: currentItems
+                            }}
+                            isDismissible={false}
+                          />
                         </div>
                       ) : (
                         <div className="p-4 rounded-2xl border border-dashed border-slate-300 text-center text-slate-400 text-xs">
@@ -2061,6 +2069,106 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           </div>
                         </div>
                       </div>
+
+                      {/* GLOBAL HEIGHT & MEDIA FIT SETTINGS (SLIDE TINTE HEIGHT IN-AN TLLANG NAN) */}
+                      <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10.5px] font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>1. Slide Tinte Height (Sang Zawng In-an tlangna)</span>
+                          </label>
+                          <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono">
+                            {localAnnouncement.globalHeightPreset === 'custom'
+                              ? `${localAnnouncement.globalCustomHeightPx || 240}px (Custom)`
+                              : (ANNOUNCEMENT_HEIGHT_PRESETS[localAnnouncement.globalHeightPreset || 'auto']?.name || 'Auto')}
+                          </span>
+                        </div>
+
+                        {/* Height Presets Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5">
+                          {[
+                            { key: 'auto', label: 'Auto (Mil zelin)', px: 'Auto' },
+                            { key: 'compact', label: 'Compact (Tawi)', px: '180px' },
+                            { key: 'medium', label: 'Standard (Ngaimawh)', px: '240px' },
+                            { key: 'tall', label: 'Tall (Lian)', px: '320px' },
+                            { key: 'extra_tall', label: 'Cinema (Lian Fal)', px: '400px' },
+                            { key: 'custom', label: 'Custom Px...', px: 'Duh zat' }
+                          ].map(hPreset => {
+                            const isSelected = (localAnnouncement.globalHeightPreset || 'auto') === hPreset.key;
+                            return (
+                              <button
+                                key={hPreset.key}
+                                type="button"
+                                onClick={() => setLocalAnnouncement(prev => ({
+                                  ...prev,
+                                  globalHeightPreset: hPreset.key as any,
+                                  globalCustomHeightPx: prev.globalCustomHeightPx || 240
+                                }))}
+                                className={`p-2 rounded-xl text-center transition cursor-pointer border ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs font-black'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 font-bold'
+                                }`}
+                              >
+                                <div className="text-[11px] leading-tight">{hPreset.label}</div>
+                                <div className="text-[9px] opacity-75 font-mono mt-0.5">{hPreset.px}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom Height Slider when Custom is selected */}
+                        {localAnnouncement.globalHeightPreset === 'custom' && (
+                          <div className="p-2.5 bg-white rounded-xl border border-indigo-200 flex items-center gap-3">
+                            <label className="text-[10px] font-extrabold text-slate-600 uppercase shrink-0">Custom Height:</label>
+                            <input
+                              type="range"
+                              min="140"
+                              max="550"
+                              step="10"
+                              value={localAnnouncement.globalCustomHeightPx || 240}
+                              onChange={(e) => setLocalAnnouncement(prev => ({ ...prev, globalCustomHeightPx: Number(e.target.value) }))}
+                              className="flex-1 accent-indigo-600 cursor-pointer"
+                            />
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min="120"
+                                max="600"
+                                value={localAnnouncement.globalCustomHeightPx || 240}
+                                onChange={(e) => setLocalAnnouncement(prev => ({ ...prev, globalCustomHeightPx: Number(e.target.value) }))}
+                                className="w-16 p-1 text-center font-mono font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                              />
+                              <span className="text-[10px] font-bold text-slate-500 font-mono">px</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Media Fit Setting */}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[10px] font-bold text-slate-600">Canva / Image Fit (A lan dan):</span>
+                          <div className="flex gap-1">
+                            {[
+                              { key: 'cover', label: 'Cover (Fill & Crop)' },
+                              { key: 'contain', label: 'Contain (Full View)' },
+                              { key: 'fill', label: 'Fill (Stretch)' }
+                            ].map(fit => (
+                              <button
+                                key={fit.key}
+                                type="button"
+                                onClick={() => setLocalAnnouncement(prev => ({ ...prev, globalMediaFit: fit.key as any }))}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border ${
+                                  (localAnnouncement.globalMediaFit || 'cover') === fit.key
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                {fit.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* MULTI-ITEM MANAGER & EDITOR TABS */}
@@ -2071,7 +2179,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             Announcement Items ({currentItems.length})
                           </h4>
                           <p className="text-[10.5px] text-slate-500">
-                            Tun mek a mi 4 te hi hmet la, i duh danin thlak danglam / belh rawh le.
+                            Slide tinte text, background, leh media duh angin customize rawh le.
                           </p>
                         </div>
 
@@ -2113,7 +2221,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
 
                       {/* Editing Active Item Form */}
-                      <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200 space-y-4">
                         <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-slate-900">
@@ -2168,66 +2276,448 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Item Type */}
-                        <div>
-                          <label className="text-[10px] font-extrabold text-slate-600 uppercase block mb-1">Color Theme & Category</label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                            {(['urgent', 'info', 'notice', 'event'] as const).map(type => (
-                              <button
-                                key={type}
-                                type="button"
-                                onClick={() => handleUpdateCurrentItem({ type })}
-                                className={`py-1.5 px-2 rounded-xl text-xs font-black uppercase transition cursor-pointer border ${
-                                  activeEditingItem.type === type
-                                    ? type === 'urgent' ? 'bg-red-600 text-white border-red-600' :
-                                      type === 'info' ? 'bg-indigo-600 text-white border-indigo-600' :
-                                      type === 'notice' ? 'bg-amber-600 text-white border-amber-600' :
-                                      'bg-emerald-600 text-white border-emerald-600'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                                }`}
-                              >
-                                {type}
-                              </button>
-                            ))}
+                        {/* 2. BACKGROUND THLANNA & COLOR THEMES */}
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-2.5">
+                          <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Palette className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>2. Background Thlanna & Color Theme</span>
+                          </label>
+
+                          {/* Theme Presets Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                            {Object.values(ANNOUNCEMENT_BG_THEMES).map(theme => {
+                              const isSelected = (activeEditingItem.bgTheme || (
+                                activeEditingItem.type === 'urgent' ? 'red_urgent' :
+                                activeEditingItem.type === 'info' ? 'indigo_royal' :
+                                activeEditingItem.type === 'notice' ? 'amber_gold' : 'emerald_forest'
+                              )) === theme.id;
+                              return (
+                                <button
+                                  key={theme.id}
+                                  type="button"
+                                  onClick={() => handleUpdateCurrentItem({ bgTheme: theme.id as any })}
+                                  className={`p-2 rounded-xl text-left transition cursor-pointer border relative overflow-hidden ${
+                                    isSelected
+                                      ? 'border-indigo-600 shadow-xs ring-2 ring-indigo-300'
+                                      : 'border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span 
+                                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs border border-white/40" 
+                                      style={{ backgroundColor: theme.previewColor }}
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-800 truncate">{theme.name.split('/')[0]}</span>
+                                  </div>
+                                  <div className="text-[9px] text-slate-500 truncate">{theme.nameMizo}</div>
+                                </button>
+                              );
+                            })}
+
+                            {/* Custom Gradient Option */}
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateCurrentItem({ bgTheme: 'custom' })}
+                              className={`p-2 rounded-xl text-left transition cursor-pointer border relative overflow-hidden ${
+                                activeEditingItem.bgTheme === 'custom'
+                                  ? 'border-indigo-600 shadow-xs ring-2 ring-indigo-300 bg-indigo-50/50'
+                                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="w-3.5 h-3.5 rounded-full shrink-0 bg-gradient-to-tr from-pink-500 via-purple-500 to-cyan-400" />
+                                <span className="text-[10px] font-bold text-slate-800">Custom...</span>
+                              </div>
+                              <div className="text-[9px] text-slate-500 truncate">Duh duha siam</div>
+                            </button>
                           </div>
+
+                          {/* Custom Color/Gradient Controls when 'custom' is active */}
+                          {activeEditingItem.bgTheme === 'custom' && (
+                            <div className="p-3 bg-slate-50 rounded-xl border border-indigo-200 space-y-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Gradient Start Color (From):</label>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="color"
+                                      value={activeEditingItem.customGradientFrom || '#4f46e5'}
+                                      onChange={(e) => handleUpdateCurrentItem({ customGradientFrom: e.target.value })}
+                                      className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={activeEditingItem.customGradientFrom || '#4f46e5'}
+                                      onChange={(e) => handleUpdateCurrentItem({ customGradientFrom: e.target.value })}
+                                      className="flex-1 p-1.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-800"
+                                      placeholder="#4f46e5"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Gradient End Color (To):</label>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="color"
+                                      value={activeEditingItem.customGradientTo || '#7c3aed'}
+                                      onChange={(e) => handleUpdateCurrentItem({ customGradientTo: e.target.value })}
+                                      className="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={activeEditingItem.customGradientTo || '#7c3aed'}
+                                      onChange={(e) => handleUpdateCurrentItem({ customGradientTo: e.target.value })}
+                                      className="flex-1 p-1.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-800"
+                                      placeholder="#7c3aed"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Quick Color Presets for Custom */}
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                <span className="text-[9px] font-bold text-slate-500">Quick Palette:</span>
+                                {[
+                                  { from: '#1e1b4b', to: '#4338ca', label: 'Dark Violet' },
+                                  { from: '#064e3b', to: '#0d9488', label: 'Teal Forest' },
+                                  { from: '#701a75', to: '#be185d', label: 'Magenta Pink' },
+                                  { from: '#7c2d12', to: '#ea580c', label: 'Fiery Sunset' },
+                                  { from: '#0284c7', to: '#6366f1', label: 'Sky Cyan' }
+                                ].map(p => (
+                                  <button
+                                    key={p.label}
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({
+                                      customGradientFrom: p.from,
+                                      customGradientTo: p.to
+                                    })}
+                                    className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                  >
+                                    {p.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Badge / Tag & Title */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <div>
-                            <label className="text-[10px] font-extrabold text-slate-600 uppercase">Badge / Tag Label</label>
-                            <input
-                              type="text"
-                              value={activeEditingItem.badge || ''}
-                              onChange={(e) => handleUpdateCurrentItem({ badge: e.target.value })}
-                              placeholder="e.g. URGENT, BBPS LIVE"
-                              className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:border-indigo-600 focus:outline-none"
-                            />
+                        {/* 3. TEXT CHHUT LUHNA & TYPOGRAPHY STYLING */}
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-3">
+                          <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Type className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>3. Text Chhut Luhna & Formatting</span>
+                          </label>
+
+                          {/* Badge Tag & Title */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <label className="text-[10px] font-extrabold text-slate-600 uppercase">Badge / Tag Label</label>
+                              <input
+                                type="text"
+                                value={activeEditingItem.badge || ''}
+                                onChange={(e) => handleUpdateCurrentItem({ badge: e.target.value })}
+                                placeholder="e.g. URGENT, BBPS LIVE, KOHHRAN"
+                                className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:border-indigo-600 focus:outline-none"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="text-[10px] font-extrabold text-slate-600 uppercase">Headline / Title *</label>
+                              <input
+                                type="text"
+                                value={activeEditingItem.title}
+                                onChange={(e) => handleUpdateCurrentItem({ title: e.target.value })}
+                                placeholder="e.g. Mizoram State-wide Community Notice..."
+                                className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none"
+                                required
+                              />
+                            </div>
                           </div>
-                          <div className="sm:col-span-2">
-                            <label className="text-[10px] font-extrabold text-slate-600 uppercase">Headline / Title *</label>
-                            <input
-                              type="text"
-                              value={activeEditingItem.title}
-                              onChange={(e) => handleUpdateCurrentItem({ title: e.target.value })}
-                              placeholder="e.g. Mizoram State-wide Community Notice..."
-                              className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none"
+
+                          {/* Announcement Message & Character Count */}
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-extrabold text-slate-600 uppercase">Announcement Details (Message) *</label>
+                              <span className="text-[9.5px] font-mono text-slate-400">
+                                {activeEditingItem.message.length} chars
+                              </span>
+                            </div>
+                            <textarea
+                              value={activeEditingItem.message}
+                              onChange={(e) => handleUpdateCurrentItem({ message: e.target.value })}
+                              rows={2}
+                              className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:border-indigo-600 focus:outline-none"
+                              placeholder="Type announcement message here..."
                               required
                             />
                           </div>
+
+                          {/* Typography Formatting: Color, Alignment, Size */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                            {/* Text Alignment */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Text Alignment:</label>
+                              <div className="flex items-center gap-1">
+                                {[
+                                  { key: 'left', icon: <AlignLeft className="w-3.5 h-3.5" />, label: 'Left' },
+                                  { key: 'center', icon: <AlignCenter className="w-3.5 h-3.5" />, label: 'Center' },
+                                  { key: 'right', icon: <AlignRight className="w-3.5 h-3.5" />, label: 'Right' }
+                                ].map(align => (
+                                  <button
+                                    key={align.key}
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ textAlignment: align.key as any })}
+                                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer border ${
+                                      (activeEditingItem.textAlignment || 'left') === align.key
+                                        ? 'bg-slate-900 text-white border-slate-900'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {align.icon}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Font Size Preset */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Font Scale:</label>
+                              <div className="flex items-center gap-1">
+                                {[
+                                  { key: 'small', label: 'Small' },
+                                  { key: 'normal', label: 'Normal' },
+                                  { key: 'large', label: 'Large' }
+                                ].map(size => (
+                                  <button
+                                    key={size.key}
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ fontSizePreset: size.key as any })}
+                                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                                      (activeEditingItem.fontSizePreset || 'normal') === size.key
+                                        ? 'bg-slate-900 text-white border-slate-900'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {size.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Title & Body Text Custom Colors */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Custom Text Colors:</label>
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1" title="Title Color">
+                                  <span className="text-[9px] font-bold text-slate-500">Title:</span>
+                                  <input
+                                    type="color"
+                                    value={activeEditingItem.titleColor || '#ffffff'}
+                                    onChange={(e) => handleUpdateCurrentItem({ titleColor: e.target.value })}
+                                    className="w-6 h-6 rounded cursor-pointer border border-slate-300"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1" title="Body Text Color">
+                                  <span className="text-[9px] font-bold text-slate-500">Body:</span>
+                                  <input
+                                    type="color"
+                                    value={activeEditingItem.textColor || '#ffffff'}
+                                    onChange={(e) => handleUpdateCurrentItem({ textColor: e.target.value })}
+                                    className="w-6 h-6 rounded cursor-pointer border border-slate-300"
+                                  />
+                                </div>
+                                {(activeEditingItem.titleColor || activeEditingItem.textColor) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ titleColor: undefined, textColor: undefined })}
+                                    className="text-[9px] text-rose-600 underline font-bold"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Announcement Message */}
-                        <div>
-                          <label className="text-[10px] font-extrabold text-slate-600 uppercase">Announcement Details (Message) *</label>
-                          <textarea
-                            value={activeEditingItem.message}
-                            onChange={(e) => handleUpdateCurrentItem({ message: e.target.value })}
-                            rows={2}
-                            className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:border-indigo-600 focus:outline-none"
-                            placeholder="Type announcement details here..."
-                            required
-                          />
+                        {/* CANVA / BANNER / ANIMATION MEDIA SECTION */}
+                        <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10.5px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                              <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>4. Banner Media, Canva Design & Animation</span>
+                            </label>
+                            {activeEditingItem.bannerMediaUrl && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 uppercase font-mono">
+                                {parseMediaUrl(activeEditingItem.bannerMediaUrl).type.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="url"
+                                value={activeEditingItem.bannerMediaUrl || ''}
+                                onChange={(e) => {
+                                  const url = e.target.value;
+                                  const parsed = parseMediaUrl(url);
+                                  handleUpdateCurrentItem({ 
+                                    bannerMediaUrl: url,
+                                    mediaType: parsed.type === 'unknown' ? undefined : (parsed.type as any)
+                                  });
+                                }}
+                                placeholder="Paste Canva link (e.g. canva.com/design/...), Image URL, or GIF..."
+                                className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:border-indigo-600 focus:outline-none placeholder:text-slate-400"
+                              />
+
+                              {/* Upload Image Button */}
+                              <label className="cursor-pointer shrink-0 px-2.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs transition active:scale-95" title="Upload poster/photo from device">
+                                <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                                <span className="hidden sm:inline">Upload</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        const compressedBase64 = await compressImageFile(file, 900, 600, 0.82);
+                                        handleUpdateCurrentItem({
+                                          bannerMediaUrl: compressedBase64,
+                                          mediaType: 'image',
+                                          mediaLayout: activeEditingItem.mediaLayout || 'hero_top'
+                                        });
+                                      } catch (err) {
+                                        console.error('Image compression failed', err);
+                                      }
+                                    }
+                                  }}
+                                />
+                              </label>
+
+                              {activeEditingItem.bannerMediaUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateCurrentItem({ bannerMediaUrl: '', mediaType: undefined })}
+                                  className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                                  title="Clear Banner Media"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Canva detection badge */}
+                            {activeEditingItem.bannerMediaUrl && parseMediaUrl(activeEditingItem.bannerMediaUrl).type === 'canva' && (
+                              <div className="flex items-center gap-1.5 text-[10.5px] text-indigo-800 bg-white p-2 rounded-xl border border-indigo-200 shadow-2xs font-semibold">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0 animate-pulse" />
+                                <span className="flex-1">
+                                  ✨ <strong>Canva Design Embed Active:</strong> Live interactive Canva animation / presentation banner will be displayed directly inside the announcement!
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Quick Presets for Canva and Popular Banners */}
+                            <div className="pt-1 flex flex-wrap items-center gap-1.5">
+                              <span className="text-[9.5px] font-bold text-slate-500 mr-1">Presets:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateCurrentItem({
+                                    bannerMediaUrl: 'https://www.canva.com/design/DAHTTgdvhsU/77qJSQZdradri_piWLrIzw/view?embed',
+                                    mediaType: 'canva',
+                                    mediaLayout: 'hero_top'
+                                  });
+                                }}
+                                className="px-2 py-0.5 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-[10px] rounded-lg transition cursor-pointer flex items-center gap-1"
+                              >
+                                🎨 Canva Design
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateCurrentItem({
+                                    bannerMediaUrl: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579?q=80&w=800&auto=format&fit=crop',
+                                    mediaType: 'image',
+                                    mediaLayout: 'hero_top'
+                                  });
+                                }}
+                                className="px-2 py-0.5 bg-white hover:bg-emerald-50 border border-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition cursor-pointer"
+                              >
+                                ⛪ Church / Event
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateCurrentItem({
+                                    bannerMediaUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=800&auto=format&fit=crop',
+                                    mediaType: 'image',
+                                    mediaLayout: 'hero_top'
+                                  });
+                                }}
+                                className="px-2 py-0.5 bg-white hover:bg-amber-50 border border-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition cursor-pointer"
+                              >
+                                💳 UPI & BBPS Tech
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateCurrentItem({
+                                    bannerMediaUrl: 'https://images.unsplash.com/photo-1584433144859-1fc3ab64a957?q=80&w=800&auto=format&fit=crop',
+                                    mediaType: 'image',
+                                    mediaLayout: 'hero_top'
+                                  });
+                                }}
+                                className="px-2 py-0.5 bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition cursor-pointer"
+                              >
+                                🚨 Alert Poster
+                              </button>
+                            </div>
+
+                            {/* Media Layout & Position options if media is present */}
+                            {activeEditingItem.bannerMediaUrl && (
+                              <div className="pt-1.5 flex items-center justify-between border-t border-indigo-100 flex-wrap gap-1">
+                                <span className="text-[10px] font-bold text-slate-600">Banner Position & Layout:</span>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ mediaLayout: 'hero_top' })}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border ${
+                                      (activeEditingItem.mediaLayout || 'hero_top') === 'hero_top'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    Top Banner (Hero)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ mediaLayout: 'side_thumb' })}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border ${
+                                      activeEditingItem.mediaLayout === 'side_thumb'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    Side Thumbnail
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCurrentItem({ mediaLayout: 'background_overlay' })}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border ${
+                                      activeEditingItem.mediaLayout === 'background_overlay'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    Background Blur Overlay
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Action Button Link Config */}
@@ -2238,7 +2728,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                               type="text"
                               value={activeEditingItem.linkText || ''}
                               onChange={(e) => handleUpdateCurrentItem({ linkText: e.target.value })}
-                              placeholder="e.g. En Rawh, Lut Rawh"
+                              placeholder="e.g. En Rawh, Lut Rawh, View Canva"
                               className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none"
                             />
                           </div>
@@ -2254,6 +2744,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                               <option value="open_bill_service">BBPS Bill Payments</option>
                               <option value="create_qr">Creator Studio (Free QR)</option>
                               <option value="kumtluang_bawm">Kumtluang Church/NGO</option>
+                              <option value="open_canva_design">Open Canva Design URL</option>
                             </select>
                           </div>
                         </div>
@@ -2823,14 +3314,49 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-extrabold text-slate-600 uppercase">Validity Date & Time</label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Validity Date & Time</label>
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          {editingCampaign.validityDate ? formatDateDDMMYYYY(editingCampaign.validityDate) : 'Not set'}
+                        </span>
+                      </div>
                       <input
-                        type="text"
-                        value={editingCampaign.validityDate || ''}
+                        type="datetime-local"
+                        value={editingCampaign.validityDate ? editingCampaign.validityDate.substring(0, 16) : getTodayDateTimeLocal(23, 59, 0)}
                         onChange={(e) => setEditingCampaign({ ...editingCampaign, validityDate: e.target.value })}
                         className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none"
-                        placeholder="YYYY-MM-DDTHH:mm"
                       />
+                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                        <span className="text-[9px] font-extrabold text-slate-400 uppercase mr-1">Quick:</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 0) })}
+                          className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 7) })}
+                          className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
+                        >
+                          +7 Days
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 30) })}
+                          className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[9.5px] cursor-pointer border border-indigo-200"
+                        >
+                          +30 Days
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 365) })}
+                          className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
+                        >
+                          +1 Year
+                        </button>
+                      </div>
                     </div>
                   </div>
 

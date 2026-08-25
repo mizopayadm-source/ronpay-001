@@ -41,6 +41,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
+import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
@@ -300,9 +301,26 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
 
   const handleToggleStatus = (camp: Campaign) => {
     if (!onUpdateCampaign) return;
-    const newStatus = camp.status === 'active' ? 'expired' : 'active';
-    const updated: Campaign = { ...camp, status: newStatus };
-    onUpdateCampaign(updated);
+    const isCurrentlyExpired = camp.status === 'expired' || isCampaignExpired(camp.validityDate, camp.status);
+    
+    if (!isCurrentlyExpired && camp.status === 'active') {
+      // 1. Creator marking active campaign as Expired (Allowed directly)
+      const updated: Campaign = { ...camp, status: 'expired' };
+      onUpdateCampaign(updated);
+      alert(`⏸️ "${camp.title}" chu Expired (Closed) a dah a ni ta e.\nSum chhunluh theih a ni tawh rih lo ang.`);
+    } else {
+      // 2. Reactivating an expired campaign requires Admin approval!
+      const now = new Date();
+      now.setDate(now.getDate() + 30);
+      const updated: Campaign = {
+        ...camp,
+        status: 'pending_approval',
+        validityDate: now.toISOString(),
+        approvalRemarks: 'Reactivation requested by creator'
+      };
+      onUpdateCampaign(updated);
+      alert(`📩 Reactivation Request Admin hnenah thawn a ni e!\n\nPost hi Admin-in an approve hnuah chauh Active a ni leh ang.`);
+    }
   };
 
   const handleGenerateSubmit = (e: React.FormEvent) => {
@@ -1614,15 +1632,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
           <div className="space-y-2">
             {/* Admin Announcement / Notification if active */}
             {announcement && announcement.isActive && (
-              <div className="bg-indigo-50/90 p-3 rounded-2xl border border-indigo-200 space-y-1 text-xs">
-                <div className="flex items-center gap-1.5 font-black text-indigo-950">
-                  <Megaphone className="w-4 h-4 text-indigo-600 animate-pulse" />
-                  <span>{announcement.title || 'Admin Official Notification'}</span>
-                </div>
-                <p className="text-[10.5px] text-indigo-900/90 leading-relaxed font-medium">
-                  {announcement.message}
-                </p>
-              </div>
+              <AnnouncementBannerCard 
+                announcement={announcement}
+                isDismissible={false}
+              />
             )}
 
             {/* QR Creation Fee & Per-Creator Quota Box */}
@@ -1790,10 +1803,22 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                             <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
                               camp.status === 'active' 
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : camp.status === 'pending_approval'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-300 font-black'
                                 : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${camp.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                              {camp.status === 'active' ? 'ACTIVE' : 'EXPIRED'}
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                camp.status === 'active' 
+                                  ? 'bg-emerald-500 animate-pulse' 
+                                  : camp.status === 'pending_approval' 
+                                  ? 'bg-amber-500 animate-ping' 
+                                  : 'bg-slate-400'
+                              }`} />
+                              {camp.status === 'active' 
+                                ? 'ACTIVE' 
+                                : camp.status === 'pending_approval'
+                                ? 'PENDING APPROVAL'
+                                : 'EXPIRED'}
                             </span>
                           </div>
                           <h4 className="font-black text-slate-900 text-xs truncate mt-0.5">
@@ -1917,11 +1942,17 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                           className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
                             camp.status === 'active'
                               ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                              : camp.status === 'pending_approval'
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
                               : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                           }`}
                         >
                           <Clock className="w-3 h-3" />
-                          {camp.status === 'active' ? 'Mark as Expired' : 'Reactivate QR'}
+                          {camp.status === 'active' 
+                            ? 'Mark as Expired' 
+                            : camp.status === 'pending_approval'
+                            ? 'Approval Pending...'
+                            : '⚡ Request Reactivation'}
                         </button>
 
                         {camp.category === 'kumtluang' && onOpenMemberRoll && (
@@ -2105,7 +2136,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [location, setLocation] = useState<string>(campaign.location || '');
   const [cause, setCause] = useState<string>(campaign.cause || '');
   const [upiId, setUpiId] = useState<string>(campaign.upiId || '');
-  const [validityDate, setValidityDate] = useState<string>(campaign.validityDate || '');
+  const [validityDate, setValidityDate] = useState<string>(() => campaign.validityDate || getTodayDateTimeLocal(23, 59, 0));
   const [status, setStatus] = useState<'active' | 'pending_approval' | 'expired'>(campaign.status || 'active');
   const [gpsCoords, setGpsCoords] = useState<string>(campaign.gpsCoords || '23.7271, 92.7176');
   const [imageUrl, setImageUrl] = useState<string | undefined>(campaign.imageUrl);
@@ -2114,13 +2145,13 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [mitthiHming, setMitthiHming] = useState<string>(campaign.mitthiHming || '');
   const [age, setAge] = useState<string>(campaign.age?.toString() || '');
   const [vuitu, setVuitu] = useState<string>(campaign.vuitu || '');
-  const [thihni, setThihni] = useState<string>(campaign.thihni || '');
-  const [vuiHun, setVuiHun] = useState<string>(campaign.vuiHun || '');
+  const [thihni, setThihni] = useState<string>(() => campaign.thihni || getTodayDateTimeLocal(6, 0, 0));
+  const [vuiHun, setVuiHun] = useState<string>(() => campaign.vuiHun || getTodayDateTimeLocal(13, 0, 0));
   
   const [targetAmount, setTargetAmount] = useState<string>(campaign.targetAmount?.toString() || '');
   const [targetPeriod, setTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>(campaign.targetPeriod || 'monthly');
   const [maxLimit, setMaxLimit] = useState<string>(campaign.maxLimit?.toString() || '');
-  const [urgencyDeadline, setUrgencyDeadline] = useState<string>(campaign.urgencyDeadline || '');
+  const [urgencyDeadline, setUrgencyDeadline] = useState<string>(() => campaign.urgencyDeadline || getTodayDateTimeLocal(23, 59, 7));
   const [urgencyLevel, setUrgencyLevel] = useState<'CRITICAL' | 'URGENT' | 'NORMAL'>(campaign.urgencyLevel || 'URGENT');
   
   // Kumtluang specifics
@@ -2190,6 +2221,16 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       migratedCount = migrateCampaignMembersPrefix(campaign.id, oldPrefix, finalPrefix);
     }
 
+    const wasExpired = campaign.status === 'expired' || isCampaignExpired(campaign.validityDate, campaign.status);
+    let finalStatus = status;
+    let remarks = campaign.approvalRemarks;
+
+    if (wasExpired && status === 'active') {
+      // Creator cannot reactivate directly to active without Admin Approval
+      finalStatus = 'pending_approval';
+      remarks = 'Reactivation requested by creator';
+    }
+
     const updated: Campaign = {
       ...campaign,
       title: title.trim(),
@@ -2197,7 +2238,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       cause: cause.trim() || undefined,
       upiId: upiId.trim(),
       validityDate: validityDate,
-      status: status,
+      status: finalStatus,
+      approvalRemarks: remarks,
       gpsCoords: gpsCoords.trim(),
       imageUrl: imageUrl || undefined,
       orgCode: finalPrefix,
@@ -2782,15 +2824,29 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
               <label className="text-[10.5px] font-bold text-slate-700 block mb-1">QR Status</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setStatus(val);
+                }}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none"
               >
                 <option value="active">Active (Pawisa pek theih)</option>
-                <option value="expired">Expired (Closed)</option>
-                <option value="pending_approval">Pending Approval</option>
+                <option value="expired">Expired (Closed / A tawp tawh)</option>
+                <option value="pending_approval">Reactivate (Admin Approval Required)</option>
               </select>
             </div>
           </div>
+
+          {/* Admin Approval Notice if Reactivation is selected or previous was expired */}
+          {(campaign.status === 'expired' || isCampaignExpired(campaign.validityDate, campaign.status)) && (status === 'active' || status === 'pending_approval') && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-[11px] text-amber-900 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-black block">Admin Approval Required for Reactivation</span>
+                <span>He Bawm hi Expired a nih tawh avangin, Reactivate i dilna hi Admin Approval hnuah chauh a active leh ang.</span>
+              </div>
+            </div>
+          )}
 
           {/* Validity & Quick Extend */}
           <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
@@ -2807,14 +2863,16 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
               className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-[10.5px] focus:outline-none focus:border-indigo-600"
             />
             <div className="flex items-center gap-1.5 pt-1 flex-wrap">
-              <span className="text-[9.5px] text-slate-500 font-bold">Quick Extend:</span>
+              <span className="text-[9.5px] text-slate-500 font-bold">Quick Extend (from Today):</span>
               <button
                 type="button"
                 onClick={() => {
                   const now = new Date();
                   now.setDate(now.getDate() + 7);
                   setValidityDate(now.toISOString());
-                  setStatus('active');
+                  if (campaign.status === 'expired') {
+                    setStatus('pending_approval');
+                  }
                 }}
                 className="text-[9.5px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-lg border border-indigo-200 cursor-pointer"
               >
@@ -2826,7 +2884,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                   const now = new Date();
                   now.setDate(now.getDate() + 30);
                   setValidityDate(now.toISOString());
-                  setStatus('active');
+                  if (campaign.status === 'expired') {
+                    setStatus('pending_approval');
+                  }
                 }}
                 className="text-[9.5px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-lg border border-indigo-200 cursor-pointer"
               >
@@ -2838,7 +2898,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                   const now = new Date();
                   now.setFullYear(now.getFullYear() + 1);
                   setValidityDate(now.toISOString());
-                  setStatus('active');
+                  if (campaign.status === 'expired') {
+                    setStatus('pending_approval');
+                  }
                 }}
                 className="text-[9.5px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-lg border border-indigo-200 cursor-pointer"
               >
@@ -2848,13 +2910,15 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 type="button"
                 onClick={() => {
                   const now = new Date();
-                  now.setDate(now.getDate() + 15);
+                  now.setDate(now.getDate() + 30);
                   setValidityDate(now.toISOString());
-                  setStatus('active');
+                  if (campaign.status === 'expired') {
+                    setStatus('pending_approval');
+                  }
                 }}
-                className="text-[9.5px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-lg border border-emerald-300 cursor-pointer"
+                className="text-[9.5px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-lg border border-emerald-300 cursor-pointer flex items-center gap-1"
               >
-                ⚡ Reactivate Now
+                ⚡ Request Reactivate (+30 Ni)
               </button>
             </div>
           </div>
