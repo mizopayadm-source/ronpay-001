@@ -209,7 +209,7 @@ export default function App() {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const urlCampaignId = params.get('campaignId');
+      const urlCampaignId = params.get('campaign') || params.get('campaignId');
       if (urlCampaignId) {
         const found = campaigns.find(
           c => c.id === urlCampaignId || c.id.toLowerCase() === urlCampaignId.toLowerCase()

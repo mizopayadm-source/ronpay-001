@@ -71,6 +71,9 @@ export interface Campaign {
   // Per-Campaign / Per-Creator Category Rate Overrides
   customPlatformFeePercent?: number;
   customFreeTrialActive?: boolean;
+  targetUpiId?: string;
+  creatorName?: string;
+  description?: string;
 }
 
 export interface Transaction {
