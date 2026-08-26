@@ -146,6 +146,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Initialize subcategories from campaign & Auto-load default member for this specific Kumtluang campaign
   useEffect(() => {
+    if (campaign?.customAmount && campaign.customAmount > 0) {
+      setStandardAmount(campaign.customAmount);
+    }
+
     if (category === 'kumtluang') {
       if (campaign?.subCategories && campaign.subCategories.length > 0) {
         const initialMap: { [key: string]: number } = {};

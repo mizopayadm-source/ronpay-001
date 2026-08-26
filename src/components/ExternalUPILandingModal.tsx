@@ -702,22 +702,69 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
             </p>
           </div>
         ) : (
-          /* Payment Actions */
-          <div className="space-y-2 pt-1">
+          /* Payment Mode Selection */
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between text-[11px] font-black text-slate-700 px-0.5">
+              <span>Payment Mode Thlang Rawh:</span>
+              <span className="text-[10px] text-indigo-600 font-bold">2 Options Available</span>
+            </div>
+
+            {/* Option 1: RonPay Smart Checkout (Receipt + Expense Tracker) */}
             <button
-              onClick={handleOpenUPI}
-              className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-black py-3 px-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-98"
+              type="button"
+              onClick={() => onProceedRonPay({ 
+                ...campaign, 
+                customAmount: totalAmount > 0 ? totalAmount : genericAmount 
+              })}
+              className="w-full text-left bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 hover:from-slate-800 hover:to-indigo-900 text-white p-3.5 rounded-2xl shadow-md border border-indigo-500/40 transition cursor-pointer active:scale-98 group space-y-1.5"
             >
-              <Smartphone className="w-4 h-4 text-amber-300" />
-              <span>Pay via GPay / PhonePe / Paytm (₹{totalAmount.toLocaleString('en-IN')})</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-black text-white group-hover:text-amber-300 transition">
+                    Pay with RonPay (Recommended)
+                  </span>
+                </div>
+                <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30 uppercase">
+                  Smart Tracker
+                </span>
+              </div>
+              <p className="text-[10.5px] text-indigo-200/90 leading-tight pl-9">
+                ✓ Official Digital Receipt & QR Slip • Personal Expense / Sulhnu Tracker • Real-time Cloud Sync
+              </p>
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-300 pt-1 pl-9 border-t border-white/10">
+                <span>Amount: ₹{(totalAmount > 0 ? totalAmount : genericAmount).toLocaleString('en-IN')}</span>
+                <span className="flex items-center gap-1 text-[10.5px] text-white">Proceed to Checkout <ArrowRight className="w-3.5 h-3.5" /></span>
+              </div>
             </button>
 
+            {/* Option 2: Direct UPI App Launch */}
             <button
-              onClick={() => onProceedRonPay(campaign)}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition cursor-pointer active:scale-98"
+              type="button"
+              onClick={handleOpenUPI}
+              className="w-full text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 p-3 rounded-2xl transition cursor-pointer active:scale-98 group flex items-center justify-between gap-2"
             >
-              <span>Pay with RonPay (Online / Cash + Instant Receipt)</span>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h5 className="text-xs font-black text-slate-900 truncate">
+                    Direct UPI App (GPay / PhonePe / Paytm)
+                  </h5>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    RonPay receipt awm lovin UPI app-ah a lut tlang nghal ang
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-xs font-black text-indigo-600 block">
+                  ₹{(totalAmount > 0 ? totalAmount : genericAmount).toLocaleString('en-IN')}
+                </span>
+                <span className="text-[9.5px] text-slate-400 font-bold">Launch App ↗</span>
+              </div>
             </button>
           </div>
         )}
