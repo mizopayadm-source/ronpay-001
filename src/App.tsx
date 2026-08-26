@@ -257,6 +257,8 @@ export default function App() {
     rawText?: string;
   }) => {
     setIsScannerOpen(false);
+    const target = scannerTarget;
+    setScannerTarget('any'); // Reset target so future scans are fresh
 
     // 1. Pending Admin Approval QR
     if (payload.type === 'pending') {
@@ -277,16 +279,48 @@ export default function App() {
       return;
     }
 
-    // 2. External UPI QR Scan (GPay / PhonePe / Paytm)
+    // 2. External UPI QR Scan (GPay / PhonePe / Paytm / Direct payee)
     if (payload.type === 'general-upi') {
-      // If a specific campaign was scanned or target is active, show the rich external UPI landing
-      const matchedCamp = payload.campaign || (scannerTarget !== 'any' ? campaigns.find(c => c.category === scannerTarget) : campaigns[0]);
+      let matchedCamp = payload.campaign;
+
+      // If not yet structured into a Campaign object, construct one from rawText
+      if (!matchedCamp && payload.rawText) {
+        try {
+          if (payload.rawText.startsWith('upi://pay')) {
+            const queryString = payload.rawText.includes('?') ? payload.rawText.split('?')[1] : payload.rawText.replace('upi://pay', '');
+            const params = new URLSearchParams(queryString);
+            const pa = (params.get('pa') || '').trim();
+            const pn = (params.get('pn') || '').trim();
+            const am = params.get('am');
+
+            if (pa) {
+              matchedCamp = {
+                id: `ext-${Date.now()}`,
+                category: 'ralna',
+                title: pn ? decodeURIComponent(pn) : pa.split('@')[0],
+                location: 'Direct UPI Payment',
+                gpsCoords: '23.7271, 92.7176',
+                upiId: pa,
+                validityDate: '2027-12-31',
+                status: 'active',
+                createdAt: new Date().toISOString(),
+                targetAmount: am ? Number(am) : undefined,
+              };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (matchedCamp) {
         setExternalUPICampaign(matchedCamp);
         setIsExternalUPIModalOpen(true);
       } else {
-        alert('📱 External UPI QR detected!\n\nRedirecting to Customer UPI Apps (GPay / PhonePe / Paytm)...');
-        window.location.href = 'upi://pay?pa=mizopay@axl&pn=RonPayCustomer';
+        const raw = payload.rawText?.trim() || '';
+        const upiUri = raw.startsWith('upi://') ? raw : `upi://pay?pa=${encodeURIComponent(raw || 'mizopay@axl')}&pn=RonPayCustomer`;
+        alert(`📱 Scanned UPI QR: ${raw}\n\nRedirecting to Customer UPI App...`);
+        window.location.href = upiUri;
       }
       return;
     }
@@ -296,8 +330,8 @@ export default function App() {
     const camp = payload.campaign || campaigns.find(c => c.category === actualCategory && c.status === 'active');
 
     // Check mismatch if specific target was set
-    if (scannerTarget !== 'any' && scannerTarget !== actualCategory) {
-      setMismatchIntended(scannerTarget);
+    if (target !== 'any' && target !== actualCategory) {
+      setMismatchIntended(target);
       setMismatchActual(actualCategory);
       setIsMismatchModalOpen(true);
     } else {
