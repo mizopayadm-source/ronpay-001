@@ -304,6 +304,254 @@ app.get('/api/phonepe/webhook-logs', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// CENTRAL DATABASE PERSISTENCE & MULTI-DEVICE SYNC APIS
+// -------------------------------------------------------------
+const DB_FILE_PATH = path.join(process.cwd(), 'data', 'ronpay_db.json');
+
+interface DatabaseSchema {
+  campaigns: any[];
+  members: any[];
+  transactions: any[];
+  creators: any[];
+  pricingConfig: any;
+  announcement: any;
+  auditLogs: any[];
+  lastUpdated: string;
+}
+
+function getDatabase(): DatabaseSchema {
+  try {
+    if (fs.existsSync(DB_FILE_PATH)) {
+      const data = fs.readFileSync(DB_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(data);
+      return {
+        campaigns: Array.isArray(parsed.campaigns) ? parsed.campaigns : [],
+        members: Array.isArray(parsed.members) ? parsed.members : [],
+        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        creators: Array.isArray(parsed.creators) ? parsed.creators : [],
+        pricingConfig: parsed.pricingConfig || null,
+        announcement: parsed.announcement || null,
+        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+        lastUpdated: parsed.lastUpdated || new Date().toISOString()
+      };
+    }
+  } catch (err) {
+    console.error('Failed reading DB file:', err);
+  }
+  return {
+    campaigns: [],
+    members: [],
+    transactions: [],
+    creators: [],
+    pricingConfig: null,
+    announcement: null,
+    auditLogs: [],
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+function saveDatabase(db: DatabaseSchema) {
+  try {
+    const dir = path.dirname(DB_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    db.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed saving DB file:', err);
+  }
+}
+
+// Upsert helper for arrays by unique key
+function mergeCollections<T extends Record<string, any>>(serverList: T[], clientList: T[], key: string = 'id'): T[] {
+  if (!Array.isArray(clientList) || clientList.length === 0) return serverList;
+  const map = new Map<string, T>();
+  // 1. Put server items
+  for (const item of serverList) {
+    if (item && item[key]) {
+      map.set(String(item[key]).toLowerCase(), item);
+    }
+  }
+  // 2. Put / overwrite with client items
+  for (const item of clientList) {
+    if (item && item[key]) {
+      const k = String(item[key]).toLowerCase();
+      const existing = map.get(k);
+      map.set(k, { ...(existing || {}), ...item });
+    }
+  }
+  return Array.from(map.values());
+}
+
+// GET /api/data/state - Fetch current central database state
+app.get('/api/data/state', (req: Request, res: Response) => {
+  const db = getDatabase();
+  res.json({
+    success: true,
+    data: db,
+    timestamp: db.lastUpdated
+  });
+});
+
+// POST /api/data/sync - Bi-directional sync between App, Web Portal, & Multi-devices
+app.post('/api/data/sync', (req: Request, res: Response) => {
+  try {
+    const {
+      campaigns,
+      members,
+      transactions,
+      creators,
+      pricingConfig,
+      announcement,
+      auditLogs
+    } = req.body || {};
+
+    const db = getDatabase();
+
+    // Merge collections intelligently
+    if (Array.isArray(campaigns)) {
+      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id');
+    }
+    if (Array.isArray(members)) {
+      db.members = mergeCollections(db.members, members, 'id');
+    }
+    if (Array.isArray(transactions)) {
+      db.transactions = mergeCollections(db.transactions, transactions, 'id');
+    }
+    if (Array.isArray(creators)) {
+      db.creators = mergeCollections(db.creators, creators, 'phone');
+    }
+    if (Array.isArray(auditLogs)) {
+      db.auditLogs = mergeCollections(db.auditLogs, auditLogs, 'id');
+    }
+    if (pricingConfig && typeof pricingConfig === 'object') {
+      db.pricingConfig = { ...(db.pricingConfig || {}), ...pricingConfig };
+    }
+    if (announcement && typeof announcement === 'object') {
+      db.announcement = { ...(db.announcement || {}), ...announcement };
+    }
+
+    saveDatabase(db);
+
+    res.json({
+      success: true,
+      message: 'State synchronized successfully',
+      data: db,
+      timestamp: db.lastUpdated
+    });
+  } catch (err: any) {
+    console.error('Sync error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Single Campaign Fetch for QR Code Deep Linking / Web Portals
+app.get('/api/campaigns/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  const camp = db.campaigns.find(c => String(c.id).toLowerCase() === String(id).toLowerCase());
+  if (camp) {
+    res.json({ success: true, campaign: camp });
+  } else {
+    res.status(404).json({ success: false, message: `Campaign ${id} not found on server` });
+  }
+});
+
+// Create / Update Campaign endpoint
+app.post('/api/campaigns', (req: Request, res: Response) => {
+  try {
+    const campaign = req.body;
+    if (!campaign || !campaign.id) {
+      return res.status(400).json({ success: false, message: 'Invalid campaign payload' });
+    }
+    const db = getDatabase();
+    db.campaigns = mergeCollections(db.campaigns, [campaign], 'id');
+    saveDatabase(db);
+    res.json({ success: true, campaign, data: db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Members API
+app.get('/api/members', (req: Request, res: Response) => {
+  const { campaignId } = req.query;
+  const db = getDatabase();
+  let result = db.members;
+  if (campaignId) {
+    result = result.filter(m => String(m.campaignId).toLowerCase() === String(campaignId).toLowerCase());
+  }
+  res.json({ success: true, members: result });
+});
+
+app.post('/api/members', (req: Request, res: Response) => {
+  try {
+    const member = req.body;
+    if (!member || !member.id) {
+      return res.status(400).json({ success: false, message: 'Invalid member payload' });
+    }
+    const db = getDatabase();
+    db.members = mergeCollections(db.members, [member], 'id');
+    saveDatabase(db);
+    res.json({ success: true, member, data: db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/members/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    db.members = db.members.filter(m => String(m.id).toLowerCase() !== String(id).toLowerCase());
+    saveDatabase(db);
+    res.json({ success: true, message: `Member ${id} deleted` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Transactions API
+app.get('/api/transactions', (req: Request, res: Response) => {
+  const db = getDatabase();
+  res.json({ success: true, transactions: db.transactions });
+});
+
+app.post('/api/transactions', (req: Request, res: Response) => {
+  try {
+    const tx = req.body;
+    if (!tx || !tx.id) {
+      return res.status(400).json({ success: false, message: 'Invalid transaction payload' });
+    }
+    const db = getDatabase();
+    db.transactions = mergeCollections(db.transactions, [tx], 'id');
+    saveDatabase(db);
+    res.json({ success: true, transaction: tx, data: db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Announcement API
+app.get('/api/announcement', (req: Request, res: Response) => {
+  const db = getDatabase();
+  res.json({ success: true, announcement: db.announcement });
+});
+
+app.post('/api/announcement', (req: Request, res: Response) => {
+  try {
+    const ann = req.body;
+    const db = getDatabase();
+    db.announcement = ann;
+    saveDatabase(db);
+    res.json({ success: true, announcement: ann });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // Vite Middleware / Static Serving
 // -------------------------------------------------------------
 async function startServer() {

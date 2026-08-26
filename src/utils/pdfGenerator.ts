@@ -7,6 +7,7 @@ export interface PDFExportResult {
   fileName: string;
   blobUrl?: string;
   blob?: Blob;
+  dataUri?: string;
   error?: string;
 }
 
@@ -108,17 +109,33 @@ export async function exportElementToPDF(
 
     if (onProgress) onProgress('PDF download & save mek a ni...');
 
-    // Generate Blob for universal multi-channel handling
+    // Generate Blob & Data URI for universal multi-channel handling
     const pdfBlob = pdf.output('blob');
     const blobUrl = URL.createObjectURL(pdfBlob);
+    const dataUri = pdf.output('datauristring');
 
-    // Multi-tier download execution
+    // Multi-tier download execution for Android WebViews and mobile browsers
     try {
-      // 1. Direct universal downloader with Web Share / Blob download
-      await downloadFileUniversal(pdfBlob, cleanFileName, 'application/pdf', cleanFileName.replace('.pdf', ''));
+      // 1. Trigger direct anchor download using Blob Object URL
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = cleanFileName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+        } catch {}
+      }, 800);
     } catch (e) {
-      console.warn('Universal download fallback to direct pdf.save', e);
-      pdf.save(cleanFileName);
+      console.warn('Anchor blob download failed, trying dataUri and pdf.save', e);
+      try {
+        pdf.save(cleanFileName);
+      } catch (saveErr) {
+        console.warn('pdf.save failed', saveErr);
+      }
     }
 
     return {
@@ -126,6 +143,7 @@ export async function exportElementToPDF(
       fileName: cleanFileName,
       blobUrl,
       blob: pdfBlob,
+      dataUri,
     };
   } catch (error: any) {
     console.error('PDF Generation failed:', error);

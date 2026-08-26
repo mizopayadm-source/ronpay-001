@@ -130,26 +130,37 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 export const getStoredCampaigns = (): Campaign[] => {
   try {
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
+    let storedList: Campaign[] = [];
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure every campaign has an orgCode populated
-        let hasChanges = false;
-        const normalized = parsed.map((camp: Campaign) => {
-          if (!camp.orgCode) {
-            const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
-            const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-            hasChanges = true;
-            return { ...camp, orgCode: derived };
-          }
-          return camp;
-        });
-        if (hasChanges) {
-          localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(normalized));
-        }
-        return normalized;
+      if (Array.isArray(parsed)) {
+        storedList = parsed;
       }
     }
+
+    // Merge INITIAL_CAMPAIGNS (from AI Studio / code updates) with stored campaigns
+    const map = new Map<string, Campaign>();
+    for (const c of INITIAL_CAMPAIGNS) {
+      if (c && c.id) map.set(c.id.toLowerCase(), c);
+    }
+    for (const c of storedList) {
+      if (c && c.id) {
+        const k = c.id.toLowerCase();
+        const existing = map.get(k);
+        map.set(k, { ...(existing || {}), ...c });
+      }
+    }
+
+    const merged = Array.from(map.values()).map((camp: Campaign) => {
+      if (!camp.orgCode) {
+        const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
+        const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
+        return { ...camp, orgCode: derived };
+      }
+      return camp;
+    });
+
+    return merged.length > 0 ? merged : INITIAL_CAMPAIGNS;
   } catch (e) {
     console.error('Failed to parse stored campaigns', e);
   }
@@ -271,6 +282,15 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
 
     localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
     setLastSyncTime(new Date().toISOString());
+
+    // Asynchronously push to backend server for multi-device sync
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaigns: sanitized })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save campaigns', e);
   }
@@ -299,6 +319,13 @@ export const getStoredTransactions = (): Transaction[] => {
 export const saveStoredTransactions = (transactions: Transaction[]) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save transactions', e);
   }
@@ -603,6 +630,13 @@ export const getStoredAnnouncement = (): AnnouncementBanner => {
 export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
   try {
     localStorage.setItem(ANNOUNCEMENT_KEY, JSON.stringify(ann));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ann)
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save announcement banner', e);
   }
@@ -785,15 +819,29 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
 
 export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
-    let allMembers: MemberRecord[] = [];
+    let storedMembers: MemberRecord[] = [];
     const raw = localStorage.getItem(MEMBERS_LIST_KEY);
-    if (!raw) {
-      localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(INITIAL_DEFAULT_MEMBERS));
-      allMembers = INITIAL_DEFAULT_MEMBERS;
-    } else {
+    if (raw) {
       const parsed = JSON.parse(raw);
-      allMembers = Array.isArray(parsed) ? parsed : INITIAL_DEFAULT_MEMBERS;
+      if (Array.isArray(parsed)) {
+        storedMembers = parsed;
+      }
     }
+
+    // Merge default initial members from AI Studio / code with stored members
+    const map = new Map<string, MemberRecord>();
+    for (const m of INITIAL_DEFAULT_MEMBERS) {
+      if (m && m.id) map.set(m.id.toLowerCase(), m);
+    }
+    for (const m of storedMembers) {
+      if (m && m.id) {
+        const k = m.id.toLowerCase();
+        const existing = map.get(k);
+        map.set(k, { ...(existing || {}), ...m });
+      }
+    }
+
+    const allMembers = Array.from(map.values());
 
     if (!campaignId || campaignId === 'all') {
       return allMembers;
@@ -827,6 +875,13 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 export const saveMembers = (members: MemberRecord[]): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }
@@ -844,6 +899,13 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
     allList.unshift(member);
   }
   saveMembers(allList);
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(member)
+    }).catch(() => {});
+  }
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
@@ -854,6 +916,11 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
     return false;
   });
   saveMembers(filtered);
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE'
+    }).catch(() => {});
+  }
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
@@ -889,5 +956,12 @@ export const saveTransaction = (tx: Transaction): void => {
   const current = getStoredTransactions();
   const updated = [tx, ...current];
   saveStoredTransactions(updated);
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx)
+    }).catch(() => {});
+  }
 };
 

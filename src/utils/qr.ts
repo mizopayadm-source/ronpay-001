@@ -37,20 +37,35 @@ export const getCustomDomain = (): string => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('ronpay_custom_domain');
     if (saved && saved.trim()) return saved.trim();
-    if (window.location.hostname !== 'localhost') {
+    if (window.location.origin && window.location.origin !== 'null') {
       return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
     }
   }
-  return 'https://ronpay-001-pi.vercel.app/';
+  return 'https://ronpay-001-pi.vercel.app';
 };
 
-export const generateCampaignWebLink = (campaignId: string, customDomain?: string): string => {
+export const generateCampaignWebLink = (campaignOrId: string | Campaign, customDomain?: string): string => {
   const baseDomain = (customDomain && customDomain.trim()) ? customDomain.trim().replace(/\/+$/, '') : getCustomDomain().replace(/\/+$/, '');
-  return `${baseDomain}/?campaign=${encodeURIComponent(campaignId)}`;
+  
+  if (typeof campaignOrId === 'string') {
+    return `${baseDomain}/?campaign=${encodeURIComponent(campaignOrId)}`;
+  }
+
+  const camp = campaignOrId;
+  const params = new URLSearchParams();
+  params.set('campaign', camp.id);
+  if (camp.category) params.set('cat', camp.category);
+  if (camp.title) params.set('title', camp.title);
+  if (camp.upiId) params.set('upi', camp.upiId);
+  if (camp.location) params.set('loc', camp.location);
+  if (camp.orgCode) params.set('org', camp.orgCode);
+  if (camp.targetAmount) params.set('target', String(camp.targetAmount));
+
+  return `${baseDomain}/?${params.toString()}`;
 };
 
-export const getCampaignWebPortalUrl = (campaignId: string, customDomain?: string): string => {
-  return generateCampaignWebLink(campaignId, customDomain);
+export const getCampaignWebPortalUrl = (campaignOrId: string | Campaign, customDomain?: string): string => {
+  return generateCampaignWebLink(campaignOrId, customDomain);
 };
 
 export const createUPIPaymentString = (upiId: string, name: string, amount?: number, note?: string): string => {

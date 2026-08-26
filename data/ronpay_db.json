@@ -1,0 +1,17 @@
+{
+  "campaigns": [
+    {
+      "id": "cmp-test",
+      "category": "ralna",
+      "title": "Test Ralna",
+      "upiId": "test@upi"
+    }
+  ],
+  "members": [],
+  "transactions": [],
+  "creators": [],
+  "pricingConfig": null,
+  "announcement": null,
+  "auditLogs": [],
+  "lastUpdated": "2026-08-26T07:25:55.946Z"
+}

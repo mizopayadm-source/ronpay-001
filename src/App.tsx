@@ -30,8 +30,16 @@ import {
   isUserPaidTransaction,
   syncWithGoogleScript,
   getStoredAnnouncement,
-  saveStoredAnnouncement
+  saveStoredAnnouncement,
+  getMembers
 } from './utils/storage';
+import { 
+  startAutoSyncEngine, 
+  fetchCampaignById, 
+  saveCampaignToServer, 
+  RONPAY_SYNC_EVENT,
+  SyncDataState
+} from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, BAWM_CONFIG } from './data/initialData';
 import { Header } from './components/Header';
 import { HomeScreen } from './components/HomeScreen';
@@ -205,24 +213,101 @@ export default function App() {
     saveStoredPricingConfig(pricingConfig);
   }, [pricingConfig]);
 
-  // Handle shared campaign URL query parameters on startup
+  // Continuous multi-device sync engine & event listener
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const urlCampaignId = params.get('campaign') || params.get('campaignId');
-      if (urlCampaignId) {
-        const found = campaigns.find(
-          c => c.id === urlCampaignId || c.id.toLowerCase() === urlCampaignId.toLowerCase()
-        );
-        if (found) {
-          setSelectedCampaign(found);
-          setCurrentCategory(found.category);
-          setCurrentScreen('screen-checkout');
-        }
+    const stopSync = startAutoSyncEngine((serverData) => {
+      if (serverData.campaigns && serverData.campaigns.length > 0) {
+        setCampaigns(serverData.campaigns);
       }
-    } catch (e) {
-      console.error('Error handling campaign URL param:', e);
+      if (serverData.transactions) {
+        setTransactions(serverData.transactions);
+      }
+      if (serverData.creators) {
+        setCreatorsList(serverData.creators);
+      }
+      if (serverData.announcement) {
+        setAnnouncement(serverData.announcement);
+      }
+      if (serverData.pricingConfig) {
+        setPricingConfig(serverData.pricingConfig);
+      }
+    });
+
+    const handleCustomSync = (e: any) => {
+      const serverData = e.detail;
+      if (serverData) {
+        if (serverData.campaigns) setCampaigns(serverData.campaigns);
+        if (serverData.transactions) setTransactions(serverData.transactions);
+        if (serverData.creators) setCreatorsList(serverData.creators);
+        if (serverData.announcement) setAnnouncement(serverData.announcement);
+        if (serverData.pricingConfig) setPricingConfig(serverData.pricingConfig);
+      }
+    };
+
+    window.addEventListener(RONPAY_SYNC_EVENT, handleCustomSync);
+
+    return () => {
+      stopSync();
+      window.removeEventListener(RONPAY_SYNC_EVENT, handleCustomSync);
+    };
+  }, []);
+
+  // Handle shared campaign URL query parameters on startup (Deep Linking & QR Web Portal)
+  useEffect(() => {
+    async function resolveUrlCampaign() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlCampaignId = params.get('campaign') || params.get('campaignId');
+        if (urlCampaignId) {
+          // 1. Check in local campaigns
+          let found = campaigns.find(
+            c => c.id === urlCampaignId || c.id.toLowerCase() === urlCampaignId.toLowerCase()
+          );
+
+          // 2. If not found locally, fetch from server database
+          if (!found) {
+            const remoteCamp = await fetchCampaignById(urlCampaignId);
+            if (remoteCamp) {
+              found = remoteCamp;
+              setCampaigns(prev => [remoteCamp, ...prev.filter(c => c.id !== remoteCamp.id)]);
+            }
+          }
+
+          // 3. If still not found, construct from URL search parameters if available
+          if (!found && params.get('cat')) {
+            const fallbackCamp: Campaign = {
+              id: urlCampaignId,
+              category: (params.get('cat') as BawmCategory) || 'ralna',
+              title: params.get('title') || 'Community Campaign',
+              upiId: params.get('upi') || 'ronpay@upi',
+              location: params.get('loc') || 'Mizoram',
+              gpsCoords: '23.7271, 92.7176',
+              validityDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              orgCode: params.get('org') || 'MEM',
+              targetAmount: params.get('target') ? Number(params.get('target')) : undefined,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+              createdBy: 'QR Scanner Portal',
+              imageUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80'
+            };
+            found = fallbackCamp;
+            setCampaigns(prev => [fallbackCamp, ...prev]);
+            saveStoredCampaigns([fallbackCamp, ...campaigns]);
+            saveCampaignToServer(fallbackCamp);
+          }
+
+          if (found) {
+            setSelectedCampaign(found);
+            setCurrentCategory(found.category);
+            setCurrentScreen('screen-checkout');
+          }
+        }
+      } catch (e) {
+        console.error('Error handling campaign URL param:', e);
+      }
     }
+
+    resolveUrlCampaign();
   }, []);
 
   // Navigate to screen
@@ -528,6 +613,8 @@ export default function App() {
   // Generate QR submitted
   const handleGenerateQR = (newCampaign: Campaign) => {
     setCampaigns(prev => [newCampaign, ...prev]);
+    saveStoredCampaigns([newCampaign, ...campaigns]);
+    saveCampaignToServer(newCampaign);
     setLatestGeneratedCampaign(newCampaign);
     setIsGeneratedQRModalOpen(true);
 
@@ -545,6 +632,7 @@ export default function App() {
     setCampaigns(prev => {
       const updated = prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c);
       saveStoredCampaigns(updated);
+      saveCampaignToServer(updatedCampaign);
       return updated;
     });
     
