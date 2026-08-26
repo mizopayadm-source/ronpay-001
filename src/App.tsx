@@ -37,9 +37,16 @@ import {
   startAutoSyncEngine, 
   fetchCampaignById, 
   saveCampaignToServer, 
+  saveTransactionToServer,
   RONPAY_SYNC_EVENT,
   SyncDataState
 } from './utils/syncEngine';
+import { 
+  initFCM, 
+  onFCMNotification, 
+  FCMNotificationPayload, 
+  requestFCMNotificationPermission 
+} from './services/fcmService';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, BAWM_CONFIG } from './data/initialData';
 import { Header } from './components/Header';
 import { HomeScreen } from './components/HomeScreen';
@@ -118,6 +125,19 @@ export default function App() {
 
   const [latestTransaction, setLatestTransaction] = useState<Transaction | null>(null);
   const [isDesktopView, setIsDesktopView] = useState<boolean>(false);
+  const [fcmToast, setFcmToast] = useState<FCMNotificationPayload | null>(null);
+
+  // Initialize Firebase Cloud Messaging (FCM) on app mount
+  useEffect(() => {
+    initFCM().catch(console.warn);
+
+    const unsubFCM = onFCMNotification((payload) => {
+      setFcmToast(payload);
+      setTimeout(() => setFcmToast(null), 7000);
+    });
+
+    return () => unsubFCM();
+  }, []);
 
   // Localization & Extra Modals
   const [language, setLanguage] = useState<Language>(() => {
@@ -257,6 +277,22 @@ export default function App() {
     async function resolveUrlCampaign() {
       try {
         const params = new URLSearchParams(window.location.search);
+        
+        // 1. Digital Receipt Web Portal resolver (?receipt=RPAY-12345 or ?receiptId=... or ?verify=...)
+        const urlReceiptId = params.get('receipt') || params.get('receiptId') || params.get('verify');
+        if (urlReceiptId) {
+          const allTx = getStoredTransactions();
+          let foundTx = allTx.find(
+            t => t.id === urlReceiptId || t.id.toLowerCase() === urlReceiptId.toLowerCase()
+          );
+
+          if (foundTx) {
+            setLatestTransaction(foundTx);
+            setCurrentScreen('screen-success');
+            return;
+          }
+        }
+
         const urlCampaignId = params.get('campaign') || params.get('campaignId');
         if (urlCampaignId) {
           // 1. Check in local campaigns
@@ -381,9 +417,9 @@ export default function App() {
             if (pa) {
               matchedCamp = {
                 id: `ext-${Date.now()}`,
-                category: 'ralna',
+                category: 'others',
                 title: pn ? decodeURIComponent(pn) : pa.split('@')[0],
-                location: 'Direct UPI Payment',
+                location: 'Standard Direct UPI',
                 gpsCoords: '23.7271, 92.7176',
                 upiId: pa,
                 validityDate: '2027-12-31',
@@ -688,6 +724,7 @@ export default function App() {
       saveStoredTransactions(updated);
       return updated;
     });
+    saveTransactionToServer(transaction);
     setLatestTransaction(transaction);
     navigateTo('screen-success');
 
@@ -708,6 +745,7 @@ export default function App() {
       saveStoredTransactions(updated);
       return updated;
     });
+    saveTransactionToServer(transaction);
     setLatestTransaction(transaction);
     navigateTo('screen-cash-pending');
 
@@ -743,6 +781,7 @@ export default function App() {
       saveStoredTransactions(updated);
       return updated;
     });
+    saveTransactionToServer(billTxn);
   };
 
   // Reset Demo Data
@@ -776,12 +815,72 @@ export default function App() {
           onOpenReports={() => navigateTo('screen-export-reports')}
           isDesktopView={isDesktopView}
           onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
-          notificationCount={1}
-          onOpenNotifications={() => alert('🔔 RonPay Notifications:\n• Pi Lalhmingliani Ralna campaign is live.\n• BCM Ebenezer Zobawk collection active.')}
+          notificationCount={fcmToast ? 1 : 0}
+          onOpenNotifications={() => {
+            if (fcmToast) {
+              if (fcmToast.transactionId) {
+                const allTx = getStoredTransactions();
+                const found = allTx.find(t => t.id === fcmToast.transactionId);
+                if (found) {
+                  setLatestTransaction(found);
+                  setCurrentScreen('screen-success');
+                }
+              }
+              setFcmToast(null);
+            } else {
+              alert('🔔 RonPay Notifications:\n• Real-Time Cloud Messaging (FCM) is Active.\n• Digital Receipts are automatically generated for all offline & online payments.');
+            }
+          }}
           language={language}
           onToggleLanguage={handleToggleLanguage}
           onOpenHistory={handleOpenSecureHistory}
         />
+
+        {/* Real-Time FCM Notification Toast */}
+        {fcmToast && (
+          <div className="mx-3 mt-2 p-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-xl border border-indigo-500/60 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300 z-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center shrink-0">
+                <Zap className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[11px] font-black text-white truncate">{fcmToast.title}</h4>
+                  <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-400/30">
+                    FCM Push
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 truncate">{fcmToast.body}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {fcmToast.transactionId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allTx = getStoredTransactions();
+                    const found = allTx.find(t => t.id === fcmToast.transactionId);
+                    if (found) {
+                      setLatestTransaction(found);
+                      setCurrentScreen('screen-success');
+                    }
+                    setFcmToast(null);
+                  }}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition cursor-pointer"
+                >
+                  Open Receipt
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setFcmToast(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Main Body */}
         <main className="p-3.5 sm:p-5 flex-1 overflow-y-auto no-scrollbar relative space-y-3.5">

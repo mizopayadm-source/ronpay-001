@@ -106,7 +106,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const tn = (params.get('tn') || '').trim();
       const am = params.get('am');
 
-      // Check if tn contains campaign ID (e.g. "RonPay:cmp-xxx" or "cmp-xxx")
+      // Check if tn contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx" or "cmp-xxx")
       let targetId = '';
       if (tn.startsWith('RonPay:')) {
         targetId = tn.replace('RonPay:', '').trim();
@@ -125,39 +125,15 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         }
       }
 
-      // Check if pa (UPI ID) matches any campaign in our list
-      if (pa) {
-        const foundByUpi = campaigns.find(c => c.upiId.toLowerCase() === pa.toLowerCase());
-        if (foundByUpi) {
-          return {
-            type: foundByUpi.status === 'pending_approval' ? 'pending' : foundByUpi.category,
-            campaign: foundByUpi,
-            rawText: cleanText
-          };
-        }
-      }
-
-      // Check if pn (Payee Name) matches any campaign title
-      if (pn) {
-        const decodedPn = decodeURIComponent(pn).trim().toLowerCase();
-        const foundByName = campaigns.find(c => c.title.toLowerCase() === decodedPn);
-        if (foundByName) {
-          return {
-            type: foundByName.status === 'pending_approval' ? 'pending' : foundByName.category,
-            campaign: foundByName,
-            rawText: cleanText
-          };
-        }
-      }
-
-      // Construct fresh external campaign for this specific payee
+      // If it is a standard/generic UPI QR (without explicit RonPay campaign reference in tn),
+      // treat it cleanly as an External UPI Payment (category: 'others')
       const externalCamp: Campaign = {
         id: `ext-${Date.now()}`,
-        category: 'ralna',
+        category: 'others',
         title: pn ? decodeURIComponent(pn) : (pa ? pa.split('@')[0] : 'External UPI Merchant'),
-        location: 'Direct UPI Payment',
+        location: 'Standard Direct UPI',
         gpsCoords: '23.7271, 92.7176',
-        upiId: pa || 'ronpay@axl',
+        upiId: pa || 'direct@upi',
         validityDate: '2027-12-31',
         status: 'active',
         createdAt: new Date().toISOString(),
@@ -184,10 +160,10 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     };
   }
 
-  // 5. Match by Campaign Title or ID inclusion
+  // 5. Match by Campaign Title or ID inclusion (only if explicitly matching a known campaign)
   const foundByTitle = campaigns.find(c => 
-    c.title.toLowerCase() === cleanText.toLowerCase() ||
-    cleanText.toLowerCase().includes(c.id.toLowerCase())
+    c.id.toLowerCase() === cleanText.toLowerCase() ||
+    (cleanText.length > 5 && c.title.toLowerCase() === cleanText.toLowerCase())
   );
   if (foundByTitle) {
     return {
@@ -201,9 +177,9 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
   if (cleanText.includes('@') && !cleanText.includes(' ')) {
     const directUpiCamp: Campaign = {
       id: `upi-${Date.now()}`,
-      category: 'ralna',
+      category: 'others',
       title: cleanText.split('@')[0],
-      location: 'Direct UPI VPA',
+      location: 'Standard Direct UPI VPA',
       gpsCoords: '23.7271, 92.7176',
       upiId: cleanText,
       validityDate: '2027-12-31',

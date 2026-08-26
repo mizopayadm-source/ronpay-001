@@ -207,6 +207,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return buildKumtluangMatrix(filteredTransactions, sortOrder);
   }, [filteredTransactions, sortOrder]);
 
+  // Scoped members for the current selected campaign
+  const scopedMembers = useMemo(() => {
+    return getMembers(selectedCampaignId);
+  }, [selectedCampaignId]);
+
   // Selected campaign display name
   const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
   const currentCampaignDisplayName = selectedCampaignObj 
@@ -391,31 +396,31 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       return;
     }
 
-    const allMembers = getMembers();
+    const targetMembers = scopedMembers.length > 0 ? scopedMembers : getMembers(selectedCampaignId);
     const resolvedOrgName = selectedCampaignObj?.orgName || selectedCampaignObj?.title || creatorProfile.orgName || creatorProfile.name || 'RonPay Organization';
     const resolvedLogoUrl = activeCampaignImage || creatorProfile.logoUrl;
     const resolvedLocation = headerLocation;
 
     if (reportPrintStyle === 'master_ledger') {
       exportMasterLedgerPrint(
-        allMembers, 
-        transactions, 
+        targetMembers, 
+        filteredTransactions, 
         selectedCampaignObj?.title || headerTitle, 
         resolvedOrgName,
         resolvedLogoUrl,
         resolvedLocation
       );
-      showExportSuccessToast('Format 1: Master Ledger (12-Thla Grid)', allMembers.length);
+      showExportSuccessToast('Format 1: Master Ledger (12-Thla Grid)', targetMembers.length);
       return;
     }
 
     if (reportPrintStyle === 'member_matrix') {
-      const targetMemberId = reportMemberId || (allMembers.length > 0 ? allMembers[0].id : '');
+      const targetMemberId = reportMemberId || (targetMembers.length > 0 ? targetMembers[0].id : '');
       if (!targetMemberId) {
         alert('Khawngaihin Member hming i register hmasa rawh le.');
         return;
       }
-      const m = allMembers.find(x => x.id === targetMemberId) || allMembers[0];
+      const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
         : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
@@ -423,7 +428,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         exportMemberCategoryMatrixPrint(
           m, 
           defaultCategories, 
-          transactions, 
+          filteredTransactions, 
           resolvedOrgName,
           resolvedLogoUrl,
           resolvedLocation
@@ -434,12 +439,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
 
     if (reportPrintStyle === 'member_passbook') {
-      const targetMemberId = reportMemberId || (allMembers.length > 0 ? allMembers[0].id : '');
+      const targetMemberId = reportMemberId || (targetMembers.length > 0 ? targetMembers[0].id : '');
       if (!targetMemberId) {
         alert('Khawngaihin Member hming i register hmasa rawh le.');
         return;
       }
-      const m = allMembers.find(x => x.id === targetMemberId) || allMembers[0];
+      const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
         : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
@@ -447,7 +452,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         exportMemberPassbookVerticalPrint(
           m, 
           defaultCategories, 
-          transactions, 
+          filteredTransactions, 
           resolvedOrgName,
           resolvedLogoUrl,
           resolvedLocation
@@ -1127,7 +1132,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       const style = e.target.value as any;
                       setReportPrintStyle(style);
                       if ((style === 'member_matrix' || style === 'member_passbook') && !reportMemberId) {
-                        const mList = getMembers();
+                        const mList = scopedMembers.length > 0 ? scopedMembers : getMembers(selectedCampaignId);
                         if (mList.length > 0) setReportMemberId(mList[0].id);
                       }
                     }}
@@ -1145,12 +1150,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
                     <span className="text-[11px] font-bold text-indigo-900 shrink-0">Member Thlang Rawh:</span>
                     <select
-                      value={reportMemberId || (getMembers().length > 0 ? getMembers()[0].id : '')}
+                      value={reportMemberId || (scopedMembers.length > 0 ? scopedMembers[0].id : '')}
                       onChange={(e) => setReportMemberId(e.target.value)}
                       className="flex-1 bg-white border border-indigo-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
                     >
-                      {getMembers().length === 0 && <option value="">-- Member an la awm lo --</option>}
-                      {getMembers().map(m => (
+                      {scopedMembers.length === 0 && <option value="">-- Member an la awm lo --</option>}
+                      {scopedMembers.map(m => (
                         <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
                       ))}
                     </select>

@@ -1461,6 +1461,18 @@ export const printTransactionsPDF = (
 export const isTransactionForMember = (t: Transaction, member: MemberRecord): boolean => {
   if (!t || !member) return false;
 
+  // Strict Org / Campaign Guard: Prevent cross-campaign contamination (e.g. EBE vs KTL)
+  if (t.memberId && member.orgCode) {
+    const tPrefix = t.memberId.split('-')[0].toUpperCase();
+    const mPrefix = member.orgCode.toUpperCase();
+    if (tPrefix && mPrefix && tPrefix !== mPrefix) {
+      return false;
+    }
+  }
+  if (t.campaignId && member.campaignId && t.campaignId !== member.campaignId) {
+    return false;
+  }
+
   // 1. Direct member ID match
   if (t.memberId && member.id && t.memberId.toLowerCase().trim() === member.id.toLowerCase().trim()) {
     return true;

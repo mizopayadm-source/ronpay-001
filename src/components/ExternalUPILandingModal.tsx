@@ -135,6 +135,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
   if (!isOpen || !campaign) return null;
 
   const isExpired = isCampaignExpired(campaign.validityDate, campaign.status);
+  const isOthers = campaign.category === 'others';
   const isRalna = campaign.category === 'ralna';
   const isRikrum = campaign.category === 'rikrum';
   const isKhawlsak = campaign.category === 'khawlsak';
@@ -200,7 +201,11 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
     return `RonPay ${orgTag} [${payerInfo.id}] ${payerInfo.name} - ${catNote} (${selectedMonth})`;
   };
 
-  const upiNote = isKumtluang ? generateAuditNote() : `RonPay ${campaign.category.toUpperCase()} - ${campaign.title}`;
+  const upiNote = isKumtluang 
+    ? generateAuditNote() 
+    : isOthers 
+    ? (campaign.title || 'UPI Payment')
+    : `RonPay ${campaign.category.toUpperCase()} - ${campaign.title}`;
 
   const upiPayUrl = createUPIPaymentString(
     campaign.upiId || 'ronpay@axl',
@@ -269,9 +274,14 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
             isRalna ? 'bg-slate-900 text-white border-slate-700' :
             isRikrum ? 'bg-rose-100 text-rose-800 border-rose-300' :
             isKhawlsak ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+            isOthers ? 'bg-purple-100 text-purple-900 border-purple-300' :
             'bg-indigo-100 text-indigo-800 border-indigo-300'
           }`}>
-            {isKumtluang ? 'KUMTLUANG BAWM • MEMBER PORTAL' : `${campaign.category.toUpperCase()} BAWM SCAN`}
+            {isKumtluang 
+              ? 'KUMTLUANG BAWM • MEMBER PORTAL' 
+              : isOthers 
+              ? 'DIRECT UPI PAYMENT • EXTERNAL' 
+              : `${campaign.category.toUpperCase()} BAWM SCAN`}
           </span>
           <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Verified
@@ -636,6 +646,13 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
               <p className="text-xs text-slate-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium leading-relaxed">
                 {campaign.cause}
               </p>
+            )}
+
+            {isOthers && (
+              <div className="text-xs text-purple-900 bg-purple-50 p-2.5 rounded-xl border border-purple-200 font-medium flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-purple-600 shrink-0" />
+                <span>Standard UPI QR Code a ni a, RonPay Bawm dangte nen inzawmna a nei lo.</span>
+              </div>
             )}
 
             {/* Generic Amount Input */}

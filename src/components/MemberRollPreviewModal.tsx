@@ -457,15 +457,18 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
               <select
                 id="preview-camp-select"
                 value={selectedCampaignId}
-                onChange={(e) => setSelectedCampaignId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCampaignId(e.target.value);
+                  setSelectedMemberId('');
+                }}
                 className="bg-white border border-indigo-200 text-slate-900 font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer max-w-[200px] truncate"
               >
-                <option value="all">🌐 All Campaigns ({members.length} Members)</option>
                 {campaigns.map(c => (
                   <option key={c.id} value={c.id}>
                     🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title}
                   </option>
                 ))}
+                <option value="all">🌐 All Campaigns Combined ({members.length} Members)</option>
               </select>
             </div>
 

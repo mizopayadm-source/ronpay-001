@@ -96,6 +96,39 @@ export const generateQRCodeDataUrl = async (text: string): Promise<string> => {
   }
 };
 
+export const generateReceiptWebLink = (transactionId: string, customDomain?: string): string => {
+  const baseDomain = (customDomain && customDomain.trim()) ? customDomain.trim().replace(/\/+$/, '') : getCustomDomain().replace(/\/+$/, '');
+  return `${baseDomain}/?receipt=${encodeURIComponent(transactionId)}`;
+};
+
+export const generateOffAppPaymentQR = (payload: {
+  upiId: string;
+  name: string;
+  amount?: number;
+  campaignId: string;
+  transactionRef?: string;
+  donorName?: string;
+}): { upiIntentUrl: string; receiptWebUrl: string } => {
+  const txRef = payload.transactionRef || `RPAY${Date.now()}`;
+  const receiptWebUrl = generateReceiptWebLink(txRef);
+  const cleanUpiId = payload.upiId ? payload.upiId.trim() : 'ronpay@upi';
+  const cleanName = payload.name ? payload.name.trim() : 'RonPay Bawm';
+  const note = `RonPay:${payload.campaignId}:${txRef}`;
+
+  let upiIntentUrl = `upi://pay?pa=${encodeURIComponent(cleanUpiId)}&pn=${encodeURIComponent(cleanName)}&tr=${encodeURIComponent(txRef)}&tn=${encodeURIComponent(note)}&cu=INR&url=${encodeURIComponent(receiptWebUrl)}`;
+
+  if (payload.amount && payload.amount > 0) {
+    upiIntentUrl += `&am=${payload.amount.toFixed(2)}`;
+  }
+
+  return { upiIntentUrl, receiptWebUrl };
+};
+
+export const generateReceiptQRDataUrl = async (transactionId: string): Promise<string> => {
+  const receiptUrl = generateReceiptWebLink(transactionId);
+  return generateQRCodeDataUrl(receiptUrl);
+};
+
 export const generateBawmQRDataUrl = async (campaign: Campaign, mode: 'auto' | 'upi' | 'web' = 'auto'): Promise<string> => {
   // If mode is 'web' or if auto and it's kumtluang, generate Web Portal link QR
   if (mode === 'web' || (mode === 'auto' && campaign.category === 'kumtluang')) {

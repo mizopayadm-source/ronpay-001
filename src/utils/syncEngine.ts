@@ -15,6 +15,17 @@ import {
   getStoredAuditLogs, 
   saveStoredAuditLogs 
 } from './storage';
+import {
+  initFirestoreRealtimeSync,
+  syncTransactionToFirestore,
+  syncCampaignToFirestore,
+  syncMemberToFirestore,
+  deleteMemberFromFirestore,
+  deleteCampaignFromFirestore,
+  syncCreatorToFirestore,
+  syncAnnouncementToFirestore,
+  pushAllLocalDataToFirestore
+} from '../services/firestoreSync';
 
 export interface SyncDataState {
   campaigns: Campaign[];
@@ -129,9 +140,13 @@ export async function fetchCampaignById(campaignId: string): Promise<Campaign | 
 }
 
 /**
- * Save new or updated campaign to server immediately
+ * Save new or updated campaign to Firestore & Server immediately
  */
 export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
+  // Sync to Firestore
+  syncCampaignToFirestore(campaign).catch(() => {});
+  
+  // Also post to local express server
   try {
     await fetch('/api/campaigns', {
       method: 'POST',
@@ -144,9 +159,13 @@ export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
 }
 
 /**
- * Save new member to server immediately
+ * Save new member to Firestore & Server immediately
  */
 export async function saveMemberToServer(member: MemberRecord): Promise<void> {
+  // Sync to Firestore
+  syncMemberToFirestore(member).catch(() => {});
+
+  // Also post to local express server
   try {
     await fetch('/api/members', {
       method: 'POST',
@@ -159,9 +178,13 @@ export async function saveMemberToServer(member: MemberRecord): Promise<void> {
 }
 
 /**
- * Delete member on server immediately
+ * Delete member on Firestore & Server immediately
  */
 export async function deleteMemberFromServer(memberId: string): Promise<void> {
+  // Sync to Firestore
+  deleteMemberFromFirestore(memberId).catch(() => {});
+
+  // Also delete on server
   try {
     await fetch(`/api/members/${encodeURIComponent(memberId)}`, {
       method: 'DELETE',
@@ -172,9 +195,13 @@ export async function deleteMemberFromServer(memberId: string): Promise<void> {
 }
 
 /**
- * Save transaction to server immediately
+ * Save transaction to Firestore & Server immediately
  */
 export async function saveTransactionToServer(tx: Transaction): Promise<void> {
+  // Sync to Firestore
+  syncTransactionToFirestore(tx).catch(() => {});
+
+  // Also post to local server
   try {
     await fetch('/api/transactions', {
       method: 'POST',
@@ -187,9 +214,12 @@ export async function saveTransactionToServer(tx: Transaction): Promise<void> {
 }
 
 /**
- * Save announcement to server immediately
+ * Save announcement to Firestore & Server immediately
  */
 export async function saveAnnouncementToServer(ann: AnnouncementBanner): Promise<void> {
+  // Sync to Firestore
+  syncAnnouncementToFirestore(ann).catch(() => {});
+
   try {
     await fetch('/api/announcement', {
       method: 'POST',
@@ -202,22 +232,91 @@ export async function saveAnnouncementToServer(ann: AnnouncementBanner): Promise
 }
 
 /**
- * Starts continuous background sync engine
+ * Starts continuous background hybrid sync engine with Firestore onSnapshot + server backup
  */
 export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void): () => void {
-  // Initial sync immediately
+  // 1. Start real-time Firestore listeners
+  const stopFirestore = initFirestoreRealtimeSync({
+    onTransactionsUpdate: (transactions) => {
+      if (onSyncUpdate) {
+        onSyncUpdate({
+          campaigns: getStoredCampaigns(),
+          members: getMembers(),
+          transactions,
+          creators: getStoredCreatorsList(),
+          pricingConfig: getStoredPricingConfig(),
+          announcement: getStoredAnnouncement(),
+          auditLogs: getStoredAuditLogs()
+        });
+      }
+    },
+    onCampaignsUpdate: (campaigns) => {
+      if (onSyncUpdate) {
+        onSyncUpdate({
+          campaigns,
+          members: getMembers(),
+          transactions: getStoredTransactions(),
+          creators: getStoredCreatorsList(),
+          pricingConfig: getStoredPricingConfig(),
+          announcement: getStoredAnnouncement(),
+          auditLogs: getStoredAuditLogs()
+        });
+      }
+    },
+    onMembersUpdate: (members) => {
+      if (onSyncUpdate) {
+        onSyncUpdate({
+          campaigns: getStoredCampaigns(),
+          members,
+          transactions: getStoredTransactions(),
+          creators: getStoredCreatorsList(),
+          pricingConfig: getStoredPricingConfig(),
+          announcement: getStoredAnnouncement(),
+          auditLogs: getStoredAuditLogs()
+        });
+      }
+    },
+    onCreatorsUpdate: (creators) => {
+      if (onSyncUpdate) {
+        onSyncUpdate({
+          campaigns: getStoredCampaigns(),
+          members: getMembers(),
+          transactions: getStoredTransactions(),
+          creators,
+          pricingConfig: getStoredPricingConfig(),
+          announcement: getStoredAnnouncement(),
+          auditLogs: getStoredAuditLogs()
+        });
+      }
+    },
+    onAnnouncementUpdate: (announcement) => {
+      if (onSyncUpdate) {
+        onSyncUpdate({
+          campaigns: getStoredCampaigns(),
+          members: getMembers(),
+          transactions: getStoredTransactions(),
+          creators: getStoredCreatorsList(),
+          pricingConfig: getStoredPricingConfig(),
+          announcement,
+          auditLogs: getStoredAuditLogs()
+        });
+      }
+    }
+  });
+
+  // 2. Initial sync with server
   syncAllWithServer().then(res => {
     if (res && onSyncUpdate) onSyncUpdate(res);
   });
 
-  // Periodic sync every 8 seconds
+  // 3. Periodic fallback sync every 15 seconds
   const intervalId = setInterval(() => {
     syncAllWithServer().then(res => {
       if (res && onSyncUpdate) onSyncUpdate(res);
     });
-  }, 8000);
+  }, 15000);
 
-  // Sync on tab visibility change (e.g. user switches back to tab or phone wakes up)
+  // Sync on tab visibility change
   const handleVisibility = () => {
     if (document.visibilityState === 'visible') {
       syncAllWithServer().then(res => {
@@ -230,6 +329,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   window.addEventListener('focus', handleVisibility);
 
   return () => {
+    stopFirestore();
     clearInterval(intervalId);
     document.removeEventListener('visibilitychange', handleVisibility);
     window.removeEventListener('focus', handleVisibility);

@@ -92,7 +92,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   };
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('cmp-kumtluang-1');
 
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
@@ -139,7 +139,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Print Styles & Configuration State
-  const [printOrgScope, setPrintOrgScope] = useState<string>('all');
+  const [printOrgScope, setPrintOrgScope] = useState<string>('cmp-kumtluang-1');
   const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
   const [printMemberId, setPrintMemberId] = useState<string>('');
   const [printYear, setPrintYear] = useState<string>('2026');
@@ -161,22 +161,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     if (isOpen) {
       setActiveTab(initialTab || 'members_list');
       const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
-      const defaultId = initialCamp?.id || 'all';
+      const defaultId = initialCamp?.id || (allowedCampaigns[0]?.id || 'cmp-kumtluang-1');
       
-      // Keep selectedCampaignId if already set, else default to first campaign or 'all'
-      const activeId = selectedCampaignId && (selectedCampaignId === 'all' || allowedCampaignIds.has(selectedCampaignId)) 
+      // Keep selectedCampaignId if already set, else default to first campaign
+      const activeId = selectedCampaignId && allowedCampaignIds.has(selectedCampaignId) 
         ? selectedCampaignId 
         : defaultId;
       setSelectedCampaignId(activeId);
-      setQuickEntryCampaignId(initialCamp?.id || allowedCampaigns[0]?.id || '');
-      setRegTargetCampaignId(initialCamp?.id || allowedCampaigns[0]?.id || '');
+      setQuickEntryCampaignId(activeId);
+      setRegTargetCampaignId(activeId);
       setPrintOrgScope(activeId);
 
-      const mList = filterMembersForScope(getMembers(activeId));
+      const mList = getMembers(activeId);
       setMembers(mList);
 
-      if (initialCamp?.orgCode) {
-        setNewOrgCode(initialCamp.orgCode);
+      const foundCamp = allowedCampaigns.find(c => c.id === activeId);
+      if (foundCamp?.orgCode) {
+        setNewOrgCode(foundCamp.orgCode);
       }
     }
   }, [isOpen, allowedCampaigns, initialTab]);
@@ -184,7 +185,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
     if (isOpen && selectedCampaignId) {
-      const mList = filterMembersForScope(getMembers(selectedCampaignId));
+      const mList = getMembers(selectedCampaignId);
       setMembers(mList);
 
       if (selectedCampaignId !== 'all') {
@@ -562,12 +563,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (creatorProfile.isAdmin) return transactions;
       return transactions.filter(t => allowedCampaignIds.has(t.campaignId));
     }
-    return transactions.filter(t => t.campaignId === printOrgScope || (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title));
+    return transactions.filter(t => 
+      t.campaignId === printOrgScope || 
+      (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title) ||
+      (printTargetCampaign?.orgCode && (t.memberId?.startsWith(`${printTargetCampaign.orgCode}-`) || t.txHash?.includes(printTargetCampaign.orgCode)))
+    );
   }, [transactions, printOrgScope, printTargetCampaign, allowedCampaignIds, creatorProfile]);
 
   const printTargetMembers = useMemo(() => {
-    return filterMembersForScope(getMembers(printOrgScope));
-  }, [printOrgScope, members, allowedCampaigns]);
+    if (printOrgScope === 'all') {
+      return filterMembersForScope(getMembers('all'));
+    }
+    return getMembers(printOrgScope);
+  }, [printOrgScope, allowedCampaigns]);
 
   if (!isOpen) return null;
 
@@ -1344,15 +1352,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </label>
                   <select
                     value={printOrgScope}
-                    onChange={(e) => setPrintOrgScope(e.target.value)}
+                    onChange={(e) => {
+                      setPrintOrgScope(e.target.value);
+                      setPrintMemberId('');
+                    }}
                     className="w-full p-2.5 bg-white border-2 border-indigo-300 rounded-xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
-                    <option value="all">🌐 All Campaigns (Consolidated Report — {printTargetTransactions.length} Txns / {allMembersList.length} Members)</option>
                     {allowedCampaigns.map(camp => (
                       <option key={camp.id} value={camp.id}>
                         🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
                       </option>
                     ))}
+                    <option value="all">🌐 All Campaigns (Consolidated Combined Report)</option>
                   </select>
                 </div>
 

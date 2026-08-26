@@ -28,7 +28,9 @@ import {
   ChevronRight,
   Edit3,
   Trash2,
-  Save
+  Save,
+  Receipt,
+  Smartphone
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
@@ -523,6 +525,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           isRalna ? 'bg-white text-slate-900 border-slate-300 shadow-xs' :
           category === 'khawlsak' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
           category === 'rikrum' ? 'bg-rose-100 text-rose-900 border-rose-300' :
+          category === 'others' ? 'bg-purple-100 text-purple-900 border-purple-300' :
           'bg-blue-100 text-blue-900 border-blue-300'
         }`}>
           {config.name}
@@ -797,6 +800,36 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 <MapPin className="w-3 h-3 text-rose-500" /> GPS: {campaign?.gpsCoords || "22.8833, 92.7333"} <ExternalLink className="w-2.5 h-2.5" />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {category === 'others' && (
+        <div className="bg-white border border-purple-200 p-4 rounded-2xl shadow-xs space-y-3">
+          <div className="flex gap-3 items-center">
+            <div className="w-14 h-14 bg-purple-600 text-white rounded-2xl flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+              <Receipt className="w-7 h-7" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] bg-purple-100 text-purple-900 font-extrabold px-2 py-0.5 rounded-full border border-purple-200 uppercase">
+                  External UPI Payment
+                </span>
+              </div>
+              <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">
+                {campaign?.title || 'External Merchant / Payee'}
+              </h3>
+              <p className="text-[10px] text-purple-700 font-mono font-bold mt-0.5">
+                UPI ID: {campaign?.upiId || 'Direct UPI'}
+              </p>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {campaign?.location || 'Standard Direct UPI Payment'}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-purple-100 pt-2 text-[11px] text-purple-900 bg-purple-50/60 p-2 rounded-xl border border-purple-100 font-medium flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-purple-600 shrink-0" />
+            <span>UPI QR Code tlangpui a ni a, RonPay campaign / bawm dangte nen inzawmna a nei lo.</span>
           </div>
         </div>
       )}

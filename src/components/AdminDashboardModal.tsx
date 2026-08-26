@@ -98,6 +98,13 @@ import {
   migrateCampaignMembersPrefix,
   getStoredCreatorsList
 } from '../utils/storage';
+import { 
+  pushAllLocalDataToFirestore,
+  getFirestoreConnectionStatus,
+  subscribeFirestoreStatus,
+  FirestoreConnectionStatus
+} from '../services/firestoreSync';
+import { syncAllWithServer } from '../utils/syncEngine';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { 
   parseMediaUrl, 
@@ -255,6 +262,63 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Restore file state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [restoreNotice, setRestoreNotice] = useState<{ message: string; isError?: boolean } | null>(null);
+
+  // Firebase Cloud Sync State
+  const [firebaseStatus, setFirebaseStatus] = useState<FirestoreConnectionStatus>(getFirestoreConnectionStatus);
+  const [isSyncingToCloud, setIsSyncingToCloud] = useState<boolean>(false);
+  const [cloudSyncMessage, setCloudSyncMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeFirestoreStatus((status, msg) => {
+      setFirebaseStatus(status);
+      if (msg) setCloudSyncMessage(msg);
+    });
+    return () => unsub();
+  }, []);
+
+  const handlePushAllToCloud = async () => {
+    setIsSyncingToCloud(true);
+    setCloudSyncMessage(null);
+    try {
+      const result = await pushAllLocalDataToFirestore();
+      if (result.success) {
+        setRestoreNotice({
+          message: `☁️ Realtime Cloud Synchronization Active! Successfully synced ${result.count} local records to Firebase Firestore (ronpay-7fc69).`
+        });
+        recordAuditLog('Cloud Database Sync Pushed', `Pushed ${result.count} records to Firebase Firestore.`, 'system');
+        setLogsList(getStoredAuditLogs());
+      } else {
+        setRestoreNotice({
+          message: '⚠️ Cloud sync deferred to offline queue.',
+          isError: true
+        });
+      }
+    } catch (err: any) {
+      setRestoreNotice({
+        message: `⚠️ Cloud sync notice: ${err?.message || 'Offline cache active'}`,
+        isError: true
+      });
+    } finally {
+      setIsSyncingToCloud(false);
+    }
+  };
+
+  const handleForcePullCloud = async () => {
+    setIsSyncingToCloud(true);
+    try {
+      await syncAllWithServer();
+      setRestoreNotice({
+        message: '🔄 Realtime sync refreshed across Web, App, and AI Studio!'
+      });
+    } catch (e: any) {
+      setRestoreNotice({
+        message: '⚠️ Sync fallback active.',
+        isError: true
+      });
+    } finally {
+      setIsSyncingToCloud(false);
+    }
+  };
 
   // Sync pricing & announcements when props change
   useEffect(() => {
@@ -2852,6 +2916,58 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       {restoreNotice.message}
                     </div>
                   )}
+
+                  {/* Firebase Cloud Live Synchronization Section */}
+                  <div className="bg-linear-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-3xl shadow-md border border-indigo-700/50 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center shrink-0">
+                          <Zap className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-black text-white tracking-wide">Firebase Cloud Live Sync</h4>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase ${
+                              firebaseStatus === 'connected' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40' :
+                              firebaseStatus === 'connecting' ? 'bg-amber-500/20 text-amber-300 border-amber-400/40' :
+                              'bg-rose-500/20 text-rose-300 border-rose-400/40'
+                            }`}>
+                              {firebaseStatus === 'connected' ? '● Realtime Live' : firebaseStatus === 'connecting' ? 'Connecting...' : '○ Offline Cache'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 mt-0.5">
+                            Firestore ID: <span className="font-mono text-amber-300">ronpay-7fc69</span> (Realtime cross-sync between Web, Android App, & AI Studio)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={handlePushAllToCloud}
+                        disabled={isSyncingToCloud}
+                        className="py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {isSyncingToCloud ? 'Syncing to Cloud...' : 'Push Local Data to Firestore'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleForcePullCloud}
+                        disabled={isSyncingToCloud}
+                        className="py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncingToCloud ? 'animate-spin' : ''}`} />
+                        Refresh Realtime Connection
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-indigo-200/80 leading-relaxed">
+                      * Android App emaw Web Link aṭanga post / transaction thun thar apiang realtime in a in-sync vek anga, AI Studio-ah script version thar kan deploy pawhin data a bo tawh lo vang.
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Export Card */}

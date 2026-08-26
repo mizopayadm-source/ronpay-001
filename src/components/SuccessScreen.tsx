@@ -15,11 +15,17 @@ import {
   HeartHandshake,
   Volume2,
   VolumeX,
-  Compass
+  Compass,
+  ExternalLink,
+  QrCode,
+  Bell,
+  Printer
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
+import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
+import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
 
 interface SuccessScreenProps {
   transaction: Transaction | null;
@@ -33,7 +39,27 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   onExploreMore,
 }) => {
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
+  const [receiptQrUrl, setReceiptQrUrl] = useState<string>('');
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const [fcmEnabled, setFcmEnabled] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (transaction) {
+      // 1. Generate Receipt QR Data URL
+      generateReceiptQRDataUrl(transaction.id).then(url => setReceiptQrUrl(url)).catch(() => {});
+      
+      // 2. Trigger instant FCM receipt notification
+      triggerReceiptNotification(transaction);
+
+      // 3. Check FCM status
+      const status = getFCMStatus();
+      setFcmEnabled(status.permission === 'granted');
+    }
+  }, [transaction]);
+
+  const webReceiptLink = transaction ? generateReceiptWebLink(transaction.id) : '';
 
   // Synthesize a joyful celebratory chime using Web Audio API
   const playCelebrationChime = () => {
@@ -130,7 +156,8 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   }, []);
 
   const handleShareReceipt = async () => {
-    const text = `🎉 *RonPay Payment Receipt*\n\n` +
+    const receiptLink = webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`;
+    const text = `🎉 *RonPay Official Digital Receipt*\n\n` +
       `🏛️ *Bawm:* ${transaction?.campaignTitle || 'RonPay Community Bawm'}\n` +
       `👤 *Donor:* ${transaction?.isAnonymous ? 'Anonymous' : (transaction?.donorName || 'Consumer User')}\n` +
       `💰 *Amount:* ₹${transaction?.amount.toFixed(2) || '0.00'}\n` +
@@ -138,6 +165,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
       `✅ *Total Settled:* ₹${transaction?.totalAmount.toFixed(2) || '0.00'}\n` +
       `🔖 *TXN ID:* ${transaction?.id || 'RPAY2026'}\n` +
       `🕒 *Time:* ${new Date(transaction?.timestamp || Date.now()).toLocaleString()}\n\n` +
+      `🌐 *View Verified Digital Receipt Online:*\n${receiptLink}\n\n` +
       `Verified by RonPay Smart Payment Infrastructure.`;
 
     if (navigator.share) {
@@ -145,6 +173,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
         await navigator.share({
           title: 'RonPay Payment Slip',
           text: text,
+          url: receiptLink
         });
         return;
       } catch (err) {
@@ -156,6 +185,22 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     });
+  };
+
+  const handleCopyReceiptLink = () => {
+    if (!webReceiptLink) return;
+    navigator.clipboard.writeText(webReceiptLink).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    });
+  };
+
+  const handleEnableFCM = async () => {
+    const res = await requestFCMNotificationPermission();
+    if (res.granted) {
+      setFcmEnabled(true);
+      if (transaction) triggerReceiptNotification(transaction);
+    }
   };
 
   const handleDownloadReceipt = () => {
@@ -412,6 +457,74 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               <span>HASH:</span>
               <span className="truncate max-w-[170px] text-slate-600">{transaction.txHash}</span>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Web-Accessible Digital Receipt Portal Card */}
+      <div className="bg-linear-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-4 rounded-3xl mx-1 shadow-md border border-indigo-700/60 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center shrink-0">
+              <ExternalLink className="w-4 h-4 text-indigo-300" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-white">Web-Accessible Digital Receipt</h4>
+              <p className="text-[10px] text-indigo-200">Device dang emaw browser engah pawh hawn theih</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowQrModal(!showQrModal)}
+            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-[10px] font-bold text-indigo-200 flex items-center gap-1 cursor-pointer transition"
+          >
+            <QrCode className="w-3.5 h-3.5 text-amber-300" />
+            {showQrModal ? 'Hide QR' : 'Receipt QR'}
+          </button>
+        </div>
+
+        {/* QR Code expansion */}
+        {showQrModal && receiptQrUrl && (
+          <div className="p-3 bg-white text-slate-900 rounded-2xl flex flex-col items-center justify-center text-center space-y-2 border border-indigo-200">
+            <img src={receiptQrUrl} alt="Receipt QR" className="w-40 h-40 rounded-xl shadow-xs" />
+            <p className="text-[10px] text-slate-500 font-medium">
+              Phone camera emaw scanner dangin scan la, live digital receipt a inhawng nghal ang.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl p-1.5 pl-3">
+          <span className="text-[10px] font-mono text-slate-300 truncate flex-1 select-all">
+            {webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`}
+          </span>
+          <button
+            type="button"
+            onClick={handleCopyReceiptLink}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black shrink-0 transition flex items-center gap-1 cursor-pointer"
+          >
+            {copiedLink ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+            {copiedLink ? 'Copied' : 'Copy Link'}
+          </button>
+        </div>
+
+        {/* FCM Push Notification Info / Toggle */}
+        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10.5px]">
+          <div className="flex items-center gap-1.5 text-slate-300">
+            <Bell className="w-3.5 h-3.5 text-amber-400" />
+            <span>Real-Time Receipt Push (FCM):</span>
+          </div>
+          {fcmEnabled ? (
+            <span className="text-[9.5px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+              ✓ Active / Delivered
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleEnableFCM}
+              className="text-[9.5px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
+            >
+              Enable Browser Push
+            </button>
           )}
         </div>
       </div>

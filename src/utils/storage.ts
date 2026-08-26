@@ -907,10 +907,18 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') {
         return true;
       }
+      // Check ID prefix
+      if (m.id && targetCampaign?.orgCode) {
+        const prefix = m.id.split('-')[0].toUpperCase();
+        if (prefix === targetCampaign.orgCode.toUpperCase()) {
+          return true;
+        }
+      }
       return false;
     });
   } catch (e) {
-    return campaignId && campaignId !== 'all' && campaignId !== 'cmp-kumtluang-1' ? [] : INITIAL_DEFAULT_MEMBERS;
+    if (!campaignId || campaignId === 'all') return INITIAL_DEFAULT_MEMBERS;
+    return INITIAL_DEFAULT_MEMBERS.filter(m => m.campaignId === campaignId || (campaignId === 'cmp-kumtluang-1' && m.orgCode === 'EBE') || (campaignId === 'cmp-kumtluang-2' && m.orgCode === 'KTL'));
   }
 };
 
