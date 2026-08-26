@@ -24,9 +24,7 @@ import {
   deleteCampaignFromFirestore,
   syncCreatorToFirestore,
   syncAnnouncementToFirestore,
-  pushAllLocalDataToFirestore,
-  fetchCampaignByIdFromFirestore,
-  fetchAllFromFirestore
+  pushAllLocalDataToFirestore
 } from '../services/firestoreSync';
 
 export interface SyncDataState {
@@ -44,120 +42,193 @@ export interface SyncDataState {
 export const RONPAY_SYNC_EVENT = 'ronpay_data_synced';
 
 /**
- * Trigger sync with Firebase Firestore directly (pure serverless / Vercel compatible)
+ * Trigger sync with server backend (/api/data/sync or /api/data/state)
  */
 export async function syncAllWithServer(): Promise<SyncDataState | null> {
   try {
-    const firestoreData = await fetchAllFromFirestore();
-    if (firestoreData) {
-      if (Array.isArray(firestoreData.campaigns) && firestoreData.campaigns.length > 0) {
-        saveStoredCampaigns(firestoreData.campaigns);
+    const localCampaigns = getStoredCampaigns();
+    const localMembers = getMembers();
+    const localTransactions = getStoredTransactions();
+    const localCreators = getStoredCreatorsList();
+    const localPricingConfig = getStoredPricingConfig();
+    const localAnnouncement = getStoredAnnouncement();
+    const localAuditLogs = getStoredAuditLogs();
+
+    const response = await fetch('/api/data/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        campaigns: localCampaigns,
+        members: localMembers,
+        transactions: localTransactions,
+        creators: localCreators,
+        pricingConfig: localPricingConfig,
+        announcement: localAnnouncement,
+        auditLogs: localAuditLogs,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Sync server responded with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.success && result.data) {
+      const serverData = result.data;
+
+      // Update local storage with unified server data
+      if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
+        saveStoredCampaigns(serverData.campaigns);
       }
-      if (Array.isArray(firestoreData.members) && firestoreData.members.length > 0) {
-        saveMembers(firestoreData.members);
+      if (Array.isArray(serverData.members)) {
+        saveMembers(serverData.members);
       }
-      if (Array.isArray(firestoreData.transactions) && firestoreData.transactions.length > 0) {
-        saveStoredTransactions(firestoreData.transactions);
+      if (Array.isArray(serverData.transactions)) {
+        saveStoredTransactions(serverData.transactions);
       }
-      if (Array.isArray(firestoreData.creators) && firestoreData.creators.length > 0) {
-        saveStoredCreatorsList(firestoreData.creators);
+      if (Array.isArray(serverData.creators)) {
+        saveStoredCreatorsList(serverData.creators);
       }
-      if (firestoreData.announcement) {
-        saveStoredAnnouncement(firestoreData.announcement);
+      if (serverData.pricingConfig) {
+        saveStoredPricingConfig(serverData.pricingConfig);
+      }
+      if (serverData.announcement) {
+        saveStoredAnnouncement(serverData.announcement);
+      }
+      if (Array.isArray(serverData.auditLogs)) {
+        saveStoredAuditLogs(serverData.auditLogs);
       }
 
-      const syncState: SyncDataState = {
-        campaigns: getStoredCampaigns(),
-        members: getMembers(),
-        transactions: getStoredTransactions(),
-        creators: getStoredCreatorsList(),
-        pricingConfig: getStoredPricingConfig(),
-        announcement: getStoredAnnouncement(),
-        auditLogs: getStoredAuditLogs(),
-        lastUpdated: new Date().toISOString()
-      };
-
+      // Dispatch event to re-render any listening UI
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: syncState }));
+        window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
       }
 
-      return syncState;
+      return serverData;
     }
   } catch (err) {
-    console.warn('Firestore direct sync deferring to local storage cache:', err);
+    console.warn('Network sync offline or server unreachable (using local storage):', err);
   }
   return null;
 }
 
 /**
- * Fetch a single campaign by ID from Firestore directly if not found in local storage
+ * Fetch a single campaign by ID from server if not found in local storage
  */
 export async function fetchCampaignById(campaignId: string): Promise<Campaign | null> {
   if (!campaignId) return null;
   try {
-    const firestoreCampaign = await fetchCampaignByIdFromFirestore(campaignId);
-    if (firestoreCampaign) {
-      const current = getStoredCampaigns();
-      const exists = current.some(c => c.id === firestoreCampaign.id);
-      if (!exists) {
-        saveStoredCampaigns([firestoreCampaign, ...current]);
+    const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.campaign) {
+        // Save to local storage
+        const current = getStoredCampaigns();
+        const exists = current.some(c => c.id === json.campaign.id);
+        if (!exists) {
+          saveStoredCampaigns([json.campaign, ...current]);
+        }
+        return json.campaign;
       }
-      return firestoreCampaign;
     }
   } catch (e) {
-    console.warn('Failed to fetch campaign by id from Firestore:', e);
+    console.warn('Failed to fetch campaign by id from server:', e);
   }
   return null;
 }
 
 /**
- * Save new or updated campaign to Firestore immediately
+ * Save new or updated campaign to Firestore & Server immediately
  */
 export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
-  // Sync to Firestore directly
-  await syncCampaignToFirestore(campaign).catch((err) => {
-    console.error('Firebase Error:', err);
-  });
+  // Sync to Firestore
+  syncCampaignToFirestore(campaign).catch(() => {});
+  
+  // Also post to local express server
+  try {
+    await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(campaign),
+    });
+  } catch (e) {
+    console.warn('Could not post campaign to server:', e);
+  }
 }
 
 /**
- * Save new member to Firestore immediately
+ * Save new member to Firestore & Server immediately
  */
 export async function saveMemberToServer(member: MemberRecord): Promise<void> {
-  // Sync to Firestore directly
-  await syncMemberToFirestore(member).catch((err) => {
-    console.error('Firebase Error:', err);
-  });
+  // Sync to Firestore
+  syncMemberToFirestore(member).catch(() => {});
+
+  // Also post to local express server
+  try {
+    await fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(member),
+    });
+  } catch (e) {
+    console.warn('Could not post member to server:', e);
+  }
 }
 
 /**
- * Delete member on Firestore immediately
+ * Delete member on Firestore & Server immediately
  */
 export async function deleteMemberFromServer(memberId: string): Promise<void> {
-  // Sync to Firestore directly
-  await deleteMemberFromFirestore(memberId).catch((err) => {
-    console.error('Firebase Error:', err);
-  });
+  // Sync to Firestore
+  deleteMemberFromFirestore(memberId).catch(() => {});
+
+  // Also delete on server
+  try {
+    await fetch(`/api/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE',
+    });
+  } catch (e) {
+    console.warn('Could not delete member on server:', e);
+  }
 }
 
 /**
- * Save transaction to Firestore immediately
+ * Save transaction to Firestore & Server immediately
  */
 export async function saveTransactionToServer(tx: Transaction): Promise<void> {
-  // Sync to Firestore directly
-  await syncTransactionToFirestore(tx).catch((err) => {
-    console.error('Firebase Error:', err);
-  });
+  // Sync to Firestore
+  syncTransactionToFirestore(tx).catch(() => {});
+
+  // Also post to local server
+  try {
+    await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx),
+    });
+  } catch (e) {
+    console.warn('Could not post transaction to server:', e);
+  }
 }
 
 /**
- * Save announcement to Firestore immediately
+ * Save announcement to Firestore & Server immediately
  */
 export async function saveAnnouncementToServer(ann: AnnouncementBanner): Promise<void> {
-  // Sync to Firestore directly
-  await syncAnnouncementToFirestore(ann).catch((err) => {
-    console.error('Firebase Error:', err);
-  });
+  // Sync to Firestore
+  syncAnnouncementToFirestore(ann).catch(() => {});
+
+  try {
+    await fetch('/api/announcement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ann),
+    });
+  } catch (e) {
+    console.warn('Could not post announcement to server:', e);
+  }
 }
 
 /**

@@ -282,6 +282,15 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
 
     localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
     setLastSyncTime(new Date().toISOString());
+
+    // Asynchronously push to backend server for multi-device sync
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaigns: sanitized })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save campaigns', e);
   }
@@ -324,6 +333,13 @@ export const getStoredTransactions = (): Transaction[] => {
 export const saveStoredTransactions = (transactions: Transaction[]) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save transactions', e);
   }
@@ -628,6 +644,13 @@ export const getStoredAnnouncement = (): AnnouncementBanner => {
 export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
   try {
     localStorage.setItem(ANNOUNCEMENT_KEY, JSON.stringify(ann));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ann)
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save announcement banner', e);
   }
@@ -902,6 +925,13 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 export const saveMembers = (members: MemberRecord[]): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }
@@ -919,6 +949,13 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
     allList.unshift(member);
   }
   saveMembers(allList);
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(member)
+    }).catch(() => {});
+  }
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
@@ -929,6 +966,11 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
     return false;
   });
   saveMembers(filtered);
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE'
+    }).catch(() => {});
+  }
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
@@ -964,5 +1006,12 @@ export const saveTransaction = (tx: Transaction): void => {
   const current = getStoredTransactions();
   const updated = [tx, ...current];
   saveStoredTransactions(updated);
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx)
+    }).catch(() => {});
+  }
 };
 

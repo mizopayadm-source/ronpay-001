@@ -1,7 +1,6 @@
 import { 
   collection, 
   doc, 
-  getDoc,
   setDoc, 
   deleteDoc, 
   onSnapshot, 
@@ -297,87 +296,6 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
     await setDoc(docRef, { ...tx, updatedAt: new Date().toISOString() }, { merge: true });
   } catch (err) {
     console.warn('Cloud sync for transaction deferred to offline cache:', err);
-  }
-}
-
-/**
- * Fetch a single campaign directly from Firestore
- */
-export async function fetchCampaignByIdFromFirestore(campaignId: string): Promise<Campaign | null> {
-  if (!campaignId) return null;
-  try {
-    const docRef = doc(db, 'campaigns', campaignId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const camp = docSnap.data() as Campaign;
-      return camp;
-    }
-  } catch (err) {
-    console.warn('Direct Firestore fetch for campaign warning:', err);
-  }
-  return null;
-}
-
-/**
- * Fetch full snapshot from Firestore directly for initial sync
- */
-export async function fetchAllFromFirestore(): Promise<{
-  campaigns: Campaign[];
-  members: MemberRecord[];
-  transactions: Transaction[];
-  creators: CreatorProfile[];
-  announcement?: AnnouncementBanner;
-} | null> {
-  try {
-    const [campSnap, memSnap, txSnap, creatSnap, annSnap] = await Promise.allSettled([
-      getDocs(collection(db, 'campaigns')),
-      getDocs(collection(db, 'members')),
-      getDocs(query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))),
-      getDocs(collection(db, 'creators')),
-      getDoc(doc(db, 'systemConfig', 'announcement'))
-    ]);
-
-    const campaigns: Campaign[] = [];
-    if (campSnap.status === 'fulfilled') {
-      campSnap.value.forEach(d => {
-        const data = d.data() as Campaign;
-        if (data && data.id) campaigns.push(data);
-      });
-    }
-
-    const members: MemberRecord[] = [];
-    if (memSnap.status === 'fulfilled') {
-      memSnap.value.forEach(d => {
-        const data = d.data() as MemberRecord;
-        if (data && data.id) members.push(data);
-      });
-    }
-
-    const transactions: Transaction[] = [];
-    if (txSnap.status === 'fulfilled') {
-      txSnap.value.forEach(d => {
-        const data = d.data() as Transaction;
-        if (data && data.id) transactions.push(data);
-      });
-    }
-
-    const creators: CreatorProfile[] = [];
-    if (creatSnap.status === 'fulfilled') {
-      creatSnap.value.forEach(d => {
-        const data = d.data() as CreatorProfile;
-        if (data && (data.phone || (data as any).id)) creators.push(data);
-      });
-    }
-
-    let announcement: AnnouncementBanner | undefined;
-    if (annSnap.status === 'fulfilled' && annSnap.value.exists()) {
-      announcement = annSnap.value.data() as AnnouncementBanner;
-    }
-
-    return { campaigns, members, transactions, creators, announcement };
-  } catch (err) {
-    console.warn('Failed full fetch from Firestore:', err);
-    return null;
   }
 }
 
