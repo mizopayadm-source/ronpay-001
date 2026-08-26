@@ -302,12 +302,26 @@ export const getStoredTransactions = (): Transaction[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy sample entries for Liana & Kunga
-        const filtered = parsed.filter(t => t.donorName !== 'Liana' && t.donorName !== 'Kunga');
-        if (filtered.length !== parsed.length) {
-          saveStoredTransactions(filtered);
+        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
+        const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
+        const cleanedStored = parsed.filter(t => 
+          t.donorName !== 'Liana' && 
+          t.donorName !== 'Kunga' && 
+          !legacyMismatchedIds.has(t.id)
+        );
+
+        // Merge INITIAL_TRANSACTIONS with cleaned stored transactions
+        const map = new Map<string, Transaction>();
+        for (const t of INITIAL_TRANSACTIONS) {
+          if (t && t.id) map.set(t.id, t);
         }
-        return filtered;
+        for (const t of cleanedStored) {
+          if (t && t.id) {
+            map.set(t.id, t);
+          }
+        }
+        const merged = Array.from(map.values());
+        return merged;
       }
     }
   } catch (e) {
@@ -757,7 +771,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
       { subId: 'EBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
       { subId: 'EBE-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
     ],
-    createdAt: new Date().toISOString()
+    createdAt: '2026-01-01T00:00:00.000Z'
   },
   {
     id: 'EBE-8622',
@@ -772,7 +786,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
       { subId: 'EBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
       { subId: 'EBE-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
     ],
-    createdAt: new Date().toISOString()
+    createdAt: '2026-01-02T00:00:00.000Z'
   },
   {
     id: 'EBE-3120',
@@ -783,8 +797,36 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     fullPhone: '8794563120',
     section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
+    dependents: [
+      { subId: 'EBE-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
+    ],
+    createdAt: '2026-01-03T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-5544',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'C. Lalmuanpuia',
+    orgCode: 'EBE',
+    phoneLast4: '5544',
+    fullPhone: '9436125544',
+    section: 'Bial 3 (Venglai)',
+    isFamilyHead: true,
     dependents: [],
-    createdAt: new Date().toISOString()
+    createdAt: '2026-01-04T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-9912',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Lalbiakzuala & Chhungte',
+    orgCode: 'EBE',
+    phoneLast4: '9912',
+    fullPhone: '9862399912',
+    section: 'Bial 4 (Field Veng)',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'EBE-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
+    ],
+    createdAt: '2026-01-05T00:00:00.000Z'
   },
   {
     id: 'KTL-5510',
@@ -799,12 +841,12 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
       { subId: 'KTL-5510-01', name: 'Lallawmsangi (Nupui)', relation: 'Nupui' },
       { subId: 'KTL-5510-02', name: 'Lalremruata (Fapa)', relation: 'Fa' }
     ],
-    createdAt: new Date().toISOString()
+    createdAt: '2026-01-06T00:00:00.000Z'
   },
   {
     id: 'KTL-7234',
     campaignId: 'cmp-kumtluang-2',
-    name: 'C. Lalmuanpuia',
+    name: 'Zodingliana Sailo',
     orgCode: 'KTL',
     phoneLast4: '7234',
     fullPhone: '9436127234',
@@ -813,7 +855,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     dependents: [
       { subId: 'KTL-7234-01', name: 'Zomuanpuii (Nupui)', relation: 'Nupui' }
     ],
-    createdAt: new Date().toISOString()
+    createdAt: '2026-01-07T00:00:00.000Z'
   }
 ];
 

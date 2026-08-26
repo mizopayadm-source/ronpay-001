@@ -1451,6 +1451,103 @@ export const printTransactionsPDF = (
 };
 
 /**
+ * Helper to determine if a transaction belongs to a specific Member Record.
+ * Matches by:
+ * 1. Direct memberId match
+ * 2. Remark containing member.id
+ * 3. Phone number matching (exact or last 4 digits)
+ * 4. Fuzzy name matching (handling accents, punctuation, '& Chhungte', etc.)
+ */
+export const isTransactionForMember = (t: Transaction, member: MemberRecord): boolean => {
+  if (!t || !member) return false;
+
+  // 1. Direct member ID match
+  if (t.memberId && member.id && t.memberId.toLowerCase().trim() === member.id.toLowerCase().trim()) {
+    return true;
+  }
+
+  // 2. Remark containing Member ID
+  if (t.remark && member.id && t.remark.toLowerCase().includes(member.id.toLowerCase().trim())) {
+    return true;
+  }
+
+  // 3. Phone number match (last 4 digits or full phone)
+  if (t.donorPhone && (member.fullPhone || member.phoneLast4)) {
+    const cleanTxPhone = t.donorPhone.replace(/\D/g, '');
+    const cleanMemPhone = (member.fullPhone || '').replace(/\D/g, '');
+    if (cleanTxPhone && cleanMemPhone && cleanTxPhone === cleanMemPhone) {
+      return true;
+    }
+    if (cleanTxPhone.length >= 4 && member.phoneLast4 && cleanTxPhone.endsWith(member.phoneLast4)) {
+      return true;
+    }
+  }
+
+  // 4. Robust Name Match
+  if (t.donorName && member.name) {
+    const tClean = t.donorName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mClean = member.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (tClean === mClean) return true;
+    if (tClean.length > 3 && mClean.length > 3) {
+      if (tClean.includes(mClean) || mClean.includes(tClean)) return true;
+    }
+
+    // Check primary name without '& Chhungte' / '(Nupui)'
+    const tPrimary = t.donorName.split('&')[0].replace(/\([^)]*\)/g, '').trim().toLowerCase();
+    const mPrimary = member.name.split('&')[0].replace(/\([^)]*\)/g, '').trim().toLowerCase();
+    if (tPrimary && mPrimary && (tPrimary === mPrimary || tPrimary.includes(mPrimary) || mPrimary.includes(tPrimary))) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Extracts category contribution amount from a transaction.
+ * Supports subCategoryBreakdown object and direct subCategory/remark matching.
+ */
+export const getTransactionCategoryAmount = (t: Transaction, category: string): number => {
+  if (!t || !category) return 0;
+  const targetCatLower = category.toLowerCase().trim();
+
+  // If transaction has detailed multi-category breakdown
+  if (t.subCategoryBreakdown && typeof t.subCategoryBreakdown === 'object') {
+    // 1. Exact key match
+    for (const [key, val] of Object.entries(t.subCategoryBreakdown)) {
+      if (key.toLowerCase().trim() === targetCatLower) {
+        return Number(val) || 0;
+      }
+    }
+    // 2. Partial key match
+    for (const [key, val] of Object.entries(t.subCategoryBreakdown)) {
+      const kLower = key.toLowerCase().trim();
+      if (kLower.includes(targetCatLower) || targetCatLower.includes(kLower)) {
+        return Number(val) || 0;
+      }
+    }
+  }
+
+  // Fallback to single subCategory matching
+  if (t.subCategory) {
+    const subLower = t.subCategory.toLowerCase().trim();
+    if (subLower === targetCatLower || subLower.includes(targetCatLower) || targetCatLower.includes(subLower)) {
+      return t.amount || 0;
+    }
+  }
+
+  // Fallback to remark matching
+  if (t.remark) {
+    const remarkLower = t.remark.toLowerCase();
+    if (remarkLower.includes(targetCatLower)) {
+      return t.amount || 0;
+    }
+  }
+
+  return 0;
+};
+
+/**
  * Format 1: Master 12-Month Table HTML Generator
  */
 export const generateMasterLedgerPrintHtml = (
@@ -1467,10 +1564,7 @@ export const generateMasterLedgerPrintHtml = (
   let grandTotal = 0;
 
   const rowsHtml = members.map((member, idx) => {
-    const memberTxns = transactions.filter(t => 
-      (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
-      (t.remark && t.remark.includes(member.id))
-    );
+    const memberTxns = transactions.filter(t => isTransactionForMember(t, member));
 
     let rowTotal = 0;
     const monthCols = months.map(m => {
@@ -1608,10 +1702,7 @@ export const generateMemberCategoryMatrixPrintHtml = (
   location?: string
 ): string => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const memberTxns = transactions.filter(t => 
-    (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
-    (t.remark && t.remark.includes(member.id))
-  );
+  const memberTxns = transactions.filter(t => isTransactionForMember(t, member));
 
   const monthTotals: { [key: string]: number } = {};
   months.forEach(m => { monthTotals[m] = 0; });
@@ -1620,16 +1711,12 @@ export const generateMemberCategoryMatrixPrintHtml = (
   const rowsHtml = categories.map((cat, idx) => {
     let rowTotal = 0;
     const monthCols = months.map(m => {
-      const txs = memberTxns.filter(t => {
-        const matchesCat = (t.subCategory && t.subCategory.toLowerCase() === cat.toLowerCase()) ||
-          (t.remark && t.remark.toLowerCase().includes(cat.toLowerCase()));
-        if (!matchesCat) return false;
-
+      const monthTxns = memberTxns.filter(t => {
         if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
         const d = new Date(t.timestamp);
         return months[d.getMonth()] === m;
       });
-      const sum = txs.reduce((acc, t) => acc + (t.amount || 0), 0);
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
       rowTotal += sum;
       monthTotals[m] += sum;
       return `<td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
@@ -1757,10 +1844,7 @@ export const generateMemberPassbookVerticalPrintHtml = (
   location?: string
 ): string => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const memberTxns = transactions.filter(t => 
-    (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
-    (t.remark && t.remark.includes(member.id))
-  );
+  const memberTxns = transactions.filter(t => isTransactionForMember(t, member));
 
   let grandTotal = 0;
   const categoryTotals: { [cat: string]: number } = {};
@@ -1768,17 +1852,14 @@ export const generateMemberPassbookVerticalPrintHtml = (
 
   const rowsHtml = months.map((month, idx) => {
     let monthTotal = 0;
-    const catCols = categories.map(cat => {
-      const txs = memberTxns.filter(t => {
-        const matchesCat = (t.subCategory && t.subCategory.toLowerCase() === cat.toLowerCase()) ||
-          (t.remark && t.remark.toLowerCase().includes(cat.toLowerCase()));
-        if (!matchesCat) return false;
+    const monthTxns = memberTxns.filter(t => {
+      if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
+      const d = new Date(t.timestamp);
+      return months[d.getMonth()] === month;
+    });
 
-        if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
-        const d = new Date(t.timestamp);
-        return months[d.getMonth()] === month;
-      });
-      const sum = txs.reduce((acc, t) => acc + (t.amount || 0), 0);
+    const catCols = categories.map(cat => {
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
       monthTotal += sum;
       categoryTotals[cat] += sum;
       return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
