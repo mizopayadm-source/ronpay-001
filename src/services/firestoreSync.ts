@@ -5,29 +5,29 @@ import {
   deleteDoc, 
   onSnapshot, 
   getDocs,
-  query,
-  orderBy,
-  limit,
-  writeBatch
+  getDoc,
+  query, 
+  orderBy, 
+  limit, 
+  writeBatch 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Campaign, Transaction, MemberRecord, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog } from '../types';
 import { 
-  getStoredCampaigns, 
-  saveStoredCampaigns, 
-  getStoredTransactions, 
-  saveStoredTransactions, 
-  getMembers, 
-  saveMembers, 
-  getStoredCreatorsList, 
-  saveStoredCreatorsList,
-  getStoredPricingConfig,
-  saveStoredPricingConfig,
-  getStoredAnnouncement,
-  saveStoredAnnouncement,
-  getStoredAuditLogs,
-  saveStoredAuditLogs
-} from '../utils/storage';
+  Campaign, 
+  Transaction, 
+  MemberRecord, 
+  CreatorProfile, 
+  SystemPricingConfig, 
+  AnnouncementBanner, 
+  AuditLog 
+} from '../types';
+import { 
+  INITIAL_CAMPAIGNS, 
+  INITIAL_TRANSACTIONS, 
+  DEFAULT_PRICING_CONFIG, 
+  INITIAL_REGISTERED_CREATORS 
+} from '../data/initialData';
+import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT } from '../utils/storage';
 
 export type FirestoreConnectionStatus = 'connecting' | 'connected' | 'offline' | 'error';
 
@@ -38,6 +38,7 @@ export interface FirestoreSyncCallbacks {
   onCreatorsUpdate?: (creators: CreatorProfile[]) => void;
   onAnnouncementUpdate?: (announcement: AnnouncementBanner) => void;
   onPricingConfigUpdate?: (pricingConfig: SystemPricingConfig) => void;
+  onAuditLogsUpdate?: (logs: AuditLog[]) => void;
   onStatusChange?: (status: FirestoreConnectionStatus, message?: string) => void;
 }
 
@@ -68,6 +69,30 @@ function updateStatus(status: FirestoreConnectionStatus, msg?: string) {
 }
 
 /**
+ * Deeply remove any `undefined` values from objects/arrays so Firestore `setDoc` never fails.
+ */
+export function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(obj)) {
+    return obj
+      .filter(item => item !== undefined)
+      .map(item => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
+/**
  * Merge local and remote collections by unique key, keeping newest and most complete records
  */
 function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems: T[], key: string = 'id'): T[] {
@@ -93,41 +118,86 @@ function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems:
 }
 
 /**
- * Upload initial local seed data to Firestore if Firestore is empty on first launch
+ * Check and seed Firestore with initial default data if empty on cold start
  */
-async function seedInitialCloudDataIfEmpty() {
+export async function seedInitialCloudDataIfEmpty() {
   try {
+    // 1. Campaigns seed check
     const campaignsSnap = await getDocs(collection(db, 'campaigns'));
     if (campaignsSnap.empty) {
-      console.log('Seeding initial campaigns to Firestore...');
-      const localCampaigns = getStoredCampaigns();
+      console.log('[Firestore] Seeding initial campaigns to Firestore...');
       const batch = writeBatch(db);
-      for (const camp of localCampaigns) {
+      for (const camp of INITIAL_CAMPAIGNS) {
         if (camp && camp.id) {
           const docRef = doc(db, 'campaigns', camp.id);
-          batch.set(docRef, camp, { merge: true });
+          batch.set(docRef, sanitizeForFirestore({ ...camp, updatedAt: new Date().toISOString() }), { merge: true });
+        }
+      }
+      await batch.commit();
+    }
+
+    // 2. Pricing config seed check
+    const pricingDoc = await getDoc(doc(db, 'systemConfig', 'pricing'));
+    if (!pricingDoc.exists()) {
+      await setDoc(doc(db, 'systemConfig', 'pricing'), sanitizeForFirestore({
+        ...DEFAULT_PRICING_CONFIG,
+        updatedAt: new Date().toISOString()
+      }), { merge: true });
+    }
+
+    // 3. Announcement seed check
+    const announcementDoc = await getDoc(doc(db, 'systemConfig', 'announcement'));
+    if (!announcementDoc.exists()) {
+      await setDoc(doc(db, 'systemConfig', 'announcement'), sanitizeForFirestore({
+        ...DEFAULT_ANNOUNCEMENT,
+        updatedAt: new Date().toISOString()
+      }), { merge: true });
+    }
+
+    // 4. Initial Creators seed check
+    const creatorsSnap = await getDocs(collection(db, 'creators'));
+    if (creatorsSnap.empty) {
+      const batch = writeBatch(db);
+      for (const cr of INITIAL_REGISTERED_CREATORS) {
+        if (cr && cr.phone) {
+          const docRef = doc(db, 'creators', cr.phone);
+          batch.set(docRef, sanitizeForFirestore({ ...cr, updatedAt: new Date().toISOString() }), { merge: true });
+        }
+      }
+      await batch.commit();
+    }
+
+    // 5. Initial Members seed check
+    const membersSnap = await getDocs(collection(db, 'members'));
+    if (membersSnap.empty) {
+      const batch = writeBatch(db);
+      for (const m of INITIAL_DEFAULT_MEMBERS) {
+        if (m && m.id) {
+          const docRef = doc(db, 'members', m.id);
+          batch.set(docRef, sanitizeForFirestore({ ...m, updatedAt: new Date().toISOString() }), { merge: true });
         }
       }
       await batch.commit();
     }
   } catch (err) {
-    console.warn('Initial Firestore seed check skipped or handled by offline cache:', err);
+    console.warn('[Firestore] Initial cloud seed check note:', err);
   }
 }
 
 /**
- * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners
+ * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners.
+ * Every change from other browsers / admin immediately triggers the callbacks.
  */
 export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
   const unsubscribers: Array<() => void> = [];
   updateStatus('connecting');
 
-  // Check initial seed
+  // Trigger initial cloud seed check
   seedInitialCloudDataIfEmpty().catch(() => {});
 
-  // 1. Transactions Listener (onSnapshot on payment collection)
+  // 1. Transactions Listener (onSnapshot on transactions collection)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(500));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -138,19 +208,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (remoteTxList.length > 0) {
-        const localTxList = getStoredTransactions();
-        const merged = smartMerge(localTxList, remoteTxList, 'id');
-        
-        // Cache to local storage immediately
-        saveStoredTransactions(merged);
-
-        if (callbacks.onTransactionsUpdate) {
-          callbacks.onTransactionsUpdate(merged);
-        }
+      if (callbacks.onTransactionsUpdate && remoteTxList.length > 0) {
+        callbacks.onTransactionsUpdate(remoteTxList);
       }
     }, (error) => {
-      console.warn('Firestore transactions listener warning (using local persistence):', error);
+      console.warn('Firestore transactions listener note:', error);
       updateStatus('offline', error.message);
     });
     unsubscribers.push(unsubTx);
@@ -172,19 +234,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (remoteCampaigns.length > 0) {
-        const localCampaigns = getStoredCampaigns();
-        const merged = smartMerge(localCampaigns, remoteCampaigns, 'id');
-        
-        // Cache to local storage immediately
-        saveStoredCampaigns(merged);
-
-        if (callbacks.onCampaignsUpdate) {
-          callbacks.onCampaignsUpdate(merged);
-        }
+      if (callbacks.onCampaignsUpdate && remoteCampaigns.length > 0) {
+        callbacks.onCampaignsUpdate(remoteCampaigns);
       }
     }, (error) => {
-      console.warn('Firestore campaigns listener warning (using local persistence):', error);
+      console.warn('Firestore campaigns listener note:', error);
     });
     unsubscribers.push(unsubCamp);
   } catch (err) {
@@ -203,19 +257,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (remoteMembers.length > 0) {
-        const localMembers = getMembers();
-        const merged = smartMerge(localMembers, remoteMembers, 'id');
-        
-        // Cache to local storage immediately
-        saveMembers(merged);
-
-        if (callbacks.onMembersUpdate) {
-          callbacks.onMembersUpdate(merged);
-        }
+      if (callbacks.onMembersUpdate && remoteMembers.length > 0) {
+        callbacks.onMembersUpdate(remoteMembers);
       }
     }, (error) => {
-      console.warn('Firestore members listener warning:', error);
+      console.warn('Firestore members listener note:', error);
     });
     unsubscribers.push(unsubMem);
   } catch (err) {
@@ -234,19 +280,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (remoteCreators.length > 0) {
-        const localCreators = getStoredCreatorsList();
-        const merged = smartMerge(localCreators, remoteCreators, 'phone');
-        
-        // Cache to local storage immediately
-        saveStoredCreatorsList(merged);
-
-        if (callbacks.onCreatorsUpdate) {
-          callbacks.onCreatorsUpdate(merged);
-        }
+      if (callbacks.onCreatorsUpdate && remoteCreators.length > 0) {
+        callbacks.onCreatorsUpdate(remoteCreators);
       }
     }, (error) => {
-      console.warn('Firestore creators listener warning:', error);
+      console.warn('Firestore creators listener note:', error);
     });
     unsubscribers.push(unsubCreators);
   } catch (err) {
@@ -259,19 +297,56 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AnnouncementBanner;
-        if (data && data.id) {
-          saveStoredAnnouncement(data);
-          if (callbacks.onAnnouncementUpdate) {
-            callbacks.onAnnouncementUpdate(data);
-          }
+        if (data && data.id && callbacks.onAnnouncementUpdate) {
+          callbacks.onAnnouncementUpdate(data);
         }
       }
     }, (error) => {
-      console.warn('Firestore announcement config listener warning:', error);
+      console.warn('Firestore announcement config listener note:', error);
     });
     unsubscribers.push(unsubConfig);
   } catch (err) {
-    console.warn('Failed to attach systemConfig listener:', err);
+    console.warn('Failed to attach systemConfig announcement listener:', err);
+  }
+
+  // 6. Pricing Configuration Listener
+  try {
+    const pricingDocRef = doc(db, 'systemConfig', 'pricing');
+    const unsubPricing = onSnapshot(pricingDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as SystemPricingConfig;
+        if (data && data.categories && callbacks.onPricingConfigUpdate) {
+          callbacks.onPricingConfigUpdate(data);
+        }
+      }
+    }, (error) => {
+      console.warn('Firestore pricing config listener note:', error);
+    });
+    unsubscribers.push(unsubPricing);
+  } catch (err) {
+    console.warn('Failed to attach pricing config listener:', err);
+  }
+
+  // 7. Audit Logs Listener
+  try {
+    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(100));
+    const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
+      const logs: AuditLog[] = [];
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as AuditLog;
+        if (data && data.id) {
+          logs.push(data);
+        }
+      });
+      if (callbacks.onAuditLogsUpdate && logs.length > 0) {
+        callbacks.onAuditLogsUpdate(logs);
+      }
+    }, (err) => {
+      console.warn('Firestore audit logs listener note:', err);
+    });
+    unsubscribers.push(unsubAudit);
+  } catch (err) {
+    console.warn('Failed to attach audit logs listener:', err);
   }
 
   // Return unsubscribe all function
@@ -287,114 +362,201 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 }
 
 /**
- * Write single transaction to Firestore with auto-merge & local caching
+ * Direct write: Save single transaction to Firebase Firestore (transactions collection)
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
   if (!tx || !tx.id) return;
   try {
+    const cleanTx = sanitizeForFirestore({
+      ...tx,
+      updatedAt: new Date().toISOString()
+    });
     const docRef = doc(db, 'transactions', tx.id);
-    await setDoc(docRef, { ...tx, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanTx, { merge: true });
+    console.log('[Firestore] Transaction successfully synced:', tx.id);
   } catch (err) {
-    console.warn('Cloud sync for transaction deferred to offline cache:', err);
+    console.error('[Firestore] Error saving transaction:', err);
   }
 }
 
 /**
- * Write single campaign to Firestore with auto-merge & local caching
+ * Direct write: Save single campaign / QR code to Firebase Firestore (campaigns collection)
  */
 export async function syncCampaignToFirestore(campaign: Campaign): Promise<void> {
   if (!campaign || !campaign.id) return;
   try {
+    const cleanCampaign = sanitizeForFirestore({
+      ...campaign,
+      updatedAt: new Date().toISOString()
+    });
     const docRef = doc(db, 'campaigns', campaign.id);
-    await setDoc(docRef, { ...campaign, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanCampaign, { merge: true });
     console.log('[Firestore] Campaign successfully synced:', campaign.id);
   } catch (err) {
-    console.error('Firebase Error:', err);
+    console.error('[Firestore] Error saving campaign:', err);
   }
 }
 
 /**
- * Write single member to Firestore with auto-merge & local caching
+ * Direct write: Save single member to Firebase Firestore (members collection)
  */
 export async function syncMemberToFirestore(member: MemberRecord): Promise<void> {
   if (!member || !member.id) return;
   try {
+    const cleanMember = sanitizeForFirestore({
+      ...member,
+      updatedAt: new Date().toISOString()
+    });
     const docRef = doc(db, 'members', member.id);
-    await setDoc(docRef, { ...member, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanMember, { merge: true });
+    console.log('[Firestore] Member successfully synced:', member.id);
   } catch (err) {
-    console.warn('Cloud sync for member deferred to offline cache:', err);
+    console.error('[Firestore] Error saving member:', err);
   }
 }
 
 /**
- * Delete member from Firestore
+ * Direct delete: Delete member from Firestore
  */
 export async function deleteMemberFromFirestore(memberId: string): Promise<void> {
   if (!memberId) return;
   try {
     const docRef = doc(db, 'members', memberId);
     await deleteDoc(docRef);
+    console.log('[Firestore] Member deleted:', memberId);
   } catch (err) {
-    console.warn('Cloud delete for member deferred to offline cache:', err);
+    console.error('[Firestore] Error deleting member:', err);
   }
 }
 
 /**
- * Delete campaign from Firestore
+ * Direct delete: Delete campaign from Firestore
  */
 export async function deleteCampaignFromFirestore(campaignId: string): Promise<void> {
   if (!campaignId) return;
   try {
     const docRef = doc(db, 'campaigns', campaignId);
     await deleteDoc(docRef);
+    console.log('[Firestore] Campaign deleted:', campaignId);
   } catch (err) {
-    console.warn('Cloud delete for campaign deferred to offline cache:', err);
+    console.error('[Firestore] Error deleting campaign:', err);
   }
 }
 
 /**
- * Write single creator profile to Firestore
+ * Direct delete: Delete transaction from Firestore
+ */
+export async function deleteTransactionFromFirestore(transactionId: string): Promise<void> {
+  if (!transactionId) return;
+  try {
+    const docRef = doc(db, 'transactions', transactionId);
+    await deleteDoc(docRef);
+    console.log('[Firestore] Transaction deleted:', transactionId);
+  } catch (err) {
+    console.error('[Firestore] Error deleting transaction:', err);
+  }
+}
+
+/**
+ * Direct write: Save single creator profile to Firebase Firestore (creators collection)
  */
 export async function syncCreatorToFirestore(creator: CreatorProfile): Promise<void> {
   if (!creator || !creator.phone) return;
   try {
+    const cleanCreator = sanitizeForFirestore({
+      ...creator,
+      updatedAt: new Date().toISOString()
+    });
     const docRef = doc(db, 'creators', creator.phone);
-    await setDoc(docRef, { ...creator, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanCreator, { merge: true });
+    console.log('[Firestore] Creator successfully synced:', creator.phone);
   } catch (err) {
-    console.warn('Cloud sync for creator deferred to offline cache:', err);
+    console.error('[Firestore] Error saving creator:', err);
   }
 }
 
 /**
- * Write announcement banner to Firestore
+ * Direct write: Save announcement banner to Firebase Firestore
  */
 export async function syncAnnouncementToFirestore(announcement: AnnouncementBanner): Promise<void> {
   if (!announcement) return;
   try {
+    const cleanAnnouncement = sanitizeForFirestore({
+      ...announcement,
+      updatedAt: new Date().toISOString()
+    });
     const docRef = doc(db, 'systemConfig', 'announcement');
-    await setDoc(docRef, { ...announcement, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanAnnouncement, { merge: true });
+    console.log('[Firestore] Announcement config synced');
   } catch (err) {
-    console.warn('Cloud sync for announcement deferred to offline cache:', err);
+    console.error('[Firestore] Error saving announcement:', err);
   }
 }
 
 /**
- * Push all local records to Firestore (e.g. on manual sync or initial migration)
+ * Direct write: Save pricing config to Firebase Firestore
+ */
+export async function syncPricingConfigToFirestore(pricingConfig: SystemPricingConfig): Promise<void> {
+  if (!pricingConfig) return;
+  try {
+    const cleanPricing = sanitizeForFirestore({
+      ...pricingConfig,
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = doc(db, 'systemConfig', 'pricing');
+    await setDoc(docRef, cleanPricing, { merge: true });
+    console.log('[Firestore] Pricing config synced');
+  } catch (err) {
+    console.error('[Firestore] Error saving pricing config:', err);
+  }
+}
+
+/**
+ * Direct write: Save audit log to Firebase Firestore
+ */
+export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void> {
+  if (!auditLog || !auditLog.id) return;
+  try {
+    const cleanLog = sanitizeForFirestore({
+      ...auditLog,
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = doc(db, 'auditLogs', auditLog.id);
+    await setDoc(docRef, cleanLog, { merge: true });
+  } catch (err) {
+    console.warn('[Firestore] Audit log save note:', err);
+  }
+}
+
+/**
+ * Push all local records to Firebase Firestore (manual bulk push & migration)
  */
 export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean; count: number }> {
   try {
+    const { 
+      getStoredCampaigns, 
+      getStoredTransactions, 
+      getMembers, 
+      getStoredCreatorsList, 
+      getStoredAnnouncement,
+      getStoredPricingConfig,
+      getStoredAuditLogs 
+    } = await import('../utils/storage');
+
     const localCampaigns = getStoredCampaigns();
     const localTransactions = getStoredTransactions();
     const localMembers = getMembers();
     const localCreators = getStoredCreatorsList();
     const localAnnouncement = getStoredAnnouncement();
+    const localPricing = getStoredPricingConfig();
+    const localAuditLogs = getStoredAuditLogs();
 
     let count = 0;
 
     // Batch upload campaigns
     for (const c of localCampaigns) {
       if (c && c.id) {
-        await setDoc(doc(db, 'campaigns', c.id), c, { merge: true });
+        await syncCampaignToFirestore(c);
         count++;
       }
     }
@@ -402,7 +564,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // Batch upload transactions
     for (const t of localTransactions) {
       if (t && t.id) {
-        await setDoc(doc(db, 'transactions', t.id), t, { merge: true });
+        await syncTransactionToFirestore(t);
         count++;
       }
     }
@@ -410,7 +572,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // Batch upload members
     for (const m of localMembers) {
       if (m && m.id) {
-        await setDoc(doc(db, 'members', m.id), m, { merge: true });
+        await syncMemberToFirestore(m);
         count++;
       }
     }
@@ -418,15 +580,27 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // Batch upload creators
     for (const cr of localCreators) {
       if (cr && cr.phone) {
-        await setDoc(doc(db, 'creators', cr.phone), cr, { merge: true });
+        await syncCreatorToFirestore(cr);
         count++;
       }
     }
 
     // System configs
     if (localAnnouncement) {
-      await setDoc(doc(db, 'systemConfig', 'announcement'), localAnnouncement, { merge: true });
+      await syncAnnouncementToFirestore(localAnnouncement);
       count++;
+    }
+
+    if (localPricing) {
+      await syncPricingConfigToFirestore(localPricing);
+      count++;
+    }
+
+    for (const log of localAuditLogs.slice(0, 50)) {
+      if (log && log.id) {
+        await syncAuditLogToFirestore(log);
+        count++;
+      }
     }
 
     return { success: true, count };

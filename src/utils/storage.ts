@@ -1,5 +1,15 @@
 import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
+import {
+  syncCampaignToFirestore,
+  syncTransactionToFirestore,
+  syncMemberToFirestore,
+  deleteMemberFromFirestore,
+  syncCreatorToFirestore,
+  syncAnnouncementToFirestore,
+  syncPricingConfigToFirestore,
+  syncAuditLogToFirestore
+} from '../services/firestoreSync';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
@@ -283,6 +293,13 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
     localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
     setLastSyncTime(new Date().toISOString());
 
+    // Direct Sync to Firebase Firestore
+    for (const camp of sanitized) {
+      if (camp && camp.id) {
+        syncCampaignToFirestore(camp).catch(() => {});
+      }
+    }
+
     // Asynchronously push to backend server for multi-device sync
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
@@ -333,6 +350,14 @@ export const getStoredTransactions = (): Transaction[] => {
 export const saveStoredTransactions = (transactions: Transaction[]) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+
+    // Direct Sync to Firebase Firestore
+    for (const tx of transactions) {
+      if (tx && tx.id) {
+        syncTransactionToFirestore(tx).catch(() => {});
+      }
+    }
+
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
         method: 'POST',
@@ -379,6 +404,9 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
 export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
+    if (profile && profile.phone) {
+      syncCreatorToFirestore(profile).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save creator profile', e);
   }
@@ -402,6 +430,11 @@ export const getStoredCreatorsList = (): CreatorProfile[] => {
 export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
   try {
     localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(creators));
+    for (const c of creators) {
+      if (c && c.phone) {
+        syncCreatorToFirestore(c).catch(() => {});
+      }
+    }
   } catch (e) {
     console.error('Failed to save creators list', e);
   }
@@ -432,6 +465,9 @@ export const getStoredPricingConfig = (): SystemPricingConfig => {
 export const saveStoredPricingConfig = (config: SystemPricingConfig) => {
   try {
     localStorage.setItem(PRICING_CONFIG_KEY, JSON.stringify(config));
+    if (config) {
+      syncPricingConfigToFirestore(config).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save pricing config', e);
   }
@@ -602,6 +638,7 @@ export const recordAuditLog = (
     const current = getStoredAuditLogs();
     const updated = [newLog, ...current.slice(0, 199)]; // Keep latest 200 logs
     saveStoredAuditLogs(updated);
+    syncAuditLogToFirestore(newLog).catch(() => {});
   } catch (e) {
     console.error('Failed to record audit log', e);
   }
@@ -644,6 +681,9 @@ export const getStoredAnnouncement = (): AnnouncementBanner => {
 export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
   try {
     localStorage.setItem(ANNOUNCEMENT_KEY, JSON.stringify(ann));
+    if (ann) {
+      syncAnnouncementToFirestore(ann).catch(() => {});
+    }
     if (typeof fetch !== 'undefined') {
       fetch('/api/announcement', {
         method: 'POST',
@@ -925,6 +965,11 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 export const saveMembers = (members: MemberRecord[]): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
+    for (const m of members) {
+      if (m && m.id) {
+        syncMemberToFirestore(m).catch(() => {});
+      }
+    }
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
         method: 'POST',
@@ -949,6 +994,9 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
     allList.unshift(member);
   }
   saveMembers(allList);
+  if (member && member.id) {
+    syncMemberToFirestore(member).catch(() => {});
+  }
   if (typeof fetch !== 'undefined') {
     fetch('/api/members', {
       method: 'POST',
@@ -966,6 +1014,9 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
     return false;
   });
   saveMembers(filtered);
+  if (memberId) {
+    deleteMemberFromFirestore(memberId).catch(() => {});
+  }
   if (typeof fetch !== 'undefined') {
     fetch(`/api/members/${encodeURIComponent(memberId)}`, {
       method: 'DELETE'
@@ -1006,6 +1057,9 @@ export const saveTransaction = (tx: Transaction): void => {
   const current = getStoredTransactions();
   const updated = [tx, ...current];
   saveStoredTransactions(updated);
+  if (tx && tx.id) {
+    syncTransactionToFirestore(tx).catch(() => {});
+  }
   if (typeof fetch !== 'undefined') {
     fetch('/api/transactions', {
       method: 'POST',
