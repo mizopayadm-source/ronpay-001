@@ -118,6 +118,7 @@ export default function App() {
   const [adminApprovalCampaign, setAdminApprovalCampaign] = useState<Campaign | null>(null);
   const [isKumtluangManagerOpen, setIsKumtluangManagerOpen] = useState<boolean>(false);
   const [kumtluangInitialTab, setKumtluangInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('members_list');
+  const [kumtluangInitialCampaignId, setKumtluangInitialCampaignId] = useState<string | undefined>(undefined);
   const [isMemberRollPreviewOpen, setIsMemberRollPreviewOpen] = useState<boolean>(false);
   const [memberRollPreviewParams, setMemberRollPreviewParams] = useState<{
     format?: PreviewReportFormat;
@@ -308,8 +309,9 @@ export default function App() {
     reloadLocalData();
   };
 
-  const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => {
+  const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => {
     setKumtluangInitialTab(tab || 'members_list');
+    setKumtluangInitialCampaignId(campaignId);
     setIsKumtluangManagerOpen(true);
   };
 
@@ -691,12 +693,16 @@ export default function App() {
 
         <KumtluangMemberManagerModal
           isOpen={isKumtluangManagerOpen}
-          onClose={() => setIsKumtluangManagerOpen(false)}
+          onClose={() => {
+            setIsKumtluangManagerOpen(false);
+            setKumtluangInitialCampaignId(undefined);
+          }}
           language={language}
           creatorProfile={creatorProfile}
           campaigns={campaigns}
           transactions={transactions}
           initialTab={kumtluangInitialTab}
+          initialCampaignId={kumtluangInitialCampaignId}
           onDataUpdated={reloadLocalData}
           onOpenCreateQR={() => {
             setIsKumtluangManagerOpen(false);

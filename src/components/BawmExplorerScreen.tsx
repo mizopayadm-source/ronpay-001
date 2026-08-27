@@ -48,7 +48,7 @@ interface BawmExplorerScreenProps {
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
   onShareCampaign?: (campaign: Campaign) => void;
   onCategoryChange?: (category: BawmCategory) => void;
-  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => void;
   language?: Language;
 }
 
@@ -838,7 +838,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onOpenMemberRoll('members_list');
+                          onOpenMemberRoll('members_list', camp.id);
                         }}
                         className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
                         title="Open Member Roll"

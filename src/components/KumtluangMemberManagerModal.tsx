@@ -49,6 +49,7 @@ interface KumtluangMemberManagerModalProps {
   campaigns: Campaign[];
   transactions: Transaction[];
   initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports';
+  initialCampaignId?: string;
   onDataUpdated: () => void;
   onOpenCreateQR?: () => void;
 }
@@ -61,6 +62,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   campaigns,
   transactions,
   initialTab = 'members_list',
+  initialCampaignId,
   onDataUpdated,
   onOpenCreateQR
 }) => {
@@ -160,13 +162,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab || 'members_list');
-      const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
-      const defaultId = initialCamp?.id || (allowedCampaigns[0]?.id || 'cmp-kumtluang-1');
       
-      // Keep selectedCampaignId if already set, else default to first campaign
-      const activeId = selectedCampaignId && allowedCampaignIds.has(selectedCampaignId) 
-        ? selectedCampaignId 
-        : defaultId;
+      // Determine default campaign ID prioritizing initialCampaignId
+      let activeId = 'cmp-kumtluang-1';
+      if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
+        activeId = initialCampaignId;
+      } else if (selectedCampaignId && allowedCampaignIds.has(selectedCampaignId)) {
+        activeId = selectedCampaignId;
+      } else {
+        const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
+        activeId = initialCamp?.id || (allowedCampaigns[0]?.id || 'cmp-kumtluang-1');
+      }
+
       setSelectedCampaignId(activeId);
       setQuickEntryCampaignId(activeId);
       setRegTargetCampaignId(activeId);
@@ -180,7 +187,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         setNewOrgCode(foundCamp.orgCode);
       }
     }
-  }, [isOpen, allowedCampaigns, initialTab]);
+  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId]);
 
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
@@ -347,9 +354,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewDependents(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Handle Full Phone Input in Registration (Max 10 digits, auto-fills last 4 digits)
+  const handleFullPhoneChange = (val: string) => {
+    const cleaned = val.replace(/\D/g, '').slice(0, 10);
+    setNewFullPhone(cleaned);
+    if (cleaned.length >= 4) {
+      const p4 = cleaned.slice(-4);
+      setNewPhone4(p4);
+      handlePhoneChange(p4);
+    }
+  };
+
   // Check duplicate when typing in Registration
   const handlePhoneChange = (val: string) => {
-    const cleaned = val.replace(/[^0-9]/g, '');
+    const cleaned = val.replace(/[^0-9]/g, '').slice(0, 4);
     setNewPhone4(cleaned);
     if (cleaned.length >= 4) {
       const p4 = cleaned.slice(-4);
@@ -372,7 +390,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return;
     }
     if (!newPhone4 || newPhone4.length < 4) {
-      alert(language === 'english' ? 'Please enter 4 digits phone suffix' : 'Phone number tawp digit 4 chhu lut rawh');
+      alert(language === 'english' ? 'Please enter 4 digits phone suffix or 10-digit phone number' : 'Phone number (digit 10) emaw phone tawp digit 4 chhu lut rawh');
       return;
     }
 
@@ -408,7 +426,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const updated = getMembers(selectedCampaignId);
     setMembers(updated);
 
-    setRegSuccess(`Member thar [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
+    setRegSuccess(`Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
     setSelectedMember(newM);
     setSelectedPayerType('primary');
     setQuickPhone4(newM.phoneLast4);
@@ -416,7 +434,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       setQuickEntryCampaignId(targetCamp.id);
     }
     
-    // Reset form
+    // Reset form so user can immediately register the next member
     setNewHming('');
     setNewPhone4('');
     setNewFullPhone('');
@@ -426,10 +444,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setDuplicateWarning(null);
     onDataUpdated();
     
+    // Do not automatically switch tabs away so creator can add multiple members continuously
     setTimeout(() => {
       setRegSuccess(null);
-      setActiveTab('members_list');
-    }, 1800);
+    }, 6000);
   };
 
   // Open Edit Member Modal
@@ -1070,9 +1088,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           {activeTab === 'register_member' && (
             <div className="max-w-xl mx-auto space-y-4">
               {regSuccess && (
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{regSuccess}</span>
+                <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-3 text-xs text-emerald-950 animate-fadeIn shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-black text-emerald-900">{regSuccess}</p>
+                      <p className="text-[10px] text-emerald-700 font-medium">A dawt chhungkaw member dang i chhunzawm nghal thei e (Form a in-reset sa).</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('members_list')}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 transition cursor-pointer shadow-xs active:scale-95"
+                  >
+                    Roll List En Rawh &rarr;
+                  </button>
                 </div>
               )}
 
@@ -1127,6 +1157,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   />
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Full Phone Number (Digit 10) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                      Auto-fills Last 4 Digits
+                    </span>
+                  </div>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={newFullPhone}
+                    onChange={(e) => handleFullPhoneChange(e.target.value)}
+                    placeholder="e.g. 9862123456 (Digit 10 chiah)"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -1152,7 +1201,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       maxLength={4}
                       value={newPhone4}
                       onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="e.g. 1460"
+                      placeholder="e.g. 3456"
                       className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
                       required
                     />
@@ -1167,38 +1216,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Full Phone (Optional)</label>
-                    <input
-                      type="tel"
-                      value={newFullPhone}
-                      onChange={(e) => setNewFullPhone(e.target.value)}
-                      placeholder="e.g. 9436141460"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Section / Bial / Veng
-                    </label>
-                    <select
-                      value={newSection}
-                      onChange={(e) => setNewSection(e.target.value)}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    >
-                      <option value="">-- Thlang Rawh (Bial / Section) --</option>
-                      {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
-                        ? activeScopedCampaign.definedSections
-                        : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                      ).map((sec, idx) => (
-                        <option key={idx} value={sec}>
-                          {sec}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Section / Bial / Veng
+                  </label>
+                  <select
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="">-- Thlang Rawh (Bial / Section) --</option>
+                    {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
+                      ? activeScopedCampaign.definedSections
+                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                    ).map((sec, idx) => (
+                      <option key={idx} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Member Profile Photo Upload */}
@@ -1317,13 +1353,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   )}
                 </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Chhungkaw Record Vawng Rawh (Save & Link to Roll)</span>
-                </button>
+                <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                  <button
+                    type="submit"
+                    className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Member Vawng Rawh (Save & Add Next)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('members_list')}
+                    className="py-3.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <Users className="w-4 h-4 text-slate-600" />
+                    <span>Member List En Rawh</span>
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -1935,6 +1981,82 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 />
               </div>
 
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10.5px] font-bold text-slate-700">
+                    Full Phone Number (Digit 10)
+                  </label>
+                  <span className="text-[9.5px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                    Auto-fills Last 4
+                  </span>
+                </div>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={editFullPhone}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setEditFullPhone(digits);
+                    if (digits.length >= 4) {
+                      setEditPhone4(digits.slice(-4));
+                    }
+                  }}
+                  placeholder="e.g. 9862123456"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Pawl Code (Prefix)
+                  </label>
+                  <input
+                    type="text"
+                    value={editOrgCode}
+                    onChange={(e) => setEditOrgCode(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 uppercase focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Phone Last 4 Digits
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={editPhone4}
+                    onChange={(e) => setEditPhone4(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  Section / Bial
+                </label>
+                <select
+                  value={editSection}
+                  onChange={(e) => setEditSection(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                >
+                  <option value="">-- Thlang Rawh --</option>
+                  {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
+                    ? activeScopedCampaign.definedSections
+                    : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                  ).map((sec, idx) => (
+                    <option key={idx} value={sec}>
+                      {sec}
+                    </option>
+                  ))}
+                  {editSection && !activeScopedCampaign?.definedSections?.includes(editSection) && (
+                    <option value={editSection}>{editSection} (Existing)</option>
+                  )}
+                </select>
+              </div>
+
               {/* Photo Upload in Edit Modal */}
               <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                 <label className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
@@ -1976,71 +2098,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       </button>
                     )}
                   </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Pawl Code (Prefix)
-                  </label>
-                  <input
-                    type="text"
-                    value={editOrgCode}
-                    onChange={(e) => setEditOrgCode(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 uppercase focus:outline-none focus:bg-white focus:border-indigo-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Phone Last 4 Digits
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    value={editPhone4}
-                    onChange={(e) => setEditPhone4(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Full Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    value={editFullPhone}
-                    onChange={(e) => setEditFullPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Section / Bial
-                  </label>
-                  <select
-                    value={editSection}
-                    onChange={(e) => setEditSection(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                  >
-                    <option value="">-- Thlang Rawh --</option>
-                    {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
-                      ? activeScopedCampaign.definedSections
-                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                    ).map((sec, idx) => (
-                      <option key={idx} value={sec}>
-                        {sec}
-                      </option>
-                    ))}
-                    {editSection && !activeScopedCampaign?.definedSections?.includes(editSection) && (
-                      <option value={editSection}>{editSection} (Existing)</option>
-                    )}
-                  </select>
                 </div>
               </div>
 

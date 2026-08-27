@@ -55,7 +55,7 @@ interface HomeScreenProps {
   creatorProfile: CreatorProfile;
   announcement?: AnnouncementBanner;
   onOpenReports: () => void;
-  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => void;
   onShowBalance: () => void;
   onShowBankTransfer: () => void;
   onOpenPhonePePortal?: () => void;
@@ -486,7 +486,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onOpenMemberRoll('members_list');
+                    const firstKumtluang = campaigns.find(c => c.category === 'kumtluang');
+                    onOpenMemberRoll('members_list', firstKumtluang?.id);
                   }}
                   className="text-[8.5px] font-black text-white bg-blue-600 hover:bg-blue-700 px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
                   title="Open Member Roll"
@@ -605,7 +606,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onOpenMemberRoll('members_list');
+                          onOpenMemberRoll('members_list', camp.id);
                         }}
                         title="Open Member Roll"
                         className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
