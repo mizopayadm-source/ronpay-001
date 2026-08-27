@@ -22,10 +22,8 @@ import {
   syncMemberToFirestore,
   deleteMemberFromFirestore,
   deleteCampaignFromFirestore,
-  deleteTransactionFromFirestore,
   syncCreatorToFirestore,
   syncAnnouncementToFirestore,
-  syncPricingConfigToFirestore,
   pushAllLocalDataToFirestore
 } from '../services/firestoreSync';
 
@@ -111,7 +109,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
       return serverData;
     }
   } catch (err) {
-    console.warn('Network sync offline or server unreachable (using local cache & Firestore):', err);
+    console.warn('Network sync offline or server unreachable (using local storage):', err);
   }
   return null;
 }
@@ -126,6 +124,7 @@ export async function fetchCampaignById(campaignId: string): Promise<Campaign | 
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.campaign) {
+        // Save to local storage
         const current = getStoredCampaigns();
         const exists = current.some(c => c.id === json.campaign.id);
         if (!exists) {
@@ -144,10 +143,10 @@ export async function fetchCampaignById(campaignId: string): Promise<Campaign | 
  * Save new or updated campaign to Firestore & Server immediately
  */
 export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
-  // 1. Direct write to Firestore
-  await syncCampaignToFirestore(campaign);
+  // Sync to Firestore
+  syncCampaignToFirestore(campaign).catch(() => {});
   
-  // 2. Also post to local express server
+  // Also post to local express server
   try {
     await fetch('/api/campaigns', {
       method: 'POST',
@@ -163,10 +162,10 @@ export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
  * Save new member to Firestore & Server immediately
  */
 export async function saveMemberToServer(member: MemberRecord): Promise<void> {
-  // 1. Direct write to Firestore
-  await syncMemberToFirestore(member);
+  // Sync to Firestore
+  syncMemberToFirestore(member).catch(() => {});
 
-  // 2. Also post to local express server
+  // Also post to local express server
   try {
     await fetch('/api/members', {
       method: 'POST',
@@ -182,10 +181,10 @@ export async function saveMemberToServer(member: MemberRecord): Promise<void> {
  * Delete member on Firestore & Server immediately
  */
 export async function deleteMemberFromServer(memberId: string): Promise<void> {
-  // 1. Direct delete on Firestore
-  await deleteMemberFromFirestore(memberId);
+  // Sync to Firestore
+  deleteMemberFromFirestore(memberId).catch(() => {});
 
-  // 2. Also delete on server
+  // Also delete on server
   try {
     await fetch(`/api/members/${encodeURIComponent(memberId)}`, {
       method: 'DELETE',
@@ -199,10 +198,10 @@ export async function deleteMemberFromServer(memberId: string): Promise<void> {
  * Save transaction to Firestore & Server immediately
  */
 export async function saveTransactionToServer(tx: Transaction): Promise<void> {
-  // 1. Direct write to Firestore
-  await syncTransactionToFirestore(tx);
+  // Sync to Firestore
+  syncTransactionToFirestore(tx).catch(() => {});
 
-  // 2. Also post to local server
+  // Also post to local server
   try {
     await fetch('/api/transactions', {
       method: 'POST',
@@ -218,7 +217,8 @@ export async function saveTransactionToServer(tx: Transaction): Promise<void> {
  * Save announcement to Firestore & Server immediately
  */
 export async function saveAnnouncementToServer(ann: AnnouncementBanner): Promise<void> {
-  await syncAnnouncementToFirestore(ann);
+  // Sync to Firestore
+  syncAnnouncementToFirestore(ann).catch(() => {});
 
   try {
     await fetch('/api/announcement', {
@@ -238,9 +238,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   // 1. Start real-time Firestore listeners
   const stopFirestore = initFirestoreRealtimeSync({
     onTransactionsUpdate: (transactions) => {
-      try {
-        localStorage.setItem('ronpay_transactions_v2', JSON.stringify(transactions));
-      } catch (e) {}
       if (onSyncUpdate) {
         onSyncUpdate({
           campaigns: getStoredCampaigns(),
@@ -254,9 +251,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
       }
     },
     onCampaignsUpdate: (campaigns) => {
-      try {
-        localStorage.setItem('ronpay_campaigns_v2', JSON.stringify(campaigns));
-      } catch (e) {}
       if (onSyncUpdate) {
         onSyncUpdate({
           campaigns,
@@ -270,9 +264,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
       }
     },
     onMembersUpdate: (members) => {
-      try {
-        localStorage.setItem('ronpay_kumtluang_members_v1', JSON.stringify(members));
-      } catch (e) {}
       if (onSyncUpdate) {
         onSyncUpdate({
           campaigns: getStoredCampaigns(),
@@ -286,9 +277,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
       }
     },
     onCreatorsUpdate: (creators) => {
-      try {
-        localStorage.setItem('ronpay_creators_list_v2', JSON.stringify(creators));
-      } catch (e) {}
       if (onSyncUpdate) {
         onSyncUpdate({
           campaigns: getStoredCampaigns(),
@@ -302,9 +290,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
       }
     },
     onAnnouncementUpdate: (announcement) => {
-      try {
-        localStorage.setItem('ronpay_announcement_v1', JSON.stringify(announcement));
-      } catch (e) {}
       if (onSyncUpdate) {
         onSyncUpdate({
           campaigns: getStoredCampaigns(),
@@ -314,38 +299,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
           pricingConfig: getStoredPricingConfig(),
           announcement,
           auditLogs: getStoredAuditLogs()
-        });
-      }
-    },
-    onPricingConfigUpdate: (pricingConfig) => {
-      try {
-        localStorage.setItem('ronpay_pricing_config_v1', JSON.stringify(pricingConfig));
-      } catch (e) {}
-      if (onSyncUpdate) {
-        onSyncUpdate({
-          campaigns: getStoredCampaigns(),
-          members: getMembers(),
-          transactions: getStoredTransactions(),
-          creators: getStoredCreatorsList(),
-          pricingConfig,
-          announcement: getStoredAnnouncement(),
-          auditLogs: getStoredAuditLogs()
-        });
-      }
-    },
-    onAuditLogsUpdate: (auditLogs) => {
-      try {
-        localStorage.setItem('ronpay_audit_logs_v1', JSON.stringify(auditLogs));
-      } catch (e) {}
-      if (onSyncUpdate) {
-        onSyncUpdate({
-          campaigns: getStoredCampaigns(),
-          members: getMembers(),
-          transactions: getStoredTransactions(),
-          creators: getStoredCreatorsList(),
-          pricingConfig: getStoredPricingConfig(),
-          announcement: getStoredAnnouncement(),
-          auditLogs
         });
       }
     }
