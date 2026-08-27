@@ -372,7 +372,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [triggerLiveGPS]);
 
   return (
-    <header className="Header-wrapper bg-slate-950 text-white shadow-xl relative shrink-0 border-b border-slate-800 sticky top-0 z-30 transition-all">
+    <header className="Header-wrapper bg-slate-950 text-white shadow-xl relative shrink-0 border-b border-slate-800 sticky top-0 z-30 transition-all overflow-hidden">
       {/* Subtle glowing ambient lighting */}
       <div className="absolute -right-6 -top-6 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute left-1/4 -bottom-6 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />

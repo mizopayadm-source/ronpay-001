@@ -32,7 +32,7 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
   const upiLink = generateUPILink({
     upiId: effectiveUpiId,
     name: effectiveName,
-    note: `RonPay ${campaign.category.toUpperCase()} - ${campaign.title}`
+    note: `RonPay:${campaign.id}`
   });
 
   const smartWebLink = generateCampaignWebLink(campaign.id, customDomainInput);

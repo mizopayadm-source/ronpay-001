@@ -144,7 +144,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     return clean.substring(0, 3) || 'MEM';
   };
 
-  // Initialize subcategories from campaign & Auto-load default member for this specific Kumtluang campaign
+  // Initialize subcategories from campaign
   useEffect(() => {
     if (campaign?.customAmount && campaign.customAmount > 0) {
       setStandardAmount(campaign.customAmount);
@@ -157,24 +157,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           initialMap[cat] = (idx + 1) * 100;
         });
         setSubcatAmounts(initialMap);
-      }
-
-      // Auto-load member from local storage ONLY for this specific Bawm/Campaign
-      const bawmMembers = campaign?.id ? getMembers(campaign.id) : getMembers();
-      if (bawmMembers.length > 0 && !selectedMember && !donorName) {
-        const defaultM = bawmMembers[0];
-        setSelectedMember(defaultM);
-        setDonorName(defaultM.name);
-        setDonorPhone(defaultM.fullPhone || `943614${defaultM.phoneLast4}`);
-        setDonorSection(defaultM.section || 'Section A');
-        setPhoneSearchQuery(defaultM.phoneLast4);
-        setSelectedPayerType('primary');
-      } else if (bawmMembers.length === 0) {
-        setSelectedMember(null);
-        setDonorName('');
-        setDonorPhone('');
-        setDonorSection('');
-        setPhoneSearchQuery('');
       }
     }
   }, [category, campaign]);

@@ -500,7 +500,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* 4. Recharge & Bill Payments Section */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5">
+      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5 overflow-hidden">
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -516,8 +516,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         {/* Scrollable Container with horizontal swipe */}
-        <div className="overflow-x-auto pb-1.5 pt-0.5 -mx-1 px-1 scroll-smooth">
-          <div className="flex gap-2 sm:gap-3 min-w-max">
+        <div className="overflow-x-auto pb-1.5 pt-0.5 scroll-smooth no-scrollbar">
+          <div className="flex gap-2 sm:gap-3 min-w-max px-0.5">
             {BILL_SERVICES.map(service => (
               <button
                 key={service.id}

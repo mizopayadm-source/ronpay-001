@@ -411,9 +411,9 @@ export default function App() {
   const userVisibleTransactions = transactions.filter(t => isUserPaidTransaction(t, userPaidIds, creatorProfile));
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
       {/* Container with responsive boundary */}
-      <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-2xl transition-all duration-300 relative`}>
+      <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
         {/* Offline & Connection Status Banner */}
         <OfflineStatusBanner onRefreshCache={reloadLocalData} />
 
@@ -433,7 +433,7 @@ export default function App() {
         />
 
         {/* Main Body Screen Router */}
-        <main className="flex-1 px-3 sm:px-4 py-4 pb-20 overflow-y-auto">
+        <main className="flex-1 w-full max-w-full px-3 sm:px-4 py-4 pb-20 overflow-y-auto overflow-x-hidden">
           {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}

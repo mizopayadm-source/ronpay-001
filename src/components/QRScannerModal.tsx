@@ -106,12 +106,17 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const tn = (params.get('tn') || '').trim();
       const am = params.get('am');
 
-      // Check if tn contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx" or "cmp-xxx")
+      // Check if tn contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx", "RonPay:123", "cmp-xxx", etc.)
       let targetId = '';
-      if (tn.startsWith('RonPay:')) {
-        targetId = tn.replace('RonPay:', '').trim();
-      } else if (tn.startsWith('cmp-')) {
-        targetId = tn.trim();
+      const decodedTn = decodeURIComponent(tn);
+      if (decodedTn.includes('RonPay:')) {
+        const afterRonPay = decodedTn.split('RonPay:')[1]?.trim() || '';
+        targetId = afterRonPay.split(':')[0]?.split(' ')[0]?.split('&')[0]?.trim() || '';
+      } else if (decodedTn.startsWith('cmp-')) {
+        targetId = decodedTn.trim();
+      } else if (decodedTn.toLowerCase().includes('cmp-')) {
+        const match = decodedTn.match(/cmp-[a-zA-Z0-9_-]+/i);
+        if (match) targetId = match[0];
       }
 
       if (targetId) {
@@ -120,6 +125,18 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           return {
             type: found.status === 'pending_approval' ? 'pending' : found.category,
             campaign: found,
+            rawText: cleanText
+          };
+        }
+      }
+
+      // Check if pa (VPA) matches a known campaign UPI ID
+      if (pa) {
+        const foundByUpi = campaigns.find(c => c.upiId && c.upiId.toLowerCase() === pa.toLowerCase());
+        if (foundByUpi) {
+          return {
+            type: foundByUpi.status === 'pending_approval' ? 'pending' : foundByUpi.category,
+            campaign: foundByUpi,
             rawText: cleanText
           };
         }
