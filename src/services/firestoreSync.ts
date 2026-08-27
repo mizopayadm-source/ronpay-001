@@ -533,23 +533,26 @@ export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void>
  */
 export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean; count: number }> {
   try {
-    const { 
-      getStoredCampaigns, 
-      getStoredTransactions, 
-      getMembers, 
-      getStoredCreatorsList, 
-      getStoredAnnouncement,
-      getStoredPricingConfig,
-      getStoredAuditLogs 
-    } = await import('../utils/storage');
+    const rawCampaigns = localStorage.getItem('ronpay_campaigns_v2');
+    const localCampaigns: Campaign[] = rawCampaigns ? JSON.parse(rawCampaigns) : [];
+    
+    const rawTransactions = localStorage.getItem('ronpay_transactions_v2');
+    const localTransactions: Transaction[] = rawTransactions ? JSON.parse(rawTransactions) : [];
 
-    const localCampaigns = getStoredCampaigns();
-    const localTransactions = getStoredTransactions();
-    const localMembers = getMembers();
-    const localCreators = getStoredCreatorsList();
-    const localAnnouncement = getStoredAnnouncement();
-    const localPricing = getStoredPricingConfig();
-    const localAuditLogs = getStoredAuditLogs();
+    const rawMembers = localStorage.getItem('ronpay_kumtluang_members_v1');
+    const localMembers: MemberRecord[] = rawMembers ? JSON.parse(rawMembers) : [];
+
+    const rawCreators = localStorage.getItem('ronpay_creators_list_v2');
+    const localCreators: CreatorProfile[] = rawCreators ? JSON.parse(rawCreators) : [];
+
+    const rawAnn = localStorage.getItem('ronpay_announcement_v1');
+    const localAnnouncement: AnnouncementBanner | null = rawAnn ? JSON.parse(rawAnn) : null;
+
+    const rawPricing = localStorage.getItem('ronpay_pricing_config_v1');
+    const localPricing: SystemPricingConfig | null = rawPricing ? JSON.parse(rawPricing) : null;
+
+    const rawLogs = localStorage.getItem('ronpay_audit_logs_v1');
+    const localAuditLogs: AuditLog[] = rawLogs ? JSON.parse(rawLogs) : [];
 
     let count = 0;
 
