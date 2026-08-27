@@ -319,25 +319,7 @@ interface DatabaseSchema {
   lastUpdated: string;
 }
 
-function getDatabase(): DatabaseSchema {
-  try {
-    if (fs.existsSync(DB_FILE_PATH)) {
-      const data = fs.readFileSync(DB_FILE_PATH, 'utf-8');
-      const parsed = JSON.parse(data);
-      return {
-        campaigns: Array.isArray(parsed.campaigns) ? parsed.campaigns : [],
-        members: Array.isArray(parsed.members) ? parsed.members : [],
-        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
-        creators: Array.isArray(parsed.creators) ? parsed.creators : [],
-        pricingConfig: parsed.pricingConfig || null,
-        announcement: parsed.announcement || null,
-        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-        lastUpdated: parsed.lastUpdated || new Date().toISOString()
-      };
-    }
-  } catch (err) {
-    console.error('Failed reading DB file:', err);
-  }
+function getDefaultDatabase(): DatabaseSchema {
   return {
     campaigns: [],
     members: [],
@@ -350,6 +332,31 @@ function getDatabase(): DatabaseSchema {
   };
 }
 
+function getDatabase(): DatabaseSchema {
+  try {
+    if (fs.existsSync(DB_FILE_PATH)) {
+      const data = fs.readFileSync(DB_FILE_PATH, 'utf-8');
+      if (!data || !data.trim()) {
+        return getDefaultDatabase();
+      }
+      const parsed = JSON.parse(data);
+      return {
+        campaigns: Array.isArray(parsed?.campaigns) ? parsed.campaigns : [],
+        members: Array.isArray(parsed?.members) ? parsed.members : [],
+        transactions: Array.isArray(parsed?.transactions) ? parsed.transactions : [],
+        creators: Array.isArray(parsed?.creators) ? parsed.creators : [],
+        pricingConfig: parsed?.pricingConfig || null,
+        announcement: parsed?.announcement || null,
+        auditLogs: Array.isArray(parsed?.auditLogs) ? parsed.auditLogs : [],
+        lastUpdated: parsed?.lastUpdated || new Date().toISOString()
+      };
+    }
+  } catch (err) {
+    console.warn('Failed reading DB file, falling back to empty schema:', err);
+  }
+  return getDefaultDatabase();
+}
+
 function saveDatabase(db: DatabaseSchema) {
   try {
     const dir = path.dirname(DB_FILE_PATH);
@@ -357,7 +364,9 @@ function saveDatabase(db: DatabaseSchema) {
       fs.mkdirSync(dir, { recursive: true });
     }
     db.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(db, null, 2), 'utf-8');
+    const tempFilePath = `${DB_FILE_PATH}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
+    fs.writeFileSync(tempFilePath, JSON.stringify(db, null, 2), 'utf-8');
+    fs.renameSync(tempFilePath, DB_FILE_PATH);
   } catch (err) {
     console.error('Failed saving DB file:', err);
   }
