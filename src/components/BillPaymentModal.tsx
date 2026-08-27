@@ -10,22 +10,15 @@ import {
   Droplet, 
   Wifi, 
   CreditCard,
-  Building2,
   Landmark,
   Ticket,
-  Search,
   Sparkles,
   ChevronRight,
   ShieldCheck,
-  Calendar,
-  User,
-  Phone,
-  MapPin,
   ExternalLink,
   Info,
-  Receipt,
-  GraduationCap,
-  Shield
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { BillService } from '../types';
 import { Language, TRANSLATIONS } from '../utils/translations';
@@ -76,20 +69,11 @@ const FASTAG_BANKS = [
   'State Bank of India (SBI FASTag)',
   'HDFC Bank FASTag',
   'ICICI Bank FASTag',
-  'Paytm / Airtel Payments Bank FASTag',
   'Axis Bank FASTag',
+  'Airtel Payments Bank FASTag',
   'IDFC First Bank FASTag',
-  'Kotak Mahindra Bank FASTag'
-];
-
-const ELECTRICITY_BOARDS = [
-  'P&ED Mizoram (Power & Electricity Department)',
-  'P&ED Aizawl Circle (Urban & Rural)',
-  'P&ED Lunglei Circle (Urban & Rural)',
-  'P&ED Champhai Circle',
-  'P&ED Kolasib Circle',
-  'P&ED Serchhip Circle',
-  'P&ED Siaha / Lawngtlai Circle'
+  'Kotak Mahindra Bank FASTag',
+  'Paytm Payments Bank FASTag'
 ];
 
 const DTH_OPERATORS = [
@@ -138,6 +122,217 @@ const INSURANCE_PROVIDERS = [
   'Bajaj Allianz Life'
 ];
 
+// Mock Databases for realistic BBPS validation
+interface ElectricityBillRecord {
+  consumerName: string;
+  accountNo: string;
+  subDivision: string;
+  dueDate: string;
+  billAmount: number;
+  meterNo: string;
+  units: number;
+}
+
+const ELECTRICITY_MOCK_RECORDS: Record<string, ElectricityBillRecord> = {
+  '1002948201': {
+    consumerName: 'Lalmuanpuia Ralte',
+    accountNo: '1002948201',
+    subDivision: 'Aizawl Power Division I (Chanmari / Bawngkawn)',
+    dueDate: '15/09/2026',
+    billAmount: 940,
+    meterNo: 'MTR-AZ-9842',
+    units: 145
+  },
+  '2004819203': {
+    consumerName: 'Rohlupuia Sailo',
+    accountNo: '2004819203',
+    subDivision: 'Lunglei Power Division (Venglai / Bazar)',
+    dueDate: '18/09/2026',
+    billAmount: 1480,
+    meterNo: 'MTR-LG-7719',
+    units: 230
+  },
+  '3001827492': {
+    consumerName: 'Zodinpuii',
+    accountNo: '3001827492',
+    subDivision: 'Champhai Power Division (Vengsang / Kahrawt)',
+    dueDate: '20/09/2026',
+    billAmount: 760,
+    meterNo: 'MTR-CP-3312',
+    units: 110
+  },
+  '4005918234': {
+    consumerName: 'C. Lalrintluanga',
+    accountNo: '4005918234',
+    subDivision: 'Kolasib Power Division (Diakkawn)',
+    dueDate: '22/09/2026',
+    billAmount: 1120,
+    meterNo: 'MTR-KL-5541',
+    units: 175
+  },
+  '5006821901': {
+    consumerName: 'Vanlalruati',
+    accountNo: '5006821901',
+    subDivision: 'Serchhip Power Division (New Serchhip)',
+    dueDate: '25/09/2026',
+    billAmount: 890,
+    meterNo: 'MTR-SC-6610',
+    units: 135
+  }
+};
+
+interface WaterBillRecord {
+  consumerName: string;
+  accountNo: string;
+  subDivisionOrVeng: string;
+  dueDate: string;
+  billAmount: number;
+  meterNo: string;
+  liters: number;
+}
+
+const WATER_MOCK_RECORDS: Record<string, WaterBillRecord> = {
+  'PHED/AIZ/2024/0981': {
+    consumerName: 'Zohmangaiha',
+    accountNo: 'PHED/AIZ/2024/0981',
+    subDivisionOrVeng: 'Mission Veng Sub-Division, Aizawl',
+    dueDate: '10/09/2026',
+    billAmount: 420,
+    meterNo: 'W-AZ-8821',
+    liters: 16000
+  },
+  'AIZ0981': {
+    consumerName: 'Zohmangaiha',
+    accountNo: 'PHED/AIZ/2024/0981',
+    subDivisionOrVeng: 'Mission Veng Sub-Division, Aizawl',
+    dueDate: '10/09/2026',
+    billAmount: 420,
+    meterNo: 'W-AZ-8821',
+    liters: 16000
+  },
+  'PHED/LGL/2024/1102': {
+    consumerName: 'K. Vanlalhruaia',
+    accountNo: 'PHED/LGL/2024/1102',
+    subDivisionOrVeng: 'Bazar Veng PHED Division, Lunglei',
+    dueDate: '12/09/2026',
+    billAmount: 650,
+    meterNo: 'W-LG-4412',
+    liters: 24000
+  },
+  'LGL1102': {
+    consumerName: 'K. Vanlalhruaia',
+    accountNo: 'PHED/LGL/2024/1102',
+    subDivisionOrVeng: 'Bazar Veng PHED Division, Lunglei',
+    dueDate: '12/09/2026',
+    billAmount: 650,
+    meterNo: 'W-LG-4412',
+    liters: 24000
+  },
+  'PHED/CMP/2024/0419': {
+    consumerName: 'Malsawmtluanga',
+    accountNo: 'PHED/CMP/2024/0419',
+    subDivisionOrVeng: 'Champhai Vengthlang Division',
+    dueDate: '15/09/2026',
+    billAmount: 380,
+    meterNo: 'W-CP-1920',
+    liters: 14000
+  },
+  'PHED/KOL/2024/0211': {
+    consumerName: 'H. Lalrammawia',
+    accountNo: 'PHED/KOL/2024/0211',
+    subDivisionOrVeng: 'Kolasib Town Division',
+    dueDate: '18/09/2026',
+    billAmount: 510,
+    meterNo: 'W-KL-3109',
+    liters: 19000
+  }
+};
+
+interface FastagRecord {
+  vehicleNo: string;
+  ownerName: string;
+  vehicleModel: string;
+  bank: string;
+  tagStatus: string;
+  tagId: string;
+  suggestedRecharge: number;
+}
+
+const FASTAG_MOCK_RECORDS: Record<string, FastagRecord> = {
+  'MZ01T5432': {
+    vehicleNo: 'MZ-01-T-5432',
+    ownerName: 'Lalremruata',
+    vehicleModel: 'Maruti Suzuki WagonR (Commercial Taxi - Aizawl)',
+    bank: 'State Bank of India (SBI FASTag)',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA820391823',
+    suggestedRecharge: 500
+  },
+  'MZ-01-T-5432': {
+    vehicleNo: 'MZ-01-T-5432',
+    ownerName: 'Lalremruata',
+    vehicleModel: 'Maruti Suzuki WagonR (Commercial Taxi - Aizawl)',
+    bank: 'State Bank of India (SBI FASTag)',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA820391823',
+    suggestedRecharge: 500
+  },
+  'MZ01A1234': {
+    vehicleNo: 'MZ-01-A-1234',
+    ownerName: 'David Lalhmingliana',
+    vehicleModel: 'Hyundai Creta SX (Private LMV - Aizawl)',
+    bank: 'HDFC Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA991820491',
+    suggestedRecharge: 1000
+  },
+  'MZ-01-A-1234': {
+    vehicleNo: 'MZ-01-A-1234',
+    ownerName: 'David Lalhmingliana',
+    vehicleModel: 'Hyundai Creta SX (Private LMV - Aizawl)',
+    bank: 'HDFC Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA991820491',
+    suggestedRecharge: 1000
+  },
+  'MZ02B9911': {
+    vehicleNo: 'MZ-02-B-9911',
+    ownerName: 'Vanlalpeka',
+    vehicleModel: 'Mahindra Bolero Camper (Commercial - Lunglei)',
+    bank: 'ICICI Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA109283748',
+    suggestedRecharge: 500
+  },
+  'MZ-02-B-9911': {
+    vehicleNo: 'MZ-02-B-9911',
+    ownerName: 'Vanlalpeka',
+    vehicleModel: 'Mahindra Bolero Camper (Commercial - Lunglei)',
+    bank: 'ICICI Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA109283748',
+    suggestedRecharge: 500
+  },
+  'MZ04C7788': {
+    vehicleNo: 'MZ-04-C-7788',
+    ownerName: 'Lalrosanga',
+    vehicleModel: 'Ashok Leyland Truck (Heavy Vehicle - Champhai)',
+    bank: 'Axis Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA778899001',
+    suggestedRecharge: 2000
+  },
+  'MZ-04-C-7788': {
+    vehicleNo: 'MZ-04-C-7788',
+    ownerName: 'Lalrosanga',
+    vehicleModel: 'Ashok Leyland Truck (Heavy Vehicle - Champhai)',
+    bank: 'Axis Bank FASTag',
+    tagStatus: 'ACTIVE / NPCI LINKED',
+    tagId: '34161FA778899001',
+    suggestedRecharge: 2000
+  }
+};
+
 export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   service,
   onClose,
@@ -148,19 +343,17 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   const [isPaying, setIsPaying] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isFetchingBill, setIsFetchingBill] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const t = TRANSLATIONS[language];
 
   // Specific form states
   const [phone, setPhone] = useState<string>('');
   const [operator, setOperator] = useState<string>('Jio');
-  const [circle, setCircle] = useState<string>('Mizoram / North East');
   const [selectedPlan, setSelectedPlan] = useState<RechargePlan | null>(null);
 
   // Electricity states
-  const [electricBoard, setElectricBoard] = useState<string>(ELECTRICITY_BOARDS[0]);
   const [consumerNumber, setConsumerNumber] = useState<string>('');
-  const [subDivision, setSubDivision] = useState<string>('');
 
   // FASTag states
   const [vehicleNumber, setVehicleNumber] = useState<string>('');
@@ -172,13 +365,11 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
   // Water Bill states
   const [waterConsumerId, setWaterConsumerId] = useState<string>('');
-  const [waterVeng, setWaterVeng] = useState<string>('');
 
   // Municipal Tax states
   const [municipalAuthority, setMunicipalAuthority] = useState<string>(MUNICIPAL_AUTHORITIES[0]);
   const [taxType, setTaxType] = useState<string>(TAX_TYPES[0]);
   const [holdingNo, setHoldingNo] = useState<string>('');
-  const [taxpayerName, setTaxpayerName] = useState<string>('');
 
   // Gas states
   const [gasAgency, setGasAgency] = useState<string>('Aizawl Indane Gas Agency (Chanmari)');
@@ -216,10 +407,11 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
     subDivisionOrLocality: string;
     portalUrl: string;
     status: string;
+    meterNo?: string;
     breakdown?: { label: string; amount: number }[];
   } | null>(null);
 
-  // Reset state on service change without forcing hardcoded amounts
+  // Clean reset on service change without forcing hardcoded auto-fetch
   useEffect(() => {
     if (service) {
       setIsSuccess(false);
@@ -228,131 +420,189 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
       setAmount('');
       setLinkedBillData(null);
       setIsFetchingBill(false);
-
-      // Auto link defaults for Electric, Water, FASTag on open for convenience
-      if (service.id === 'electricity') {
-        handleFetchLiveBill('electricity', '1002948201');
-      } else if (service.id === 'water') {
-        handleFetchLiveBill('water', 'PHED/AIZ/2024/0981');
-      } else if (service.id === 'fastag') {
-        handleFetchLiveBill('fastag', 'MZ-01-T-5432');
-      }
+      setErrorMessage(null);
+      setConsumerNumber('');
+      setVehicleNumber('');
+      setWaterConsumerId('');
+      setSubscriberId('');
+      setHoldingNo('');
+      setGasConsumerNo('');
+      setBroadbandAccNo('');
+      setLoanAccountNo('');
+      setStudentId('');
+      setStudentName('');
+      setPolicyNo('');
     }
   }, [service?.id]);
 
-  // Live Bill Fetch Simulation connecting to Department Server
+  // Live Bill Fetch with BBPS validation & Mock error handling
   const handleFetchLiveBill = (type: string, idVal: string) => {
-    if (!idVal.trim() || idVal.length < 3) {
-      alert(language === 'english' ? 'Please enter a valid ID / Registration Number.' : 'Khawngaihin Consumer ID / Vehicle No a dik chhu lut rawh le.');
+    const rawId = idVal.trim();
+    setErrorMessage(null);
+
+    if (!rawId) {
+      setErrorMessage(
+        language === 'english'
+          ? 'Please enter your Consumer ID / Vehicle Registration Number to fetch bill.'
+          : 'Khawngaihin Consumer ID / Vehicle Number chhu lut rawh le.'
+      );
+      setLinkedBillData(null);
+      setAmount('');
       return;
     }
 
     setIsFetchingBill(true);
     setTimeout(() => {
       setIsFetchingBill(false);
+
       if (type === 'electricity') {
-        const liveBill = idVal.startsWith('2') ? 1480 : 940;
-        setAmount(liveBill.toString());
-        if (idVal.startsWith('2')) {
-          setSubDivision('Lunglei Power Division');
-          setElectricBoard(ELECTRICITY_BOARDS[2]);
+        const cleanId = rawId.replace(/\s+/g, '');
+        const record = ELECTRICITY_MOCK_RECORDS[cleanId];
+
+        if (record) {
+          setAmount(record.billAmount.toString());
+          setLinkedBillData({
+            consumerName: record.consumerName,
+            accountNo: record.accountNo,
+            dueDate: record.dueDate,
+            billAmount: record.billAmount,
+            subDivisionOrLocality: record.subDivision,
+            meterNo: record.meterNo,
+            portalUrl: 'https://power.mizoram.gov.in',
+            status: language === 'english' ? 'P&ED Mizoram Live Bill Verified' : 'P&ED Server-ah Bill Hmuh A Ni',
+            breakdown: [
+              { label: `Energy Charges (${record.units} kWh)`, amount: record.billAmount - 140 },
+              { label: 'Fixed Monthly Charges', amount: 100 },
+              { label: 'Electricity Duty & Cess (5%)', amount: 40 }
+            ]
+          });
         } else {
-          setSubDivision('Aizawl Power Division I');
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage(
+            language === 'english'
+              ? `Invalid Consumer ID or Not Found (${cleanId}). P&ED Mizoram server returned 0 records. Please check the ID or tap a sample button below.`
+              : `Consumer ID hmuh a ni lo (${cleanId}). P&ED Mizoram server-ah a awm lo. Consumer Number dik tak chhu lut rawh emaw Sample ID hi hmet rawh.`
+          );
         }
-        setLinkedBillData({
-          consumerName: idVal.startsWith('2') ? 'Rohlupuia Sailo' : 'Lalmuanpuia Ralte',
-          accountNo: idVal,
-          dueDate: '05/09/2026',
-          billAmount: liveBill,
-          subDivisionOrLocality: idVal.startsWith('2') ? 'Lunglei Power Division (Bazar/Venglai)' : 'Aizawl Power Division I (Chanmari/Bawngkawn)',
-          portalUrl: 'https://power.mizoram.gov.in',
-          status: language === 'english' ? 'Live Bill Fetched & Linked (P&ED Mizoram Server)' : 'Bill Generated & Linked (P&ED Server)',
-          breakdown: [
-            { label: 'Energy Charges (Units: 145 kWh)', amount: liveBill - 140 },
-            { label: 'Fixed Monthly Charges', amount: 100 },
-            { label: 'Electricity Duty & Cess (5%)', amount: 40 }
-          ]
-        });
       } else if (type === 'water') {
-        const liveBill = idVal.includes('LGL') ? 650 : 420;
-        setAmount(liveBill.toString());
-        if (idVal.includes('LGL')) {
-          setWaterVeng('Bazar Veng, Lunglei');
+        const cleanId = rawId.toUpperCase().replace(/\s+/g, '');
+        const record = WATER_MOCK_RECORDS[cleanId];
+
+        if (record) {
+          setAmount(record.billAmount.toString());
+          setLinkedBillData({
+            consumerName: record.consumerName,
+            accountNo: record.accountNo,
+            dueDate: record.dueDate,
+            billAmount: record.billAmount,
+            subDivisionOrLocality: record.subDivisionOrVeng,
+            meterNo: record.meterNo,
+            portalUrl: 'https://phed.mizoram.gov.in',
+            status: language === 'english' ? 'PHED Mizoram Connection Verified' : 'PHED Server-ah Connection Hmuh A Ni',
+            breakdown: [
+              { label: `Water Usage (${record.liters.toLocaleString()} Liters)`, amount: record.billAmount - 70 },
+              { label: 'Meter Rent & Maintenance', amount: 50 },
+              { label: 'Sanitation Cess', amount: 20 }
+            ]
+          });
         } else {
-          setWaterVeng('Mission Veng, Aizawl');
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage(
+            language === 'english'
+              ? `Water Connection ID Not Found (${rawId}). No active connection record found on PHED Mizoram server. Please use a sample ID or verify your bill.`
+              : `PHED Consumer ID hmuh a ni lo (${rawId}). PHED Mizoram server-ah record a awm lo. Consumer ID dik tak chhu lut rawh emaw Sample ID hi hmet rawh.`
+          );
         }
-        setLinkedBillData({
-          consumerName: idVal.includes('LGL') ? 'K. Vanlalhruaia' : 'Zohmangaiha',
-          accountNo: idVal,
-          dueDate: '10/09/2026',
-          billAmount: liveBill,
-          subDivisionOrLocality: idVal.includes('LGL') ? 'Bazar Veng, Lunglei PHED Division' : 'Mission Veng, Aizawl Division',
-          portalUrl: 'https://phed.mizoram.gov.in',
-          status: language === 'english' ? 'Active Water Connection Verified (PHED Mizoram)' : 'Active Connection Verified (PHED Server)',
-          breakdown: [
-            { label: 'Water Usage Charge (18,000 Liters)', amount: liveBill - 70 },
-            { label: 'Meter Rent & Maintenance', amount: 50 },
-            { label: 'Sanitation Cess', amount: 20 }
-          ]
-        });
       } else if (type === 'fastag') {
-        const liveBill = 500;
-        setAmount(liveBill.toString());
-        setLinkedBillData({
-          consumerName: 'Lalremruata (Tag Verified)',
-          accountNo: idVal,
-          dueDate: 'Valid Active Fastag Tag',
-          billAmount: liveBill,
-          subDivisionOrLocality: 'NETC National Electronic Toll Collection (NPCI)',
-          portalUrl: 'https://www.ihmcl.co.in',
-          status: language === 'english' ? 'FASTag Tag ID Active / NPCI Linked' : 'FASTag Tag ID Active / NPCI Linked'
-        });
+        const cleanVeh = rawId.toUpperCase().replace(/[\s-]+/g, '');
+        const record = FASTAG_MOCK_RECORDS[cleanVeh] || FASTAG_MOCK_RECORDS[rawId.toUpperCase()];
+
+        if (record) {
+          setAmount(record.suggestedRecharge.toString());
+          setFastagBank(record.bank);
+          setLinkedBillData({
+            consumerName: `${record.ownerName} (${record.vehicleModel})`,
+            accountNo: record.vehicleNo,
+            dueDate: record.tagStatus,
+            billAmount: record.suggestedRecharge,
+            subDivisionOrLocality: `Tag ID: ${record.tagId} • ${record.bank}`,
+            portalUrl: 'https://www.ihmcl.co.in',
+            status: language === 'english' ? 'NETC / NPCI Active Tag Linked' : 'NPCI / NETC Tag Nung Lai Hmuh A Ni'
+          });
+        } else {
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage(
+            language === 'english'
+              ? `No active FASTag found for vehicle '${rawId}'. Tag not registered with selected bank or invalid vehicle number. Try a sample vehicle.`
+              : `FASTag Tag hmuh a ni lo ('${rawId}'). Vehicle registration number dik lo emaw Bank thlan dik loh a ni thei. Sample vehicle hi hmet chhin rawh.`
+          );
+        }
       } else if (type === 'municipal_tax') {
-        const liveBill = 1200;
-        setAmount(liveBill.toString());
-        if (!taxpayerName) setTaxpayerName('Lalthakimi');
-        setLinkedBillData({
-          consumerName: 'Lalthakimi (Property Owner)',
-          accountNo: idVal,
-          dueDate: '30/09/2026',
-          billAmount: liveBill,
-          subDivisionOrLocality: 'AMC Ward 12, Aizawl',
-          portalUrl: 'https://amcmizoram.com',
-          status: 'Holding Tax Assessment Live (AMC Server)'
-        });
+        if (rawId.includes('AMC') || rawId.length >= 6) {
+          const liveBill = 1200;
+          setAmount(liveBill.toString());
+          setLinkedBillData({
+            consumerName: 'Lalthakimi (Property Owner)',
+            accountNo: rawId,
+            dueDate: '30/09/2026',
+            billAmount: liveBill,
+            subDivisionOrLocality: `${municipalAuthority} - Assessment Ward 12`,
+            portalUrl: 'https://amcmizoram.com',
+            status: 'Holding Tax Assessment Live (AMC/LMC Server)'
+          });
+        } else {
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage('Holding Number / Assessment ID a dik lo. Entirnan: AMC/H-4820/2026.');
+        }
       } else if (type === 'school_fees') {
-        const liveBill = 3500;
-        setAmount(liveBill.toString());
-        setLinkedBillData({
-          consumerName: studentName || 'Lalremruata Ralte',
-          accountNo: idVal,
-          dueDate: '15/09/2026',
-          billAmount: liveBill,
-          subDivisionOrLocality: institution || 'Mizoram University (MZU)',
-          portalUrl: 'https://mzu.edu.in',
-          status: language === 'english' ? 'Student Enrollment Verified' : 'Zirlai Record Hmuh A Ni (School/College)',
-          breakdown: [
-            { label: 'Tuition Fee (Semester)', amount: 2800 },
-            { label: 'Library & Laboratory Fee', amount: 450 },
-            { label: 'Examination & Student Welfare', amount: 250 }
-          ]
-        });
+        if (rawId.length >= 4) {
+          const liveBill = 3500;
+          setAmount(liveBill.toString());
+          setLinkedBillData({
+            consumerName: studentName || 'Lalremruata Ralte',
+            accountNo: rawId,
+            dueDate: '15/09/2026',
+            billAmount: liveBill,
+            subDivisionOrLocality: institution || 'Mizoram University (MZU)',
+            portalUrl: 'https://mzu.edu.in',
+            status: language === 'english' ? 'Student Enrollment Verified' : 'Zirlai Record Hmuh A Ni (Institution Server)',
+            breakdown: [
+              { label: 'Tuition Fee (Semester)', amount: 2800 },
+              { label: 'Library & Laboratory Fee', amount: 450 },
+              { label: 'Examination & Student Welfare', amount: 250 }
+            ]
+          });
+        } else {
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage('Student Roll Number / Enrollment ID dik tak chhu lut rawh.');
+        }
       } else if (type === 'insurance') {
-        const liveBill = 4500;
-        setAmount(liveBill.toString());
-        setLinkedBillData({
-          consumerName: 'Lalmuankima (Policyholder)',
-          accountNo: idVal,
-          dueDate: '28/09/2026',
-          billAmount: liveBill,
-          subDivisionOrLocality: insuranceProvider || 'LIC of India (Aizawl Branch)',
-          portalUrl: 'https://licindia.in',
-          status: language === 'english' ? 'Active Policy Verified' : 'Policy Nung Lai (Verified)',
-          breakdown: [
-            { label: 'Base Insurance Premium', amount: 4100 },
-            { label: 'GST (18% on applicable premium)', amount: 400 }
-          ]
-        });
+        if (rawId.length >= 6) {
+          const liveBill = 4500;
+          setAmount(liveBill.toString());
+          setLinkedBillData({
+            consumerName: 'Lalmuankima (Policyholder)',
+            accountNo: rawId,
+            dueDate: '28/09/2026',
+            billAmount: liveBill,
+            subDivisionOrLocality: insuranceProvider,
+            portalUrl: 'https://licindia.in',
+            status: language === 'english' ? 'Active Policy Verified' : 'Policy Nung Lai (Verified)',
+            breakdown: [
+              { label: 'Base Insurance Premium', amount: 4100 },
+              { label: 'GST (18% on applicable premium)', amount: 400 }
+            ]
+          });
+        } else {
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage('Policy Number dik tak chhu lut rawh (digits 6 aia tam).');
+        }
       }
     }, 450);
   };
@@ -424,7 +674,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
-      <div className="bg-white w-full max-w-sm sm:max-w-md rounded-3xl p-5 space-y-4 shadow-2xl border border-slate-200 relative text-slate-900 my-auto shrink-0 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white w-full max-w-sm sm:max-w-md rounded-3xl p-5 space-y-4 shadow-2xl border border-slate-200 relative text-slate-900 my-auto shrink-0 max-h-[92vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-3.5 right-3.5 text-slate-400 hover:text-slate-600 transition cursor-pointer z-10 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"
@@ -441,38 +691,43 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
               <div className="overflow-hidden pr-6">
                 <h3 className="font-black text-slate-900 text-sm truncate">{service.name}</h3>
-                <p className="text-[10px] text-slate-400 font-medium truncate">{service.category} • Instant Bharat BillPay (BBPS)</p>
+                <p className="text-[10px] text-slate-500 font-bold truncate flex items-center gap-1">
+                  <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded text-[9px] font-black border border-indigo-200">BBPS</span>
+                  <span>Bharat BillPay Verified Service</span>
+                </p>
               </div>
             </div>
+
+            {/* Error Message Box */}
+            {errorMessage && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl p-3 text-[11px] font-medium space-y-1 animate-fadeIn">
+                <div className="flex items-start gap-2 font-bold text-rose-700">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>Validation Error / Bill Not Found</span>
+                </div>
+                <p className="pl-6 text-[10.5px] leading-relaxed">{errorMessage}</p>
+              </div>
+            )}
 
             {/* 1. MOBILE RECHARGE */}
             {service.id === 'mobile' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Mobile Number (10 Digits) *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      placeholder="e.g. 9862300000 / 7005123456"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-                    />
-                    {phone.length >= 4 && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9.5px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        {operator} • {circle}
-                      </span>
-                    )}
-                  </div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Mobile Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    placeholder="Enter 10-digit mobile number"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-600 block mb-1">Operator</label>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1">Operator</label>
                     <select
                       value={operator}
                       onChange={(e) => setOperator(e.target.value)}
@@ -481,21 +736,14 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       <option value="Jio">Jio Prepaid</option>
                       <option value="Airtel">Airtel Prepaid</option>
                       <option value="BSNL">BSNL Prepaid</option>
-                      <option value="Vi">Vodafone Idea (Vi)</option>
+                      <option value="Vi">Vi Prepaid</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-600 block mb-1">Circle</label>
-                    <select
-                      value={circle}
-                      onChange={(e) => setCircle(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-600"
-                    >
-                      <option value="Mizoram / North East">Mizoram (NE)</option>
-                      <option value="Assam">Assam</option>
-                      <option value="Kolkata">Kolkata</option>
-                      <option value="National">All India</option>
-                    </select>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1">Circle</label>
+                    <div className="w-full bg-slate-100 border border-slate-200 rounded-xl p-2 font-bold text-slate-700 text-xs truncate">
+                      Mizoram / North East
+                    </div>
                   </div>
                 </div>
 
@@ -555,33 +803,38 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* 2. ELECTRICITY BILL */}
+            {/* 2. ELECTRICITY BILL (POWER & ELECTRICITY DEPARTMENT - MIZORAM) */}
             {service.id === 'electricity' && (
               <div className="space-y-3">
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    {t.electricBoardLabel || 'Electricity Department / Circle *'}
-                  </label>
-                  <select
-                    value={electricBoard}
-                    onChange={(e) => setElectricBoard(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-amber-600"
-                  >
-                    {ELECTRICITY_BOARDS.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
+                {/* Unified State BBPS Biller info as in PhonePe / GPay */}
+                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 font-black shrink-0">
+                      <Zap className="w-4 h-4 text-amber-700" />
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-black text-slate-900 leading-tight">
+                        Power & Electricity Department, Mizoram (P&ED)
+                      </h4>
+                      <p className="text-[9.5px] text-slate-500 font-medium">State Electricity Board • Bharat BillPay</p>
+                    </div>
+                  </div>
+                  <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
+                    BBPS Biller
+                  </span>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      {t.consumerIdLabel || 'Consumer ID / Meter Connection Number *'}
+                      Consumer ID / CA Number *
                     </label>
-                    <span className="text-[9px] text-amber-700 font-bold">Quick sample</span>
+                    <span className="text-[9px] text-amber-700 font-bold flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" /> Sample ID Hmet Rawh
+                    </span>
                   </div>
                   
-                  {/* Quick Sample IDs */}
+                  {/* Verified Quick Sample IDs in Mizoram */}
                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1">
                     <button
                       type="button"
@@ -590,7 +843,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('electricity', '1002948201');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        consumerNumber === '1002948201' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        consumerNumber === '1002948201' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
                       ⚡ 1002948201 (Aizawl - ₹940)
@@ -602,10 +855,22 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('electricity', '2004819203');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        consumerNumber === '2004819203' ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        consumerNumber === '2004819203' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
                       ⚡ 2004819203 (Lunglei - ₹1,480)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConsumerNumber('3001827492');
+                        handleFetchLiveBill('electricity', '3001827492');
+                      }}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                        consumerNumber === '3001827492' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      ⚡ 3001827492 (Champhai - ₹760)
                     </button>
                   </div>
 
@@ -614,45 +879,63 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       type="text"
                       required
                       value={consumerNumber}
-                      onChange={(e) => setConsumerNumber(e.target.value)}
-                      placeholder="Enter Consumer ID (e.g. 1002948201)"
+                      onChange={(e) => {
+                        setConsumerNumber(e.target.value);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      placeholder="Enter 10-digit Consumer ID (e.g. 1002948201)"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
                     />
                     <button
                       type="button"
-                      onClick={() => handleFetchLiveBill('electricity', consumerNumber || '1002948201')}
+                      onClick={() => handleFetchLiveBill('electricity', consumerNumber)}
                       disabled={isFetchingBill}
-                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
+                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3.5 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? (t.linking || 'Linking...') : (t.linkFetch || 'Link & Fetch')}</span>
+                      {isFetchingBill ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Fetching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3" />
+                          <span>Fetch Bill</span>
+                        </>
+                      )}
                     </button>
                   </div>
+                  <p className="text-[9.5px] text-slate-400 font-medium mt-1">
+                    Consumer ID hi i electricity bill paper chunglamah a inziak e.
+                  </p>
                 </div>
 
                 {/* Verified Live Bill Card with Details Breakdown */}
                 {linkedBillData && (
-                  <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 space-y-2 text-amber-950">
+                  <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 space-y-2 text-amber-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
+                      <span className="font-bold text-slate-600">Due Date: {linkedBillData.dueDate}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
+                        {linkedBillData.meterNo && (
+                          <p className="text-[9.5px] text-slate-500 font-mono">Meter: {linkedBillData.meterNo}</p>
+                        )}
                       </div>
                       <div className="text-right">
                         <span className="text-[9.5px] text-slate-500 font-bold block">Live Due Amount</span>
-                        <span className="text-sm font-black text-amber-700">₹{linkedBillData.billAmount}</span>
+                        <span className="text-base font-black text-amber-800">₹{linkedBillData.billAmount}</span>
                       </div>
                     </div>
 
                     {/* Breakdown */}
                     {linkedBillData.breakdown && (
-                      <div className="bg-white/80 rounded-xl p-2 border border-amber-200/80 space-y-1 text-[10px]">
+                      <div className="bg-white/90 rounded-xl p-2 border border-amber-200/80 space-y-1 text-[10px]">
                         {linkedBillData.breakdown.map((item, idx) => (
                           <div key={idx} className="flex justify-between text-slate-600">
                             <span>{item.label}</span>
@@ -674,44 +957,15 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 )}
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Sub-Division / Town
-                  </label>
-                  <input
-                    type="text"
-                    value={subDivision}
-                    onChange={(e) => setSubDivision(e.target.value)}
-                    placeholder="e.g. Aizawl Power Division I / Lunglei"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
-                  />
-                </div>
-
-                <div>
                   <label className="text-[10px] font-bold text-slate-700 block mb-1">
                     {language === 'english' ? 'Bill Amount to Pay (₹)' : 'Pek tur zat (₹)'}
                   </label>
-                  <div className="grid grid-cols-4 gap-1.5 mb-2">
-                    {['500', '940', '1500', '2500'].map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setAmount(amt)}
-                        className={`py-1.5 rounded-lg text-[11px] font-black border transition cursor-pointer ${
-                          amount === amt
-                            ? 'bg-amber-500 text-slate-950 border-amber-600'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        ₹{amt}
-                      </button>
-                    ))}
-                  </div>
                   <input
                     type="number"
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 940"
+                    placeholder="Enter amount to pay"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-amber-600"
                   />
                 </div>
@@ -723,11 +977,14 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               <div className="space-y-3">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    {t.fastagBankLabel || 'FASTag Issuing Bank *'}
+                    FASTag Issuing Bank *
                   </label>
                   <select
                     value={fastagBank}
-                    onChange={(e) => setFastagBank(e.target.value)}
+                    onChange={(e) => {
+                      setFastagBank(e.target.value);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-orange-600"
                   >
                     {FASTAG_BANKS.map((b) => (
@@ -739,9 +996,9 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      {t.vehicleNumberLabel || 'Vehicle Registration Number (RC No.) *'}
+                      Vehicle Registration Number (RC No.) *
                     </label>
-                    <span className="text-[9px] text-orange-700 font-bold">Quick vehicle</span>
+                    <span className="text-[9px] text-orange-700 font-bold">Quick vehicle sample</span>
                   </div>
 
                   {/* Quick Sample Vehicles */}
@@ -753,7 +1010,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('fastag', 'MZ-01-T-5432');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-01-T-5432' ? 'bg-orange-100 text-orange-900 border-orange-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        vehicleNumber === 'MZ-01-T-5432' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
                       🚗 MZ-01-T-5432 (Taxi)
@@ -765,10 +1022,10 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('fastag', 'MZ-01-A-1234');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-01-A-1234' ? 'bg-orange-100 text-orange-900 border-orange-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        vehicleNumber === 'MZ-01-A-1234' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      🚘 MZ-01-A-1234 (Sedan)
+                      🚘 MZ-01-A-1234 (Creta)
                     </button>
                     <button
                       type="button"
@@ -777,7 +1034,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('fastag', 'MZ-02-B-9911');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-02-B-9911' ? 'bg-orange-100 text-orange-900 border-orange-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        vehicleNumber === 'MZ-02-B-9911' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
                       🚙 MZ-02-B-9911 (Lunglei)
@@ -789,33 +1046,45 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       type="text"
                       required
                       value={vehicleNumber}
-                      onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        setVehicleNumber(e.target.value.toUpperCase());
+                        if (errorMessage) setErrorMessage(null);
+                      }}
                       placeholder="e.g. MZ-01-T-5432 / MZ-02-B-1122"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs uppercase focus:outline-none focus:bg-white focus:border-orange-600"
                     />
                     <button
                       type="button"
-                      onClick={() => handleFetchLiveBill('fastag', vehicleNumber || 'MZ-01-T-5432')}
+                      onClick={() => handleFetchLiveBill('fastag', vehicleNumber)}
                       disabled={isFetchingBill}
-                      className="bg-orange-500 hover:bg-orange-600 text-white font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
+                      className="bg-orange-500 hover:bg-orange-600 text-white font-black px-3.5 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? (t.linking || 'Linking...') : (t.linkVehicle || 'Link Vehicle')}</span>
+                      {isFetchingBill ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Validating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3" />
+                          <span>Validate Tag</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
 
                 {/* Verified FASTag Card */}
                 {linkedBillData && (
-                  <div className="bg-orange-50/90 border border-orange-200 rounded-2xl p-3 space-y-1.5 text-orange-950">
+                  <div className="bg-orange-50/90 border border-orange-200 rounded-2xl p-3 space-y-1.5 text-orange-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="text-[9.5px] font-bold text-slate-500">NETC / NPCI Live</span>
+                      <span className="text-[9.5px] font-bold text-slate-500">NETC / NPCI Verified</span>
                     </div>
                     <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                    <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                    <p className="text-[10px] text-slate-600 font-mono">{linkedBillData.subDivisionOrLocality}</p>
                   </div>
                 )}
 
@@ -844,7 +1113,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 500"
+                    placeholder="Enter top-up amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-orange-600"
                   />
                 </div>
@@ -913,20 +1182,35 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* 5. WATER BILL (PHE MIZORAM) */}
+            {/* 5. WATER BILL (PUBLIC HEALTH ENGINEERING DEPARTMENT - MIZORAM) */}
             {service.id === 'water' && (
               <div className="space-y-3">
-                <div className="bg-cyan-50/70 p-2.5 rounded-xl border border-cyan-200 flex items-center gap-2 text-cyan-900">
-                  <Droplet className="w-4 h-4 text-cyan-600 shrink-0" />
-                  <p className="text-[10.5px] font-bold">Public Health Engineering Department (PHED Mizoram)</p>
+                {/* Unified State BBPS Water Biller */}
+                <div className="bg-cyan-50/80 border border-cyan-200/90 rounded-2xl p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-800 font-black shrink-0">
+                      <Droplet className="w-4 h-4 text-cyan-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-[11px] font-black text-slate-900 leading-tight">
+                        Public Health Engineering Department, Mizoram (PHED)
+                      </h4>
+                      <p className="text-[9.5px] text-slate-500 font-medium">State Water Board • Bharat BillPay</p>
+                    </div>
+                  </div>
+                  <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
+                    BBPS Biller
+                  </span>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      {t.waterConnectionLabel || 'PHE Water Connection / Consumer ID *'}
+                      Water Connection / Consumer ID *
                     </label>
-                    <span className="text-[9px] text-cyan-700 font-bold">Quick sample</span>
+                    <span className="text-[9px] text-cyan-700 font-bold flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" /> Sample ID Hmet Rawh
+                    </span>
                   </div>
 
                   {/* Quick Sample IDs */}
@@ -938,10 +1222,10 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('water', 'PHED/AIZ/2024/0981');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        waterConsumerId === 'PHED/AIZ/2024/0981' ? 'bg-cyan-100 text-cyan-900 border-cyan-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        waterConsumerId === 'PHED/AIZ/2024/0981' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      💧 Mission Veng (₹420)
+                      💧 Mission Veng, Aizawl (₹420)
                     </button>
                     <button
                       type="button"
@@ -950,10 +1234,22 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('water', 'PHED/LGL/2024/1102');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        waterConsumerId === 'PHED/LGL/2024/1102' ? 'bg-cyan-100 text-cyan-900 border-cyan-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        waterConsumerId === 'PHED/LGL/2024/1102' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      💧 Lunglei Bazar (₹650)
+                      💧 Bazar Veng, Lunglei (₹650)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWaterConsumerId('PHED/CMP/2024/0419');
+                        handleFetchLiveBill('water', 'PHED/CMP/2024/0419');
+                      }}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                        waterConsumerId === 'PHED/CMP/2024/0419' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      💧 Champhai (₹380)
                     </button>
                   </div>
 
@@ -962,45 +1258,60 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       type="text"
                       required
                       value={waterConsumerId}
-                      onChange={(e) => setWaterConsumerId(e.target.value)}
-                      placeholder="e.g. PHED/AIZ/2024/0981"
+                      onChange={(e) => {
+                        setWaterConsumerId(e.target.value);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      placeholder="e.g. PHED/AIZ/2024/0981 or AIZ0981"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
                     />
                     <button
                       type="button"
-                      onClick={() => handleFetchLiveBill('water', waterConsumerId || 'PHED/AIZ/2024/0981')}
+                      onClick={() => handleFetchLiveBill('water', waterConsumerId)}
                       disabled={isFetchingBill}
-                      className="bg-cyan-600 hover:bg-cyan-700 text-white font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
+                      className="bg-cyan-600 hover:bg-cyan-700 text-white font-black px-3.5 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? (t.linking || 'Linking...') : (t.linkFetch || 'Link & Fetch')}</span>
+                      {isFetchingBill ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Fetching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3" />
+                          <span>Fetch Bill</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
 
                 {/* Verified PHED Card */}
                 {linkedBillData && (
-                  <div className="bg-cyan-50/90 border border-cyan-300 rounded-2xl p-3 space-y-2 text-cyan-950">
+                  <div className="bg-cyan-50/90 border border-cyan-300 rounded-2xl p-3 space-y-2 text-cyan-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
+                      <span className="font-bold text-slate-600">Due Date: {linkedBillData.dueDate}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
+                        {linkedBillData.meterNo && (
+                          <p className="text-[9.5px] text-slate-500 font-mono">Meter: {linkedBillData.meterNo}</p>
+                        )}
                       </div>
                       <div className="text-right">
                         <span className="text-[9.5px] text-slate-500 font-bold block">Live Due Amount</span>
-                        <span className="text-sm font-black text-cyan-700">₹{linkedBillData.billAmount}</span>
+                        <span className="text-base font-black text-cyan-800">₹{linkedBillData.billAmount}</span>
                       </div>
                     </div>
 
                     {/* Breakdown */}
                     {linkedBillData.breakdown && (
-                      <div className="bg-white/80 rounded-xl p-2 border border-cyan-200 space-y-1 text-[10px]">
+                      <div className="bg-white/90 rounded-xl p-2 border border-cyan-200 space-y-1 text-[10px]">
                         {linkedBillData.breakdown.map((item, idx) => (
                           <div key={idx} className="flex justify-between text-slate-600">
                             <span>{item.label}</span>
@@ -1022,45 +1333,15 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 )}
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    {t.waterVengLabel || 'Veng / Locality / Sub-Division *'}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={waterVeng}
-                    onChange={(e) => setWaterVeng(e.target.value)}
-                    placeholder="e.g. Mission Veng, Aizawl / Bazar Veng, Lunglei"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
-                  />
-                </div>
-
-                <div>
                   <label className="text-[10px] font-bold text-slate-700 block mb-1">
                     {language === 'english' ? 'Water Bill Amount (₹)' : 'Tui bill pek tur zat (₹)'}
                   </label>
-                  <div className="grid grid-cols-4 gap-1.5 mb-2">
-                    {['300', '420', '850', '1200'].map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setAmount(amt)}
-                        className={`py-1.5 rounded-lg text-[11px] font-black border transition cursor-pointer ${
-                          amount === amt
-                            ? 'bg-cyan-600 text-white border-cyan-700'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        ₹{amt}
-                      </button>
-                    ))}
-                  </div>
                   <input
                     type="number"
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 420"
+                    placeholder="Enter bill amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-cyan-600"
                   />
                 </div>
@@ -1126,7 +1407,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 space-y-1.5 text-emerald-950">
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 space-y-1.5 text-emerald-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
@@ -1414,7 +1695,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 space-y-1.5 text-indigo-950">
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 space-y-1.5 text-indigo-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded-md">
                         <CheckCircle2 className="w-3 h-3 text-indigo-600" /> {linkedBillData.status}
@@ -1506,7 +1787,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 space-y-1.5 text-blue-950">
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 space-y-1.5 text-blue-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-blue-800 bg-blue-100 px-2 py-0.5 rounded-md">
                         <CheckCircle2 className="w-3 h-3 text-blue-600" /> {linkedBillData.status}
@@ -1540,7 +1821,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* Direct Official Portals & Direct UPI Payment Links (Real Working Links) */}
+            {/* Direct Official Portals & Direct UPI Payment Links */}
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
@@ -1855,22 +2136,22 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
               {service.id === 'electricity' && (
                 <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Consumer & Circle:</span>
-                  <span className="font-bold text-slate-900">{consumerNumber} ({subDivision})</span>
+                  <span className="text-[10.5px]">Consumer & Biller:</span>
+                  <span className="font-bold text-slate-900">{consumerNumber} (P&ED Mizoram)</span>
                 </div>
               )}
 
               {service.id === 'fastag' && (
                 <div className="flex justify-between items-center text-slate-600">
                   <span className="text-[10.5px]">Vehicle Registration:</span>
-                  <span className="font-bold text-slate-900">{vehicleNumber}</span>
+                  <span className="font-bold text-slate-900">{vehicleNumber} ({fastagBank})</span>
                 </div>
               )}
 
               {service.id === 'water' && (
                 <div className="flex justify-between items-center text-slate-600">
                   <span className="text-[10.5px]">PHE Connection:</span>
-                  <span className="font-bold text-slate-900">{waterConsumerId}</span>
+                  <span className="font-bold text-slate-900">{waterConsumerId} (PHED Mizoram)</span>
                 </div>
               )}
 
@@ -1895,7 +2176,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               <div className="flex justify-between items-center text-slate-600">
                 <span className="text-[10.5px]">Payment Status:</span>
                 <span className="font-black text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Instant Credit Verified
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Instant BBPS Credit Settled
                 </span>
               </div>
             </div>

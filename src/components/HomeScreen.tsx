@@ -505,7 +505,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* 4. Recharge & Bill Payments Section */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5 overflow-hidden">
+      <div id="quick-bill-recharge-section" className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5 overflow-hidden">
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">

@@ -83,6 +83,7 @@ import { ExternalUPILandingModal } from './components/ExternalUPILandingModal';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
 import { AIHriatpuiModal } from './components/AIHriatpuiModal';
+import { BankTransferModal } from './components/BankTransferModal';
 
 export default function App() {
   // Navigation & View States
@@ -116,6 +117,7 @@ export default function App() {
   const [generatedQRCampaign, setGeneratedQRCampaign] = useState<Campaign | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
@@ -468,8 +470,8 @@ export default function App() {
               onOpenBillService={handleOpenBillService}
               onOpenReports={handleOpenReports}
               onOpenMemberRoll={handleOpenMemberRoll}
-              onShowBalance={() => setIsProfileOpen(true)}
-              onShowBankTransfer={() => setIsPhonePeOpen(true)}
+              onShowBalance={() => setIsHistoryOpen(true)}
+              onShowBankTransfer={() => setIsBankTransferOpen(true)}
               onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onPreviewImage={handlePreviewImage}
@@ -665,6 +667,13 @@ export default function App() {
         <PhonePeModal
           isOpen={isPhonePeOpen}
           onClose={() => setIsPhonePeOpen(false)}
+        />
+
+        <BankTransferModal
+          isOpen={isBankTransferOpen}
+          onClose={() => setIsBankTransferOpen(false)}
+          creatorProfile={creatorProfile}
+          onTransferSuccess={handlePaymentSuccess}
         />
 
         <BillPaymentModal
