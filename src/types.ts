@@ -273,3 +273,42 @@ export interface BillService {
   fieldPlaceholder?: string;
   fields?: any[];
 }
+
+export interface AIHriatpuiLetterRequest {
+  orgName: string; // e.g. YMA Chanmari Branch / Kohhran
+  orgType: 'yma' | 'kohhran' | 'mup' | 'mhip' | 'local_council' | 'ngo' | 'custom';
+  applicantName: string;
+  applicantPhone: string;
+  applicantRole: string; // e.g. Executive Member / Veng Chhung Mi
+  category: BawmCategory;
+  purpose: string;
+  locality: string;
+  signatoryTitle: string; // e.g. President / Secretary
+  signatoryName: string;
+}
+
+export interface AIHriatpuiLetterResponse {
+  refNo: string;
+  date: string;
+  orgHeader: string;
+  subject: string;
+  bodyText: string;
+  signatoryText: string;
+  fullLetterText: string;
+  verificationHash: string;
+  trustScore: number;
+}
+
+export interface AIHriatpuiVerificationReport {
+  isAuthentic: boolean;
+  trustScore: number; // 0 to 100
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  detectedOrg?: string;
+  detectedName?: string;
+  detectedSignatory?: string;
+  detectedDate?: string;
+  keyPoints: string[];
+  recommendation: 'RECOMMENDED_APPROVE' | 'MANUAL_REVIEW_NEEDED' | 'SUSPICIOUS';
+  remarksInMizo: string;
+}
+

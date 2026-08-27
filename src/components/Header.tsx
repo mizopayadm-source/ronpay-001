@@ -34,7 +34,9 @@ interface HeaderProps {
   language: Language;
   onToggleLanguage: (lang: Language) => void;
   onOpenHistory: () => void;
+  onOpenAIHriatpui?: () => void;
 }
+
 
 // Comprehensive database of Mizoram Towns, Districts & Localities for accurate fallback & nearest-point geofencing
 const MIZORAM_GEO_DATABASE = [
@@ -146,7 +148,9 @@ export const Header: React.FC<HeaderProps> = ({
   language,
   onToggleLanguage,
   onOpenHistory,
+  onOpenAIHriatpui,
 }) => {
+
   const [userLocation, setUserLocation] = useState<string>(() => {
     const saved = localStorage.getItem('kut_app_user_location');
     if (!saved || saved.includes('Assam') || saved.includes('Detecting') || saved.includes('Nagaon')) {
@@ -495,6 +499,21 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
+            {/* AI Hriatpui Button */}
+            {onOpenAIHriatpui && (
+              <button
+                type="button"
+                id="header-ai-hriatpui-btn"
+                onClick={onOpenAIHriatpui}
+                title="AI Hriatpui (Recommendation & Verification Assistant)"
+                className="h-7 sm:h-8 px-2 sm:px-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-indigo-400/50 shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                <span className="tracking-tight font-black hidden xs:inline">AI Hriatpui</span>
+                <span className="tracking-tight font-black xs:hidden">AI</span>
+              </button>
+            )}
+
             {/* QR Scanner Action Button */}
             <button
               type="button"
@@ -549,6 +568,7 @@ export const Header: React.FC<HeaderProps> = ({
               <History className="w-3 h-3 text-amber-400" />
               <span>Sulhnu</span>
             </button>
+
 
             <button
               type="button"

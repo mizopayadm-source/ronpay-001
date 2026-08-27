@@ -82,6 +82,7 @@ import { BiometricAuthModal } from './components/BiometricAuthModal';
 import { ExternalUPILandingModal } from './components/ExternalUPILandingModal';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
+import { AIHriatpuiModal } from './components/AIHriatpuiModal';
 
 export default function App() {
   // Navigation & View States
@@ -105,7 +106,9 @@ export default function App() {
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
 
   // Modals Visibility
+  const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+
   const [scannerCategory, setScannerCategory] = useState<BawmCategory | 'any'>('any');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareCampaign, setShareCampaign] = useState<Campaign | null>(null);
@@ -442,6 +445,7 @@ export default function App() {
           language={language}
           onToggleLanguage={setLanguage}
           onOpenHistory={handleOpenHistory}
+          onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
         />
 
         {/* Main Body Screen Router */}
@@ -470,8 +474,10 @@ export default function App() {
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onPreviewImage={handlePreviewImage}
               language={language}
+              onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
             />
           )}
+
 
           {currentScreen === 'explorer' && (
             <BawmExplorerScreen
@@ -802,7 +808,20 @@ export default function App() {
           docTitle={printPreviewData.docTitle}
           onClose={() => setPrintPreviewData({ isOpen: false })}
         />
+
+        <AIHriatpuiModal
+          isOpen={isAIHriatpuiOpen}
+          onClose={() => setIsAIHriatpuiOpen(false)}
+          creatorProfile={creatorProfile}
+          onApplyLetterToRegistration={() => {
+            setIsAIHriatpuiOpen(false);
+            if (!creatorProfile.isApproved) {
+              handleNavigate('creator_reg');
+            }
+          }}
+        />
       </div>
     </div>
   );
 }
+

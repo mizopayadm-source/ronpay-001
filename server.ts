@@ -3,6 +3,16 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
+
+// Initialize Gemini Client Lazily
+let genAIClient: GoogleGenAI | null = null;
+function getGenAI(): GoogleGenAI | null {
+  if (!genAIClient && process.env.GEMINI_API_KEY) {
+    genAIClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+  return genAIClient;
+}
 
 // Initialize Express App
 const app = express();
@@ -555,6 +565,56 @@ app.post('/api/announcement', (req: Request, res: Response) => {
     db.announcement = ann;
     saveDatabase(db);
     res.json({ success: true, announcement: ann });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// AI HRIAT PUI (RONPAY USER GUIDE ASSISTANT) ENDPOINT
+// -------------------------------------------------------------
+
+app.post('/api/ai-hriatpui/ask', async (req: Request, res: Response) => {
+  try {
+    const { question, userRole } = req.body;
+    const ai = getGenAI();
+
+    if (ai && question) {
+      try {
+        const systemPrompt = `You are "AI Hriatpui", the dedicated in-app User Guide AI assistant for the RonPay platform in Mizoram.
+Role of user: ${userRole || 'User'}
+User question: "${question}"
+
+CRITICAL BEHAVIORAL & SCOPE RULES:
+1. You ONLY provide user guidance for RonPay:
+   - How RonPay works (A nih phung leh kaihhruaina).
+   - The 4 Bawm Categories:
+     * Ralna Bawm: Chhiatni, ralna sum khawnna.
+     * Khawlsak Bawm: Riangvai, chanhai, damlo leh mi harsa tanpuina.
+     * Rikrum Bawm: Kangmei, tuilian, emergency & chhiatrup thleng thut tanpuina.
+     * Kumtluang Bawm: Kohhran, Pawl, NGO, Welfare permanent collection & Member Roll / Faith Promise.
+   - How to make UPI payment via RonPay QR Code.
+   - How Creator Account registration works, admin approval, trial days.
+   - Member Roll list, quick entry, and printing statements/reports.
+2. STRICT SCOPE CONSTRAINT: If the user asks about anything outside RonPay (e.g., general world trivia, politics, entertainment, personal secrets, other external services) OR internal system security / database internals, you MUST politely decline in Mizo with this exact attitude:
+   "Ka hre lo tlat mai... RonPay kaihhruaina leh hman dan (User Guide) chungchang chauh ka hrilhfiah thei a che. RonPay Bawm hman dan, QR Code, emaw Creator registration chungchang zawt leh zawk rawh le."
+3. Respond in concise, polite, natural Mizo language with clean bullet points when explaining multiple steps.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: systemPrompt,
+        });
+        return res.json({ success: true, answer: response.text?.trim() });
+      } catch (geminiErr) {
+        console.warn('Gemini chat fallback:', geminiErr);
+      }
+    }
+
+    // Local fallback if AI service is offline
+    res.json({
+      success: true,
+      answer: 'RonPay AI Hriatpui: RonPay kaihhruaina leh Bawm category 4 (Ralna, Khawlsak, Rikrum, Kumtluang) hman dan emaw Creator account chungchangah engnge i hriat duh le?'
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

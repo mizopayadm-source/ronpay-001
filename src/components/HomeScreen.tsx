@@ -63,6 +63,7 @@ interface HomeScreenProps {
   language?: Language;
   onOpenHistory?: () => void;
   onShareCampaign?: (campaign: Campaign) => void;
+  onOpenAIHriatpui?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -83,7 +84,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   language = 'mizo',
   onOpenHistory,
   onShareCampaign,
+  onOpenAIHriatpui,
 }) => {
+
   const t = TRANSLATIONS[language] || TRANSLATIONS.mizo;
   const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
   const [currentAnnounceIdx, setCurrentAnnounceIdx] = useState<number>(0);
@@ -301,6 +304,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </button>
         </div>
       </div>
+
 
       {/* 2. RonPay Live Stats Card */}
       <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4 rounded-2xl text-white shadow-md relative overflow-hidden border border-indigo-800/60">
