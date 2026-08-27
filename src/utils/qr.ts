@@ -80,19 +80,19 @@ export const createUPIPaymentString = (upiId: string, name: string, amount?: num
 export const generateQRCodeDataUrl = async (text: string): Promise<string> => {
   try {
     const dataUrl = await QRCode.toDataURL(text, {
-      width: 400,
-      margin: 2,
+      width: 450,
+      margin: 3,
       color: {
-        dark: '#1e1b4b',
+        dark: '#000000',
         light: '#ffffff',
       },
-      errorCorrectionLevel: 'H',
+      errorCorrectionLevel: 'M',
     });
     return dataUrl;
   } catch (err) {
     console.error('Error generating QR code', err);
     // Fallback QR service
-    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(text)}`;
   }
 };
 

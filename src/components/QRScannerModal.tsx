@@ -27,7 +27,7 @@ export interface ScannedQRResult {
 }
 
 /**
- * Robust parser for all RonPay QR formats (UPI URLs, Web portal links, JSON strings, Plain IDs)
+ * Robust parser for all RonPay QR formats (UPI URLs, Web portal links, JSON strings, Plain IDs, VPAs)
  */
 export function parseScannedPayload(rawText: string, campaigns: Campaign[]): ScannedQRResult {
   const cleanText = (rawText || '').trim();
@@ -72,15 +72,25 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     // Ignore JSON parse error and proceed
   }
 
-  // 2. Web Portal URL parsing (e.g. https://...?campaign=cmp-123 or ?c=cmp-123 or ?id=cmp-123)
-  if (cleanText.startsWith('http://') || cleanText.startsWith('https://')) {
+  // 2. Web Portal URL parsing (e.g. https://...?campaign=cmp-123 or ?cat=ralna&title=...)
+  if (cleanText.startsWith('http://') || cleanText.startsWith('https://') || cleanText.includes('/?') || cleanText.includes('campaign=')) {
     try {
-      const url = new URL(cleanText);
+      const urlString = (cleanText.startsWith('http://') || cleanText.startsWith('https://')) 
+        ? cleanText 
+        : `https://dummy-portal.com/${cleanText.startsWith('?') ? cleanText : '?' + cleanText}`;
+      const url = new URL(urlString);
       const campId = url.searchParams.get('campaign') || 
                      url.searchParams.get('cmp') || 
                      url.searchParams.get('c') || 
                      url.searchParams.get('id') || 
                      url.searchParams.get('bawm');
+      const cat = url.searchParams.get('cat') as BawmCategory;
+      const title = url.searchParams.get('title');
+      const upi = url.searchParams.get('upi');
+      const loc = url.searchParams.get('loc');
+      const org = url.searchParams.get('org');
+      const target = url.searchParams.get('target');
+
       if (campId) {
         const matched = campaigns.find(c => c.id.toLowerCase() === campId.toLowerCase());
         if (matched) {
@@ -90,6 +100,27 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
             rawText: cleanText
           };
         }
+
+        // Reconstruct from URL parameters if available
+        const reconstructedCamp: Campaign = {
+          id: campId,
+          category: (cat || (campId.startsWith('cmp-k') ? 'kumtluang' : campId.startsWith('cmp-r') ? 'ralna' : 'others')) as BawmCategory,
+          title: title ? decodeURIComponent(title) : 'Scanned Bawm Portal',
+          location: loc ? decodeURIComponent(loc) : 'Mizoram',
+          gpsCoords: '23.7271, 92.7176',
+          upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
+          orgCode: org ? decodeURIComponent(org) : undefined,
+          targetAmount: target ? Number(target) : undefined,
+          validityDate: '2027-12-31',
+          status: 'active',
+          createdAt: new Date().toISOString()
+        };
+
+        return {
+          type: reconstructedCamp.category,
+          campaign: reconstructedCamp,
+          rawText: cleanText
+        };
       }
     } catch {
       // Fallback
@@ -97,16 +128,16 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
   }
 
   // 3. UPI Payment URI parsing (e.g. upi://pay?pa=...&pn=...&tn=RonPay:cmp-123&am=500)
-  if (cleanText.startsWith('upi://pay')) {
+  if (cleanText.toLowerCase().startsWith('upi://pay')) {
     try {
-      const queryString = cleanText.includes('?') ? cleanText.split('?')[1] : cleanText.replace('upi://pay', '');
+      const queryString = cleanText.includes('?') ? cleanText.split('?')[1] : cleanText.replace(/upi:\/\/pay\??/i, '');
       const params = new URLSearchParams(queryString);
       const pa = (params.get('pa') || '').trim();
       const pn = (params.get('pn') || '').trim();
       const tn = (params.get('tn') || '').trim();
       const am = params.get('am');
 
-      // Check if tn contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx", "RonPay:123", "cmp-xxx", etc.)
+      // Check if tn or note contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx", "cmp-xxx", etc.)
       let targetId = '';
       const decodedTn = decodeURIComponent(tn);
       if (decodedTn.includes('RonPay:')) {
@@ -142,8 +173,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         }
       }
 
-      // If it is a standard/generic UPI QR (without explicit RonPay campaign reference in tn),
-      // treat it cleanly as an External UPI Payment (category: 'others')
+      // Standard / Generic External UPI QR (Google Pay, PhonePe, Paytm, BharatPe, Merchant QR)
       const externalCamp: Campaign = {
         id: `ext-${Date.now()}`,
         category: 'others',
@@ -167,7 +197,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     }
   }
 
-  // 4. Exact Campaign ID match
+  // 4. Exact Campaign ID match (e.g. cmp-174065321)
   const foundById = campaigns.find(c => c.id.toLowerCase() === cleanText.toLowerCase());
   if (foundById) {
     return {
@@ -177,10 +207,10 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     };
   }
 
-  // 5. Match by Campaign Title or ID inclusion (only if explicitly matching a known campaign)
+  // 5. Match by Campaign Title
   const foundByTitle = campaigns.find(c => 
     c.id.toLowerCase() === cleanText.toLowerCase() ||
-    (cleanText.length > 5 && c.title.toLowerCase() === cleanText.toLowerCase())
+    (cleanText.length > 3 && c.title.toLowerCase().trim() === cleanText.toLowerCase().trim())
   );
   if (foundByTitle) {
     return {
@@ -211,27 +241,48 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
   }
 
   // 7. General fallback
+  const fallbackCamp: Campaign = {
+    id: `scan-${Date.now()}`,
+    category: 'others',
+    title: cleanText.length > 25 ? `${cleanText.substring(0, 25)}...` : cleanText,
+    location: 'Scanned Payment Target',
+    gpsCoords: '23.7271, 92.7176',
+    upiId: 'ronpay@axl',
+    validityDate: '2027-12-31',
+    status: 'active',
+    createdAt: new Date().toISOString()
+  };
+
   return {
     type: 'general-upi',
+    campaign: fallbackCamp,
     rawText: cleanText
   };
 }
 
 interface QRScannerModalProps {
   isOpen: boolean;
-  targetCategory: BawmCategory | 'any';
+  targetCategory?: BawmCategory | 'any';
+  categoryFilter?: BawmCategory | 'any';
   campaigns: Campaign[];
   onClose: () => void;
-  onScanResult: (scannedPayload: ScannedQRResult) => void;
+  onScanResult?: (scannedPayload: ScannedQRResult) => void;
+  onSelectCampaign?: (campaign: Campaign) => void;
+  onOpenExternalLanding?: (campaign: Campaign) => void;
+  onMismatchDetected?: (category: BawmCategory) => void;
   onApproveCampaign?: (campaignId: string) => void;
 }
 
 export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   isOpen,
   targetCategory,
+  categoryFilter,
   campaigns,
   onClose,
   onScanResult,
+  onSelectCampaign,
+  onOpenExternalLanding,
+  onMismatchDetected,
   onApproveCampaign,
 }) => {
   const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -275,7 +326,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     setIsStartingCamera(false);
   }, []);
 
-  // Process decoded QR text cleanly and freshly
+  // Process decoded QR text cleanly and route appropriately
   const handleRawDecodedData = useCallback((rawText: string) => {
     if (!rawText || !rawText.trim()) return;
     
@@ -283,18 +334,62 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     stopCamera();
     setLastScannedText(rawText);
 
-    // Parse payload with fresh context
-    const result = parseScannedPayload(rawText, campaigns);
-    
     // Reset file inputs so subsequent uploads start fresh
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraCaptureInputRef.current) cameraCaptureInputRef.current.value = '';
 
-    onScanResult(result);
-  }, [campaigns, onScanResult, stopCamera]);
+    // Parse payload
+    const result = parseScannedPayload(rawText, campaigns);
 
-  // Continuous QR scan loop using jsQR
-  const tickScan = useCallback(() => {
+    // Close the scanner modal
+    onClose();
+
+    // 1. If explicit onScanResult callback is provided, invoke it
+    if (onScanResult) {
+      onScanResult(result);
+    }
+
+    // 2. If standard App.tsx modal props are provided
+    if (result.type === 'pending' && result.campaign) {
+      if (onSelectCampaign) {
+        onSelectCampaign(result.campaign);
+      }
+    } else if (result.type === 'general-upi' && result.campaign) {
+      if (onOpenExternalLanding) {
+        onOpenExternalLanding(result.campaign);
+      } else if (onSelectCampaign) {
+        onSelectCampaign(result.campaign);
+      }
+    } else if (result.campaign) {
+      const activeFilter = targetCategory || categoryFilter || 'any';
+      if (activeFilter !== 'any' && activeFilter !== result.campaign.category) {
+        if (onMismatchDetected) {
+          onMismatchDetected(result.campaign.category);
+        } else if (onSelectCampaign) {
+          onSelectCampaign(result.campaign);
+        }
+      } else {
+        if (onSelectCampaign) {
+          onSelectCampaign(result.campaign);
+        }
+      }
+    }
+  }, [campaigns, onClose, onScanResult, onSelectCampaign, onOpenExternalLanding, onMismatchDetected, targetCategory, categoryFilter, stopCamera]);
+
+  // BarcodeDetector instance if available
+  const barcodeDetectorRef = useRef<any>(null);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+      } catch (e) {
+        barcodeDetectorRef.current = null;
+      }
+    }
+  }, []);
+
+  // Continuous QR scan loop using BarcodeDetector + jsQR
+  const tickScan = useCallback(async () => {
     if (!isScanningRef.current) return;
 
     if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) {
@@ -303,15 +398,30 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
 
     const video = videoRef.current;
+
+    // 1. Try Hardware-Accelerated Native BarcodeDetector directly on Video element
+    if (barcodeDetectorRef.current) {
+      try {
+        const barcodes = await barcodeDetectorRef.current.detect(video);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          handleRawDecodedData(barcodes[0].rawValue);
+          return;
+        }
+      } catch (e) {
+        // Fallback to canvas/jsQR
+      }
+    }
+
+    // 2. High performance Canvas + jsQR pass
     if (!canvasRef.current) {
       canvasRef.current = document.createElement('canvas');
     }
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    if (ctx) {
-      // Downscale if camera resolution is huge (e.g. 1920x1080 -> 640x360) for fast 60fps processing
-      const scale = Math.min(1, 640 / video.videoWidth);
+    if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+      // Optimal resolution for jsQR (around 800px width)
+      const scale = Math.min(1, 800 / video.videoWidth);
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
       
@@ -319,11 +429,26 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
+        inversionAttempts: 'attemptBoth',
       });
 
       if (code && code.data && code.data.trim()) {
         handleRawDecodedData(code.data);
+        return;
+      }
+
+      // If full frame didn't find, try center-box crop (zoomed center 70%)
+      const cropW = Math.round(canvas.width * 0.7);
+      const cropH = Math.round(canvas.height * 0.7);
+      const cropX = Math.round((canvas.width - cropW) / 2);
+      const cropY = Math.round((canvas.height - cropH) / 2);
+      const cropData = ctx.getImageData(cropX, cropY, cropW, cropH);
+      const cropCode = jsQR(cropData.data, cropData.width, cropData.height, {
+        inversionAttempts: 'attemptBoth'
+      });
+
+      if (cropCode && cropCode.data && cropCode.data.trim()) {
+        handleRawDecodedData(cropCode.data);
         return;
       }
     }
@@ -466,10 +591,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     startCamera(nextMode);
   };
 
-  // Helper to decode image using BarcodeDetector if available, otherwise multi-pass jsQR
+  // Helper to decode image using BarcodeDetector if available, otherwise multi-pass jsQR with thresholding & cropping
   const decodeImageElement = async (img: HTMLImageElement): Promise<string | null> => {
     // 1. Try native BarcodeDetector API (fastest on modern Chrome/Android)
-    if ('BarcodeDetector' in window) {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
         const barcodes = await detector.detect(img);
@@ -481,28 +606,68 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       }
     }
 
-    // 2. jsQR Multi-resolution pass
+    // 2. jsQR Multi-resolution & Multi-pass
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
 
-    // Resolutions to try (Original, 1000px, 600px)
+    // Resolutions to try (Original, 1200px, 800px, 500px)
     const targetSizes = [
       { w: img.width, h: img.height },
-      { w: Math.min(1000, img.width), h: Math.round(img.height * (Math.min(1000, img.width) / img.width)) },
-      { w: Math.min(600, img.width), h: Math.round(img.height * (Math.min(600, img.width) / img.width)) }
+      { w: Math.min(1200, img.width), h: Math.round(img.height * (Math.min(1200, img.width) / img.width)) },
+      { w: Math.min(800, img.width), h: Math.round(img.height * (Math.min(800, img.width) / img.width)) },
+      { w: Math.min(500, img.width), h: Math.round(img.height * (Math.min(500, img.width) / img.width)) }
     ];
 
     for (const size of targetSizes) {
       canvas.width = size.w;
       canvas.height = size.h;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // Pass A: Normal image
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imgData.data, imgData.width, imgData.height, {
+      const codeA = jsQR(imgData.data, imgData.width, imgData.height, {
         inversionAttempts: 'attemptBoth'
       });
-      if (code && code.data && code.data.trim()) {
-        return code.data.trim();
+      if (codeA && codeA.data && codeA.data.trim()) {
+        return codeA.data.trim();
+      }
+
+      // Pass B: Center Crop (Zoomed 70%)
+      const cropW = Math.round(canvas.width * 0.7);
+      const cropH = Math.round(canvas.height * 0.7);
+      const cropX = Math.round((canvas.width - cropW) / 2);
+      const cropY = Math.round((canvas.height - cropH) / 2);
+      const cropData = ctx.getImageData(cropX, cropY, cropW, cropH);
+      const cropCode = jsQR(cropData.data, cropData.width, cropData.height, {
+        inversionAttempts: 'attemptBoth'
+      });
+      if (cropCode && cropCode.data && cropCode.data.trim()) {
+        return cropCode.data.trim();
+      }
+
+      // Pass C: High Contrast / Binarization (Otsu-like thresholding for low light or glare photos)
+      const binaryData = ctx.createImageData(canvas.width, canvas.height);
+      let sum = 0;
+      const count = imgData.width * imgData.height;
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const gray = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+        sum += gray;
+      }
+      const avgBrightness = sum / count;
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const gray = 0.299 * imgData.data[i] + 0.587 * imgData.data[i + 1] + 0.114 * imgData.data[i + 2];
+        const val = gray > avgBrightness ? 255 : 0;
+        binaryData.data[i] = val;
+        binaryData.data[i + 1] = val;
+        binaryData.data[i + 2] = val;
+        binaryData.data[i + 3] = 255;
+      }
+      const codeC = jsQR(binaryData.data, binaryData.width, binaryData.height, {
+        inversionAttempts: 'attemptBoth'
+      });
+      if (codeC && codeC.data && codeC.data.trim()) {
+        return codeC.data.trim();
       }
     }
 

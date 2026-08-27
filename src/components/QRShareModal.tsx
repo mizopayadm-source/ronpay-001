@@ -306,10 +306,12 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
           <QRCodeSVG 
             id="ronpay-share-qr-svg"
             value={activeQrValue} 
-            size={190} 
-            level="H" 
+            size={220} 
+            level="M" 
             includeMargin 
-            className="w-44 h-44 sm:w-48 sm:h-48"
+            fgColor="#000000"
+            bgColor="#ffffff"
+            className="w-48 h-48 sm:w-52 sm:h-52"
           />
           <p className="text-[11px] font-bold text-slate-800 mt-2 font-mono break-all text-center">
             {qrType === 'smart_link' ? '🌐 WEB PORTAL LINK' : `UPI: ${effectiveUpiId}`}

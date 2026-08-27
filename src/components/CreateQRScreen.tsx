@@ -1260,17 +1260,18 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
               </div>
 
               {/* System-wide Unique Prefix Code Setting */}
-              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2">
-                <div className="flex items-center justify-between">
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
                   <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <QrCode className="w-3.5 h-3.5 text-blue-600" /> Bawm Prefix Code (System-wide Unique) *
+                    <QrCode className="w-3.5 h-3.5 text-blue-600 shrink-0" /> 
+                    <span>Bawm Prefix Code *</span>
                   </label>
-                  <span className="text-[10px] font-bold text-slate-500">
-                    Sample Member ID: <span className="font-mono text-blue-600 font-black">{(prefixCode || 'BET').toUpperCase()}-7890</span>
+                  <span className="text-[10px] font-bold text-slate-500 truncate">
+                    Sample: <span className="font-mono text-blue-600 font-black">{(prefixCode || 'BET').toUpperCase()}-7890</span>
                   </span>
                 </div>
 
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                   <input
                     type="text"
                     maxLength={6}
@@ -1279,8 +1280,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                       setPrefixUserEdited(true);
                       setPrefixCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
                     }}
-                    placeholder="e.g. BET, EBE"
-                    className={`w-28 bg-slate-50 border-2 rounded-xl p-2 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
+                    placeholder="e.g. BET"
+                    className={`w-full sm:w-28 bg-slate-50 border-2 rounded-xl p-2 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
                       prefixCode.trim() && isPrefixCodeTaken(prefixCode.trim())
                         ? 'border-rose-500 text-rose-700 bg-rose-50'
                         : prefixCode.trim()
@@ -1306,7 +1307,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                 </div>
 
                 {/* Quick Sync / Re-derive from Org Name button */}
-                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => {
@@ -1322,17 +1323,17 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                     }}
                     className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition cursor-pointer"
                   >
-                    <RefreshCw className="w-3 h-3 text-blue-600" />
-                    <span>🔄 Org Name atangin Sync / Thlak Thung rawh</span>
+                    <RefreshCw className="w-3 h-3 text-blue-600 shrink-0" />
+                    <span>Org Name atangin Sync rawh</span>
                   </button>
-                  <span className="text-[9px] text-slate-400 font-medium">Duhtawkin manual-in a thlak theih reng bawk</span>
+                  <span className="text-[9px] text-slate-400 font-medium">Manual-in a thlak theih bawk</span>
                 </div>
 
                 {/* Dynamic Suggestions if Taken */}
                 {prefixCode.trim() && isPrefixCodeTaken(prefixCode.trim()) && (
                   <div className="bg-rose-50/90 p-2.5 rounded-xl border border-rose-200 space-y-1.5 animate-fadeIn">
                     <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-900">
-                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
                       <span>Rawtna / Alternative Suggestions (Hmet la i thlang nghal ang):</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1360,8 +1361,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
               </div>
 
               {/* Fund Heads / Sub-Categories */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center mb-1">
                   <label className="text-[10.5px] font-bold text-slate-700">Sub-Categories / Fund Heads</label>
                 </div>
 
@@ -1376,12 +1377,12 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                           updated[idx] = e.target.value;
                           setKumtluangSubcats(updated);
                         }}
-                        className="flex-1 bg-white border border-slate-300 rounded-xl p-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                        className="flex-1 min-w-0 bg-white border border-slate-300 rounded-xl p-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
                       />
                       <button
                         type="button"
                         onClick={() => handleRemoveSubcategory(idx)}
-                        className="w-7 h-7 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center text-xs hover:bg-rose-200 transition cursor-pointer"
+                        className="w-7 h-7 shrink-0 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center text-xs hover:bg-rose-200 transition cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1394,12 +1395,12 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                       value={newSubcatName}
                       onChange={(e) => setNewSubcatName(e.target.value)}
                       placeholder="+ Sub-category hming thar..."
-                      className="flex-1 bg-white border border-dashed border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
+                      className="flex-1 min-w-0 bg-white border border-dashed border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                     <button
                       type="button"
                       onClick={handleAddSubcategory}
-                      className="px-2.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
+                      className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
                     >
                       Add
                     </button>
@@ -1408,13 +1409,13 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
               </div>
 
               {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}
-              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2.5">
-                <div className="flex justify-between items-center">
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
                   <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-blue-600" />
-                    Bial / Section / Veng Dropdown Setup
+                    <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Bial / Section Dropdown Setup</span>
                   </label>
-                  <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md">
+                  <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
                     Pre-defined Dropdown
                   </span>
                 </div>
@@ -1458,7 +1459,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">
                       Label Hming (Dynamic Label)
@@ -1481,7 +1482,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         value={newSectionName}
                         onChange={(e) => setNewSectionName(e.target.value)}
                         placeholder="+ Bial/Section..."
-                        className="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
                       />
                       <button
                         type="button"
@@ -1491,7 +1492,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                             setNewSectionName('');
                           }
                         }}
-                        className="px-2.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                        className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
                       >
                         +
                       </button>
@@ -1504,13 +1505,13 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                   {kumtluangSections.map((sec, idx) => (
                     <span
                       key={idx}
-                      className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                      className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
                     >
-                      <span>{sec}</span>
+                      <span className="truncate">{sec}</span>
                       <button
                         type="button"
                         onClick={() => setKumtluangSections(kumtluangSections.filter((_, i) => i !== idx))}
-                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1"
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
                       >
                         ✕
                       </button>
@@ -2595,22 +2596,22 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
               </div>
 
               {/* Unique Prefix Code Editor */}
-              <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-1.5">
-                <div className="flex items-center justify-between">
+              <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-1.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
                   <label className="text-[10px] font-black text-blue-950 uppercase tracking-wider">
-                    Bawm Prefix Code (System-wide Unique)
+                    Bawm Prefix Code
                   </label>
-                  <span className="text-[9.5px] font-mono font-bold text-blue-700">
+                  <span className="text-[9.5px] font-mono font-bold text-blue-700 truncate">
                     Sample: {editOrgCode.trim().toUpperCase() || 'EBE'}-7890
                   </span>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
                   <input
                     type="text"
                     maxLength={6}
                     value={editOrgCode}
                     onChange={(e) => setEditOrgCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                    className={`w-24 bg-slate-50 border-2 rounded-xl p-1.5 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
+                    className={`w-full sm:w-24 bg-slate-50 border-2 rounded-xl p-1.5 font-mono font-black text-center text-xs tracking-wider uppercase focus:outline-none ${
                       editOrgCode.trim() && isPrefixCodeTaken(editOrgCode.trim(), campaign.id)
                         ? 'border-rose-500 text-rose-700 bg-rose-50'
                         : editOrgCode.trim()
@@ -2628,7 +2629,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 </div>
 
                 {/* Quick Sync with Org Name button */}
-                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-1 pt-1 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => {
@@ -2643,10 +2644,10 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     }}
                     className="text-[9.5px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition cursor-pointer"
                   >
-                    <RefreshCw className="w-2.5 h-2.5 text-blue-600" />
-                    <span>🔄 Org Name atangin Sync / Thlak Thung rawh</span>
+                    <RefreshCw className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                    <span>Org Name atangin Sync rawh</span>
                   </button>
-                  <span className="text-[8.5px] text-slate-400 font-medium">Member awm sa te ID auto-update nghal ang</span>
+                  <span className="text-[8.5px] text-slate-400 font-medium">Member ID auto-update nghal ang</span>
                 </div>
 
                 {editOrgCode.trim() && isPrefixCodeTaken(editOrgCode.trim(), campaign.id) && (

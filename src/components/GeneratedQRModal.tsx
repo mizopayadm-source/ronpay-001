@@ -11,7 +11,7 @@ import {
   Globe
 } from 'lucide-react';
 import { Campaign } from '../types';
-import { generateQRCodeDataUrl, getCampaignWebPortalUrl } from '../utils/qr';
+import { generateQRCodeDataUrl, getCampaignWebPortalUrl, generateUPILink } from '../utils/qr';
 
 interface GeneratedQRModalProps {
   isOpen: boolean;
@@ -36,17 +36,13 @@ export const GeneratedQRModal: React.FC<GeneratedQRModalProps> = ({
           setQrDataUrl(url);
         });
       } else {
-        const qrPayload = JSON.stringify({
-          platform: 'RonPay',
-          campaignId: campaign.id,
-          category: campaign.category,
-          title: campaign.title,
-          upi: campaign.upiId,
-          status: campaign.status,
-          validity: campaign.validityDate,
+        const upiUri = generateUPILink({
+          upiId: campaign.targetUpiId || campaign.upiId || 'ronpay@axl',
+          name: campaign.creatorName || campaign.orgName || campaign.title,
+          note: `RonPay:${campaign.id}`
         });
 
-        generateQRCodeDataUrl(qrPayload).then(url => {
+        generateQRCodeDataUrl(upiUri).then(url => {
           setQrDataUrl(url);
         });
       }
