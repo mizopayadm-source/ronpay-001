@@ -15,6 +15,7 @@ import { Language } from './utils/translations';
 import {
   getStoredCampaigns,
   saveStoredCampaigns,
+  saveCampaign,
   getStoredTransactions,
   saveStoredTransactions,
   getStoredCreatorProfile,
@@ -58,6 +59,7 @@ import { ReportsScreen } from './components/ReportsScreen';
 import { SuccessScreen } from './components/SuccessScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
+import { BottomNav } from './components/BottomNav';
 
 // Modals
 import { QRScannerModal } from './components/QRScannerModal';
@@ -291,6 +293,16 @@ export default function App() {
   };
 
   const handleGenerateQR = (campaign: Campaign) => {
+    saveCampaign(campaign);
+    setCampaigns(prev => {
+      const idx = prev.findIndex(c => c.id === campaign.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = campaign;
+        return copy;
+      }
+      return [campaign, ...prev];
+    });
     setGeneratedQRCampaign(campaign);
     setIsGeneratedQROpen(true);
     reloadLocalData();
@@ -544,6 +556,19 @@ export default function App() {
             />
           )}
         </main>
+
+        {/* Global Footer Navigation (Home, Roll, Studio, Report, Profile) */}
+        {currentScreen !== 'checkout' && (
+          <BottomNav
+            currentScreen={currentScreen}
+            onNavigate={handleNavigate}
+            onOpenMemberRoll={handleOpenMemberRoll}
+            onOpenProfile={() => setIsProfileOpen(true)}
+            isProfileOpen={isProfileOpen}
+            isKumtluangManagerOpen={isKumtluangManagerOpen}
+            language={language}
+          />
+        )}
 
         {/* Global Floating Actions / Modals */}
         <QRScannerModal

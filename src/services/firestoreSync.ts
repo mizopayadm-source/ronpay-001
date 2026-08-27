@@ -375,7 +375,7 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
     await setDoc(docRef, cleanTx, { merge: true });
     console.log('[Firestore] Transaction successfully synced:', tx.id);
   } catch (err) {
-    console.error('[Firestore] Error saving transaction:', err);
+    console.error('Firebase Error:', err);
   }
 }
 

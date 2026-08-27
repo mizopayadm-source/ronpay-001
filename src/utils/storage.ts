@@ -313,6 +313,30 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
   }
 };
 
+export const saveCampaign = (camp: Campaign): void => {
+  if (!camp || !camp.id) return;
+  const current = getStoredCampaigns();
+  const idx = current.findIndex(c => c.id === camp.id);
+  let updated: Campaign[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = camp;
+  } else {
+    updated = [camp, ...current];
+  }
+  saveStoredCampaigns(updated);
+  syncCampaignToFirestore(camp).catch((err) => {
+    console.error('Firebase Error:', err);
+  });
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(camp)
+    }).catch(() => {});
+  }
+};
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
     const raw = localStorage.getItem(TRANSACTIONS_KEY);

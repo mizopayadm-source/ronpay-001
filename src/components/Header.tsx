@@ -377,105 +377,75 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="absolute -right-6 -top-6 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute left-1/4 -bottom-6 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
 
-      <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 relative z-10">
-        {/* Top Section (Mobile) / Left Section (Desktop): Brand & Top Actions */}
-        <div className="w-full sm:w-auto flex items-center justify-between gap-2 min-w-0">
-          {/* Brand Logo & Title (Separated from inner interactive controls) */}
-          <div className="flex items-center gap-2 sm:gap-3 text-left shrink-0">
-            <button 
-              type="button"
-              onClick={() => onNavigate('screen-home')}
-              className="flex items-center gap-2 sm:gap-3 group transition cursor-pointer shrink-0 focus:outline-none"
-            >
-              {/* Logo Squircle */}
-              <div className="relative shrink-0">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 via-indigo-500 to-indigo-700 shadow-md group-hover:scale-105 transition-transform duration-200">
-                  <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center relative overflow-hidden">
-                    <svg viewBox="0 0 40 40" className="w-5.5 h-5.5 sm:w-6.5 sm:h-6.5 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <defs>
-                        <linearGradient id="rPayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#FDE047" />
-                          <stop offset="45%" stopColor="#F59E0B" />
-                          <stop offset="100%" stopColor="#FB7185" />
-                        </linearGradient>
-                        <linearGradient id="rPayGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#38BDF8" />
-                          <stop offset="100%" stopColor="#818CF8" />
-                        </linearGradient>
-                      </defs>
-                      <circle cx="20" cy="20" r="17" stroke="url(#rPayGrad2)" strokeWidth="1.5" strokeDasharray="4 2" strokeOpacity="0.4" />
-                      <rect x="10" y="9" width="4.5" height="22" rx="2.25" fill="url(#rPayGrad)" />
-                      <path 
-                        d="M13 9H22C25.5 9 28.5 12 28.5 15.5C28.5 19 25.5 22 22 22H13" 
-                        stroke="url(#rPayGrad)" 
-                        strokeWidth="4.5" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                      />
-                      <path 
-                        d="M19 20L27 31" 
-                        stroke="url(#rPayGrad)" 
-                        strokeWidth="4.5" 
-                        strokeLinecap="round" 
-                      />
-                      <circle cx="29" cy="11" r="2.2" fill="#38BDF8" />
-                    </svg>
-                  </div>
-                </div>
-                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-slate-950 shadow-xs ${isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-ping'}`} />
-              </div>
-
-              {/* Brand Name & FINTECH Badge */}
-              <div className="shrink-0 flex flex-col justify-center">
-                <div className="flex items-center gap-1.5 leading-tight">
-                  <span className="font-black text-lg sm:text-2xl tracking-tight text-white font-sans whitespace-nowrap">
-                    RON<span className="text-amber-400">PAY</span>
-                  </span>
-                  <span className="inline-flex bg-amber-400/15 text-amber-300 text-[8.5px] sm:text-[9.5px] font-black px-1.5 sm:px-2 py-0.5 rounded-full border border-amber-400/40 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
-                    <Sparkles className="w-2.5 h-2.5 text-amber-300 shrink-0" /> FINTECH
-                  </span>
-                  {!isOnline && (
-                    <span className="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border border-amber-400/50 uppercase tracking-wider shrink-0 whitespace-nowrap animate-pulse">
-                      <WifiOff className="w-2.5 h-2.5 text-amber-300" /> OFFLINE
-                    </span>
-                  )}
+      <div className="px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 relative z-10">
+        {/* Main Row: Brand & Quick Action Controls */}
+        <div className="flex items-center justify-between gap-2 w-full">
+          {/* Brand Logo & Title */}
+          <button 
+            type="button"
+            onClick={() => onNavigate('home')}
+            className="flex items-center gap-2 group transition cursor-pointer shrink-0 focus:outline-none text-left"
+          >
+            {/* Logo Squircle */}
+            <div className="relative shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-0.5 bg-gradient-to-br from-amber-400 via-indigo-500 to-indigo-700 shadow-md group-hover:scale-105 transition-transform duration-200">
+                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center relative overflow-hidden">
+                  <svg viewBox="0 0 40 40" className="w-5 h-5 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <linearGradient id="rPayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#FDE047" />
+                        <stop offset="45%" stopColor="#F59E0B" />
+                        <stop offset="100%" stopColor="#FB7185" />
+                      </linearGradient>
+                      <linearGradient id="rPayGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#38BDF8" />
+                        <stop offset="100%" stopColor="#818CF8" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="20" cy="20" r="17" stroke="url(#rPayGrad2)" strokeWidth="1.5" strokeDasharray="4 2" strokeOpacity="0.4" />
+                    <rect x="10" y="9" width="4.5" height="22" rx="2.25" fill="url(#rPayGrad)" />
+                    <path 
+                      d="M13 9H22C25.5 9 28.5 12 28.5 15.5C28.5 19 25.5 22 22 22H13" 
+                      stroke="url(#rPayGrad)" 
+                      strokeWidth="4.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                    />
+                    <path 
+                      d="M19 20L27 31" 
+                      stroke="url(#rPayGrad)" 
+                      strokeWidth="4.5" 
+                      strokeLinecap="round" 
+                    />
+                    <circle cx="29" cy="11" r="2.2" fill="#38BDF8" />
+                  </svg>
                 </div>
               </div>
-            </button>
-
-            {/* Desktop Live Auto GPS Status Chip (Placed outside the logo button) */}
-            <div 
-              onClick={handleLocationClick}
-              className="hidden sm:flex text-xs text-slate-300 font-medium items-center gap-1.5 hover:text-amber-300 transition cursor-pointer mt-0.5 ml-1 group bg-slate-900/60 px-2 py-1 rounded-lg border border-slate-800"
-              title="Live Auto GPS (Click to re-detect / tap again to cycle location)"
-            >
-              {isLocating ? (
-                <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
-              ) : (
-                <span className="relative flex items-center justify-center">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
-                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                </span>
-              )}
-              <span className="truncate max-w-[180px] md:max-w-[220px] font-bold text-slate-200 text-xs">
-                {userLocation}
-              </span>
-              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-emerald-950/80 border border-emerald-500/40 rounded text-[8.5px] font-black text-emerald-300 uppercase tracking-wider">
-                <Crosshair className="w-2 h-2 text-emerald-400" /> Auto GPS
-              </span>
-              <span
-                title="Re-detect GPS location"
-                className="p-0.5 hover:text-amber-400"
-              >
-                <RotateCw className={`w-2.5 h-2.5 text-slate-500 opacity-70 group-hover:opacity-100 transition-all shrink-0 ${isLocating ? 'animate-spin text-amber-400' : ''}`} />
-              </span>
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-slate-950 shadow-xs ${isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-ping'}`} />
             </div>
-          </div>
 
-          {/* Mobile Top-Right Quick Actions: Language, Notification, & Scan */}
-          <div className="flex sm:hidden items-center gap-1.5 shrink-0">
-            {/* Language Switcher */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px] font-black shadow-inner">
+            {/* Brand Name & FINTECH Badge */}
+            <div className="shrink-0 flex flex-col justify-center">
+              <div className="flex items-center gap-1 leading-tight">
+                <span className="font-black text-base sm:text-lg tracking-tight text-white font-sans whitespace-nowrap">
+                  RON<span className="text-amber-400">PAY</span>
+                </span>
+                <span className="inline-flex bg-amber-400/15 text-amber-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-amber-400/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
+                  FINTECH
+                </span>
+                {!isOnline && (
+                  <span className="inline-flex items-center gap-0.5 bg-rose-500/20 text-rose-300 text-[7.5px] font-bold px-1.5 py-0.5 rounded-full border border-rose-400/40 uppercase tracking-wider shrink-0 whitespace-nowrap">
+                    OFFLINE
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+
+          {/* Right Action Controls */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Language Switcher (MZ / EN) */}
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[9.5px] font-black shadow-inner">
               <button
                 type="button"
                 onClick={() => onToggleLanguage('mizo')}
@@ -484,6 +454,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title="Mizo"
               >
                 MZ
               </button>
@@ -495,43 +466,55 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
+                title="English"
               >
                 EN
               </button>
             </div>
+
+            {/* Viewport Toggle (Desktop / Mobile Frame) */}
+            <button
+              type="button"
+              onClick={onToggleDesktopView}
+              title={isDesktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-300 flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+            >
+              {isDesktopView ? <Smartphone className="w-3.5 h-3.5 text-amber-300" /> : <Monitor className="w-3.5 h-3.5 text-indigo-300" />}
+            </button>
 
             {/* Notifications Button */}
             <button
               type="button"
               onClick={onOpenNotifications}
               title="Notifications"
-              className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition relative cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition relative cursor-pointer active:scale-95 shrink-0 shadow-xs"
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-3.5 h-3.5" />
               {notificationCount > 0 && (
                 <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-slate-950 animate-pulse" />
               )}
             </button>
 
-            {/* QR Scanner Primary Action Button */}
+            {/* QR Scanner Action Button */}
             <button
               type="button"
               onClick={onOpenScanner}
               title="Scan QR Code"
-              className="w-8 h-8 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 rounded-lg flex items-center justify-center transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+              className="h-7 sm:h-8 px-2 sm:px-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
             >
-              <QrCode className="w-4.5 h-4.5" />
+              <QrCode className="w-3.5 h-3.5" />
+              <span className="tracking-tight font-black">SCAN</span>
             </button>
           </div>
         </div>
 
-        {/* Mobile Bottom Sub-Bar: Full-Width Balanced Grid with Live Auto GPS on Left, History & Reports on Right */}
-        <div className="w-full flex sm:hidden items-center justify-between bg-slate-900/90 backdrop-blur-xs border border-slate-800/80 rounded-xl px-2.5 py-1.5 gap-2 shadow-inner">
-          {/* Live Auto GPS on Left */}
+        {/* Sub-Row: Location Auto GPS Bar & Sulhnu Quick Link */}
+        <div className="w-full flex items-center justify-between bg-slate-900/80 backdrop-blur-xs border border-slate-800/80 rounded-xl px-2.5 py-1 gap-2 shadow-inner">
+          {/* Live Auto GPS (Click to change/cycle) */}
           <div 
             onClick={handleLocationClick}
-            className="flex items-center gap-1.5 min-w-0 text-slate-300 hover:text-amber-300 transition cursor-pointer group text-left"
-            title="Auto-detected GPS Location (Click to re-detect / tap again to cycle)"
+            className="flex items-center gap-1.5 min-w-0 text-slate-300 hover:text-amber-300 transition cursor-pointer group text-left flex-1"
+            title="Auto GPS Location (Click to change)"
           >
             {isLocating ? (
               <Loader2 className="w-3 h-3 text-amber-400 animate-spin shrink-0" />
@@ -541,115 +524,42 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-emerald-400 rounded-full animate-ping" />
               </span>
             )}
-            <span className="truncate max-w-[130px] xs:max-w-[160px] font-bold text-slate-200 text-[11px]">
+            <span className="truncate text-[11px] font-bold text-slate-200 max-w-[170px] sm:max-w-[240px]">
               {userLocation}
             </span>
+            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-emerald-950/90 border border-emerald-500/40 rounded text-[7.5px] font-black text-emerald-300 uppercase tracking-wider shrink-0">
+              <Crosshair className="w-2 h-2 text-emerald-400" /> GPS
+            </span>
             <span
-              title="Auto-detect phone GPS"
-              className="p-1 hover:text-amber-400"
+              title="Re-detect GPS"
+              className="p-0.5 hover:text-amber-400 shrink-0"
             >
-              <RotateCw className={`w-2.5 h-2.5 text-slate-500 opacity-70 group-hover:opacity-100 transition-all shrink-0 ${isLocating ? 'animate-spin text-amber-400' : ''}`} />
+              <RotateCw className={`w-2.5 h-2.5 text-slate-500 opacity-70 group-hover:opacity-100 transition-all ${isLocating ? 'animate-spin text-amber-400' : ''}`} />
             </span>
           </div>
 
-          {/* Quick Navigation: Sulhnu (History) & Reports on Right */}
+          {/* Quick Actions: Sulhnu (History) & Report (Print / Statement) */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
+              type="button"
               onClick={onOpenHistory}
               title={language === 'mizo' ? 'Pekna Sulhnu (History)' : 'Transaction History'}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-[10.5px] font-bold border border-slate-700 transition cursor-pointer active:scale-95"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >
-              <History className="w-3.5 h-3.5 text-amber-400" />
+              <History className="w-3 h-3 text-amber-400" />
               <span>Sulhnu</span>
             </button>
 
             <button
+              type="button"
               onClick={onOpenReports}
-              title="Reports & Export Sheet"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-[10.5px] font-bold border border-slate-700 transition cursor-pointer active:scale-95"
+              title={language === 'mizo' ? 'Reports & Print Statements' : 'Reports & Print Statements'}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-emerald-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >
-              <FileDown className="w-3.5 h-3.5 text-emerald-400" />
+              <FileDown className="w-3 h-3 text-emerald-400" />
               <span>Report</span>
             </button>
           </div>
-        </div>
-
-        {/* Desktop Action Toolbar (sm+ screens) */}
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          {/* Language Switcher (MZ | EN) */}
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-[11px] font-black shadow-inner">
-            <button
-              onClick={() => onToggleLanguage('mizo')}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                language === 'mizo'
-                  ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="Mizo version"
-            >
-              MZ
-            </button>
-            <button
-              onClick={() => onToggleLanguage('english')}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                language === 'english'
-                  ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="English version"
-            >
-              EN
-            </button>
-          </div>
-
-          {/* Sulhnu / History Button */}
-          <button
-            onClick={onOpenHistory}
-            title={language === 'mizo' ? 'Pekna Sulhnu (History)' : 'Transaction History'}
-            className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-amber-400 flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
-          >
-            <History className="w-4.5 h-4.5" />
-          </button>
-
-          {/* Reports & Export Button */}
-          <button
-            onClick={onOpenReports}
-            title="Reports & Export Sheet"
-            className="flex w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
-          >
-            <FileDown className="w-4.5 h-4.5 text-emerald-400" />
-          </button>
-
-          {/* Desktop/Phone View Toggle */}
-          <button
-            onClick={onToggleDesktopView}
-            title={isDesktopView ? "Switch to Phone Frame" : "Switch to Wide Desktop View"}
-            className="hidden md:flex w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-amber-300 items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
-          >
-            {isDesktopView ? <Smartphone className="w-4.5 h-4.5 text-amber-300" /> : <Monitor className="w-4.5 h-4.5 text-indigo-300" />}
-          </button>
-
-          {/* Notifications Button */}
-          <button
-            onClick={onOpenNotifications}
-            title="Notifications"
-            className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition relative cursor-pointer active:scale-95 shrink-0 shadow-xs"
-          >
-            <Bell className="w-4.5 h-4.5" />
-            {notificationCount > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-slate-950 animate-pulse" />
-            )}
-          </button>
-
-          {/* QR Scanner Primary Action Button */}
-          <button
-            onClick={onOpenScanner}
-            title="Scan QR Code"
-            className="h-10 px-3.5 sm:px-4 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-xl flex items-center justify-center gap-1.5 font-black text-xs transition shadow-sm cursor-pointer transform active:scale-95 border border-amber-300 shrink-0"
-          >
-            <QrCode className="w-4.5 h-4.5" />
-            <span className="text-xs font-black tracking-tight">SCAN</span>
-          </button>
         </div>
       </div>
 
