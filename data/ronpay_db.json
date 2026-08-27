@@ -18,7 +18,7 @@
       "status": "active",
       "createdAt": "2026-08-16T23:00",
       "createdBy": "9862311223",
-      "updatedAt": "2026-08-27T05:46:45.923Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-ralna-2",
@@ -38,7 +38,7 @@
       "status": "active",
       "createdAt": "2026-08-17T07:00",
       "createdBy": "9436155667",
-      "updatedAt": "2026-08-27T05:46:45.923Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-khawlsak-1",
@@ -56,7 +56,7 @@
       "status": "active",
       "createdAt": "2026-08-01T09:00",
       "createdBy": "9862311223",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-khawlsak-2",
@@ -74,7 +74,7 @@
       "status": "active",
       "createdAt": "2026-08-05T10:00",
       "createdBy": "9774123456",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-khawlsak-3",
@@ -92,7 +92,7 @@
       "status": "active",
       "createdAt": "2026-08-18T10:00",
       "createdBy": "9862012345",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-rikrum-1",
@@ -112,7 +112,7 @@
       "status": "active",
       "createdAt": "2026-08-10T14:00",
       "createdBy": "9862012345",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-kumtluang-1",
@@ -143,7 +143,7 @@
       "status": "active",
       "createdAt": "2026-01-01T00:00",
       "createdBy": "9862599881",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "cmp-kumtluang-2",
@@ -175,7 +175,7 @@
       "status": "active",
       "createdAt": "2026-01-10T00:00",
       "createdBy": "9862599881",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     }
   ],
   "members": [
@@ -201,7 +201,7 @@
         }
       ],
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.699Z"
+      "updatedAt": "2026-08-27T06:27:02.577Z"
     },
     {
       "id": "EBE-8622",
@@ -225,7 +225,7 @@
         }
       ],
       "createdAt": "2026-01-02T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.699Z"
+      "updatedAt": "2026-08-27T06:27:02.577Z"
     },
     {
       "id": "EBE-3120",
@@ -244,7 +244,7 @@
         }
       ],
       "createdAt": "2026-01-03T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.699Z"
+      "updatedAt": "2026-08-27T06:27:02.577Z"
     },
     {
       "id": "EBE-5544",
@@ -257,7 +257,7 @@
       "isFamilyHead": true,
       "dependents": [],
       "createdAt": "2026-01-04T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.700Z"
+      "updatedAt": "2026-08-27T06:27:02.577Z"
     },
     {
       "id": "EBE-9912",
@@ -276,7 +276,7 @@
         }
       ],
       "createdAt": "2026-01-05T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.700Z"
+      "updatedAt": "2026-08-27T06:27:02.577Z"
     },
     {
       "id": "KTL-5510",
@@ -300,7 +300,7 @@
         }
       ],
       "createdAt": "2026-01-06T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.700Z"
+      "updatedAt": "2026-08-27T06:27:02.578Z"
     },
     {
       "id": "KTL-7234",
@@ -319,7 +319,7 @@
         }
       ],
       "createdAt": "2026-01-07T00:00:00.000Z",
-      "updatedAt": "2026-08-27T05:46:40.700Z"
+      "updatedAt": "2026-08-27T06:27:02.578Z"
     }
   ],
   "transactions": [
@@ -351,7 +351,7 @@
       },
       "timestamp": "2026-08-18T06:30:00.000Z",
       "txHash": "RPAYEBE146008",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.784Z"
     },
     {
       "id": "TXN-EBE-1460-07",
@@ -380,7 +380,7 @@
       },
       "timestamp": "2026-07-15T08:00:00.000Z",
       "txHash": "RPAYEBE146007",
-      "updatedAt": "2026-08-27T05:46:45.926Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-06",
@@ -409,7 +409,7 @@
       },
       "timestamp": "2026-06-14T09:10:00.000Z",
       "txHash": "RPAYEBE146006",
-      "updatedAt": "2026-08-27T05:46:45.811Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-05",
@@ -438,7 +438,7 @@
       },
       "timestamp": "2026-05-12T10:20:00.000Z",
       "txHash": "RPAYEBE146005",
-      "updatedAt": "2026-08-27T05:46:45.811Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-04",
@@ -467,7 +467,7 @@
       },
       "timestamp": "2026-04-10T11:00:00.000Z",
       "txHash": "RPAYEBE146004",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-03",
@@ -496,7 +496,7 @@
       },
       "timestamp": "2026-03-15T09:45:00.000Z",
       "txHash": "RPAYEBE146003",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-02",
@@ -525,7 +525,7 @@
       },
       "timestamp": "2026-02-14T10:00:00.000Z",
       "txHash": "RPAYEBE146002",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-1460-01",
@@ -554,7 +554,7 @@
       },
       "timestamp": "2026-01-18T11:15:00.000Z",
       "txHash": "RPAYEBE146001",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-8622-08",
@@ -583,7 +583,7 @@
       },
       "timestamp": "2026-08-18T07:15:00.000Z",
       "txHash": "RPAYEBE862208",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-8622-07",
@@ -612,7 +612,7 @@
       },
       "timestamp": "2026-07-16T09:30:00.000Z",
       "txHash": "RPAYEBE862207",
-      "updatedAt": "2026-08-27T05:46:45.926Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-8622-06",
@@ -641,7 +641,7 @@
       },
       "timestamp": "2026-06-18T10:00:00.000Z",
       "txHash": "RPAYEBE862206",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-8622-05",
@@ -670,7 +670,7 @@
       },
       "timestamp": "2026-05-15T11:45:00.000Z",
       "txHash": "RPAYEBE862205",
-      "updatedAt": "2026-08-27T05:46:45.812Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-3120-08",
@@ -699,7 +699,7 @@
       },
       "timestamp": "2026-08-17T11:00:00.000Z",
       "txHash": "RPAYEBE312008",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-3120-07",
@@ -728,7 +728,7 @@
       },
       "timestamp": "2026-07-18T14:30:00.000Z",
       "txHash": "RPAYEBE312007",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-5544-08",
@@ -756,7 +756,7 @@
       },
       "timestamp": "2026-08-16T15:20:00.000Z",
       "txHash": "RPAYEBE554408",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-EBE-9912-08",
@@ -785,7 +785,7 @@
       },
       "timestamp": "2026-08-18T06:45:00.000Z",
       "txHash": "RPAYEBE991208",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-KTL-5510-08",
@@ -814,7 +814,7 @@
       },
       "timestamp": "2026-08-17T09:00:00.000Z",
       "txHash": "RPAYKTL551008",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-KTL-5510-07",
@@ -843,7 +843,7 @@
       },
       "timestamp": "2026-07-14T10:15:00.000Z",
       "txHash": "RPAYKTL551007",
-      "updatedAt": "2026-08-27T05:46:45.928Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-KTL-7234-08",
@@ -872,7 +872,7 @@
       },
       "timestamp": "2026-08-16T11:40:00.000Z",
       "txHash": "RPAYKTL723408",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-9011",
@@ -891,7 +891,7 @@
       "remark": "Sunpui chhungte tan thlamuanna kan dilpui e.",
       "timestamp": "2026-08-17T18:30:00.000Z",
       "txHash": "RPAY9928103A",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.785Z"
     },
     {
       "id": "TXN-9013",
@@ -910,7 +910,7 @@
       "remark": "Mani phak tawk chawmna",
       "timestamp": "2026-08-17T19:10:00.000Z",
       "txHash": "RPAY9928104B",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-RALNA-201",
@@ -929,7 +929,7 @@
       "remark": "Chhungte thlamuan nan.",
       "timestamp": "2026-08-17T08:30:00.000Z",
       "txHash": "RPAYRALNA201",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-9012",
@@ -945,7 +945,7 @@
       "status": "completed",
       "timestamp": "2026-08-17T17:15:00.000Z",
       "txHash": "RPAY7721992B",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-9014",
@@ -964,7 +964,7 @@
       "remark": "Treasurer hnenah cash-a thehluh a ni e.",
       "timestamp": "2026-08-17T14:20:00.000Z",
       "txHash": "RPAYCASH8831",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-RIKRUM-102",
@@ -983,7 +983,7 @@
       "remark": "In kang tuartute tanpui nan.",
       "timestamp": "2026-08-16T16:00:00.000Z",
       "txHash": "RPAYRIK102",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-BILL-8801",
@@ -1000,7 +1000,7 @@
       "status": "completed",
       "timestamp": "2026-08-18T09:40:00.000Z",
       "txHash": "RPAYBILL0192X",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-BILL-8802",
@@ -1017,7 +1017,7 @@
       "status": "completed",
       "timestamp": "2026-08-18T10:15:00.000Z",
       "txHash": "RPAYBILL0381Y",
-      "updatedAt": "2026-08-27T05:46:45.924Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     },
     {
       "id": "TXN-BILL-8803",
@@ -1034,7 +1034,7 @@
       "status": "completed",
       "timestamp": "2026-08-17T16:25:00.000Z",
       "txHash": "RPAYBILL0772Z",
-      "updatedAt": "2026-08-27T05:46:45.925Z"
+      "updatedAt": "2026-08-27T06:27:03.705Z"
     }
   ],
   "creators": [
@@ -1058,7 +1058,7 @@
       "trialExpiresAt": "2027-01-24T04:52:31.258Z",
       "subscriptionExpiresAt": "2027-01-24T04:52:31.258Z",
       "registeredAt": "2026-07-28T04:52:31.258Z",
-      "updatedAt": "2026-08-27T05:46:40.704Z"
+      "updatedAt": "2026-08-27T06:27:02.582Z"
     },
     {
       "name": "C. Lalthanmawia",
@@ -1095,7 +1095,7 @@
           "platformFeePercent": 0
         }
       },
-      "updatedAt": "2026-08-27T05:46:40.705Z"
+      "updatedAt": "2026-08-27T06:27:02.582Z"
     },
     {
       "name": "Lalhmangaihi Sailo",
@@ -1127,7 +1127,7 @@
           "platformFeePercent": 0
         }
       },
-      "updatedAt": "2026-08-27T05:46:40.705Z"
+      "updatedAt": "2026-08-27T06:27:02.583Z"
     },
     {
       "name": "K. Laldinpuia",
@@ -1148,7 +1148,7 @@
       "registeredAt": "2026-07-26T04:52:31.258Z",
       "customDiscountPercent": 20,
       "isFreeServiceGranted": false,
-      "updatedAt": "2026-08-27T05:46:40.705Z"
+      "updatedAt": "2026-08-27T06:27:02.583Z"
     },
     {
       "name": "Rev. Dr. R. Zothansanga",
@@ -1171,7 +1171,7 @@
       "customDiscountPercent": 15,
       "isFreeServiceGranted": false,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "updatedAt": "2026-08-27T05:46:40.705Z"
+      "updatedAt": "2026-08-27T06:27:02.583Z"
     },
     {
       "name": "Vanlalruata",
@@ -1194,7 +1194,7 @@
       "trialExpiresAt": "2027-08-27T04:52:31.258Z",
       "subscriptionExpiresAt": "2027-08-27T04:52:31.258Z",
       "registeredAt": "2026-04-29T04:52:31.258Z",
-      "updatedAt": "2026-08-27T05:46:40.706Z"
+      "updatedAt": "2026-08-27T06:27:02.583Z"
     }
   ],
   "pricingConfig": {
@@ -1311,7 +1311,7 @@
         "trialPeriodDays": 365
       }
     },
-    "updatedAt": "2026-08-27T05:46:45.655Z"
+    "updatedAt": "2026-08-27T06:27:03.623Z"
   },
   "announcement": {
     "id": "ann-main-config",
@@ -1376,7 +1376,7 @@
       }
     ],
     "createdAt": "2026-08-27T04:52:31.258Z",
-    "updatedAt": "2026-08-27T05:46:40.706Z"
+    "updatedAt": "2026-08-27T06:27:02.583Z"
   },
   "auditLogs": [
     {
@@ -1414,5 +1414,5 @@
       "timestamp": "2026-08-27T04:53:14.196Z"
     }
   ],
-  "lastUpdated": "2026-08-27T05:47:45.460Z"
+  "lastUpdated": "2026-08-27T06:27:34.422Z"
 }
