@@ -126,6 +126,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const deriveOrgCode = (orgName?: string, title?: string): string => {
     if (campaign?.orgCode) return campaign.orgCode;
     const text = (orgName || title || 'KOHHRAN').toUpperCase();
+    if (text.includes('YMA') && (text.includes('VENGTHAR') || text.includes('VENG THAR') || text.includes('VT'))) return 'YMAVT';
     if (text.includes('EBENEZER') || text.includes('EBE')) return 'EBE';
     if (text.includes('BETHEL') || text.includes('BET')) return 'BET';
     if (text.includes('KHATLA') || text.includes('KTL')) return 'KTL';

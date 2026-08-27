@@ -425,18 +425,32 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         )}
 
         {/* Creator Session Login / Logout Action */}
-        {creatorProfile.isApproved ? (
-          onLogout && (
-            <button
-              onClick={() => {
-                onLogout();
-                onClose();
-              }}
-              className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4 text-rose-600" /> Creator Logout (Back to Normal User)
-            </button>
-          )
+        {creatorProfile.isApproved && creatorProfile.phone ? (
+          <div className="space-y-2">
+            {onLoginClick && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onLoginClick();
+                }}
+                className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer shadow-2xs"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-600" /> Switch Account / Test User Dang
+              </button>
+            )}
+
+            {onLogout && (
+              <button
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 text-rose-600" /> Creator Logout (Standard User-ah let rawh)
+              </button>
+            )}
+          </div>
         ) : (
           onLoginClick && (
             <button
@@ -444,9 +458,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 onClose();
                 onLoginClick();
               }}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer"
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer active:scale-[0.99]"
             >
-              <LogIn className="w-4 h-4" /> Creator Login / In-Register
+              <LogIn className="w-4 h-4" /> Creator Login / Test Account Switcher
             </button>
           )
         )}

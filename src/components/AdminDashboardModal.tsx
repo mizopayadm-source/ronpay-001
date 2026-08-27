@@ -1052,7 +1052,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {[
                 { 
                   id: 'campaigns', 
-                  label: 'Campaign Moderation', 
+                  label: 'Campaigns & Moderation', 
                   icon: Layers,
                   badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
                   badgeColor: 'bg-amber-500 text-white'

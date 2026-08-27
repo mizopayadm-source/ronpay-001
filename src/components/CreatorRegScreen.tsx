@@ -542,8 +542,83 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             />
           </div>
 
+          {/* 1-Click Fast Test Account Switcher */}
+          <div className="pt-2 border-t border-slate-200/90 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> 1-Click Test Accounts
+              </span>
+              <span className="text-[9.5px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold border border-amber-200">
+                Switch & Test Users
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              Account dang test nan a hnuaia creator i duh zawk hi hmet rawh (Password type a ngai lo):
+            </p>
+
+            <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-0.5">
+              {getStoredCreatorsList().map((creator, idx) => {
+                const isCurrentActive = creatorProfile.isApproved && creatorProfile.phone === creator.phone;
+                return (
+                  <div
+                    key={creator.phone || idx}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition ${
+                      isCurrentActive
+                        ? 'bg-emerald-50/80 border-emerald-300 shadow-2xs'
+                        : 'bg-slate-50 hover:bg-indigo-50/70 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                        isCurrentActive ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
+                      }`}>
+                        {creator.name ? creator.name.charAt(0).toUpperCase() : 'C'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-slate-900 truncate">{creator.name}</p>
+                          {isCurrentActive && (
+                            <span className="text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1 rounded">
+                              ACTIVE
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[9.5px] text-slate-500 truncate">{creator.orgName}</p>
+                        <p className="text-[8.5px] text-slate-400 font-mono">Ph: {creator.phone}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetProfile: CreatorProfile = {
+                          ...creator,
+                          isPhoneVerified: true,
+                          isApproved: true,
+                          approvedCategories: creator.approvedCategories && creator.approvedCategories.length > 0 
+                            ? creator.approvedCategories 
+                            : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+                        };
+                        const initialCat = (targetProfile.approvedCategories && targetProfile.approvedCategories[0]) || 'ralna';
+                        onSuccess(targetProfile, initialCat);
+                      }}
+                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        isCurrentActive
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active:scale-95'
+                      }`}
+                    >
+                      <LogIn className="w-3 h-3" />
+                      {isCurrentActive ? 'Active (Open)' : '1-Click Login'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 text-[10px] text-indigo-950 font-medium space-y-1">
-            <p className="font-bold">Quick Demo Login Credentials:</p>
+            <p className="font-bold">Manual Demo Credentials:</p>
             <p>• Creator: <span className="font-mono font-bold text-indigo-700">9862300000</span> | PIN: <span className="font-mono font-bold text-indigo-700">1234</span></p>
             <p>• Admin: <span className="font-mono font-bold text-indigo-700">admin</span> | Password: <span className="font-mono font-bold text-indigo-700">ronpay2026</span></p>
           </div>
@@ -552,7 +627,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             type="submit"
             className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-3 rounded-xl transition text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
           >
-            <LogIn className="w-4 h-4" /> Login & Continue
+            <LogIn className="w-4 h-4" /> Login with Entered Credentials
           </button>
 
           {onOpenAdminDashboard && (

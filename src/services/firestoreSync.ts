@@ -95,18 +95,18 @@ export function sanitizeForFirestore<T>(obj: T): T {
 /**
  * Merge local and remote collections by unique key, keeping newest and most complete records
  */
-function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems: T[], key: string = 'id'): T[] {
+export function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems: T[], key: string = 'id'): T[] {
   const map = new Map<string, T>();
   
   // 1. Seed with local items
-  for (const item of localItems) {
+  for (const item of (localItems || [])) {
     if (item && item[key]) {
       map.set(String(item[key]).toLowerCase(), item);
     }
   }
   
   // 2. Merge with remote items
-  for (const remote of remoteItems) {
+  for (const remote of (remoteItems || [])) {
     if (remote && remote[key]) {
       const k = String(remote[key]).toLowerCase();
       const existing = map.get(k);
@@ -185,8 +185,31 @@ export async function seedInitialCloudDataIfEmpty() {
 }
 
 /**
+ * Helper to safely read from localStorage
+ */
+function getLocalJson<T>(key: string, fallback: T): T {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Helper to safely write to localStorage
+ */
+function setLocalJson(key: string, data: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('LocalStorage save error for key:', key, e);
+  }
+}
+
+/**
  * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners.
- * Every change from other browsers / admin immediately triggers the callbacks.
+ * Every change from other browsers / mobile apps immediately triggers the callbacks and updates localStorage.
  */
 export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
   const unsubscribers: Array<() => void> = [];
@@ -197,7 +220,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 
   // 1. Transactions Listener (onSnapshot on transactions collection)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(500));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -208,8 +231,16 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (callbacks.onTransactionsUpdate && remoteTxList.length > 0) {
-        callbacks.onTransactionsUpdate(remoteTxList);
+      if (remoteTxList.length > 0) {
+        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS);
+        const merged = smartMerge(localTx, remoteTxList, 'id');
+        setLocalJson('ronpay_transactions_v2', merged);
+        if (callbacks.onTransactionsUpdate) {
+          callbacks.onTransactionsUpdate(merged);
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
+        } catch {}
       }
     }, (error) => {
       console.warn('Firestore transactions listener note:', error);
@@ -234,8 +265,16 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (callbacks.onCampaignsUpdate && remoteCampaigns.length > 0) {
-        callbacks.onCampaignsUpdate(remoteCampaigns);
+      if (remoteCampaigns.length > 0) {
+        const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS);
+        const merged = smartMerge(localCamps, remoteCampaigns, 'id');
+        setLocalJson('ronpay_campaigns_v2', merged);
+        if (callbacks.onCampaignsUpdate) {
+          callbacks.onCampaignsUpdate(merged);
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: merged }));
+        } catch {}
       }
     }, (error) => {
       console.warn('Firestore campaigns listener note:', error);
@@ -245,7 +284,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     console.warn('Failed to attach campaigns onSnapshot listener:', err);
   }
 
-  // 3. Members Listener (Kumtluang / YMA member database)
+  // 3. Members Listener (Kumtluang / YMA / Bawm member database)
   try {
     const memQuery = collection(db, 'members');
     const unsubMem = onSnapshot(memQuery, (snapshot) => {
@@ -257,8 +296,16 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (callbacks.onMembersUpdate && remoteMembers.length > 0) {
-        callbacks.onMembersUpdate(remoteMembers);
+      if (remoteMembers.length > 0) {
+        const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
+        const merged = smartMerge(localMembers, remoteMembers, 'id');
+        setLocalJson('ronpay_kumtluang_members_v1', merged);
+        if (callbacks.onMembersUpdate) {
+          callbacks.onMembersUpdate(merged);
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
+        } catch {}
       }
     }, (error) => {
       console.warn('Firestore members listener note:', error);
@@ -280,8 +327,13 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       });
 
-      if (callbacks.onCreatorsUpdate && remoteCreators.length > 0) {
-        callbacks.onCreatorsUpdate(remoteCreators);
+      if (remoteCreators.length > 0) {
+        const localCreators = getLocalJson<CreatorProfile[]>('ronpay_creators_list_v2', INITIAL_REGISTERED_CREATORS);
+        const merged = smartMerge(localCreators, remoteCreators, 'phone');
+        setLocalJson('ronpay_creators_list_v2', merged);
+        if (callbacks.onCreatorsUpdate) {
+          callbacks.onCreatorsUpdate(merged);
+        }
       }
     }, (error) => {
       console.warn('Firestore creators listener note:', error);
@@ -297,8 +349,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AnnouncementBanner;
-        if (data && data.id && callbacks.onAnnouncementUpdate) {
-          callbacks.onAnnouncementUpdate(data);
+        if (data && data.id) {
+          setLocalJson('ronpay_announcement_v1', data);
+          if (callbacks.onAnnouncementUpdate) {
+            callbacks.onAnnouncementUpdate(data);
+          }
         }
       }
     }, (error) => {
@@ -315,8 +370,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     const unsubPricing = onSnapshot(pricingDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as SystemPricingConfig;
-        if (data && data.categories && callbacks.onPricingConfigUpdate) {
-          callbacks.onPricingConfigUpdate(data);
+        if (data && data.categories) {
+          setLocalJson('ronpay_pricing_config_v1', data);
+          if (callbacks.onPricingConfigUpdate) {
+            callbacks.onPricingConfigUpdate(data);
+          }
         }
       }
     }, (error) => {
@@ -338,8 +396,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
           logs.push(data);
         }
       });
-      if (callbacks.onAuditLogsUpdate && logs.length > 0) {
-        callbacks.onAuditLogsUpdate(logs);
+      if (logs.length > 0) {
+        setLocalJson('ronpay_audit_logs_v1', logs);
+        if (callbacks.onAuditLogsUpdate) {
+          callbacks.onAuditLogsUpdate(logs);
+        }
       }
     }, (err) => {
       console.warn('Firestore audit logs listener note:', err);

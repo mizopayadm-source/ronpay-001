@@ -20,6 +20,9 @@ import {
   saveStoredTransactions,
   getStoredCreatorProfile,
   saveStoredCreatorProfile,
+  logoutCreator,
+  loginCreator,
+  GUEST_CREATOR_PROFILE,
   getStoredCreatorsList,
   saveStoredCreatorsList,
   getStoredPricingConfig,
@@ -409,6 +412,13 @@ export default function App() {
     localStorage.setItem('ronpay_biometric_enabled', next ? 'true' : 'false');
   };
 
+  const handleLogout = () => {
+    const guest = logoutCreator();
+    setCreatorProfile(guest);
+    setIsProfileOpen(false);
+    handleNavigate('home');
+  };
+
   // Filter transactions for Sulhnu History
   const userVisibleTransactions = transactions.filter(t => isUserPaidTransaction(t, userPaidIds, creatorProfile));
 
@@ -443,7 +453,13 @@ export default function App() {
               creatorProfile={creatorProfile}
               announcement={announcement}
               onStartScanner={handleStartScanner}
-              onCreateQRClick={() => handleNavigate('create_qr')}
+              onCreateQRClick={() => {
+                if (creatorProfile.isApproved && creatorProfile.phone) {
+                  handleNavigate('create_qr');
+                } else {
+                  handleNavigate('creator_reg');
+                }
+              }}
               onSelectBawm={handleSelectBawm}
               onOpenBillService={handleOpenBillService}
               onOpenReports={handleOpenReports}
@@ -498,10 +514,8 @@ export default function App() {
               onBack={() => handleNavigate('home')}
               onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
               onGenerateQR={handleGenerateQR}
-              onLogout={() => {
-                setCreatorProfile(getStoredCreatorProfile());
-                handleNavigate('home');
-              }}
+              onLogout={handleLogout}
+              onSwitchAccount={() => handleNavigate('creator_reg')}
               onUpdateCampaign={handleUpdateCampaign}
               onDeleteCampaign={handleDeleteCampaign}
               onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
@@ -516,8 +530,8 @@ export default function App() {
               creatorProfile={creatorProfile}
               onBack={() => handleNavigate('home')}
               onSuccess={(profile, cat) => {
+                loginCreator(profile);
                 setCreatorProfile(profile);
-                saveStoredCreatorProfile(profile);
                 setSelectedCategory(cat);
                 handleNavigate('create_qr');
               }}
@@ -563,7 +577,13 @@ export default function App() {
         {currentScreen !== 'checkout' && (
           <BottomNav
             currentScreen={currentScreen}
-            onNavigate={handleNavigate}
+            onNavigate={(screen) => {
+              if (screen === 'create_qr' && (!creatorProfile.isApproved || !creatorProfile.phone)) {
+                handleNavigate('creator_reg');
+              } else {
+                handleNavigate(screen);
+              }
+            }}
             onOpenMemberRoll={handleOpenMemberRoll}
             onOpenProfile={() => setIsProfileOpen(true)}
             isProfileOpen={isProfileOpen}
@@ -608,10 +628,7 @@ export default function App() {
           creatorProfile={creatorProfile}
           onResetData={handleResetData}
           onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
-          onLogout={() => {
-            setCreatorProfile(getStoredCreatorProfile());
-            setIsProfileOpen(false);
-          }}
+          onLogout={handleLogout}
           onLoginClick={() => {
             setIsProfileOpen(false);
             handleNavigate('creator_reg');

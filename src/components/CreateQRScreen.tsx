@@ -55,6 +55,7 @@ interface CreateQRScreenProps {
   announcement?: AnnouncementBanner;
   onGenerateQR: (campaign: Campaign) => void;
   onLogout?: () => void;
+  onSwitchAccount?: () => void;
   campaigns?: Campaign[];
   transactions?: Transaction[];
   onUpdateCampaign?: (campaign: Campaign) => void;
@@ -71,6 +72,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   announcement,
   onGenerateQR,
   onLogout,
+  onSwitchAccount,
   campaigns = [],
   transactions = [],
   onUpdateCampaign,
@@ -461,19 +463,29 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
           <ArrowLeft className="w-4 h-4" /> Home
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {onSwitchAccount && (
+            <button
+              type="button"
+              onClick={onSwitchAccount}
+              className="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-1 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+              title="Test Creator dang thlang rawh"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-600" /> Switch
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenUpgradeModal}
-            className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1 transition cursor-pointer"
+            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1 transition cursor-pointer"
           >
-            <ArrowUpRight className="w-3.5 h-3.5" /> Upgrade Menu
+            <ArrowUpRight className="w-3.5 h-3.5" /> Upgrade
           </button>
           {onLogout && (
             <button
               type="button"
               onClick={onLogout}
-              className="text-[10px] bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:border-rose-200 transition cursor-pointer flex items-center gap-1"
+              className="text-[10px] bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-bold px-2 py-1 rounded-lg border border-slate-200 hover:border-rose-200 transition cursor-pointer flex items-center gap-1"
             >
               <LogOut className="w-3 h-3 text-rose-500" /> Logout
             </button>

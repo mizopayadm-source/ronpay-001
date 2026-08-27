@@ -394,35 +394,79 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
   }
 };
 
+export const GUEST_CREATOR_PROFILE: CreatorProfile = {
+  name: 'RonPay User',
+  orgName: 'RonPay Community',
+  designation: 'Standard User',
+  phone: '',
+  isPhoneVerified: false,
+  isApproved: false,
+  isAdmin: false,
+  approvedCategories: [],
+  createdQRsCount: 0,
+};
+
+export const DEFAULT_INITIAL_CREATOR: CreatorProfile = {
+  name: 'Rev. Dr. R. Zothansanga',
+  orgName: 'BCM Ebenezer, Zobawk Local Church',
+  designation: 'Pastor / Secretary',
+  phone: '9862599881',
+  password: '1234',
+  pin: '1234',
+  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  isPhoneVerified: true,
+  isApproved: true,
+  approvedCategories: ['kumtluang', 'ralna'],
+  createdQRsCount: 5,
+};
+
 export const getStoredCreatorProfile = (): CreatorProfile => {
   try {
     const raw = localStorage.getItem(CREATOR_PROFILE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (parsed.orgName === 'RonPay HQ / Master Console') {
-        parsed.orgName = 'BCM Ebenezer';
-        saveStoredCreatorProfile(parsed);
-      }
-      if (parsed.name && parsed.phone) {
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.orgName === 'RonPay HQ / Master Console') {
+          parsed.orgName = 'BCM Ebenezer';
+          saveStoredCreatorProfile(parsed);
+        }
         return parsed;
       }
     }
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  const defaultProfile: CreatorProfile = {
-    name: 'Rev. Dr. R. Zothansanga',
-    orgName: 'BCM Ebenezer, Zobawk Local Church',
-    designation: 'Pastor / Secretary',
-    phone: '9862599881',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    isPhoneVerified: true,
-    isApproved: true,
-    approvedCategories: ['kumtluang', 'ralna'],
-    createdQRsCount: 5,
-  };
-  saveStoredCreatorProfile(defaultProfile);
-  return defaultProfile;
+  // First time app launch: initialize default creator
+  saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
+  return DEFAULT_INITIAL_CREATOR;
+};
+
+export const logoutCreator = (): CreatorProfile => {
+  try {
+    localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
+    sessionStorage.removeItem('ronpay_admin_auth');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: GUEST_CREATOR_PROFILE }));
+    }
+  } catch (e) {
+    console.error('Failed to log out creator', e);
+  }
+  return GUEST_CREATOR_PROFILE;
+};
+
+export const loginCreator = (profile: CreatorProfile): void => {
+  try {
+    localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
+    if (profile.isAdmin) {
+      sessionStorage.setItem('ronpay_admin_auth', 'true');
+    }
+    syncCreatorToFirestore(profile).catch(() => {});
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
+    }
+  } catch (e) {
+    console.error('Failed to login creator', e);
+  }
 };
 
 export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
@@ -920,6 +964,80 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
       { subId: 'KTL-7234-01', name: 'Zomuanpuii (Nupui)', relation: 'Nupui' }
     ],
     createdAt: '2026-01-07T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-7373',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'Lalhmangaiha',
+    orgCode: 'YMAVT',
+    phoneLast4: '7373',
+    fullPhone: '9862377373',
+    section: 'Section A (Vengthar)',
+    isFamilyHead: true,
+    dependents: [
+      { subId: 'YMAVT-7373-01', name: 'Lalduhawmi (Nupui)', relation: 'Nupui' }
+    ],
+    createdAt: '2026-08-20T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-1212',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'Vanlalthlana',
+    orgCode: 'YMAVT',
+    phoneLast4: '1212',
+    fullPhone: '9436121212',
+    section: 'Section B (Vengthar)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-21T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-3434',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'C. Lalramnghaka',
+    orgCode: 'YMAVT',
+    phoneLast4: '3434',
+    fullPhone: '8794343434',
+    section: 'Section A (Vengthar)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-22T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-5465',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'Zonunmawia',
+    orgCode: 'YMAVT',
+    phoneLast4: '5465',
+    fullPhone: '9862545465',
+    section: 'Section C (Vengthar)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-23T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-5859',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'Lalrinawma',
+    orgCode: 'YMAVT',
+    phoneLast4: '5859',
+    fullPhone: '9436585859',
+    section: 'Section D (Vengthar)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-24T00:00:00.000Z'
+  },
+  {
+    id: 'YMAVT-8466',
+    campaignId: 'cmp-kumtluang-ymavt',
+    name: 'Lalhruaitluanga',
+    orgCode: 'YMAVT',
+    phoneLast4: '8466',
+    fullPhone: '8794848466',
+    section: 'Section B (Vengthar)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-25T00:00:00.000Z'
   }
 ];
 
@@ -934,7 +1052,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     }
 
-    // Merge default initial members from AI Studio / code with stored members
+    // Merge default initial members with stored members
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
       if (m && m.id) map.set(m.id.toLowerCase(), m);
@@ -953,31 +1071,47 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       return allMembers;
     }
 
-    // Filter strictly by campaignId or fallback to campaign orgCode
+    // Filter strictly by campaignId, orgCode, or prefix
     const campaigns = getStoredCampaigns();
     const targetCampaign = campaigns.find(c => c.id === campaignId);
 
     return allMembers.filter(m => {
-      if (m.campaignId) {
-        return m.campaignId === campaignId;
+      // 1. Direct campaignId match
+      if (m.campaignId && m.campaignId === campaignId) {
+        return true;
       }
-      // Backward compatibility: check orgCode matching
+      
+      // 2. Org code match with targetCampaign (e.g. YMAVT === YMAVT)
       if (targetCampaign && m.orgCode && targetCampaign.orgCode && m.orgCode.toUpperCase() === targetCampaign.orgCode.toUpperCase()) {
         return true;
       }
-      if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') {
-        return true;
-      }
-      if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') {
-        return true;
-      }
-      // Check ID prefix
-      if (m.id && targetCampaign?.orgCode) {
+      
+      // 3. ID prefix match (e.g. YMAVT-1212 starts with YMAVT)
+      if (targetCampaign?.orgCode && m.id) {
         const prefix = m.id.split('-')[0].toUpperCase();
         if (prefix === targetCampaign.orgCode.toUpperCase()) {
           return true;
         }
       }
+
+      // 4. Backward compatibility
+      if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') return true;
+      if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') return true;
+      if (m.orgCode === 'YMAVT' && (campaignId === 'cmp-kumtluang-ymavt' || campaignId.includes('ymavt') || campaignId.includes('yma-vengthar'))) return true;
+
+      // 5. Title / Org Name match (e.g. 'YMA Vengthar' contains 'YMAVT' or 'YMA')
+      if (targetCampaign) {
+        const campClean = (targetCampaign.orgName || targetCampaign.title || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const memOrgClean = (m.orgCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const memPrefixClean = (m.id.split('-')[0] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (memOrgClean && campClean && (campClean.includes(memOrgClean) || memOrgClean.includes(campClean))) {
+          return true;
+        }
+        if (memPrefixClean && campClean && (campClean.includes(memPrefixClean) || memPrefixClean.includes(campClean))) {
+          return true;
+        }
+      }
+
       return false;
     });
   } catch (e) {

@@ -78,7 +78,18 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
   // Scoped members
   const scopedMembers = useMemo(() => {
     if (selectedCampaignId === 'all') return members;
-    return members.filter(m => m.campaignId === selectedCampaignId || (activeCampaign?.orgCode && m.orgCode === activeCampaign.orgCode));
+    return members.filter(m => {
+      if (m.campaignId === selectedCampaignId) return true;
+      if (activeCampaign?.orgCode && m.orgCode && m.orgCode.toUpperCase() === activeCampaign.orgCode.toUpperCase()) return true;
+      if (activeCampaign?.orgCode && m.id) {
+        const prefix = m.id.split('-')[0].toUpperCase();
+        if (prefix === activeCampaign.orgCode.toUpperCase()) return true;
+      }
+      if (m.orgCode === 'EBE' && selectedCampaignId === 'cmp-kumtluang-1') return true;
+      if (m.orgCode === 'KTL' && selectedCampaignId === 'cmp-kumtluang-2') return true;
+      if (m.orgCode === 'YMAVT' && (selectedCampaignId === 'cmp-kumtluang-ymavt' || selectedCampaignId.includes('ymavt') || selectedCampaignId.includes('yma-vengthar'))) return true;
+      return false;
+    });
   }, [members, selectedCampaignId, activeCampaign]);
 
   // Scoped transactions

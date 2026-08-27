@@ -253,30 +253,35 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Active target information for the current campaign or filter context
   const activeTargetInfo: TargetExportInfo | null = useMemo(() => {
-    if (selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
-      const targetAmount = selectedCampaignObj.targetAmount;
-      const targetPeriod = selectedCampaignObj.targetPeriod;
-      const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
-      const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-      const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
-      const isCompleted = grandTotal >= targetAmount;
-      const remaining = Math.max(0, targetAmount - grandTotal);
-      const surplus = Math.max(0, grandTotal - targetAmount);
+    // 1. When a specific campaign is selected (selectedCampaignId !== 'all')
+    if (selectedCampaignId !== 'all') {
+      if (selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
+        const targetAmount = selectedCampaignObj.targetAmount;
+        const targetPeriod = selectedCampaignObj.targetPeriod;
+        const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
+        const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
+        const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
+        const isCompleted = grandTotal >= targetAmount;
+        const remaining = Math.max(0, targetAmount - grandTotal);
+        const surplus = Math.max(0, grandTotal - targetAmount);
 
-      return {
-        targetAmount,
-        targetPeriod,
-        periodLabel,
-        periodSuffix,
-        progressPct,
-        isCompleted,
-        remaining,
-        surplus,
-        campaignTitle: selectedCampaignObj.title
-      };
+        return {
+          targetAmount,
+          targetPeriod,
+          periodLabel,
+          periodSuffix,
+          progressPct,
+          isCompleted,
+          remaining,
+          surplus,
+          campaignTitle: selectedCampaignObj.title
+        };
+      }
+      // If the selected specific campaign has no target configured, DO NOT show/mix targets from other campaigns!
+      return null;
     }
 
-    // Check if the current filter context has campaigns with target
+    // 2. Only when "All My Campaigns in this Bawm" is selected (selectedCampaignId === 'all')
     const targetedCampaigns = (selectedFilter === 'all' 
       ? creatorCampaigns 
       : creatorCampaigns.filter(c => c.category === selectedFilter)
@@ -327,7 +332,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
 
     return null;
-  }, [selectedCampaignObj, grandTotal, selectedFilter, creatorCampaigns, filteredTransactions]);
+  }, [selectedCampaignId, selectedCampaignObj, grandTotal, selectedFilter, creatorCampaigns, filteredTransactions]);
 
   // Compute monthly trend for the live banner & reports with customizable month range
   const monthlyDistribution = useMemo(() => {

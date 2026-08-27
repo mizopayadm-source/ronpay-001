@@ -205,6 +205,25 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
     createdAt: '2026-01-10T00:00',
     createdBy: '9862599881',
   },
+  {
+    id: 'cmp-kumtluang-ymavt',
+    category: 'kumtluang',
+    title: 'YMA Vengthar Branch',
+    orgName: 'YMA Vengthar Branch',
+    orgCode: 'YMAVT',
+    location: 'Vengthar, Aizawl, Mizoram',
+    gpsCoords: '23.7300, 92.7150',
+    upiId: 'ymavengthar@oksbi',
+    imageUrl: 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80',
+    subCategories: ['Thawhlawm', 'Khawtlang Inrelbawlna', 'YMA Chhiatni Fund', 'Building Fund', 'Youth & Sports'],
+    trxnFeeBearer: 'user_paid',
+    sectionLabel: 'Section / Bial',
+    definedSections: ['Section A (Vengthar)', 'Section B (Vengthar)', 'Section C (Vengthar)', 'Section D (Vengthar)', 'General'],
+    validityDate: '2027-12-31T23:59',
+    status: 'active',
+    createdAt: '2026-08-20T00:00',
+    createdBy: '9862599881',
+  },
 ];
 
 export const INITIAL_TRANSACTIONS: Transaction[] = [

@@ -189,6 +189,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId]);
 
+  // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
+  useEffect(() => {
+    const handleRemoteMembersUpdate = () => {
+      if (isOpen && selectedCampaignId) {
+        const refreshed = getMembers(selectedCampaignId);
+        setMembers(refreshed);
+      }
+    };
+
+    window.addEventListener('ronpay-members-updated', handleRemoteMembersUpdate);
+    window.addEventListener('ronpay-campaigns-updated', handleRemoteMembersUpdate);
+    window.addEventListener('storage', handleRemoteMembersUpdate);
+
+    return () => {
+      window.removeEventListener('ronpay-members-updated', handleRemoteMembersUpdate);
+      window.removeEventListener('ronpay-campaigns-updated', handleRemoteMembersUpdate);
+      window.removeEventListener('storage', handleRemoteMembersUpdate);
+    };
+  }, [isOpen, selectedCampaignId]);
+
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
     if (isOpen && selectedCampaignId) {
