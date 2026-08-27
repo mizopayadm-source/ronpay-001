@@ -1,6 +1,6 @@
 {
   "name": "QR Bawm & Member Roll Manager",
   "description": "QR Code Bawm collection system with active QR filter dropdown, dynamic member roll filtering, UPI payment tracking, and receipt generation.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

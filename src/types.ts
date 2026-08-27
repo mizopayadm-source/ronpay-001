@@ -1,40 +1,275 @@
-export type PaymentStatus = 'paid' | 'pending' | 'partial';
+export type ScreenId = 
+  | 'home' 
+  | 'explorer' 
+  | 'checkout' 
+  | 'create_qr' 
+  | 'creator_reg' 
+  | 'reports' 
+  | 'success' 
+  | 'cash_pending';
 
-export interface BawmItem {
-  id: string;
-  name: string; // e.g. "BCM Ebenezer", "YMA Chhiatni Fund"
-  category: 'Church' | 'YMA' | 'KTP' | 'Village' | 'School' | 'Sports' | 'Other';
-  description: string;
-  upiId: string;
-  targetAmount: number;
-  sections: string[];
-  createdAt: string;
-  creatorName: string;
-  colorTheme: string;
-}
+export type BawmCategory = 'ralna' | 'khawlsak' | 'rikrum' | 'kumtluang' | 'others';
 
-export interface MemberRollItem {
-  id: string;
-  memberId: string; // e.g. "BCM-001", "YMA-101"
+export type PaymentStatus = 'paid' | 'pending' | 'pending_verification' | 'partial' | 'completed' | 'failed' | 'rejected';
+
+export type PaymentMethod = 'online' | 'cash' | 'upi' | 'bank_transfer' | 'qr_scan';
+
+export interface BawmInfo {
+  key: BawmCategory;
   name: string;
-  bawmId: string; // References BawmItem.id for strict isolation
-  section: string; // e.g. "Section A", "Section B", "Veng Lai"
-  phone: string;
-  pledgeAmount: number;
-  paidAmount: number;
-  status: PaymentStatus;
-  paymentDate?: string;
-  paymentMethod?: 'UPI QR' | 'Cash' | 'Bank Transfer';
-  transactionRef?: string;
-  remarks?: string;
-  updatedAt: string;
+  subtitle: string;
+  icon: string;
+  themeColor: string;
+  bgLight: string;
+  borderLight: string;
+  textDark: string;
+  accent: string;
 }
 
-export interface FilterOptions {
-  selectedBawmId: string; // 'all' or specific Bawm id
-  searchQuery: string;
-  status: 'all' | PaymentStatus;
-  section: string;
-  sortBy: 'name' | 'id' | 'amount' | 'status' | 'date';
-  sortOrder: 'asc' | 'desc';
+export interface Campaign {
+  id: string;
+  category: BawmCategory;
+  title: string;
+  orgName?: string;
+  orgCode?: string;
+  mitthiHming?: string;
+  age?: number;
+  location?: string;
+  gpsCoords?: string;
+  upiId: string;
+  targetUpiId?: string;
+  imageUrl?: string;
+  thihni?: string;
+  vuiHun?: string;
+  vuitu?: string;
+  validityDate?: string;
+  status?: 'active' | 'completed' | 'expired' | 'pending' | 'rejected' | string;
+  createdAt?: string;
+  createdBy?: string;
+  creatorName?: string;
+  cause?: string;
+  targetAmount?: number;
+  maxLimit?: number;
+  emergencyTitle?: string;
+  urgencyLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | string;
+  urgencyDeadline?: string;
+  subCategories?: string[];
+  trxnFeeBearer?: 'user_paid' | 'creator_paid' | string;
+  sectionLabel?: string;
+  definedSections?: string[];
+  contactPerson?: string;
+  contactPhone?: string;
+  description?: string;
+  isVerified?: boolean;
+  isApproved?: boolean;
+  approvedAt?: string;
+  approvedBy?: string;
+  remarks?: string;
+  approvalRemarks?: string;
+  targetPeriod?: string;
+  customPlatformFeePercent?: number;
+  customFreeTrialActive?: boolean;
+}
+
+export interface Transaction {
+  id: string;
+  campaignId: string;
+  campaignTitle?: string;
+  category?: BawmCategory;
+  donorName: string;
+  donorPhone?: string;
+  donorVeng?: string;
+  memberId?: string;
+  subId?: string;
+  isAnonymous?: boolean;
+  isDependent?: boolean;
+  isSynced?: boolean;
+  amount: number;
+  platformFee?: number;
+  platformFeeBearer?: string;
+  totalAmount?: number;
+  paymentMethod: PaymentMethod | string;
+  status: 'completed' | 'pending' | 'pending_verification' | 'failed' | 'rejected' | string;
+  remark?: string;
+  subCategory?: string;
+  periodType?: 'monthly' | 'one_time' | 'annual' | string;
+  periodMonth?: string;
+  periodYear?: string;
+  periodLabel?: string;
+  subCategoryBreakdown?: Record<string, number>;
+  timestamp: string;
+  createdAt?: string;
+  txHash?: string;
+  referenceNo?: string;
+  utrRef?: string;
+  payerUPI?: string;
+  billServiceType?: string;
+  billConsumerNumber?: string;
+  billOperator?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+}
+
+export interface CategoryRequest {
+  type: 'add' | 'remove';
+  category: BawmCategory;
+  docName?: string;
+  authDocName?: string;
+  reason?: string;
+  requestedAt?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+}
+
+export interface CreatorProfile {
+  phone: string;
+  name: string;
+  designation?: string;
+  orgName?: string;
+  location?: string;
+  upiId?: string;
+  role?: string;
+  isApproved?: boolean;
+  isAdmin?: boolean;
+  isPhoneVerified?: boolean;
+  plan?: 'trial' | 'standard' | 'premium' | 'kumtluang' | string;
+  subscriptionPlan?: string;
+  subscriptionExpiresAt?: string;
+  trialExpiresAt?: string;
+  customTrialDays?: number;
+  freePostsQuota?: number;
+  customPlatformFeePercent?: number;
+  customDiscountPercent?: number;
+  isFreeServiceGranted?: boolean;
+  categoryCustomOverrides?: Record<string, any>;
+  createdQRsCount?: number;
+  registeredAt?: string;
+  password?: string;
+  pin?: string;
+  rejectionReason?: string;
+  allowedCategories?: BawmCategory[];
+  approvedCategories?: BawmCategory[];
+  panNumber?: string;
+  address?: string;
+  pendingUpgrade?: CategoryRequest | any;
+  isBlocked?: boolean;
+  regDocUrl?: string;
+  authDocName?: string;
+  authDocUrl?: string;
+  logoUrl?: string;
+  avatarUrl?: string;
+}
+
+export interface SystemPricingConfig {
+  trialDurationDays?: number;
+  globalTrialDays?: number;
+  fixedFeePerTxn?: number;
+  percentageFeePerTxn?: number;
+  maxFreeCampaigns?: number;
+  standardMonthlyCost?: number;
+  premiumYearlyCost?: number;
+  globalDiscountPercent?: number;
+  qrCreationPrice?: number;
+  lastUpdated?: string;
+  categories?: Record<string, { price?: number; label?: string; allowed?: boolean } | any>;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface BawmFeeRule {
+  category: BawmCategory;
+  fixedFee: number;
+  percentageFee: number;
+  bearer: 'user_paid' | 'creator_paid';
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  details: string;
+  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement';
+  targetId?: string;
+  performedBy: string;
+  timestamp: string;
+}
+
+export interface AnnouncementItem {
+  id: string;
+  isActive: boolean;
+  type: 'urgent' | 'info' | 'notice' | 'event';
+  title: string;
+  message: string;
+  linkText?: string;
+  linkAction?: string;
+  badge?: string;
+  badgeBgColor?: string;
+  badgeTextColor?: string;
+  bannerMediaUrl?: string;
+  mediaType?: 'image' | 'canva' | 'video';
+  mediaLayout?: 'hero_top' | 'compact' | 'card_side' | 'full_card' | 'side_thumb' | string;
+  bgTheme?: string;
+  customGradientFrom?: string;
+  customGradientTo?: string;
+  customBgColor?: string;
+  textAlignment?: 'left' | 'center' | 'right' | string;
+  fontSizePreset?: 'small' | 'medium' | 'large' | string;
+  titleColor?: string;
+  textColor?: string;
+  bannerHeightPreset?: string;
+  bannerCustomHeightPx?: number;
+  mediaFit?: 'cover' | 'contain' | string;
+}
+
+export interface AnnouncementBanner {
+  id: string;
+  isActive: boolean;
+  type?: 'urgent' | 'info' | 'notice' | 'event';
+  title?: string;
+  message?: string;
+  linkText?: string;
+  linkAction?: string;
+  animationStyle?: 'slide' | 'fade' | 'marquee';
+  rotationSpeedSeconds?: number;
+  autoRotate?: boolean;
+  items?: AnnouncementItem[];
+  createdAt?: string;
+}
+
+export interface MemberDependent {
+  subId: string;
+  name: string;
+  relation: string;
+}
+
+export interface MemberRecord {
+  id: string; // e.g. EBE-1460
+  campaignId: string;
+  name: string;
+  orgCode?: string;
+  phoneLast4?: string;
+  fullPhone?: string;
+  section?: string;
+  isFamilyHead?: boolean;
+  dependents?: MemberDependent[];
+  createdAt?: string;
+  notes?: string;
+  avatarUrl?: string;
+  pledgeAmount?: number;
+  paidAmount?: number;
+  status?: 'paid' | 'pending' | 'partial';
+}
+
+export interface BillService {
+  id: string;
+  name: string;
+  category: 'mobile' | 'dth' | 'electricity' | 'water' | 'fastag' | 'gas' | 'broadband' | 'other' | string;
+  icon: string;
+  bgColor?: string;
+  textColor?: string;
+  description?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  operators?: string[];
+  fieldLabel?: string;
+  fieldPlaceholder?: string;
+  fields?: any[];
 }

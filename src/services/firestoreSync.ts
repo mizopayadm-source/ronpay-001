@@ -393,7 +393,7 @@ export async function syncCampaignToFirestore(campaign: Campaign): Promise<void>
     await setDoc(docRef, cleanCampaign, { merge: true });
     console.log('[Firestore] Campaign successfully synced:', campaign.id);
   } catch (err) {
-    console.error('[Firestore] Error saving campaign:', err);
+    console.error('Firebase Error:', err);
   }
 }
 
