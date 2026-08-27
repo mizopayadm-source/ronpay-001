@@ -15,6 +15,7 @@ interface BottomNavProps {
   onOpenProfile: () => void;
   isProfileOpen?: boolean;
   isKumtluangManagerOpen?: boolean;
+  isDesktopView?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -24,6 +25,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onOpenProfile,
   isProfileOpen = false,
   isKumtluangManagerOpen = false,
+  isDesktopView = false,
 }) => {
   const isHomeActive = currentScreen === 'home' && !isProfileOpen && !isKumtluangManagerOpen;
   const isRollActive = isKumtluangManagerOpen;
@@ -35,28 +37,30 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     <nav 
       id="bottom-navigation-bar"
       aria-label="Bottom Navigation"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-1px_6px_rgba(0,0,0,0.03)] select-none"
+      className={`sticky bottom-0 left-0 right-0 z-40 w-full bg-white/90 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-2px_10px_rgba(0,0,0,0.03)] select-none shrink-0 ${
+        isDesktopView ? 'max-w-md mx-auto rounded-t-2xl shadow-lg border-x' : ''
+      }`}
     >
-      <div className="max-w-md mx-auto grid grid-cols-5 h-[58px]">
+      <div className="w-full flex items-center justify-around h-14 px-2">
         {/* 1. Home */}
         <button
           id="nav-home-btn"
           type="button"
           onClick={() => onNavigate('home')}
-          className="flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none"
+          className="flex-1 flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none group rounded-lg hover:bg-slate-100/50"
         >
           <Home 
-            className={`w-[21px] h-[21px] transition-colors ${
+            className={`w-[20px] h-[20px] transition-colors ${
               isHomeActive 
                 ? 'text-[#4338ca] stroke-[2.2]' 
-                : 'text-[#94a3b8] stroke-[1.6]'
+                : 'text-slate-400 group-hover:text-slate-600 stroke-[1.6]'
             }`} 
           />
           <span 
             className={`text-[11px] mt-1 tracking-tight leading-none ${
               isHomeActive 
                 ? 'font-bold text-[#4338ca]' 
-                : 'font-normal text-[#94a3b8]'
+                : 'font-normal text-slate-400 group-hover:text-slate-600'
             }`}
           >
             Home
@@ -68,24 +72,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-roll-btn"
           type="button"
           onClick={() => onOpenMemberRoll('members_list')}
-          className="flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none relative"
+          className="flex-1 flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none relative group rounded-lg hover:bg-slate-100/50"
         >
           <div className="relative inline-flex items-center justify-center">
             <Users 
-              className={`w-[21px] h-[21px] transition-colors ${
+              className={`w-[20px] h-[20px] transition-colors ${
                 isRollActive 
                   ? 'text-[#2563eb] stroke-[2.2]' 
-                  : 'text-[#94a3b8] stroke-[1.6]'
+                  : 'text-slate-400 group-hover:text-slate-600 stroke-[1.6]'
               }`} 
             />
-            {/* Notification blue dot matching reference screenshot */}
             <span className="absolute -top-0.5 -right-1 w-2 h-2 bg-[#2563eb] rounded-full ring-2 ring-white" />
           </div>
           <span 
             className={`text-[11px] mt-1 tracking-tight leading-none ${
               isRollActive 
                 ? 'font-bold text-[#2563eb]' 
-                : 'font-normal text-[#94a3b8]'
+                : 'font-normal text-slate-400 group-hover:text-slate-600'
             }`}
           >
             Roll
@@ -97,20 +100,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-studio-btn"
           type="button"
           onClick={() => onNavigate('create_qr')}
-          className="flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none"
+          className="flex-1 flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none group rounded-lg hover:bg-slate-100/50"
         >
           <QrCode 
-            className={`w-[21px] h-[21px] transition-colors ${
+            className={`w-[20px] h-[20px] transition-colors ${
               isStudioActive 
                 ? 'text-[#4338ca] stroke-[2.2]' 
-                : 'text-[#94a3b8] stroke-[1.6]'
+                : 'text-slate-400 group-hover:text-slate-600 stroke-[1.6]'
             }`} 
           />
           <span 
             className={`text-[11px] mt-1 tracking-tight leading-none ${
               isStudioActive 
                 ? 'font-bold text-[#4338ca]' 
-                : 'font-normal text-[#94a3b8]'
+                : 'font-normal text-slate-400 group-hover:text-slate-600'
             }`}
           >
             Studio
@@ -122,20 +125,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-report-btn"
           type="button"
           onClick={() => onNavigate('reports')}
-          className="flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none"
+          className="flex-1 flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none group rounded-lg hover:bg-slate-100/50"
         >
           <FileText 
-            className={`w-[21px] h-[21px] transition-colors ${
+            className={`w-[20px] h-[20px] transition-colors ${
               isReportActive 
                 ? 'text-[#4338ca] stroke-[2.2]' 
-                : 'text-[#94a3b8] stroke-[1.6]'
+                : 'text-slate-400 group-hover:text-slate-600 stroke-[1.6]'
             }`} 
           />
           <span 
             className={`text-[11px] mt-1 tracking-tight leading-none ${
               isReportActive 
                 ? 'font-bold text-[#4338ca]' 
-                : 'font-normal text-[#94a3b8]'
+                : 'font-normal text-slate-400 group-hover:text-slate-600'
             }`}
           >
             Reports
@@ -147,20 +150,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           id="nav-profile-btn"
           type="button"
           onClick={onOpenProfile}
-          className="flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none"
+          className="flex-1 flex flex-col items-center justify-center py-1 transition-all cursor-pointer focus:outline-none group rounded-lg hover:bg-slate-100/50"
         >
           <User 
-            className={`w-[21px] h-[21px] transition-colors ${
+            className={`w-[20px] h-[20px] transition-colors ${
               isProfileActive 
                 ? 'text-[#4338ca] stroke-[2.2]' 
-                : 'text-[#94a3b8] stroke-[1.6]'
+                : 'text-slate-400 group-hover:text-slate-600 stroke-[1.6]'
             }`} 
           />
           <span 
             className={`text-[11px] mt-1 tracking-tight leading-none ${
               isProfileActive 
                 ? 'font-bold text-[#4338ca]' 
-                : 'font-normal text-[#94a3b8]'
+                : 'font-normal text-slate-400 group-hover:text-slate-600'
             }`}
           >
             Profile
