@@ -87,6 +87,12 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [editCreatorDesignation, setEditCreatorDesignation] = useState<string>(creatorProfile.designation || '');
   const [profileSuccessNotice, setProfileSuccessNotice] = useState<boolean>(false);
 
+  useEffect(() => {
+    setEditCreatorName(creatorProfile.name || '');
+    setEditCreatorOrg(creatorProfile.orgName || '');
+    setEditCreatorDesignation(creatorProfile.designation || '');
+  }, [creatorProfile.name, creatorProfile.orgName, creatorProfile.designation]);
+
   // Navigation Tabs: Create New QR vs Manage Created QRs
   const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
   const [manageFilter, setManageFilter] = useState<string>('all');

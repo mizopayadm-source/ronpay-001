@@ -374,13 +374,13 @@ export default function App() {
   };
 
   const handleUpdateCreator = (creator: CreatorProfile) => {
-    const updatedList = creators.map(cr => (cr.phone === creator.phone ? creator : cr));
+    const updatedList = creators.map(cr => 
+      cr.phone === creator.phone ? { ...cr, ...creator } : cr
+    );
     setCreators(updatedList);
     saveStoredCreatorsList(updatedList);
-    if (creatorProfile.phone === creator.phone) {
-      setCreatorProfile(creator);
-      saveStoredCreatorProfile(creator);
-    }
+    setCreatorProfile(creator);
+    saveStoredCreatorProfile(creator);
     syncCreatorToFirestore(creator).catch(() => {});
   };
 
@@ -467,6 +467,9 @@ export default function App() {
                 }
               }}
               onSelectBawm={handleSelectBawm}
+              onSelectCampaign={handleSelectCampaign}
+              onShareCampaign={handleShareCampaign}
+              onOpenHistory={handleOpenHistory}
               onOpenBillService={handleOpenBillService}
               onOpenReports={handleOpenReports}
               onOpenMemberRoll={handleOpenMemberRoll}
@@ -530,6 +533,8 @@ export default function App() {
               onOpenMemberRoll={handleOpenMemberRoll}
               onPreviewImage={handlePreviewImage}
               language={language}
+              onSelectCampaign={handleSelectCampaign}
+              onUpdateCreatorProfile={handleUpdateCreator}
             />
           )}
 
@@ -557,6 +562,7 @@ export default function App() {
               creatorProfile={creatorProfile}
               onBack={() => handleNavigate('home')}
               onOpenLogin={() => handleNavigate('creator_reg')}
+              onOpenCreateQR={() => handleNavigate('create_qr')}
               onUpdateCampaign={handleUpdateCampaign}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
@@ -647,10 +653,7 @@ export default function App() {
           }}
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
-          onUpdateProfile={(p) => {
-            setCreatorProfile(p);
-            saveStoredCreatorProfile(p);
-          }}
+          onUpdateProfile={handleUpdateCreator}
         />
 
         <PeknaSulhnuModal

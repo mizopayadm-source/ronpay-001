@@ -632,11 +632,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </button>
                     )}
 
-                    <div className="text-right">
-                      <span className="text-[9.5px] font-black text-indigo-600 flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
+                    <div className="text-right flex flex-col items-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectCampaign) {
+                            onSelectCampaign(camp);
+                          } else {
+                            onSelectBawm(camp.category);
+                          }
+                        }}
+                        className="text-[9.5px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-2.5 py-1 rounded-lg border border-indigo-100/80 flex items-center gap-0.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                      >
                         {language === 'mizo' ? 'Pekna' : 'Contribute'} <ChevronRight className="w-3 h-3" />
-                      </span>
-                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5">
+                      </button>
+                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
                         {formatDateDDMMYYYY(camp.createdAt)}
                       </p>
                     </div>

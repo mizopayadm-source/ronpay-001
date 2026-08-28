@@ -66,6 +66,7 @@ interface ReportsScreenProps {
   creatorProfile: CreatorProfile;
   onBack: () => void;
   onOpenLogin?: () => void;
+  onOpenCreateQR?: () => void;
   onUpdateCampaign?: (campaign: Campaign) => void;
   onUpdateTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transactionId: string) => void;
@@ -79,6 +80,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   creatorProfile,
   onBack,
   onOpenLogin,
+  onOpenCreateQR,
   onUpdateCampaign,
   onUpdateTransaction,
   onDeleteTransaction,
@@ -118,24 +120,28 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const isCreator = Boolean(creatorProfile.isApproved && creatorProfile.phone);
 
   // Filter campaigns strictly owned/created by this creator (no cross-creator leakage)
-  const creatorCampaigns = campaigns.filter(c => {
-    if (!isCreator) return false;
-    return isCampaignCreator(c, creatorProfile);
-  });
+  const creatorCampaigns = useMemo(() => {
+    if (!isCreator) return [];
+    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+  }, [campaigns, isCreator, creatorProfile]);
 
-  const creatorCampaignIds = new Set(creatorCampaigns.map(c => c.id));
+  const creatorCampaignIds = useMemo(() => {
+    return new Set(creatorCampaigns.map(c => c.id));
+  }, [creatorCampaigns]);
 
   // Available campaigns for selector based on creator scope
-  const availableCampaigns = isCreator 
-    ? creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter)
-    : [];
+  const availableCampaigns = useMemo(() => {
+    if (!isCreator) return [];
+    return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
+  }, [isCreator, creatorCampaigns, selectedFilter]);
 
-  // Filter transactions: STRICT CREATOR ONLY ACCESS
+  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation)
   const filteredTransactions = useMemo(() => {
+    if (!isCreator || creatorCampaignIds.size === 0) return [];
+
     return transactions.filter(t => {
-      // 1. Creator Security Barrier: Only show transactions belonging to Creator's campaigns
-      if (!isCreator) return false;
-      if (!creatorCampaignIds.has(t.campaignId) && !creatorCampaigns.some(c => c.title === t.campaignTitle)) {
+      // 1. Creator Security Barrier: Only show transactions belonging to Creator's own verified campaigns
+      if (!creatorCampaignIds.has(t.campaignId)) {
         return false;
       }
 
@@ -164,16 +170,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       // 6. Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesTitle = t.campaignTitle.toLowerCase().includes(q);
-        const matchesDonor = t.donorName.toLowerCase().includes(q);
-        const matchesId = t.id.toLowerCase().includes(q);
+        const matchesTitle = (t.campaignTitle || '').toLowerCase().includes(q);
+        const matchesDonor = (t.donorName || '').toLowerCase().includes(q);
+        const matchesId = (t.id || '').toLowerCase().includes(q);
         const matchesPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
         if (!matchesTitle && !matchesDonor && !matchesId && !matchesPeriod) return false;
       }
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, creatorCampaigns, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -563,6 +569,50 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             </button>
           </div>
         </div>
+      ) : creatorCampaigns.length === 0 ? (
+        /* Authenticated Creator with 0 Campaigns */
+        <div className="space-y-4">
+          {/* Creator Scope Info Badge */}
+          <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-700" />
+              <div>
+                <span className="font-black text-emerald-950">{creatorProfile.name}</span>
+                <p className="text-[10px] text-emerald-700 font-medium">
+                  {creatorProfile.orgName} ({creatorProfile.phone}) • 0 Active Campaigns
+                </p>
+              </div>
+            </div>
+            <span className="text-[9.5px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-md border border-emerald-300 uppercase">
+              Verified Creator Access
+            </span>
+          </div>
+
+          <div className="bg-white border border-slate-200/90 p-8 sm:p-12 rounded-3xl text-center space-y-4 shadow-xs">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto border border-indigo-100 shadow-inner">
+              <FileSpreadsheet className="w-8 h-8" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base sm:text-lg font-black text-slate-900">
+                No Campaigns Found
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                I account hnuaiah hian QR Campaign / Post siam a la awm lo a, midang campaign leh sum luh dan record-te chu privacy vawn him nan a lang lo a ni. Campaign thar i siam veleh a report leh matrix hi a rawn lang nghal ang.
+              </p>
+            </div>
+            {onOpenCreateQR && (
+              <div className="pt-2">
+                <button
+                  onClick={onOpenCreateQR}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Create QR / Campaign Thar</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         /* Authenticated Creator Report Section */
         <>
@@ -614,12 +664,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   onChange={(e) => setSelectedCampaignId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition text-xs"
                 >
-                  <option value="all">All My Campaigns in this Bawm</option>
-                  {availableCampaigns.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.title} {c.targetAmount && c.targetAmount > 0 ? `(🎯 Target: ₹${c.targetAmount.toLocaleString('en-IN')}${c.targetPeriod === 'monthly' ? '/thla' : c.targetPeriod === 'yearly' ? '/kum' : ''})` : ''}
-                    </option>
-                  ))}
+                  {availableCampaigns.length === 0 ? (
+                    <option value="none" disabled>No {selectedFilter.toUpperCase()} campaigns created</option>
+                  ) : (
+                    <>
+                      <option value="all">All My Campaigns in this Bawm ({availableCampaigns.length})</option>
+                      {availableCampaigns.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.title} {c.targetAmount && c.targetAmount > 0 ? `(🎯 Target: ₹${c.targetAmount.toLocaleString('en-IN')}${c.targetPeriod === 'monthly' ? '/thla' : c.targetPeriod === 'yearly' ? '/kum' : ''})` : ''}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -697,6 +753,27 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 />
               </div>
             </div>
+
+            {availableCampaigns.length === 0 ? (
+              <div className="bg-slate-50 border border-slate-200/90 p-8 rounded-2xl text-center space-y-2.5">
+                <Receipt className="w-8 h-8 mx-auto text-slate-400" />
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  He Category ({selectedFilter.toUpperCase()}) Ah Hian Campaign I La Siam Lo
+                </h4>
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                  Category dang thlang rawh le, emaw he category pual hian Create QR screen atangin QR thar siam rawh le.
+                </p>
+                {onOpenCreateQR && (
+                  <button
+                    onClick={onOpenCreateQR}
+                    className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs inline-flex items-center gap-1 cursor-pointer transition shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> + Create {selectedFilter.toUpperCase()} QR
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
 
             {/* Active Report Focus Banner with Uploaded Campaign Image (Spacious & High-Visibility) */}
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5.5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -1206,8 +1283,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </>
+        )}
+      </div>
 
+      {availableCampaigns.length > 0 && (
+        <>
           {/* KUMTLUANG MATRIX TABLE VIEW */}
           {isKumtluang ? (
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
@@ -1482,6 +1563,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </>
       )}

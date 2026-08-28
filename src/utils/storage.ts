@@ -615,12 +615,11 @@ export const isUserPaidTransaction = (
 
 /**
  * Checks if the currently active user/creator is the verified owner/creator of a given campaign.
- * Target goals, progress, edit/delete privileges & member roll managers are strictly private
- * and exclusively accessible to the individual creator who created the campaign (or Admin).
+ * User-isolation: Target goals, progress, edit/delete privileges & reports are strictly private
+ * and exclusively accessible to the individual creator who created the campaign.
  */
 export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
-  if (!creatorProfile || !creatorProfile.isApproved) return false;
-  if (creatorProfile.isAdmin) return true;
+  if (!creatorProfile || !creatorProfile.isApproved || !creatorProfile.phone) return false;
   if (!camp) return false;
 
   const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
@@ -629,30 +628,23 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
   const campCreatedByDigits = campCreatedBy.replace(/\D/g, '').slice(-10);
   const campCreatedByLower = campCreatedBy.toLowerCase();
 
-  // 1. Strict Phone Match (last 10 digits or exact)
-  if (creatorPhone && creatorPhone.length >= 6) {
-    if (
-      campCreatedByDigits === creatorPhone || 
-      (campCreatedByDigits.length >= 6 && creatorPhone.endsWith(campCreatedByDigits)) || 
-      (campCreatedByDigits.length >= 6 && campCreatedByDigits.endsWith(creatorPhone)) ||
-      campCreatedBy.includes(creatorProfile.phone?.trim() || '')
-    ) {
+  // 1. Strict Phone Match (last 10 digits or exact string)
+  if (creatorPhone && creatorPhone.length >= 8 && campCreatedByDigits && campCreatedByDigits.length >= 8) {
+    if (campCreatedByDigits === creatorPhone) {
       return true;
     }
   }
 
-  // 2. Full Name Match
-  if (creatorName && creatorName.length >= 3) {
-    if (campCreatedByLower === creatorName || creatorName.includes(campCreatedByLower) || campCreatedByLower.includes(creatorName)) {
-      return true;
-    }
-  }
-
-  // 3. Organization Match
-  const creatorOrg = (creatorProfile.orgName || '').trim().toLowerCase();
-  const campOrg = (camp.orgName || '').trim().toLowerCase();
-  if (creatorOrg && campOrg && (creatorOrg === campOrg || creatorOrg.includes(campOrg) || campOrg.includes(creatorOrg))) {
+  // 2. Exact match with creator phone or exact createdBy
+  if (creatorProfile.phone && campCreatedBy && campCreatedBy === creatorProfile.phone.trim()) {
     return true;
+  }
+
+  // 3. Exact Creator Name Match (strictly exact, not loose includes)
+  if (creatorName && creatorName.length >= 3 && campCreatedByLower) {
+    if (campCreatedByLower === creatorName) {
+      return true;
+    }
   }
 
   return false;
