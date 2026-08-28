@@ -434,7 +434,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="font-black text-base sm:text-lg tracking-tight text-white font-sans whitespace-nowrap">
                   RON<span className="text-amber-400">PAY</span>
                 </span>
-                <span className="inline-flex bg-amber-400/15 text-amber-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-amber-400/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
+                <span className="hidden sm:inline-flex bg-amber-400/15 text-amber-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-amber-400/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
                   FINTECH
                 </span>
                 {!isOnline && (
@@ -447,9 +447,9 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Right Action Controls */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Language Switcher (MZ / EN) */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[9.5px] font-black shadow-inner">
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[9px] sm:text-[9.5px] font-black shadow-inner">
               <button
                 type="button"
                 onClick={() => onToggleLanguage('mizo')}
@@ -476,12 +476,12 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Viewport Toggle (Desktop / Mobile Frame) */}
+            {/* Viewport Toggle (Desktop / Mobile Frame - Hidden on small mobile screens to save space) */}
             <button
               type="button"
               onClick={onToggleDesktopView}
               title={isDesktopView ? "Switch to Mobile View" : "Switch to Desktop View"}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-300 flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              className="hidden sm:flex w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-amber-300 items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
             >
               {isDesktopView ? <Smartphone className="w-3.5 h-3.5 text-amber-300" /> : <Monitor className="w-3.5 h-3.5 text-indigo-300" />}
             </button>
@@ -506,11 +506,10 @@ export const Header: React.FC<HeaderProps> = ({
                 id="header-ai-hriatpui-btn"
                 onClick={onOpenAIHriatpui}
                 title="AI Hriatpui (Recommendation & Verification Assistant)"
-                className="h-7 sm:h-8 px-2 sm:px-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-indigo-400/50 shrink-0"
+                className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-indigo-400/50 shrink-0"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                <span className="tracking-tight font-black hidden xs:inline">AI Hriatpui</span>
-                <span className="tracking-tight font-black xs:hidden">AI</span>
+                <span className="tracking-tight font-black hidden sm:inline">AI Hriatpui</span>
               </button>
             )}
 
@@ -519,10 +518,10 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onOpenScanner}
               title="Scan QR Code"
-              className="h-7 sm:h-8 px-2 sm:px-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+              className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
             >
               <QrCode className="w-3.5 h-3.5" />
-              <span className="tracking-tight font-black">SCAN</span>
+              <span className="tracking-tight font-black hidden sm:inline">SCAN</span>
             </button>
           </div>
         </div>

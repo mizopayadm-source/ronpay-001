@@ -18,6 +18,7 @@ import {
   saveCampaign,
   getStoredTransactions,
   saveStoredTransactions,
+  deleteStoredCampaign,
   getStoredCreatorProfile,
   saveStoredCreatorProfile,
   logoutCreator,
@@ -207,6 +208,45 @@ export default function App() {
     };
   }, []);
 
+  // Real-time Local & Storage Live Sync across all components & tabs
+  useEffect(() => {
+    const handleCampaignsSync = (e: Event) => {
+      const customEvent = e as CustomEvent<Campaign[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setCampaigns(customEvent.detail);
+      } else {
+        setCampaigns(getStoredCampaigns());
+      }
+    };
+
+    const handleTransactionsSync = (e: Event) => {
+      const customEvent = e as CustomEvent<Transaction[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setTransactions(customEvent.detail);
+      } else {
+        setTransactions(getStoredTransactions());
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'ronpay_campaigns') {
+        setCampaigns(getStoredCampaigns());
+      } else if (e.key === 'ronpay_transactions') {
+        setTransactions(getStoredTransactions());
+      }
+    };
+
+    window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
+    window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
+      window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // Reload helper
   const reloadLocalData = useCallback(() => {
     setCampaigns(getStoredCampaigns());
@@ -303,18 +343,9 @@ export default function App() {
 
   const handleGenerateQR = (campaign: Campaign) => {
     saveCampaign(campaign);
-    setCampaigns(prev => {
-      const idx = prev.findIndex(c => c.id === campaign.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = campaign;
-        return copy;
-      }
-      return [campaign, ...prev];
-    });
+    setCampaigns(getStoredCampaigns());
     setGeneratedQRCampaign(campaign);
     setIsGeneratedQROpen(true);
-    reloadLocalData();
   };
 
   const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => {
@@ -333,17 +364,13 @@ export default function App() {
   };
 
   const handleUpdateCampaign = (campaign: Campaign) => {
-    const updated = campaigns.map(c => (c.id === campaign.id ? campaign : c));
-    setCampaigns(updated);
-    saveStoredCampaigns(updated);
-    syncCampaignToFirestore(campaign).catch(() => {});
+    saveCampaign(campaign);
+    setCampaigns(getStoredCampaigns());
   };
 
   const handleDeleteCampaign = (campaignId: string) => {
-    const updated = campaigns.filter(c => c.id !== campaignId);
-    setCampaigns(updated);
-    saveStoredCampaigns(updated);
-    deleteCampaignFromFirestore(campaignId).catch(() => {});
+    deleteStoredCampaign(campaignId);
+    setCampaigns(getStoredCampaigns());
   };
 
   const handleApproveCampaign = (campaign: Campaign) => {

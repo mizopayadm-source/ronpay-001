@@ -559,7 +559,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <div className="space-y-2.5">
-          {recentCreatedQRs.map(camp => {
+          {recentCreatedQRs.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/90 text-center space-y-2">
+              <QrCode className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-xs font-bold text-slate-700">QR Siam a la awm lo</p>
+              <p className="text-[11px] text-slate-500">QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.</p>
+            </div>
+          ) : (
+            recentCreatedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
             const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -705,7 +712,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
     </div>

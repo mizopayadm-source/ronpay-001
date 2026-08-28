@@ -2,7 +2,9 @@ import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfi
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import {
   syncCampaignToFirestore,
+  deleteCampaignFromFirestore,
   syncTransactionToFirestore,
+  deleteTransactionFromFirestore,
   syncMemberToFirestore,
   deleteMemberFromFirestore,
   syncCreatorToFirestore,
@@ -140,37 +142,22 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 export const getStoredCampaigns = (): Campaign[] => {
   try {
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
-    let storedList: Campaign[] = [];
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        storedList = parsed;
+        return parsed.map((camp: Campaign) => {
+          if (!camp.orgCode) {
+            const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
+            const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
+            return { ...camp, orgCode: derived };
+          }
+          return camp;
+        });
       }
     }
-
-    // Merge INITIAL_CAMPAIGNS (from AI Studio / code updates) with stored campaigns
-    const map = new Map<string, Campaign>();
-    for (const c of INITIAL_CAMPAIGNS) {
-      if (c && c.id) map.set(c.id.toLowerCase(), c);
-    }
-    for (const c of storedList) {
-      if (c && c.id) {
-        const k = c.id.toLowerCase();
-        const existing = map.get(k);
-        map.set(k, { ...(existing || {}), ...c });
-      }
-    }
-
-    const merged = Array.from(map.values()).map((camp: Campaign) => {
-      if (!camp.orgCode) {
-        const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
-        const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-        return { ...camp, orgCode: derived };
-      }
-      return camp;
-    });
-
-    return merged.length > 0 ? merged : INITIAL_CAMPAIGNS;
+    // Initialize if never stored before
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(INITIAL_CAMPAIGNS));
+    return INITIAL_CAMPAIGNS;
   } catch (e) {
     console.error('Failed to parse stored campaigns', e);
   }
@@ -293,6 +280,11 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
     localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
     setLastSyncTime(new Date().toISOString());
 
+    // Broadcast local event for immediate real-time sync across all components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sanitized }));
+    }
+
     // Direct Sync to Firebase Firestore
     for (const camp of sanitized) {
       if (camp && camp.id) {
@@ -337,34 +329,37 @@ export const saveCampaign = (camp: Campaign): void => {
   }
 };
 
+export const deleteStoredCampaign = (campaignId: string): void => {
+  if (!campaignId) return;
+  const current = getStoredCampaigns();
+  const updated = current.filter(c => c.id !== campaignId);
+  saveStoredCampaigns(updated);
+  deleteCampaignFromFirestore(campaignId).catch(() => {});
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/campaigns/${campaignId}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  }
+};
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
-        const cleanedStored = parsed.filter(t => 
+        return parsed.filter(t => 
           t.donorName !== 'Liana' && 
           t.donorName !== 'Kunga' && 
           !legacyMismatchedIds.has(t.id)
         );
-
-        // Merge INITIAL_TRANSACTIONS with cleaned stored transactions
-        const map = new Map<string, Transaction>();
-        for (const t of INITIAL_TRANSACTIONS) {
-          if (t && t.id) map.set(t.id, t);
-        }
-        for (const t of cleanedStored) {
-          if (t && t.id) {
-            map.set(t.id, t);
-          }
-        }
-        const merged = Array.from(map.values());
-        return merged;
       }
     }
+    // Initialize if never stored before
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
+    return INITIAL_TRANSACTIONS;
   } catch (e) {
     console.error('Failed to parse stored transactions', e);
   }
@@ -374,6 +369,11 @@ export const getStoredTransactions = (): Transaction[] => {
 export const saveStoredTransactions = (transactions: Transaction[]) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+
+    // Broadcast local event for immediate real-time sync
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
+    }
 
     // Direct Sync to Firebase Firestore
     for (const tx of transactions) {

@@ -59,6 +59,7 @@ interface CreateQRScreenProps {
   campaigns?: Campaign[];
   transactions?: Transaction[];
   onUpdateCampaign?: (campaign: Campaign) => void;
+  onDeleteCampaign?: (campaignId: string) => void;
   onSelectCampaign?: (campaign: Campaign) => void;
   onUpdateCreatorProfile?: (updated: CreatorProfile) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
@@ -76,6 +77,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   campaigns = [],
   transactions = [],
   onUpdateCampaign,
+  onDeleteCampaign,
   onSelectCampaign,
   onUpdateCreatorProfile,
   onOpenMemberRoll,
@@ -1850,14 +1852,30 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         </div>
                       </div>
 
-                      {/* Edit Button */}
-                      <button
-                        type="button"
-                        onClick={() => setEditingCampaign(camp)}
-                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1.5 rounded-xl text-xs border border-indigo-200 transition cursor-pointer flex items-center gap-1 shrink-0"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" /> Edit
-                      </button>
+                      {/* Actions: Edit and Delete */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingCampaign(camp)}
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1.5 rounded-xl text-xs border border-indigo-200 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        {onDeleteCampaign && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`"${camp.title}" hi delete (nawhreh) i duh tak tak em?\n\nHe campaign leh a QR code hi application pumah a lang tawh lo ang.`)) {
+                                onDeleteCampaign(camp.id);
+                              }
+                            }}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold p-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center justify-center"
+                            title="Delete Campaign"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Details Snippet */}
