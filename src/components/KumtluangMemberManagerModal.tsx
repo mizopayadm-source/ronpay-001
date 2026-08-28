@@ -255,6 +255,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     ? allowedCampaigns.find(c => c.id === selectedCampaignId) 
     : allowedCampaigns.find(c => c.id === quickEntryCampaignId)) || allowedCampaigns[0] || campaigns[0];
 
+  const activeRegisterCampaign = (regTargetCampaignId 
+    ? allowedCampaigns.find(c => c.id === regTargetCampaignId) 
+    : null) || activeScopedCampaign;
+
+  const activeEditCampaign = (editCampaignId 
+    ? allowedCampaigns.find(c => c.id === editCampaignId) 
+    : null) || activeScopedCampaign;
+
   const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
     ? activeScopedCampaign.subCategories
     : defaultCategories;
@@ -1246,8 +1254,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="">-- Thlang Rawh (Bial / Section) --</option>
-                    {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
-                      ? activeScopedCampaign.definedSections
+                    {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
+                      ? activeRegisterCampaign.definedSections
                       : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
                     ).map((sec, idx) => (
                       <option key={idx} value={sec}>
@@ -2063,15 +2071,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 >
                   <option value="">-- Thlang Rawh --</option>
-                  {(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0
-                    ? activeScopedCampaign.definedSections
+                  {(activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0
+                    ? activeEditCampaign.definedSections
                     : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
                   ).map((sec, idx) => (
                     <option key={idx} value={sec}>
                       {sec}
                     </option>
                   ))}
-                  {editSection && !activeScopedCampaign?.definedSections?.includes(editSection) && (
+                  {editSection && !activeEditCampaign?.definedSections?.includes(editSection) && (
                     <option value={editSection}>{editSection} (Existing)</option>
                   )}
                 </select>

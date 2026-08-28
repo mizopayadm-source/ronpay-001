@@ -188,7 +188,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const recentCreatedQRs = campaigns.slice(0, 5);
 
   return (
-    <div className="space-y-4 pb-6 animate-fadeIn">
+    <div className="space-y-4 pb-1 animate-fadeIn">
       {/* Admin Custom Live Rotating Announcement Banner with Canva & Media support */}
       {announcement && announcement.isActive && (
         <AnnouncementBannerCard

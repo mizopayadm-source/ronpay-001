@@ -306,7 +306,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   };
 
   return (
-    <div className="space-y-4 text-center py-4 animate-fadeIn pb-8 max-w-lg mx-auto relative px-1">
+    <div className="space-y-4 text-center pt-4 pb-2 animate-fadeIn max-w-lg mx-auto relative px-1">
       
       {/* Decorative Celebration CSS Aura & Particles */}
       <div className="relative py-2 flex flex-col items-center justify-center">

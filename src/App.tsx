@@ -254,6 +254,15 @@ export default function App() {
       }
     };
 
+    const handleMembersSync = (e: Event) => {
+      const customEvent = e as CustomEvent<MemberRecord[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setMembersState(customEvent.detail);
+      } else {
+        setMembersState(getMembers());
+      }
+    };
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'ronpay_campaigns' || e.key === 'ronpay_campaigns_v2') {
         setCampaigns(getStoredCampaigns());
@@ -263,6 +272,8 @@ export default function App() {
         setCreatorProfile(getStoredCreatorProfile());
       } else if (e.key === 'ronpay_creators_list_v2' || e.key === 'ronpay_registered_creators_v1') {
         setCreators(getStoredCreatorsList());
+      } else if (e.key === 'ronpay_kumtluang_members_v1') {
+        setMembersState(getMembers());
       }
     };
 
@@ -273,6 +284,9 @@ export default function App() {
     window.addEventListener('ronpay-creator-updated', handleCreatorSync);
     window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
     window.addEventListener('ronpay_creators_updated', handleCreatorsListSync);
+    window.addEventListener('ronpay-members-updated', handleMembersSync);
+    window.addEventListener('ronpay_members_updated', handleMembersSync);
+    window.addEventListener('ronpay_data_synced', reloadLocalData);
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
@@ -283,6 +297,9 @@ export default function App() {
       window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
       window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);
       window.removeEventListener('ronpay_creators_updated', handleCreatorsListSync);
+      window.removeEventListener('ronpay-members-updated', handleMembersSync);
+      window.removeEventListener('ronpay_members_updated', handleMembersSync);
+      window.removeEventListener('ronpay_data_synced', reloadLocalData);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -551,7 +568,7 @@ export default function App() {
         />
 
         {/* Main Body Screen Router */}
-        <main className="flex-1 w-full max-w-full px-3 sm:px-4 py-4 pb-20 overflow-y-auto overflow-x-hidden">
+        <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
           {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}

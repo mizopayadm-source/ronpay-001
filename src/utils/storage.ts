@@ -695,8 +695,9 @@ export const isUserPaidTransaction = (
  * and exclusively accessible to the individual creator who created the campaign.
  */
 export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
-  if (!creatorProfile || !creatorProfile.isApproved || !creatorProfile.phone) return false;
-  if (!camp) return false;
+  if (!creatorProfile || !camp) return false;
+  if (creatorProfile.isAdmin) return true;
+  if (!creatorProfile.phone && !creatorProfile.name) return false;
 
   const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
   const creatorName = (creatorProfile.name || '').trim().toLowerCase();
@@ -1191,6 +1192,13 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 export const saveMembers = (members: MemberRecord[]): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
+    
+    // Broadcast instant sync events to all components & windows
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: members }));
+      window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: members }));
+    }
+
     for (const m of members) {
       if (m && m.id) {
         syncMemberToFirestore(m).catch(() => {});
@@ -1210,8 +1218,9 @@ export const saveMembers = (members: MemberRecord[]): void => {
 
 export const addOrUpdateMember = (member: MemberRecord): void => {
   const allList = getMembers(); // Load all members across all Bawms
+  const targetId = (member.id || '').trim().toLowerCase();
   const idx = allList.findIndex(m => 
-    m.id === member.id && 
+    (m.id || '').trim().toLowerCase() === targetId && 
     (!member.campaignId || !m.campaignId || m.campaignId === member.campaignId)
   );
   if (idx >= 0) {
@@ -1234,8 +1243,9 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
   const allList = getMembers();
+  const targetId = (memberId || '').trim().toLowerCase();
   const filtered = allList.filter(m => {
-    if (m.id !== memberId) return true;
+    if ((m.id || '').trim().toLowerCase() !== targetId) return true;
     if (campaignId && m.campaignId && m.campaignId !== campaignId) return true;
     return false;
   });

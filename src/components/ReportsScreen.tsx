@@ -512,7 +512,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-6 animate-fadeIn">
+    <div className="space-y-4 pb-1 animate-fadeIn">
       {/* Enhanced Top Screen Header */}
       <div className="bg-white p-3.5 sm:p-4.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">

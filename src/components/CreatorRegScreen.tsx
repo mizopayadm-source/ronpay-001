@@ -431,7 +431,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   }
 
   return (
-    <div className="space-y-4 pb-6 animate-fadeIn">
+    <div className="space-y-4 pb-1 animate-fadeIn">
       {/* Header */}
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
         <button

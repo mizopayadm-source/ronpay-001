@@ -274,7 +274,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   ];
 
   return (
-    <div className="space-y-4 pb-6 animate-fadeIn">
+    <div className="space-y-4 pb-1 animate-fadeIn">
       {/* Top Header */}
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
         <button

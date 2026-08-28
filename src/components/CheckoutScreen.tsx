@@ -198,11 +198,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
-  const handleQuickRegisterSubmit = (e?: React.FormEvent) => {
+  const handleQuickRegisterSubmit = (e?: React.FormEvent): MemberRecord | null => {
     if (e) e.preventDefault();
     if (!newRegName.trim()) {
       alert('Khawngaihin Member Hming chhu lut rawh le.');
-      return;
+      return null;
     }
     const cleanPhone = newRegPhone.replace(/\D/g, '');
     const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : Math.floor(1000 + Math.random() * 9000).toString();
@@ -219,7 +219,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       name: newRegName.trim(),
       orgCode: orgCode,
       phoneLast4: phoneLast4,
-      fullPhone: cleanPhone || `943600${phoneLast4}`,
+      fullPhone: cleanPhone || (phoneLast4.length === 10 ? phoneLast4 : `943600${phoneLast4}`),
       section: sectionToUse,
       isFamilyHead: true,
       dependents: [],
@@ -235,6 +235,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setSelectedPayerType('primary');
     setIsNewMemberMode(false);
     setNewRegName('');
+    return newMember;
   };
 
   const handleAddDependent = () => {
@@ -424,6 +425,47 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       return;
     }
 
+    let resolvedDonorName = donorName.trim();
+    let resolvedDonorPhone = donorPhone.trim();
+    let resolvedDonorVeng = donorSection.trim();
+    let resolvedMemberId: string | undefined = undefined;
+    let resolvedSubId: string | undefined = undefined;
+    let resolvedIsDependent = false;
+
+    if (category === 'kumtluang') {
+      if (!isAnonymous) {
+        let activeMember = selectedMember;
+        // If not selected yet, but user filled new registration inputs:
+        if (!activeMember && newRegName.trim()) {
+          activeMember = handleQuickRegisterSubmit();
+        }
+
+        if (activeMember) {
+          if (selectedPayerType !== 'primary') {
+            const dep = activeMember.dependents?.find(d => d.subId === selectedPayerType);
+            resolvedDonorName = dep ? dep.name : activeMember.name;
+            resolvedSubId = selectedPayerType;
+            resolvedIsDependent = true;
+          } else {
+            resolvedDonorName = activeMember.name;
+          }
+          resolvedDonorPhone = activeMember.fullPhone || (activeMember.phoneLast4 ? `943600${activeMember.phoneLast4}` : resolvedDonorPhone);
+          resolvedDonorVeng = activeMember.section || resolvedDonorVeng;
+          resolvedMemberId = activeMember.id;
+        } else if (!resolvedDonorName) {
+          setIsNewMemberMode(true);
+          alert('⚠️ Kumtluang Bawm-ah hian Petu Hming leh Phone Number ziah luh ngei ngei tur a ni (emaw I Member ID/Phone zawng rawh le).\n\nHming thup i duh a nih chuan chung lama "Hming thup" checkbox kha tick rawh.');
+          return;
+        }
+      }
+    } else {
+      // Non-kumtluang categories (Ralna, Khawlsak, Rikrum, Others)
+      if (!isAnonymous && !resolvedDonorName) {
+        alert('⚠️ Khawngaihin Petu Hming (Donor Full Name) chhu lut rawh le.\n\nHming thup i duh a nih chuan "Hming thup" checkbox kha tick rawh.');
+        return;
+      }
+    }
+
     setIsProcessing(true);
 
     if (paymentMethod === 'online') {
@@ -438,12 +480,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             campaignId: campaign?.id || `cmp-${category}-custom`,
             campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
             category: category,
-            donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
-            donorPhone: donorPhone.trim() || undefined,
-            donorVeng: donorSection.trim() || undefined,
-            memberId: category === 'kumtluang' && selectedMember ? selectedMember.id : undefined,
-            subId: category === 'kumtluang' && selectedPayerType !== 'primary' ? selectedPayerType : undefined,
-            isDependent: category === 'kumtluang' && selectedPayerType !== 'primary',
+            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+            memberId: isAnonymous ? undefined : resolvedMemberId,
+            subId: isAnonymous ? undefined : resolvedSubId,
+            isDependent: isAnonymous ? false : resolvedIsDependent,
             isAnonymous: isAnonymous,
             amount: subtotal,
             platformFee: platformFee,
@@ -469,12 +511,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         campaignId: campaign?.id || `cmp-${category}-custom`,
         campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
         category: category,
-        donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
-        donorPhone: donorPhone.trim() || undefined,
-        donorVeng: donorSection.trim() || undefined,
-        memberId: category === 'kumtluang' && selectedMember ? selectedMember.id : undefined,
-        subId: category === 'kumtluang' && selectedPayerType !== 'primary' ? selectedPayerType : undefined,
-        isDependent: category === 'kumtluang' && selectedPayerType !== 'primary',
+        donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+        donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+        donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+        memberId: isAnonymous ? undefined : resolvedMemberId,
+        subId: isAnonymous ? undefined : resolvedSubId,
+        isDependent: isAnonymous ? false : resolvedIsDependent,
         isAnonymous: isAnonymous,
         amount: subtotal,
         platformFee: 0,
@@ -499,7 +541,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const isRalna = category === 'ralna';
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-4 pb-1">
       {/* Top Header Bar */}
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
         <button
@@ -1322,7 +1364,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     </button>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                /* Prompt for ID nei lo / thar tan */
+                <div className="p-3 bg-blue-50/70 border border-blue-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                      <UserPlus className="w-3.5 h-3.5 text-blue-600 shrink-0" /> Member ID / Account i la nei lo em ni?
+                    </div>
+                    <p className="text-[10px] text-blue-800/90 font-medium mt-0.5">
+                      I Hming leh Phone Number chhu lutin Member-ah inziak lut nghal rawh le.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsNewMemberMode(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-2xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Hming & Phone Chhu Lut Rawh
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum) */
