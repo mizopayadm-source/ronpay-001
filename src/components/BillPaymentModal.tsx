@@ -18,7 +18,9 @@ import {
   ExternalLink,
   Info,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Wallet,
+  Check
 } from 'lucide-react';
 import { BillService } from '../types';
 import { Language, TRANSLATIONS } from '../utils/translations';
@@ -66,14 +68,16 @@ const PREPAID_PLANS: Record<string, RechargePlan[]> = {
 };
 
 const FASTAG_BANKS = [
-  'State Bank of India (SBI FASTag)',
   'HDFC Bank FASTag',
+  'State Bank of India (SBI FASTag)',
   'ICICI Bank FASTag',
   'Axis Bank FASTag',
   'Airtel Payments Bank FASTag',
   'IDFC First Bank FASTag',
   'Kotak Mahindra Bank FASTag',
-  'Paytm Payments Bank FASTag'
+  'Paytm Payments Bank FASTag',
+  'Bank of Baroda FASTag',
+  'Punjab National Bank (PNB FASTag)'
 ];
 
 const DTH_OPERATORS = [
@@ -251,86 +255,56 @@ const WATER_MOCK_RECORDS: Record<string, WaterBillRecord> = {
 interface FastagRecord {
   vehicleNo: string;
   ownerName: string;
-  vehicleModel: string;
+  vehicleModel?: string;
   bank: string;
   tagStatus: string;
   tagId: string;
+  currentBalance: number;
   suggestedRecharge: number;
+  vehicleClass: string;
 }
 
-const FASTAG_MOCK_RECORDS: Record<string, FastagRecord> = {
-  'MZ01T5432': {
-    vehicleNo: 'MZ-01-T-5432',
-    ownerName: 'Lalremruata',
-    vehicleModel: 'Maruti Suzuki WagonR (Commercial Taxi - Aizawl)',
-    bank: 'State Bank of India (SBI FASTag)',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA820391823',
-    suggestedRecharge: 500
-  },
-  'MZ-01-T-5432': {
-    vehicleNo: 'MZ-01-T-5432',
-    ownerName: 'Lalremruata',
-    vehicleModel: 'Maruti Suzuki WagonR (Commercial Taxi - Aizawl)',
-    bank: 'State Bank of India (SBI FASTag)',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA820391823',
-    suggestedRecharge: 500
-  },
-  'MZ01A1234': {
-    vehicleNo: 'MZ-01-A-1234',
-    ownerName: 'David Lalhmingliana',
-    vehicleModel: 'Hyundai Creta SX (Private LMV - Aizawl)',
-    bank: 'HDFC Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA991820491',
-    suggestedRecharge: 1000
-  },
-  'MZ-01-A-1234': {
-    vehicleNo: 'MZ-01-A-1234',
-    ownerName: 'David Lalhmingliana',
-    vehicleModel: 'Hyundai Creta SX (Private LMV - Aizawl)',
-    bank: 'HDFC Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA991820491',
-    suggestedRecharge: 1000
-  },
-  'MZ02B9911': {
-    vehicleNo: 'MZ-02-B-9911',
-    ownerName: 'Vanlalpeka',
-    vehicleModel: 'Mahindra Bolero Camper (Commercial - Lunglei)',
-    bank: 'ICICI Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA109283748',
-    suggestedRecharge: 500
-  },
-  'MZ-02-B-9911': {
-    vehicleNo: 'MZ-02-B-9911',
-    ownerName: 'Vanlalpeka',
-    vehicleModel: 'Mahindra Bolero Camper (Commercial - Lunglei)',
-    bank: 'ICICI Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA109283748',
-    suggestedRecharge: 500
-  },
-  'MZ04C7788': {
-    vehicleNo: 'MZ-04-C-7788',
-    ownerName: 'Lalrosanga',
-    vehicleModel: 'Ashok Leyland Truck (Heavy Vehicle - Champhai)',
-    bank: 'Axis Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA778899001',
-    suggestedRecharge: 2000
-  },
-  'MZ-04-C-7788': {
-    vehicleNo: 'MZ-04-C-7788',
-    ownerName: 'Lalrosanga',
-    vehicleModel: 'Ashok Leyland Truck (Heavy Vehicle - Champhai)',
-    bank: 'Axis Bank FASTag',
-    tagStatus: 'ACTIVE / NPCI LINKED',
-    tagId: '34161FA778899001',
-    suggestedRecharge: 2000
-  }
+// User-customizable or saved vehicle details cache
+const USER_VEHICLE_CUSTOM_CACHE: Record<string, {
+  ownerName?: string;
+  vehicleModel?: string;
+  currentBalance?: number;
+}> = {};
+
+// Recognized Indian state prefixes for Vehicle Registration
+const STATE_NAMES: Record<string, string> = {
+  'ML': 'Meghalaya',
+  'MZ': 'Mizoram',
+  'AS': 'Assam',
+  'TR': 'Tripura',
+  'MN': 'Manipur',
+  'NL': 'Nagaland',
+  'AR': 'Arunachal Pradesh',
+  'SK': 'Sikkim',
+  'WB': 'West Bengal',
+  'DL': 'Delhi',
+  'HR': 'Haryana',
+  'UP': 'Uttar Pradesh',
+  'BR': 'Bihar',
+  'JH': 'Jharkhand',
+  'OD': 'Odisha',
+  'KA': 'Karnataka',
+  'TN': 'Tamil Nadu',
+  'KL': 'Kerala',
+  'MH': 'Maharashtra',
+  'GJ': 'Gujarat',
+  'RJ': 'Rajasthan',
+  'PB': 'Punjab',
+  'HP': 'Himachal Pradesh',
+  'JK': 'Jammu & Kashmir',
+  'LA': 'Ladakh',
+  'TS': 'Telangana',
+  'AP': 'Andhra Pradesh',
+  'CG': 'Chhattisgarh',
+  'GA': 'Goa',
+  'PY': 'Puducherry',
+  'CH': 'Chandigarh',
+  'BH': 'Bharat Series (BH)'
 };
 
 export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
@@ -358,6 +332,10 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   // FASTag states
   const [vehicleNumber, setVehicleNumber] = useState<string>('');
   const [fastagBank, setFastagBank] = useState<string>(FASTAG_BANKS[0]);
+  const [isEditingFastag, setIsEditingFastag] = useState<boolean>(false);
+  const [editOwnerName, setEditOwnerName] = useState<string>('');
+  const [editVehicleModel, setEditVehicleModel] = useState<string>('');
+  const [editTagBalance, setEditTagBalance] = useState<string>('');
 
   // DTH states
   const [dthOperator, setDthOperator] = useState<string>(DTH_OPERATORS[0]);
@@ -408,10 +386,14 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
     portalUrl: string;
     status: string;
     meterNo?: string;
+    tagBalance?: number; // FASTag Current Available Balance
+    vehicleClass?: string;
+    tagId?: string;
+    issuingBank?: string;
     breakdown?: { label: string; amount: number }[];
   } | null>(null);
 
-  // Clean reset on service change without forcing hardcoded auto-fetch
+  // Clean reset on service change
   useEffect(() => {
     if (service) {
       setIsSuccess(false);
@@ -435,7 +417,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
     }
   }, [service?.id]);
 
-  // Live Bill Fetch with BBPS validation & Mock error handling
+  // Live Bill Fetch with BBPS validation & smart real-time resolution
   const handleFetchLiveBill = (type: string, idVal: string) => {
     const rawId = idVal.trim();
     setErrorMessage(null);
@@ -476,13 +458,34 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               { label: 'Electricity Duty & Cess (5%)', amount: 40 }
             ]
           });
+        } else if (/^\d{6,12}$/.test(cleanId)) {
+          // Dynamic valid consumer number simulation
+          const calcUnits = 120 + (parseInt(cleanId.slice(-3), 10) % 180);
+          const calcAmount = 450 + (calcUnits * 4.5);
+          const roundedAmount = Math.round(calcAmount / 10) * 10;
+          setAmount(roundedAmount.toString());
+          setLinkedBillData({
+            consumerName: 'Consumer Connection (P&ED Live Verified)',
+            accountNo: cleanId,
+            dueDate: '20/09/2026',
+            billAmount: roundedAmount,
+            subDivisionOrLocality: 'Power & Electricity Dept, Mizoram (State Grid)',
+            meterNo: `MTR-${cleanId.slice(-4)}`,
+            portalUrl: 'https://power.mizoram.gov.in',
+            status: language === 'english' ? 'P&ED Mizoram Live Bill Verified' : 'P&ED Server-ah Bill Hmuh A Ni',
+            breakdown: [
+              { label: `Energy Charges (${calcUnits} kWh)`, amount: roundedAmount - 120 },
+              { label: 'Fixed Monthly Meter Rent', amount: 80 },
+              { label: 'State Electricity Duty & Cess', amount: 40 }
+            ]
+          });
         } else {
           setLinkedBillData(null);
           setAmount('');
           setErrorMessage(
             language === 'english'
-              ? `Invalid Consumer ID or Not Found (${cleanId}). P&ED Mizoram server returned 0 records. Please check the ID or tap a sample button below.`
-              : `Consumer ID hmuh a ni lo (${cleanId}). P&ED Mizoram server-ah a awm lo. Consumer Number dik tak chhu lut rawh emaw Sample ID hi hmet rawh.`
+              ? `Invalid Consumer ID (${cleanId}). P&ED Mizoram consumer numbers are 8 to 11 digits numeric. Please check your bill or tap a sample button.`
+              : `Consumer ID a dik lo (${cleanId}). P&ED Mizoram Consumer ID chu number 8-11 digits a ni tur a ni. Bill paper check la, emaw Sample ID hi hmet rawh.`
           );
         }
       } else if (type === 'water') {
@@ -506,28 +509,79 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               { label: 'Sanitation Cess', amount: 20 }
             ]
           });
+        } else if (cleanId.length >= 4) {
+          // Dynamic valid water connection simulation
+          const liveBill = 420;
+          setAmount(liveBill.toString());
+          setLinkedBillData({
+            consumerName: 'Consumer Water Connection (PHED Verified)',
+            accountNo: rawId.toUpperCase(),
+            dueDate: '15/09/2026',
+            billAmount: liveBill,
+            subDivisionOrLocality: 'PHED Water Supply Division, Mizoram',
+            meterNo: `WM-${cleanId.slice(-4)}`,
+            portalUrl: 'https://phed.mizoram.gov.in',
+            status: language === 'english' ? 'PHED Mizoram Connection Verified' : 'PHED Server-ah Connection Hmuh A Ni',
+            breakdown: [
+              { label: 'Water Usage Charges (16,000 Litres)', amount: 350 },
+              { label: 'Meter Maintenance & Sanitation Fee', amount: 70 }
+            ]
+          });
         } else {
           setLinkedBillData(null);
           setAmount('');
           setErrorMessage(
             language === 'english'
-              ? `Water Connection ID Not Found (${rawId}). No active connection record found on PHED Mizoram server. Please use a sample ID or verify your bill.`
-              : `PHED Consumer ID hmuh a ni lo (${rawId}). PHED Mizoram server-ah record a awm lo. Consumer ID dik tak chhu lut rawh emaw Sample ID hi hmet rawh.`
+              ? `Water Connection ID Not Found (${rawId}). Please enter a valid PHED Consumer ID.`
+              : `PHED Consumer ID a dik lo (${rawId}). Consumer ID dik tak chhu lut rawh le.`
           );
         }
       } else if (type === 'fastag') {
         const cleanVeh = rawId.toUpperCase().replace(/[\s-]+/g, '');
-        const record = FASTAG_MOCK_RECORDS[cleanVeh] || FASTAG_MOCK_RECORDS[rawId.toUpperCase()];
+        // Comprehensive Indian vehicle number regex parser (e.g. ML-05-J-7001, MZ-01-A-1234, AS-01-EK-4321, DL-8C-9900, etc.)
+        const match = cleanVeh.match(/^([A-Z]{2})([0-9]{1,2})([A-Z]{0,3})([0-9]{1,4})$/);
 
-        if (record) {
-          setAmount(record.suggestedRecharge.toString());
-          setFastagBank(record.bank);
+        if (match) {
+          // Dynamic recognition of ANY real Indian vehicle registration plate!
+          const stateCode = match[1];
+          const distCode = match[2].padStart(2, '0');
+          const series = match[3] || '';
+          const num = match[4].padStart(4, '0');
+          const formattedPlate = `${stateCode}-${distCode}${series ? `-${series}` : ''}-${num}`;
+
+          const stateName = STATE_NAMES[stateCode] || 'India';
+          
+          // Check if custom details exist in cache for this vehicle
+          const cached = USER_VEHICLE_CUSTOM_CACHE[cleanVeh] || USER_VEHICLE_CUSTOM_CACHE[formattedPlate];
+
+          let charSum = 0;
+          for (let i = 0; i < cleanVeh.length; i++) {
+            charSum += cleanVeh.charCodeAt(i);
+          }
+          const defaultBalance = 240;
+          const tagHash = Math.abs(charSum * 881273).toString(16).toUpperCase().padStart(12, '0');
+          const tagId = `34161FA${tagHash.slice(0, 10)}`;
+
+          const resolvedOwner = cached?.ownerName || `Vehicle Owner (${stateName} RTO - ${formattedPlate})`;
+          const resolvedModel = cached?.vehicleModel || 'Class 4 (LMV - Private / Taxi / Commercial)';
+          const resolvedBalance = cached?.currentBalance !== undefined ? cached.currentBalance : defaultBalance;
+
+          setAmount('500'); // Default recommended top-up
+          setEditOwnerName(resolvedOwner);
+          setEditVehicleModel(resolvedModel);
+          setEditTagBalance(resolvedBalance.toString());
+
           setLinkedBillData({
-            consumerName: `${record.ownerName} (${record.vehicleModel})`,
-            accountNo: record.vehicleNo,
-            dueDate: record.tagStatus,
-            billAmount: record.suggestedRecharge,
-            subDivisionOrLocality: `Tag ID: ${record.tagId} • ${record.bank}`,
+            consumerName: resolvedOwner,
+            accountNo: formattedPlate,
+            dueDate: 'ACTIVE / NPCI LINKED',
+            billAmount: 500,
+            tagBalance: resolvedBalance,
+            vehicleClass: resolvedModel,
+            vehicleModel: resolvedModel,
+            tagId: tagId,
+            issuingBank: fastagBank,
+            subDivisionOrLocality: `Tag ID: ${tagId} • ${fastagBank}`,
             portalUrl: 'https://www.ihmcl.co.in',
             status: language === 'english' ? 'NETC / NPCI Active Tag Linked' : 'NPCI / NETC Tag Nung Lai Hmuh A Ni'
           });
@@ -536,12 +590,12 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
           setAmount('');
           setErrorMessage(
             language === 'english'
-              ? `No active FASTag found for vehicle '${rawId}'. Tag not registered with selected bank or invalid vehicle number. Try a sample vehicle.`
-              : `FASTag Tag hmuh a ni lo ('${rawId}'). Vehicle registration number dik lo emaw Bank thlan dik loh a ni thei. Sample vehicle hi hmet chhin rawh.`
+              ? `Invalid Vehicle Registration Number ('${rawId}'). Please enter a valid Indian vehicle number (e.g. ML-05-J-7001, MZ-01-T-5432, AS-01-A-1234).`
+              : `Motor Number chhut luh hi a dik lo ('${rawId}'). Vehicle registration number dik tak chhu lut rawh (Entirnan: ML-05-J-7001, MZ-01-T-5432, AS-01-A-1234).`
           );
         }
       } else if (type === 'municipal_tax') {
-        if (rawId.includes('AMC') || rawId.length >= 6) {
+        if (rawId.includes('AMC') || rawId.length >= 5) {
           const liveBill = 1200;
           setAmount(liveBill.toString());
           setLinkedBillData({
@@ -639,6 +693,31 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   const handleSelectPlan = (plan: RechargePlan) => {
     setSelectedPlan(plan);
     setAmount(plan.price.toString());
+  };
+
+  const handleSaveFastagDetails = () => {
+    if (!linkedBillData) return;
+    const cleanVeh = vehicleNumber.toUpperCase().replace(/[\s-]+/g, '');
+    const numBalance = parseFloat(editTagBalance) || 0;
+    const newOwner = editOwnerName.trim() || 'Vehicle Owner';
+    const newModel = editVehicleModel.trim() || 'Class 4 (LMV)';
+    
+    USER_VEHICLE_CUSTOM_CACHE[cleanVeh] = {
+      ownerName: newOwner,
+      vehicleModel: newModel,
+      currentBalance: numBalance
+    };
+    USER_VEHICLE_CUSTOM_CACHE[linkedBillData.accountNo] = USER_VEHICLE_CUSTOM_CACHE[cleanVeh];
+
+    setLinkedBillData(prev => prev ? ({
+      ...prev,
+      consumerName: newOwner,
+      vehicleClass: newModel,
+      vehicleModel: newModel,
+      tagBalance: numBalance
+    }) : null);
+
+    setIsEditingFastag(false);
   };
 
   const handlePay = (e: React.FormEvent) => {
@@ -883,7 +962,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         setConsumerNumber(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="Enter 10-digit Consumer ID (e.g. 1002948201)"
+                      placeholder="Enter Consumer ID (e.g. 1002948201)"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
                     />
                     <button
@@ -972,7 +1051,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* 3. FASTAG RECHARGE */}
+            {/* 3. FASTAG RECHARGE (NETC / NPCI BBPS) */}
             {service.id === 'fastag' && (
               <div className="space-y-3">
                 <div>
@@ -998,11 +1077,23 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     <label className="text-[10.5px] font-bold text-slate-700">
                       Vehicle Registration Number (RC No.) *
                     </label>
-                    <span className="text-[9px] text-orange-700 font-bold">Quick vehicle sample</span>
+                    <span className="text-[9px] text-orange-700 font-bold">Quick sample plates</span>
                   </div>
 
-                  {/* Quick Sample Vehicles */}
+                  {/* Quick Sample Vehicles including Meghalaya ML, Mizoram MZ */}
                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVehicleNumber('ML-05-J-7001');
+                        handleFetchLiveBill('fastag', 'ML-05-J-7001');
+                      }}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                        (vehicleNumber === 'ML-05-J-7001' || vehicleNumber === 'ML05J7001') && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🚗 ML-05-J-7001
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1010,10 +1101,10 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('fastag', 'MZ-01-T-5432');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-01-T-5432' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        (vehicleNumber === 'MZ-01-T-5432' || vehicleNumber === 'MZ01T5432') && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      🚗 MZ-01-T-5432 (Taxi)
+                      🚕 MZ-01-T-5432
                     </button>
                     <button
                       type="button"
@@ -1022,22 +1113,10 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         handleFetchLiveBill('fastag', 'MZ-01-A-1234');
                       }}
                       className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-01-A-1234' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        (vehicleNumber === 'MZ-01-A-1234' || vehicleNumber === 'MZ01A1234') && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      🚘 MZ-01-A-1234 (Creta)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVehicleNumber('MZ-02-B-9911');
-                        handleFetchLiveBill('fastag', 'MZ-02-B-9911');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        vehicleNumber === 'MZ-02-B-9911' && linkedBillData ? 'bg-orange-500 text-white border-orange-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      🚙 MZ-02-B-9911 (Lunglei)
+                      🚙 MZ-01-A-1234
                     </button>
                   </div>
 
@@ -1050,8 +1129,8 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         setVehicleNumber(e.target.value.toUpperCase());
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="e.g. MZ-01-T-5432 / MZ-02-B-1122"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs uppercase focus:outline-none focus:bg-white focus:border-orange-600"
+                      placeholder="e.g. ML-05-J-7001 / MZ-01-T-5432"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-black text-slate-900 text-xs uppercase tracking-wider focus:outline-none focus:bg-white focus:border-orange-600"
                     />
                     <button
                       type="button"
@@ -1072,26 +1151,153 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       )}
                     </button>
                   </div>
+                  <p className="text-[9.5px] text-slate-400 font-medium mt-1">
+                    India rama motor registration number engpawh (ML, MZ, AS, DL, etc.) a hman theih e.
+                  </p>
                 </div>
 
-                {/* Verified FASTag Card */}
+                {/* Verified FASTag Card with Customizable Owner, Model and Balance */}
                 {linkedBillData && (
-                  <div className="bg-orange-50/90 border border-orange-200 rounded-2xl p-3 space-y-1.5 text-orange-950 animate-fadeIn">
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-300/80 rounded-2xl p-3.5 space-y-2.5 text-slate-900 animate-fadeIn shadow-xs">
+                    {/* Top status bar */}
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="text-[9.5px] font-bold text-slate-500">NETC / NPCI Verified</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditOwnerName(linkedBillData.consumerName);
+                            setEditVehicleModel(linkedBillData.vehicleClass || linkedBillData.vehicleModel || 'Class 4 (LMV)');
+                            setEditTagBalance((linkedBillData.tagBalance !== undefined ? linkedBillData.tagBalance : 240).toString());
+                            setIsEditingFastag(!isEditingFastag);
+                          }}
+                          className="text-[9.5px] font-black text-orange-700 hover:text-orange-900 bg-white border border-orange-300 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          ✏️ {isEditingFastag ? 'Done' : 'Siamrem / Edit'}
+                        </button>
+                        <span className="text-[9px] font-bold text-slate-500 hidden sm:flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-indigo-600" /> NETC Verified
+                        </span>
+                      </div>
                     </div>
-                    <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                    <p className="text-[10px] text-slate-600 font-mono">{linkedBillData.subDivisionOrLocality}</p>
+
+                    {isEditingFastag ? (
+                      /* Interactive Edit Form for Motor Owner, Model & Balance */
+                      <div className="bg-white/95 border border-orange-300 rounded-xl p-2.5 space-y-2 text-slate-900 animate-fadeIn">
+                        <div className="text-[10px] font-black text-orange-950 flex items-center justify-between border-b border-orange-100 pb-1">
+                          <span>🔧 Motor & FASTag Details Siamremna</span>
+                          <span className="text-[8.5px] text-slate-400 font-medium">Real-time update</span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-600 block">Motor Neitu Hming (Owner Name)</label>
+                            <input
+                              type="text"
+                              value={editOwnerName}
+                              onChange={(e) => setEditOwnerName(e.target.value)}
+                              placeholder="e.g. Bethel Computer Centre / Lalmuana"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-[11px] font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-orange-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-600 block">Motor Model / Chi (Car Model)</label>
+                            <input
+                              type="text"
+                              value={editVehicleModel}
+                              onChange={(e) => setEditVehicleModel(e.target.value)}
+                              placeholder="e.g. Maruti Suzuki Swift / Alto / Bolero / Scorpio / Creta"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-[11px] font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-orange-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-600 block">FASTag Balance Awm Zat (Current Balance ₹)</label>
+                            <input
+                              type="number"
+                              value={editTagBalance}
+                              onChange={(e) => setEditTagBalance(e.target.value)}
+                              placeholder="e.g. 250"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-[11px] font-black text-emerald-800 focus:outline-none focus:bg-white focus:border-orange-600"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingFastag(false)}
+                            className="text-[10px] font-bold text-slate-600 hover:text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveFastagDetails}
+                            className="bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-black px-3 py-1 rounded-lg shadow-xs cursor-pointer"
+                          >
+                            Save / Hman Rawh
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display Verified Information */
+                      <div className="flex items-start justify-between gap-2 border-b border-orange-200/60 pb-2">
+                        <div className="space-y-0.5">
+                          <div className="inline-flex items-center gap-1 bg-white border border-slate-400 rounded-md px-2 py-0.5 font-mono font-black text-slate-900 text-xs shadow-2xs">
+                            <span className="text-[8px] bg-blue-700 text-white px-1 py-0.2 rounded font-sans font-bold">IND</span>
+                            <span>{linkedBillData.accountNo}</span>
+                          </div>
+                          <h4 className="font-black text-xs text-slate-900 pt-0.5">{linkedBillData.consumerName}</h4>
+                          {(linkedBillData.vehicleClass || linkedBillData.vehicleModel) && (
+                            <p className="text-[9.5px] text-slate-600 font-medium">
+                              {linkedBillData.vehicleClass || linkedBillData.vehicleModel}
+                            </p>
+                          )}
+                          <p className="text-[9px] text-slate-500 font-mono">
+                            {linkedBillData.issuingBank || fastagBank} • ID: {linkedBillData.tagId}
+                          </p>
+                        </div>
+
+                        {/* FASTag Available Balance Box */}
+                        <div className="bg-white rounded-xl p-2.5 border border-orange-200 text-right shrink-0 shadow-2xs">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+                            Current Tag Balance
+                          </span>
+                          <div className="flex items-center justify-end gap-1 text-emerald-700 font-black text-base">
+                            <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>₹{linkedBillData.tagBalance !== undefined ? linkedBillData.tagBalance : 240}</span>
+                          </div>
+                          {linkedBillData.tagBalance !== undefined && linkedBillData.tagBalance < 250 ? (
+                            <span className="text-[8px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                              Low Balance
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                              Active Balance
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[9.5px] text-slate-600 font-medium">
+                      Toll plaza-ah tag a lo tawp loh nan recharge zat thlang la, top-up nghal rawh le.
+                    </p>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                    {t.quickAmount || 'Quick Top-Up Amount (₹)'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-700">
+                      {t.quickAmount || 'Quick Top-Up Amount (₹)'}
+                    </label>
+                    <span className="text-[9px] text-slate-400 font-medium">Select or enter custom</span>
+                  </div>
+
                   <div className="grid grid-cols-5 gap-1 mb-2">
                     {['300', '500', '1000', '2000', '3000'].map((amt) => (
                       <button
@@ -1100,7 +1306,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         onClick={() => setAmount(amt)}
                         className={`py-1.5 rounded-lg text-[10.5px] font-black border transition cursor-pointer ${
                           amount === amt
-                            ? 'bg-orange-500 text-white border-orange-600'
+                            ? 'bg-orange-500 text-white border-orange-600 shadow-xs'
                             : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
@@ -1140,27 +1346,29 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Subscriber ID / Smart Card VC Number *
+                    Subscriber ID / Smart Card Number *
                   </label>
                   <input
                     type="text"
                     required
                     value={subscriberId}
                     onChange={(e) => setSubscriberId(e.target.value)}
-                    placeholder="Enter 10-11 digit Subscriber ID / VC Number"
+                    placeholder="Enter 10 or 11 digit Subscriber ID"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-purple-600"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Recharge Amount (₹)</label>
-                  <div className="grid grid-cols-4 gap-1.5 mb-2">
-                    {['250', '350', '500', '800'].map((amt) => (
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    Recharge Amount (₹)
+                  </label>
+                  <div className="grid grid-cols-4 gap-1 mb-2">
+                    {['250', '399', '599', '999'].map((amt) => (
                       <button
                         key={amt}
                         type="button"
                         onClick={() => setAmount(amt)}
-                        className={`py-1.5 rounded-lg text-[11px] font-black border transition cursor-pointer ${
+                        className={`py-1.5 rounded-lg text-[10.5px] font-black border transition cursor-pointer ${
                           amount === amt
                             ? 'bg-purple-600 text-white border-purple-700'
                             : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1175,27 +1383,26 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 350"
+                    placeholder="Enter amount to recharge"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-purple-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* 5. WATER BILL (PUBLIC HEALTH ENGINEERING DEPARTMENT - MIZORAM) */}
+            {/* 5. WATER BILL (PHED MIZORAM) */}
             {service.id === 'water' && (
               <div className="space-y-3">
-                {/* Unified State BBPS Water Biller */}
                 <div className="bg-cyan-50/80 border border-cyan-200/90 rounded-2xl p-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-800 font-black shrink-0">
-                      <Droplet className="w-4 h-4 text-cyan-600" />
+                      <Droplet className="w-4 h-4 text-cyan-700" />
                     </div>
                     <div>
                       <h4 className="text-[11px] font-black text-slate-900 leading-tight">
-                        Public Health Engineering Department, Mizoram (PHED)
+                        Public Health Engineering Dept, Mizoram (PHED)
                       </h4>
-                      <p className="text-[9.5px] text-slate-500 font-medium">State Water Board • Bharat BillPay</p>
+                      <p className="text-[9.5px] text-slate-500 font-medium">State Water Utility • Bharat BillPay</p>
                     </div>
                   </div>
                   <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
@@ -1206,14 +1413,14 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      Water Connection / Consumer ID *
+                      PHED Consumer Connection ID *
                     </label>
                     <span className="text-[9px] text-cyan-700 font-bold flex items-center gap-1">
                       <Sparkles className="w-2.5 h-2.5" /> Sample ID Hmet Rawh
                     </span>
                   </div>
 
-                  {/* Quick Sample IDs */}
+                  {/* Sample PHED IDs */}
                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1">
                     <button
                       type="button"
@@ -1225,7 +1432,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         waterConsumerId === 'PHED/AIZ/2024/0981' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      💧 Mission Veng, Aizawl (₹420)
+                      💧 AIZ/0981 (Mission Veng - ₹420)
                     </button>
                     <button
                       type="button"
@@ -1237,19 +1444,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         waterConsumerId === 'PHED/LGL/2024/1102' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      💧 Bazar Veng, Lunglei (₹650)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWaterConsumerId('PHED/CMP/2024/0419');
-                        handleFetchLiveBill('water', 'PHED/CMP/2024/0419');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        waterConsumerId === 'PHED/CMP/2024/0419' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      💧 Champhai (₹380)
+                      💧 LGL/1102 (Lunglei - ₹650)
                     </button>
                   </div>
 
@@ -1262,7 +1457,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         setWaterConsumerId(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="e.g. PHED/AIZ/2024/0981 or AIZ0981"
+                      placeholder="e.g. PHED/AIZ/2024/0981"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
                     />
                     <button
@@ -1286,7 +1481,6 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                   </div>
                 </div>
 
-                {/* Verified PHED Card */}
                 {linkedBillData && (
                   <div className="bg-cyan-50/90 border border-cyan-300 rounded-2xl p-3 space-y-2 text-cyan-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
@@ -1300,18 +1494,17 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
                         <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
                         {linkedBillData.meterNo && (
-                          <p className="text-[9.5px] text-slate-500 font-mono">Meter: {linkedBillData.meterNo}</p>
+                          <p className="text-[9.5px] text-slate-500 font-mono">Water Meter: {linkedBillData.meterNo}</p>
                         )}
                       </div>
                       <div className="text-right">
-                        <span className="text-[9.5px] text-slate-500 font-bold block">Live Due Amount</span>
+                        <span className="text-[9.5px] text-slate-500 font-bold block">Due Bill Amount</span>
                         <span className="text-base font-black text-cyan-800">₹{linkedBillData.billAmount}</span>
                       </div>
                     </div>
 
-                    {/* Breakdown */}
                     {linkedBillData.breakdown && (
-                      <div className="bg-white/90 rounded-xl p-2 border border-cyan-200 space-y-1 text-[10px]">
+                      <div className="bg-white/90 rounded-xl p-2 border border-cyan-200/80 space-y-1 text-[10px]">
                         {linkedBillData.breakdown.map((item, idx) => (
                           <div key={idx} className="flex justify-between text-slate-600">
                             <span>{item.label}</span>
@@ -1320,28 +1513,19 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         ))}
                       </div>
                     )}
-
-                    <a
-                      href={linkedBillData.portalUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-bold text-cyan-800 hover:underline flex items-center gap-1 pt-1 border-t border-cyan-200"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5" /> Open Official PHED Department Portal
-                    </a>
                   </div>
                 )}
 
                 <div>
                   <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                    {language === 'english' ? 'Water Bill Amount (₹)' : 'Tui bill pek tur zat (₹)'}
+                    {language === 'english' ? 'Bill Amount to Pay (₹)' : 'Pek tur zat (₹)'}
                   </label>
                   <input
                     type="number"
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Enter bill amount"
+                    placeholder="Enter water bill amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-cyan-600"
                   />
                 </div>
@@ -1353,15 +1537,15 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               <div className="space-y-3">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Municipal Corporation / Local Body *
+                    Municipal Authority / Corporation *
                   </label>
                   <select
                     value={municipalAuthority}
                     onChange={(e) => setMunicipalAuthority(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-600"
                   >
-                    {MUNICIPAL_AUTHORITIES.map((auth) => (
-                      <option key={auth} value={auth}>{auth}</option>
+                    {MUNICIPAL_AUTHORITIES.map((a) => (
+                      <option key={a} value={a}>{a}</option>
                     ))}
                   </select>
                 </div>
@@ -1383,7 +1567,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Holding Number / Assessment ID *
+                    Holding No. / Assessment ID / Trade License No. *
                   </label>
                   <div className="flex gap-1.5">
                     <input
@@ -1396,85 +1580,88 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => handleFetchLiveBill('municipal_tax', holdingNo || 'AMC/H-4820/2026')}
+                      onClick={() => handleFetchLiveBill('municipal_tax', holdingNo)}
                       disabled={isFetchingBill}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-3.5 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? 'Linking...' : 'Link & Fetch'}</span>
+                      {isFetchingBill ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                      <span>Fetch</span>
                     </button>
                   </div>
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 space-y-1.5 text-emerald-950 animate-fadeIn">
+                  <div className="bg-emerald-50/90 border border-emerald-300 rounded-2xl p-3 space-y-1.5 text-emerald-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
-                      </span>
-                      <span className="font-bold text-slate-500">Due: {linkedBillData.dueDate}</span>
+                      <span className="font-extrabold text-emerald-800">{linkedBillData.status}</span>
+                      <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
                     </div>
-                    <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                    <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
+                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
+                      </div>
+                      <span className="text-base font-black text-emerald-800">₹{linkedBillData.billAmount}</span>
+                    </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Assessment Amount (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    Tax Amount (₹)
+                  </label>
                   <input
                     type="number"
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 1200"
+                    placeholder="Enter tax amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-emerald-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* 7. GAS CYLINDER REFILL */}
+            {/* 7. GAS CYLINDER */}
             {service.id === 'gas' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    LPG Distributor / Agency *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">LPG Distributor / Agency *</label>
                   <select
                     value={gasAgency}
                     onChange={(e) => setGasAgency(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-red-600"
                   >
                     <option value="Aizawl Indane Gas Agency (Chanmari)">Aizawl Indane Gas Agency (Chanmari)</option>
-                    <option value="Zoram Gas Agency (Dawrpui)">Zoram Gas Agency (Dawrpui)</option>
-                    <option value="Lunglei Indane Agency">Lunglei Indane Agency</option>
-                    <option value="Champhai Bharatgas">Champhai Bharatgas</option>
+                    <option value="Lunglei Indane Gas Service">Lunglei Indane Gas Service</option>
+                    <option value="Champhai Indane Agency">Champhai Indane Agency</option>
+                    <option value="Kolasib Gas Distributor">Kolasib Gas Distributor</option>
+                    <option value="Bharat Gas Mizoram (HPCL / BPCL)">Bharat Gas Mizoram</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    LPG Consumer Number / Registered Mobile *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">LPG Consumer Number / Registered Mobile *</label>
                   <input
                     type="text"
                     required
                     value={gasConsumerNo}
                     onChange={(e) => setGasConsumerNo(e.target.value)}
-                    placeholder="e.g. GX-994821"
+                    placeholder="Enter 16-digit LPG ID or 10-digit Mobile"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-red-600"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">14.2kg Refill Rate (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Cylinder Booking Amount (₹)</label>
                   <input
                     type="number"
                     required
-                    value={amount || '1050'}
+                    value={amount || '930'}
                     onChange={(e) => setAmount(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-red-600"
                   />
+                  <p className="text-[9.5px] text-slate-400 mt-1">Subsidized Indane 14.2kg Domestic Cylinder: ₹930</p>
                 </div>
               </div>
             )}
@@ -1483,31 +1670,27 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
             {service.id === 'broadband' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Fiber / Broadband Provider *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Broadband Provider *</label>
                   <select
                     value={broadbandProvider}
                     onChange={(e) => setBroadbandProvider(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-teal-600"
                   >
-                    <option value="JioFiber Mizoram">JioFiber Mizoram</option>
+                    <option value="JioFiber Mizoram">JioFiber / AirFiber (Mizoram)</option>
                     <option value="Airtel Xstream Fiber">Airtel Xstream Fiber</option>
                     <option value="BSNL Bharat Fiber (FTTH)">BSNL Bharat Fiber (FTTH)</option>
-                    <option value="Skylink / Local Cable Broadband">Skylink Broadband</option>
+                    <option value="Skylink Broadband Mizoram">Skylink Broadband (Mizoram Local)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Broadband Account Number / Landline *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Account Number / Landline No. *</label>
                   <input
                     type="text"
                     required
                     value={broadbandAccNo}
                     onChange={(e) => setBroadbandAccNo(e.target.value)}
-                    placeholder="e.g. JF-9862-4411"
+                    placeholder="Enter Account ID / Telephone Number"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-teal-600"
                   />
                 </div>
@@ -1517,678 +1700,371 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                   <input
                     type="number"
                     required
-                    value={amount || '799'}
+                    value={amount || '470'}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 799"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-teal-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* 9. LOAN EMI REPAYMENT */}
+            {/* 9. LOAN EMI */}
             {service.id === 'loan' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Bank / Financial Institution *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Lending Bank / NBFC *</label>
                   <select
                     value={lenderName}
                     onChange={(e) => setLenderName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-slate-700"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-slate-800"
                   >
                     <option value="Mizoram Rural Bank (MRB)">Mizoram Rural Bank (MRB)</option>
                     <option value="State Bank of India (SBI)">State Bank of India (SBI)</option>
-                    <option value="MCAB (Mizoram Apex Bank)">MCAB (Mizoram Apex Bank)</option>
-                    <option value="Bajaj Finserv">Bajaj Finserv</option>
-                    <option value="HDFC Bank">HDFC Bank</option>
+                    <option value="Mizoram Apex Bank (MCAB)">Mizoram Apex Bank (MCAB)</option>
+                    <option value="HDFC Bank Loan">HDFC Bank Loan</option>
+                    <option value="Bajaj Finserv">Bajaj Auto / Finance</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Loan Account Number / Agreement ID *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Loan Account Number *</label>
                   <input
                     type="text"
                     required
                     value={loanAccountNo}
                     onChange={(e) => setLoanAccountNo(e.target.value)}
-                    placeholder="e.g. MRB-LOAN-984021"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-slate-700"
+                    placeholder="Enter 11-16 digit Loan Account Number"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-slate-800"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">EMI Installment Amount (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Monthly EMI Amount (₹)</label>
                   <input
                     type="number"
                     required
-                    value={amount || '4500'}
+                    value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 4500"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-slate-700"
+                    placeholder="Enter monthly EMI to pay"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-slate-800"
                   />
                 </div>
               </div>
             )}
 
-            {/* 10. MST BUS & HELICOPTER TICKETS */}
+            {/* 10. MST BUS TICKETS */}
             {service.id === 'tickets' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Transport Route (MST / Helicopter) *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Mizoram State Transport (MST) Route *</label>
                   <select
                     value={busRoute}
                     onChange={(e) => setBusRoute(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-rose-600"
                   >
-                    <option value="Aizawl -> Lunglei (MST Night Service)">Aizawl → Lunglei (MST Night Service - ₹550)</option>
-                    <option value="Aizawl -> Champhai (MST Bus)">Aizawl → Champhai (MST Bus - ₹450)</option>
-                    <option value="Aizawl -> Siaha (MST Luxury)">Aizawl → Siaha (MST Luxury - ₹850)</option>
-                    <option value="Aizawl -> Lengpui Heli Service">Aizawl → Lengpui Helicopter (Pawan Hans - ₹2400)</option>
+                    <option value="Aizawl → Lunglei (MST Night Service)">Aizawl → Lunglei (MST Night Service)</option>
+                    <option value="Aizawl → Champhai (MST Deluxe)">Aizawl → Champhai (MST Deluxe)</option>
+                    <option value="Aizawl → Siaha (MST Express)">Aizawl → Siaha (MST Express)</option>
+                    <option value="Aizawl → Kolasib / Silchar">Aizawl → Kolasib / Silchar</option>
+                    <option value="Lunglei → Aizawl">Lunglei → Aizawl</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Passenger Name *
-                  </label>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Passenger Name *</label>
                   <input
                     type="text"
                     required
                     value={passengerName}
                     onChange={(e) => setPassengerName(e.target.value)}
-                    placeholder="e.g. C. Lalrindika"
+                    placeholder="Enter primary passenger name"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-rose-600"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Ticket Fare Amount (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Fare / Ticket Price (₹)</label>
                   <input
                     type="number"
                     required
-                    value={amount || '550'}
+                    value={amount || '650'}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 550"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-rose-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* 11. SCHOOL & COLLEGE FEES */}
+            {/* 11. SCHOOL / COLLEGE FEES */}
             {service.id === 'school_fees' && (
               <div className="space-y-3">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Educational Institution (School / College) *
+                    Institution / University / School *
                   </label>
                   <select
                     value={institution}
                     onChange={(e) => setInstitution(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-600"
                   >
-                    {SCHOOL_COLLEGES.map((sc) => (
-                      <option key={sc} value={sc}>{sc}</option>
+                    {SCHOOL_COLLEGES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Student Roll Number / Enrollment ID *
-                  </label>
-                  <div className="flex gap-1.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Student Roll No. / Reg ID *
+                    </label>
                     <input
                       type="text"
                       required
                       value={studentId}
                       onChange={(e) => setStudentId(e.target.value)}
-                      placeholder="e.g. MZU-2024-8192"
+                      placeholder="e.g. MZU-2024-88"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-indigo-600"
                     />
-                    <button
-                      type="button"
-                      onClick={() => handleFetchLiveBill('school_fees', studentId || 'MZU-2024-8192')}
-                      disabled={isFetchingBill}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? 'Checking...' : 'Check Dues'}</span>
-                    </button>
+                  </div>
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Student Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={studentName}
+                      onChange={(e) => setStudentName(e.target.value)}
+                      placeholder="e.g. Lalremruata"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-indigo-600"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Student Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="Student full name"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-indigo-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Fee Head / Category *
-                  </label>
-                  <select
-                    value={feeCategory}
-                    onChange={(e) => setFeeCategory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-600"
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleFetchLiveBill('school_fees', studentId)}
+                    disabled={isFetchingBill || !studentId}
+                    className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold py-2 rounded-xl text-[11px] transition cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    <option value="Semester Tuition & Exam Fee">Semester Tuition & Exam Fee</option>
-                    <option value="Monthly School Fee">Monthly School Fee</option>
-                    <option value="Hostel & Mess Charges">Hostel & Mess Charges</option>
-                    <option value="Admission & Registration Fee">Admission & Registration Fee</option>
-                  </select>
+                    {isFetchingBill ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    <span>Fetch Live Fee Voucher</span>
+                  </button>
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 space-y-1.5 text-indigo-950 animate-fadeIn">
+                  <div className="bg-indigo-50/90 border border-indigo-300 rounded-2xl p-3 space-y-1.5 text-indigo-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-extrabold flex items-center gap-1 text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded-md">
-                        <CheckCircle2 className="w-3 h-3 text-indigo-600" /> {linkedBillData.status}
-                      </span>
-                      <span className="font-bold text-slate-500">Due: {linkedBillData.dueDate}</span>
+                      <span className="font-extrabold text-indigo-800">{linkedBillData.status}</span>
+                      <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9.5px] text-slate-500 font-bold block">Assessed Fee</span>
-                        <span className="text-sm font-black text-indigo-700">₹{linkedBillData.billAmount}</span>
-                      </div>
+                      <span className="text-base font-black text-indigo-800">₹{linkedBillData.billAmount}</span>
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Fee Amount (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    Fee Amount to Pay (₹)
+                  </label>
                   <input
                     type="number"
                     required
-                    value={amount || '3500'}
+                    value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 3500"
+                    placeholder="Enter fee amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* 12. INSURANCE & LIC PREMIUM */}
+            {/* 12. INSURANCE PREMIUM */}
             {service.id === 'insurance' && (
               <div className="space-y-3">
                 <div>
                   <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Insurance Corporation / Provider *
+                    Insurance Provider *
                   </label>
                   <select
                     value={insuranceProvider}
                     onChange={(e) => setInsuranceProvider(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-blue-600"
                   >
-                    {INSURANCE_PROVIDERS.map((ins) => (
-                      <option key={ins} value={ins}>{ins}</option>
+                    {INSURANCE_PROVIDERS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Policy Number *
-                  </label>
-                  <div className="flex gap-1.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Policy Number *
+                    </label>
                     <input
                       type="text"
                       required
                       value={policyNo}
                       onChange={(e) => setPolicyNo(e.target.value)}
-                      placeholder="Enter 9-10 digit Policy Number"
+                      placeholder="e.g. 589201948"
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-blue-600"
                     />
-                    <button
-                      type="button"
-                      onClick={() => handleFetchLiveBill('insurance', policyNo || 'LIC-984210384')}
-                      disabled={isFetchingBill}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-black px-3 py-2 rounded-xl text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shadow-xs shrink-0"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>{isFetchingBill ? 'Validating...' : 'Fetch Premium'}</span>
-                    </button>
+                  </div>
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Policyholder DOB *
+                    </label>
+                    <input
+                      type="date"
+                      value={policyHolderDob}
+                      onChange={(e) => setPolicyHolderDob(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:border-blue-600"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Policyholder Date of Birth (DD/MM/YYYY) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={policyHolderDob}
-                    onChange={(e) => setPolicyHolderDob(e.target.value)}
-                    placeholder="DD/MM/YYYY"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-blue-600"
-                  />
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleFetchLiveBill('insurance', policyNo)}
+                    disabled={isFetchingBill || !policyNo}
+                    className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold py-2 rounded-xl text-[11px] transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {isFetchingBill ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    <span>Fetch Policy Premium</span>
+                  </button>
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 space-y-1.5 text-blue-950 animate-fadeIn">
+                  <div className="bg-blue-50/90 border border-blue-300 rounded-2xl p-3 space-y-1.5 text-blue-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-extrabold flex items-center gap-1 text-blue-800 bg-blue-100 px-2 py-0.5 rounded-md">
-                        <CheckCircle2 className="w-3 h-3 text-blue-600" /> {linkedBillData.status}
-                      </span>
-                      <span className="font-bold text-slate-500">Due: {linkedBillData.dueDate}</span>
+                      <span className="font-extrabold text-blue-800">{linkedBillData.status}</span>
+                      <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600">{linkedBillData.subDivisionOrLocality}</p>
+                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9.5px] text-slate-500 font-bold block">Due Premium</span>
-                        <span className="text-sm font-black text-blue-700">₹{linkedBillData.billAmount}</span>
-                      </div>
+                      <span className="text-base font-black text-blue-800">₹{linkedBillData.billAmount}</span>
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">Premium Amount (₹)</label>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    Premium Amount (₹)
+                  </label>
                   <input
                     type="number"
                     required
-                    value={amount || '4500'}
+                    value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g. 4500"
+                    placeholder="Enter premium amount"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-blue-600"
                   />
                 </div>
               </div>
             )}
 
-            {/* Direct Official Portals & Direct UPI Payment Links */}
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
-                  <ExternalLink className="w-3.5 h-3.5 text-indigo-600" /> Official Portal & App Direct Links:
-                </span>
-                <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded">
-                  Live External
-                </span>
-              </div>
-
-              {/* Service specific real direct links */}
-              {service.id === 'electricity' && (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://power.mizoram.gov.in"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-amber-50 border border-amber-200 p-2 rounded-xl text-center font-bold text-amber-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-amber-600" />
-                      <span>P&ED Mizoram Portal</span>
-                    </a>
-                    <a
-                      href="https://mizorampower.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-amber-50 border border-amber-200 p-2 rounded-xl text-center font-bold text-amber-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3 h-3 text-amber-600" />
-                      <span>Online Consumer Portal</span>
-                    </a>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://paytm.com/electricity-bill-payment/mizoram/power-electricity-department-mizoram"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>⚡ Paytm P&ED Mizoram</span>
-                    </a>
-                    <a
-                      href="https://www.phonepe.com/recharge-bill-payment/electricity-bill-payment/mizoram/power-and-electricity-department-mizoram"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>⚡ PhonePe P&ED Mizoram</span>
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {service.id === 'fastag' && (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://www.ihmcl.co.in"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-orange-50 border border-orange-200 p-2 rounded-xl text-center font-bold text-orange-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <Car className="w-3.5 h-3.5 text-orange-600" />
-                      <span>IHMCL FASTag Portal</span>
-                    </a>
-                    <a
-                      href="https://netc.org.in"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-orange-50 border border-orange-200 p-2 rounded-xl text-center font-bold text-orange-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3 h-3 text-orange-600" />
-                      <span>NETC / NPCI Portal</span>
-                    </a>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://paytm.com/fastag-recharge"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>🚗 Paytm FASTag Recharge</span>
-                    </a>
-                    <a
-                      href="https://www.phonepe.com/recharge-bill-payment/fastag-recharge"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>🚗 PhonePe FASTag Top-Up</span>
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {service.id === 'water' && (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://phed.mizoram.gov.in"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-cyan-50 border border-cyan-200 p-2 rounded-xl text-center font-bold text-cyan-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <Droplet className="w-3.5 h-3.5 text-cyan-600" />
-                      <span>PHED Mizoram Portal</span>
-                    </a>
-                    <a
-                      href="https://phedwater.mizoram.gov.in"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-cyan-50 border border-cyan-200 p-2 rounded-xl text-center font-bold text-cyan-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3 h-3 text-cyan-600" />
-                      <span>PHE Online Bill Desk</span>
-                    </a>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://paytm.com/water-bill-payment"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>💧 Paytm Water Bill</span>
-                    </a>
-                    <a
-                      href="https://www.phonepe.com/recharge-bill-payment/water-bill-payment"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
-                    >
-                      <span>💧 PhonePe Water Bill</span>
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {service.id === 'municipal_tax' && (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <a
-                      href="https://amcmizoram.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-emerald-50 border border-emerald-200 p-2 rounded-xl text-center font-bold text-emerald-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <Landmark className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>AMC Official Portal</span>
-                    </a>
-                    <a
-                      href="https://amcmizoram.com/tax-payment"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-emerald-50 border border-emerald-200 p-2 rounded-xl text-center font-bold text-emerald-900 text-[10.5px] flex items-center justify-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3 h-3 text-emerald-600" />
-                      <span>AMC Property Tax Desk</span>
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {service.id === 'mobile' && (
-                <div className="grid grid-cols-2 gap-1.5">
-                  <a
-                    href="https://paytm.com/recharge"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
-                  >
-                    <span>📱 Paytm Mobile Recharge</span>
-                  </a>
-                  <a
-                    href="https://www.phonepe.com/recharge-bill-payment/mobile-recharge"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
-                  >
-                    <span>📱 PhonePe Mobile Recharge</span>
-                  </a>
-                </div>
-              )}
-
-              {service.id === 'dth' && (
-                <div className="grid grid-cols-2 gap-1.5">
-                  <a
-                    href="https://paytm.com/dth-recharge"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-sky-50 hover:bg-sky-100 border border-sky-200 p-1.5 rounded-xl text-center font-bold text-sky-900 text-[10px] flex items-center justify-center gap-1 transition"
-                  >
-                    <span>📺 Paytm DTH Recharge</span>
-                  </a>
-                  <a
-                    href="https://www.phonepe.com/recharge-bill-payment/dth-recharge"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-purple-50 hover:bg-purple-100 border border-purple-200 p-1.5 rounded-xl text-center font-bold text-purple-900 text-[10px] flex items-center justify-center gap-1 transition"
-                  >
-                    <span>📺 PhonePe DTH Recharge</span>
-                  </a>
-                </div>
-              )}
-
-              {/* Direct UPI Apps Quick Option */}
-              <div className="pt-1 border-t border-slate-200">
-                <span className="text-[9.5px] font-bold text-slate-600 block mb-1">
-                  Emaw UPI App hmangin pe tlang nghal rawh:
-                </span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                      window.location.href = upiString;
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
-                  >
-                    <span>PhonePe UPI</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                      window.location.href = upiString;
-                    }}
-                    className="bg-sky-500 hover:bg-sky-600 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
-                  >
-                    <span>Paytm UPI</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const payAmt = amount || (linkedBillData ? linkedBillData.billAmount.toString() : '500');
-                      const upiString = `upi://pay?pa=ronpay.bbps@axl&pn=${encodeURIComponent(service.name)}&am=${payAmt}&cu=INR&tn=${encodeURIComponent(`Bill:${service.id}`)}`;
-                      window.location.href = upiString;
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-xl flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
-                  >
-                    <span>GPay UPI</span>
-                  </button>
-                </div>
-              </div>
+            {/* Action Buttons */}
+            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-1/3 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                {t.cancel || 'Cancel'}
+              </button>
+              <button
+                type="submit"
+                disabled={isPaying || !amount || parseFloat(amount) <= 0}
+                className={`w-2/3 py-2.5 rounded-xl font-black text-xs transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer ${
+                  isPaying || !amount || parseFloat(amount) <= 0
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/30'
+                }`}
+              >
+                {isPaying ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing Payment...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Pay ₹{amount || '0'} via UPI / BBPS</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* BBPS Assurance Strip */}
-            <div className="p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-[10px] text-slate-500 font-medium">
-              <span className="flex items-center gap-1.5 text-slate-700 font-bold">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" /> BBPS Verified Portal
-              </span>
-              <span className="font-mono text-[9.5px]">0% Surcharge</span>
+            <div className="text-center pt-1">
+              <p className="text-[9px] text-slate-400 flex items-center justify-center gap-1 font-medium">
+                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />
+                <span>NPCI Bharat BillPay • 100% Instant Settlement Guarantee</span>
+              </p>
             </div>
-
-            {/* Pay Button */}
-            <button
-              type="submit"
-              disabled={isPaying}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-2xl text-xs shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
-            >
-              {isPaying ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Processing BBPS Settlement...</span>
-                </>
-              ) : (
-                <>
-                  <span>
-                    {t.payNow || 'Pay Now'} • ₹{amount || (linkedBillData ? linkedBillData.billAmount : '500')}
-                  </span>
-                  <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
           </form>
         ) : (
-          /* Payment Success & Formal Receipt Screen */
+          /* Payment Success Confirmation Screen */
           <div className="text-center py-4 space-y-4 animate-fadeIn">
-            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase border border-emerald-200">
-                BBPS Payment Successful
-              </span>
-              <h3 className="font-black text-slate-900 text-lg">
-                ₹{amount || (linkedBillData ? linkedBillData.billAmount : '500')}
+              <h3 className="text-base font-black text-slate-900">
+                Payment Successful!
               </h3>
-              <p className="text-xs font-bold text-slate-700">{service.name} Settled</p>
-              <p className="text-[10px] text-slate-400 font-mono">
-                BBPS Ref: BBPS-MZ-{Date.now().toString().slice(-8)}
+              <p className="text-xs text-slate-500 font-medium">
+                {service.name} payment has been processed instantly through BBPS.
               </p>
             </div>
 
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-left space-y-2 text-xs">
-              <div className="flex justify-between items-center text-slate-600">
-                <span className="text-[10.5px]">Service:</span>
-                <span className="font-black text-slate-900">{service.name}</span>
+            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 text-left space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Service:</span>
+                <span className="font-bold text-slate-900">{service.name}</span>
               </div>
-
-              {service.id === 'mobile' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Mobile & Plan:</span>
-                  <span className="font-bold text-slate-900">{phone} ({operator})</span>
-                </div>
-              )}
-
-              {service.id === 'electricity' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Consumer & Biller:</span>
-                  <span className="font-bold text-slate-900">{consumerNumber} (P&ED Mizoram)</span>
-                </div>
-              )}
-
-              {service.id === 'fastag' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Vehicle Registration:</span>
-                  <span className="font-bold text-slate-900">{vehicleNumber} ({fastagBank})</span>
-                </div>
-              )}
-
-              {service.id === 'water' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">PHE Connection:</span>
-                  <span className="font-bold text-slate-900">{waterConsumerId} (PHED Mizoram)</span>
-                </div>
-              )}
-
-              {service.id === 'school_fees' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Student & School:</span>
-                  <span className="font-bold text-slate-900">{studentName} ({institution})</span>
-                </div>
-              )}
-
-              {service.id === 'insurance' && (
-                <div className="flex justify-between items-center text-slate-600">
-                  <span className="text-[10.5px]">Policy & Provider:</span>
-                  <span className="font-bold text-slate-900">{policyNo} ({insuranceProvider})</span>
-                </div>
-              )}
-
-              <div className="flex justify-between items-center text-slate-600 border-t border-slate-200/80 pt-1.5">
-                <span className="text-[10.5px]">Timestamp:</span>
-                <span className="font-bold text-slate-800">{new Date().toLocaleString()}</span>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount Paid:</span>
+                <span className="font-black text-emerald-700">₹{amount}</span>
               </div>
-              <div className="flex justify-between items-center text-slate-600">
-                <span className="text-[10.5px]">Payment Status:</span>
-                <span className="font-black text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Instant BBPS Credit Settled
+              {linkedBillData?.tagBalance !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">New Tag Balance:</span>
+                  <span className="font-black text-emerald-700">₹{(linkedBillData.tagBalance || 0) + parseFloat(amount || '0')}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">BBPS Ref ID:</span>
+                <span className="font-mono font-bold text-slate-700">
+                  BBPS{Math.floor(100000000 + Math.random() * 900000000)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <span className="font-bold text-emerald-600 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Settled / Confirmed
                 </span>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-2.5 rounded-2xl text-xs shadow-md transition cursor-pointer active:scale-98"
-              >
-                Close & Finish
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+            >
+              Done / Back to Home
+            </button>
           </div>
         )}
       </div>
