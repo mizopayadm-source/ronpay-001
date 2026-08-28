@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   QrCode, 
   PlusCircle, 
@@ -184,8 +184,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  // Recent Created QRs (Latest 5 campaigns sorted by creation or active)
-  const recentCreatedQRs = campaigns.slice(0, 5);
+  // Recent Created QRs (Strictly sorted newest first by createdAt timestamp)
+  const recentCreatedQRs = useMemo(() => {
+    return [...campaigns]
+      .sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      })
+      .slice(0, 5);
+  }, [campaigns]);
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">

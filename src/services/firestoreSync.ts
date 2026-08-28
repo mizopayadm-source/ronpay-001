@@ -268,12 +268,18 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       if (remoteCampaigns.length > 0) {
         const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS);
         const merged = smartMerge(localCamps, remoteCampaigns, 'id');
-        setLocalJson('ronpay_campaigns_v2', merged);
+        // Always sort newest first so all devices (Android, web, preview) display the exact same deterministic list
+        const sorted = [...merged].sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
+        setLocalJson('ronpay_campaigns_v2', sorted);
         if (callbacks.onCampaignsUpdate) {
-          callbacks.onCampaignsUpdate(merged);
+          callbacks.onCampaignsUpdate(sorted);
         }
         try {
-          window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: merged }));
+          window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: sorted }));
         } catch {}
       }
     }, (error) => {

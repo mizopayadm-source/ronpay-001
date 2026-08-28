@@ -145,7 +145,7 @@ export const getStoredCampaigns = (): Campaign[] => {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.map((camp: Campaign) => {
+        const mapped = parsed.map((camp: Campaign) => {
           if (!camp.orgCode) {
             const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
             const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
@@ -153,11 +153,21 @@ export const getStoredCampaigns = (): Campaign[] => {
           }
           return camp;
         });
+        return mapped.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
       }
     }
     // Initialize if never stored before
-    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(INITIAL_CAMPAIGNS));
-    return INITIAL_CAMPAIGNS;
+    const initialSorted = [...INITIAL_CAMPAIGNS].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(initialSorted));
+    return initialSorted;
   } catch (e) {
     console.error('Failed to parse stored campaigns', e);
   }
@@ -277,16 +287,22 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       return { ...c, orgCode: code };
     });
 
-    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sanitized));
+    const sortedSanitized = sanitized.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sortedSanitized));
     setLastSyncTime(new Date().toISOString());
 
     // Broadcast local event for immediate real-time sync across all components
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sanitized }));
+      window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sortedSanitized }));
     }
 
     // Direct Sync to Firebase Firestore
-    for (const camp of sanitized) {
+    for (const camp of sortedSanitized) {
       if (camp && camp.id) {
         syncCampaignToFirestore(camp).catch(() => {});
       }
@@ -297,7 +313,7 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       fetch('/api/data/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaigns: sanitized })
+        body: JSON.stringify({ campaigns: sortedSanitized })
       }).catch(() => {});
     }
   } catch (e) {
