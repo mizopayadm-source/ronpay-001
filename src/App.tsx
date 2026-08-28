@@ -40,6 +40,7 @@ import {
   restoreFullDatabaseBackup,
   isUserPaidTransaction,
   getStoredUserPaidTxIds,
+  isCampaignCreator,
 } from './utils/storage';
 import {
   initFirestoreRealtimeSync,
@@ -184,6 +185,13 @@ export default function App() {
       onCreatorsUpdate: (updatedCreators) => {
         if (updatedCreators && updatedCreators.length > 0) {
           setCreators(updatedCreators);
+          const current = getStoredCreatorProfile();
+          if (current && current.phone) {
+            const matched = updatedCreators.find(c => c.phone === current.phone);
+            if (matched) {
+              setCreatorProfile(matched);
+            }
+          }
         }
       },
       onAnnouncementUpdate: (updatedAnn) => {
@@ -208,7 +216,7 @@ export default function App() {
     };
   }, []);
 
-  // Real-time Local & Storage Live Sync across all components & tabs
+  // Real-time Local & Storage Live Sync across all components, preview and multi-tabs
   useEffect(() => {
     const handleCampaignsSync = (e: Event) => {
       const customEvent = e as CustomEvent<Campaign[]>;
@@ -228,21 +236,53 @@ export default function App() {
       }
     };
 
+    const handleCreatorSync = (e: Event) => {
+      const customEvent = e as CustomEvent<CreatorProfile>;
+      if (customEvent.detail && typeof customEvent.detail === 'object') {
+        setCreatorProfile(customEvent.detail);
+      } else {
+        setCreatorProfile(getStoredCreatorProfile());
+      }
+    };
+
+    const handleCreatorsListSync = (e: Event) => {
+      const customEvent = e as CustomEvent<CreatorProfile[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setCreators(customEvent.detail);
+      } else {
+        setCreators(getStoredCreatorsList());
+      }
+    };
+
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'ronpay_campaigns') {
+      if (e.key === 'ronpay_campaigns' || e.key === 'ronpay_campaigns_v2') {
         setCampaigns(getStoredCampaigns());
-      } else if (e.key === 'ronpay_transactions') {
+      } else if (e.key === 'ronpay_transactions' || e.key === 'ronpay_transactions_v2') {
         setTransactions(getStoredTransactions());
+      } else if (e.key === 'ronpay_creator_profile_v2' || e.key === 'ronpay_creator_profile') {
+        setCreatorProfile(getStoredCreatorProfile());
+      } else if (e.key === 'ronpay_creators_list_v2' || e.key === 'ronpay_registered_creators_v1') {
+        setCreators(getStoredCreatorsList());
       }
     };
 
     window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
+    window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
+    window.addEventListener('ronpay-transactions-updated', handleTransactionsSync);
+    window.addEventListener('ronpay-creator-updated', handleCreatorSync);
+    window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
+    window.addEventListener('ronpay_creators_updated', handleCreatorsListSync);
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
+      window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
+      window.removeEventListener('ronpay-transactions-updated', handleTransactionsSync);
+      window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
+      window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);
+      window.removeEventListener('ronpay_creators_updated', handleCreatorsListSync);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -401,14 +441,47 @@ export default function App() {
   };
 
   const handleUpdateCreator = (creator: CreatorProfile) => {
-    const updatedList = creators.map(cr => 
+    // 1. Update creators list
+    const currentList = getStoredCreatorsList();
+    const updatedList = currentList.map(cr => 
       cr.phone === creator.phone ? { ...cr, ...creator } : cr
     );
+    if (!updatedList.some(cr => cr.phone === creator.phone) && creator.phone) {
+      updatedList.push(creator);
+    }
     setCreators(updatedList);
     saveStoredCreatorsList(updatedList);
+
+    // 2. Update active creator profile
     setCreatorProfile(creator);
     saveStoredCreatorProfile(creator);
     syncCreatorToFirestore(creator).catch(() => {});
+
+    // 3. Update existing campaigns created by this creator so name & org changes sync instantly to Preview and Mobile views
+    const currentCampaigns = getStoredCampaigns();
+    let hasCampaignUpdates = false;
+    const updatedCampaigns = currentCampaigns.map(camp => {
+      if (isCampaignCreator(camp, creator) || (creator.phone && camp.createdBy === creator.phone) || (creatorProfile.name && camp.createdBy === creatorProfile.name)) {
+        hasCampaignUpdates = true;
+        return {
+          ...camp,
+          creatorName: creator.name,
+          createdBy: creator.phone || creator.name,
+          orgName: camp.category === 'kumtluang' ? camp.orgName : (creator.orgName || camp.orgName),
+        };
+      }
+      return camp;
+    });
+
+    if (hasCampaignUpdates) {
+      setCampaigns(updatedCampaigns);
+      saveStoredCampaigns(updatedCampaigns);
+      for (const camp of updatedCampaigns) {
+        if (isCampaignCreator(camp, creator) || (creator.phone && camp.createdBy === creator.phone)) {
+          saveCampaign(camp);
+        }
+      }
+    }
   };
 
   const handleUpdatePricingConfig = (config: SystemPricingConfig) => {

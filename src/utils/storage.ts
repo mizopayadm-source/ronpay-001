@@ -447,6 +447,7 @@ export const logoutCreator = (): CreatorProfile => {
     sessionStorage.removeItem('ronpay_admin_auth');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: GUEST_CREATOR_PROFILE }));
+      window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: GUEST_CREATOR_PROFILE }));
     }
   } catch (e) {
     console.error('Failed to log out creator', e);
@@ -460,9 +461,31 @@ export const loginCreator = (profile: CreatorProfile): void => {
     if (profile.isAdmin) {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
     }
+    
+    // Update or insert into registered creators list
+    const currentList = getStoredCreatorsList();
+    const idx = currentList.findIndex(c => c.phone === profile.phone);
+    let updatedList = [...currentList];
+    if (idx >= 0) {
+      updatedList[idx] = { ...updatedList[idx], ...profile };
+    } else {
+      updatedList.push(profile);
+    }
+    localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(updatedList));
+
     syncCreatorToFirestore(profile).catch(() => {});
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creators: updatedList })
+      }).catch(() => {});
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
+      window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: profile }));
+      window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: updatedList }));
     }
   } catch (e) {
     console.error('Failed to login creator', e);
@@ -472,8 +495,34 @@ export const loginCreator = (profile: CreatorProfile): void => {
 export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
+
+    // Update in registered creators list as well
+    const currentList = getStoredCreatorsList();
+    const idx = currentList.findIndex(c => c.phone === profile.phone);
+    let updatedList = [...currentList];
+    if (idx >= 0) {
+      updatedList[idx] = { ...updatedList[idx], ...profile };
+    } else if (profile.phone) {
+      updatedList.push(profile);
+    }
+    localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(updatedList));
+
     if (profile && profile.phone) {
       syncCreatorToFirestore(profile).catch(() => {});
+    }
+
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creators: updatedList })
+      }).catch(() => {});
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
+      window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: profile }));
+      window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: updatedList }));
     }
   } catch (e) {
     console.error('Failed to save creator profile', e);
@@ -498,10 +547,37 @@ export const getStoredCreatorsList = (): CreatorProfile[] => {
 export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
   try {
     localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(creators));
+    
+    // Check if active profile is in the list
+    const active = getStoredCreatorProfile();
+    if (active && active.phone) {
+      const matched = creators.find(c => c.phone === active.phone);
+      if (matched && (matched.name !== active.name || matched.orgName !== active.orgName || matched.designation !== active.designation || matched.isApproved !== active.isApproved || matched.avatarUrl !== active.avatarUrl || matched.logoUrl !== active.logoUrl)) {
+        const updatedActive = { ...active, ...matched };
+        localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(updatedActive));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: updatedActive }));
+          window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: updatedActive }));
+        }
+      }
+    }
+
     for (const c of creators) {
       if (c && c.phone) {
         syncCreatorToFirestore(c).catch(() => {});
       }
+    }
+
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creators })
+      }).catch(() => {});
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: creators }));
     }
   } catch (e) {
     console.error('Failed to save creators list', e);

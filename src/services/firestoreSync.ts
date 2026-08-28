@@ -334,6 +334,24 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         if (callbacks.onCreatorsUpdate) {
           callbacks.onCreatorsUpdate(merged);
         }
+
+        // Sync active creator profile if phone matches
+        const currentActive = getLocalJson<CreatorProfile | null>('ronpay_creator_profile_v2', null);
+        if (currentActive && currentActive.phone) {
+          const matchedRemote = merged.find(c => c.phone === currentActive.phone);
+          if (matchedRemote) {
+            const updatedActive = { ...currentActive, ...matchedRemote };
+            setLocalJson('ronpay_creator_profile_v2', updatedActive);
+            try {
+              window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: updatedActive }));
+              window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: updatedActive }));
+            } catch {}
+          }
+        }
+
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: merged }));
+        } catch {}
       }
     }, (error) => {
       console.warn('Firestore creators listener note:', error);
