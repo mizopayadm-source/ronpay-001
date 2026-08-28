@@ -17,9 +17,12 @@ import {
   Check,
   Navigation,
   Compass,
-  AlertCircle
+  AlertCircle,
+  User,
+  LogIn,
+  KeyRound
 } from 'lucide-react';
-import { ScreenId } from '../types';
+import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
 
 interface HeaderProps {
@@ -35,6 +38,8 @@ interface HeaderProps {
   onToggleLanguage: (lang: Language) => void;
   onOpenHistory: () => void;
   onOpenAIHriatpui?: () => void;
+  onOpenLogin?: () => void;
+  creatorProfile?: CreatorProfile;
 }
 
 
@@ -149,6 +154,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleLanguage,
   onOpenHistory,
   onOpenAIHriatpui,
+  onOpenLogin,
+  creatorProfile,
 }) => {
 
   const [userLocation, setUserLocation] = useState<string>(() => {
@@ -510,6 +517,31 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
                 <span className="tracking-tight font-black hidden sm:inline">AI Hriatpui</span>
+              </button>
+            )}
+
+            {/* Smart Login & Account Switcher Button */}
+            {onOpenLogin && (
+              <button
+                type="button"
+                id="header-smart-login-btn"
+                onClick={onOpenLogin}
+                title={creatorProfile?.isApproved ? `${creatorProfile.name} (${creatorProfile.designation || 'Creator'}) - Account Switcher` : 'Smart Login & Demo Switcher'}
+                className="h-7 sm:h-8 px-1.5 sm:px-2 bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 text-slate-200 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              >
+                {creatorProfile?.avatarUrl ? (
+                  <img 
+                    src={creatorProfile.avatarUrl} 
+                    alt={creatorProfile.name} 
+                    className="w-4 h-4 rounded-full object-cover ring-1 ring-amber-400"
+                  />
+                ) : (
+                  <User className="w-3.5 h-3.5 text-amber-400" />
+                )}
+                <span className="hidden sm:inline truncate max-w-[70px]">
+                  {creatorProfile?.name ? creatorProfile.name.split(' ')[0] : 'Login'}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               </button>
             )}
 

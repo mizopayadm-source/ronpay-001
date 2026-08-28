@@ -86,6 +86,8 @@ import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
 import { AIHriatpuiModal } from './components/AIHriatpuiModal';
 import { BankTransferModal } from './components/BankTransferModal';
+import { RonPayWalletModal } from './components/RonPayWalletModal';
+import { SmartLoginModal } from './components/SmartLoginModal';
 
 export default function App() {
   // Navigation & View States
@@ -118,6 +120,8 @@ export default function App() {
   const [isGeneratedQROpen, setIsGeneratedQROpen] = useState<boolean>(false);
   const [generatedQRCampaign, setGeneratedQRCampaign] = useState<Campaign | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
@@ -565,6 +569,8 @@ export default function App() {
           onToggleLanguage={setLanguage}
           onOpenHistory={handleOpenHistory}
           onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
+          creatorProfile={creatorProfile}
         />
 
         {/* Main Body Screen Router */}
@@ -590,13 +596,14 @@ export default function App() {
               onOpenBillService={handleOpenBillService}
               onOpenReports={handleOpenReports}
               onOpenMemberRoll={handleOpenMemberRoll}
-              onShowBalance={() => setIsHistoryOpen(true)}
+              onShowBalance={() => setIsWalletOpen(true)}
               onShowBankTransfer={() => setIsBankTransferOpen(true)}
               onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onPreviewImage={handlePreviewImage}
               language={language}
               onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
+              onOpenLogin={() => setIsLoginModalOpen(true)}
             />
           )}
 
@@ -762,7 +769,7 @@ export default function App() {
           onLogout={handleLogout}
           onLoginClick={() => {
             setIsProfileOpen(false);
-            handleNavigate('creator_reg');
+            setIsLoginModalOpen(true);
           }}
           onOpenAdmin={() => {
             setIsProfileOpen(false);
@@ -947,6 +954,35 @@ export default function App() {
             if (!creatorProfile.isApproved) {
               handleNavigate('creator_reg');
             }
+          }}
+        />
+
+        <RonPayWalletModal
+          isOpen={isWalletOpen}
+          onClose={() => setIsWalletOpen(false)}
+          creatorProfile={creatorProfile}
+          campaigns={campaigns}
+          onStartScanner={() => handleStartScanner('any')}
+          onOpenBankTransfer={() => {
+            setIsWalletOpen(false);
+            setIsBankTransferOpen(true);
+          }}
+          onOpenHistory={() => {
+            setIsWalletOpen(false);
+            handleOpenHistory();
+          }}
+          language={language}
+        />
+
+        <SmartLoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+          currentProfile={creatorProfile}
+          biometricEnabled={biometricEnabled}
+          onLoginSuccess={(newProfile) => {
+            setCreatorProfile(newProfile);
+            saveStoredCreatorProfile(newProfile);
+            setIsLoginModalOpen(false);
           }}
         />
       </div>

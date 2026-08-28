@@ -64,6 +64,7 @@ interface HomeScreenProps {
   onOpenHistory?: () => void;
   onShareCampaign?: (campaign: Campaign) => void;
   onOpenAIHriatpui?: () => void;
+  onOpenLogin?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -85,6 +86,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenHistory,
   onShareCampaign,
   onOpenAIHriatpui,
+  onOpenLogin,
 }) => {
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.mizo;
@@ -220,6 +222,47 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <span className="text-[9px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded-full shrink-0">
           WEB READY
         </span>
+      </div>
+
+      {/* Smart Login & Active User Strip */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {creatorProfile?.avatarUrl ? (
+            <img
+              src={creatorProfile.avatarUrl}
+              alt={creatorProfile.name}
+              className="w-9 h-9 rounded-xl object-cover ring-2 ring-amber-400 shrink-0"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-xl bg-indigo-600/90 text-white flex items-center justify-center font-black text-sm shrink-0 border border-indigo-400/40">
+              {creatorProfile?.name ? creatorProfile.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black text-white truncate">
+                {creatorProfile?.name || 'RonPay User'}
+              </span>
+              <span className="text-[8.5px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full uppercase shrink-0">
+                {creatorProfile?.isAdmin ? 'ADMIN' : creatorProfile?.isApproved ? 'CREATOR' : 'MEMBER'}
+              </span>
+            </div>
+            <p className="text-[10px] text-indigo-200/80 truncate">
+              {creatorProfile?.orgName || 'Mizoram Community'} • {creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : 'Demo Session'}
+            </p>
+          </div>
+        </div>
+
+        {onOpenLogin && (
+          <button
+            type="button"
+            onClick={onOpenLogin}
+            className="bg-white/10 hover:bg-white/20 text-amber-300 hover:text-amber-200 border border-amber-400/30 px-2.5 py-1.5 rounded-xl text-[10.5px] font-black transition cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 whitespace-nowrap shadow-2xs"
+          >
+            <span>Switch / Login</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {/* 1. Money Transfer, Quick Actions & UPI */}

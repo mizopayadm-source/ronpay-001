@@ -258,6 +258,35 @@ export interface MemberRecord {
   status?: 'paid' | 'pending' | 'partial';
 }
 
+export interface WalletTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  title: string;
+  amount: number;
+  fee?: number;
+  status: 'completed' | 'pending' | 'failed';
+  source: 'upi_topup' | 'card_topup' | 'campaign_collection' | 'bank_withdrawal' | 'qr_payment' | 'cashback' | 'fee_reimbursement';
+  timestamp: string;
+  referenceNo?: string;
+  utrRef?: string;
+  remark?: string;
+  balanceAfter?: number;
+}
+
+export interface RonPayWallet {
+  walletId: string;
+  upiHandle: string;
+  balance: number;
+  pendingPayouts: number;
+  totalCredited: number;
+  totalWithdrawn: number;
+  linkedBankName?: string;
+  linkedAccountLast4?: string;
+  linkedUpiId?: string;
+  isKycVerified: boolean;
+  history: WalletTransaction[];
+}
+
 export interface BillService {
   id: string;
   name: string;

@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import {
   syncCampaignToFirestore,
@@ -1320,4 +1320,97 @@ export const saveTransaction = (tx: Transaction): void => {
     }).catch(() => {});
   }
 };
+
+const WALLET_KEY = 'ronpay_wallet_v1';
+
+export const DEFAULT_WALLET: RonPayWallet = {
+  walletId: 'WAL-9436001234',
+  upiHandle: 'ronpay.9436001234@yesbank',
+  balance: 3450,
+  pendingPayouts: 0,
+  totalCredited: 12500,
+  totalWithdrawn: 9050,
+  linkedBankName: 'State Bank of India (Aizawl Main)',
+  linkedAccountLast4: '4589',
+  linkedUpiId: 'ronpay.creator@oksbi',
+  isKycVerified: true,
+  history: [
+    {
+      id: 'WTX-101',
+      type: 'credit',
+      title: 'UPI Wallet Top-up (GPay)',
+      amount: 1000,
+      status: 'completed',
+      source: 'upi_topup',
+      timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
+      utrRef: 'UPI/384920491823',
+      remark: 'RonPay Wallet Fast Top-Up',
+      balanceAfter: 3450
+    },
+    {
+      id: 'WTX-102',
+      type: 'debit',
+      title: 'Bawm Donation (Ralna Bawm)',
+      amount: 500,
+      status: 'completed',
+      source: 'qr_payment',
+      timestamp: new Date(Date.now() - 3600000 * 20).toISOString(),
+      utrRef: 'TXN/RAL/928401',
+      remark: 'Paid to Pu Lalthanzauva Ralna',
+      balanceAfter: 2450
+    },
+    {
+      id: 'WTX-103',
+      type: 'credit',
+      title: 'Campaign Payout Credit',
+      amount: 2500,
+      status: 'completed',
+      source: 'campaign_collection',
+      timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+      utrRef: 'SETTLE/KUM/48190',
+      remark: 'Kumtluang Bawm Monthly Settlement',
+      balanceAfter: 2950
+    },
+    {
+      id: 'WTX-104',
+      type: 'debit',
+      title: 'Bank Settlement (IMPS)',
+      amount: 2000,
+      status: 'completed',
+      source: 'bank_withdrawal',
+      timestamp: new Date(Date.now() - 3600000 * 72).toISOString(),
+      utrRef: 'IMPS/SBI/928340192',
+      remark: 'Transferred to SBI A/C ending 4589',
+      balanceAfter: 450
+    }
+  ]
+};
+
+export const getStoredWallet = (): RonPayWallet => {
+  try {
+    const raw = localStorage.getItem(WALLET_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.balance === 'number') {
+        return parsed;
+      }
+    }
+    localStorage.setItem(WALLET_KEY, JSON.stringify(DEFAULT_WALLET));
+  } catch (e) {
+    console.error('Failed to read wallet from storage', e);
+  }
+  return DEFAULT_WALLET;
+};
+
+export const saveStoredWallet = (wallet: RonPayWallet) => {
+  try {
+    localStorage.setItem(WALLET_KEY, JSON.stringify(wallet));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_wallet_updated', { detail: wallet }));
+    }
+  } catch (e) {
+    console.error('Failed to save wallet to storage', e);
+  }
+};
+
 
