@@ -1,36 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   History, 
   Search, 
-  Download, 
   Printer, 
-  Receipt, 
-  CheckCircle2, 
-  Clock, 
-  Filter, 
-  ArrowUpRight, 
-  Sparkles,
-  Calendar,
-  Layers,
-  HeartHandshake,
-  Zap,
-  Banknote,
-  MessageSquare,
-  User,
-  ShieldCheck,
-  QrCode,
-  ArrowRight
+  HeartHandshake, 
+  Zap, 
+  Banknote, 
+  MessageSquare, 
+  ShieldCheck, 
+  QrCode, 
+  ArrowRight,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Inbox,
+  Send,
+  Building2,
+  Calendar
 } from 'lucide-react';
-import { Transaction, BawmCategory, CreatorProfile } from '../types';
-import { BAWM_CONFIG } from '../data/initialData';
+import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
+import { isCampaignCreator } from '../utils/storage';
 
 interface PeknaSulhnuModalProps {
   isOpen: boolean;
   transactions: Transaction[];
+  campaigns?: Campaign[];
   creatorProfile?: CreatorProfile | null;
+  userPaidIds?: string[];
   onClose: () => void;
   onOpenReceipt?: (tx: Transaction) => void;
   onNavigateToDonate?: () => void;
@@ -39,57 +37,130 @@ interface PeknaSulhnuModalProps {
 
 // Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
 export const getEffectiveCategory = (t: Transaction): BawmCategory => {
+  if (!t) return 'others';
+  if (t.category === 'ralna' || t.category === 'khawlsak' || t.category === 'rikrum' || t.category === 'kumtluang') {
+    return t.category;
+  }
   if (t.category === 'others') return 'others';
   if (
-    t.id.startsWith('BILL-') || 
-    t.campaignId.startsWith('bill-') || 
-    t.campaignTitle.toLowerCase().includes('bill') ||
-    t.campaignTitle.toLowerCase().includes('recharge') ||
-    t.campaignTitle.toLowerCase().includes('fastag') ||
-    t.campaignTitle.toLowerCase().includes('broadband') ||
-    t.campaignTitle.toLowerCase().includes('electricity') ||
-    t.campaignTitle.toLowerCase().includes('water') ||
-    t.campaignTitle.toLowerCase().includes('gas') ||
-    t.campaignTitle.toLowerCase().includes('ticket') ||
-    t.campaignTitle.toLowerCase().includes('loan') ||
-    t.campaignTitle.toLowerCase().includes('tax')
+    (t.id && (t.id.startsWith('BILL-') || t.id.startsWith('TXN-BILL-'))) || 
+    (t.campaignId && t.campaignId.startsWith('bill-'))
   ) {
     return 'others';
   }
-  return t.category;
+  return (t.category as BawmCategory) || 'others';
 };
 
 export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   isOpen,
-  transactions,
+  transactions = [],
+  campaigns = [],
   creatorProfile,
+  userPaidIds = [],
   onClose,
   onOpenReceipt,
   onNavigateToDonate,
   onOpenScanner,
 }) => {
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   if (!isOpen) return null;
 
-  const filtered = transactions.filter(t => {
-    const effectiveCategory = getEffectiveCategory(t);
-    if (filterCategory !== 'all' && effectiveCategory !== filterCategory) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = t.campaignTitle.toLowerCase().includes(q);
-      const matchId = t.id.toLowerCase().includes(q);
-      const matchDonor = t.donorName.toLowerCase().includes(q);
-      const matchPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
-      const matchCategory = effectiveCategory.toLowerCase().includes(q);
-      if (!matchTitle && !matchId && !matchDonor && !matchPeriod && !matchCategory) return false;
+  // Identify campaigns owned by active profile
+  const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {
+    const ids = new Set<string>();
+    const titles = new Set<string>();
+    if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
+      campaigns.forEach(c => {
+        if (isCampaignCreator(c, creatorProfile)) {
+          ids.add(c.id);
+          if (c.title) {
+            titles.add(c.title.toLowerCase().trim());
+          }
+        }
+      });
     }
-    return true;
-  });
+    return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
+  }, [campaigns, creatorProfile]);
 
-  const totalDonated = filtered.reduce((sum, t) => sum + t.amount, 0);
+  const isCreatorAccount = Boolean(
+    creatorProfile?.isAdmin || 
+    creatorProfile?.isApproved || 
+    ownedCampaignIds.size > 0
+  );
+
+  // Helper to determine if transaction is received in creator's bawm or sent as donor
+  const getTxDirection = (tx: Transaction): 'received' | 'sent' => {
+    if (!tx) return 'sent';
+    
+    // Super admin can view all transactions as received donations across platform
+    if (creatorProfile?.isAdmin) {
+      return 'received';
+    }
+
+    const isOwned = (tx.campaignId && ownedCampaignIds.has(tx.campaignId)) || 
+      (tx.campaignTitle ? ownedCampaignTitles.has(tx.campaignTitle.toLowerCase().trim()) : false);
+
+    if (isOwned) {
+      // If creator was also the donor, check if phone matches and not just received
+      const profilePhone = creatorProfile?.phone ? creatorProfile.phone.replace(/\D/g, '').slice(-10) : '';
+      const txPhone = tx.donorPhone ? tx.donorPhone.replace(/\D/g, '').slice(-10) : '';
+      if (profilePhone && txPhone && profilePhone === txPhone && userPaidIds.includes(tx.id)) {
+        return 'sent';
+      }
+      return 'received';
+    }
+    return 'sent';
+  };
+
+  const receivedCount = useMemo(() => {
+    return transactions.filter(t => getTxDirection(t) === 'received').length;
+  }, [transactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+
+  const sentCount = useMemo(() => {
+    return transactions.filter(t => getTxDirection(t) === 'sent').length;
+  }, [transactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+
+  // Direction-filtered transactions for accurate tab counts
+  const directionFiltered = useMemo(() => {
+    return transactions.filter(t => {
+      const dir = getTxDirection(t);
+      if (directionFilter === 'received' && dir !== 'received') return false;
+      if (directionFilter === 'sent' && dir !== 'sent') return false;
+      return true;
+    });
+  }, [transactions, directionFilter, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+
+  const filtered = useMemo(() => {
+    return transactions.filter(t => {
+      // 1. Direction Filter (Received vs Sent)
+      const dir = getTxDirection(t);
+      if (directionFilter === 'received' && dir !== 'received') return false;
+      if (directionFilter === 'sent' && dir !== 'sent') return false;
+
+      // 2. Category Filter
+      const effectiveCategory = getEffectiveCategory(t);
+      if (filterCategory !== 'all' && effectiveCategory !== filterCategory) return false;
+
+      // 3. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = t.campaignTitle ? t.campaignTitle.toLowerCase().includes(q) : false;
+        const matchId = t.id ? t.id.toLowerCase().includes(q) : false;
+        const matchDonor = t.donorName ? t.donorName.toLowerCase().includes(q) : false;
+        const matchPhone = t.donorPhone ? t.donorPhone.includes(q) : false;
+        const matchPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
+        const matchCategory = effectiveCategory ? effectiveCategory.toLowerCase().includes(q) : false;
+        const matchRemark = t.remark ? t.remark.toLowerCase().includes(q) : false;
+        if (!matchTitle && !matchId && !matchDonor && !matchPhone && !matchPeriod && !matchCategory && !matchRemark) return false;
+      }
+      return true;
+    });
+  }, [transactions, directionFilter, filterCategory, searchQuery, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+
+  const totalAmount = filtered.reduce((sum, t) => sum + t.amount, 0);
 
   const printSingleReceipt = (tx: Transaction) => {
     const effectiveCat = getEffectiveCategory(tx);
@@ -167,6 +238,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               <span class="label">Petu Hming:</span>
               <span class="val">${tx.isAnonymous ? 'Anonymous' : tx.donorName}</span>
             </div>
+            ${tx.donorPhone ? `
+            <div class="row">
+              <span class="label">Phone:</span>
+              <span class="val font-mono">+91 ${tx.donorPhone}</span>
+            </div>` : ''}
             <div class="row">
               <span class="label">Payment Mode:</span>
               <span class="val" style="text-transform: uppercase;">${tx.paymentMethod === 'online' ? '⚡ ONLINE UPI' : '💵 CASH DEPOSIT'}</span>
@@ -212,11 +288,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
                 <span className="text-[9px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                  Ka Sulhnu
+                  {creatorProfile?.isAdmin ? 'ADMIN CONSOLE' : isCreatorAccount ? 'CREATOR SULHNU' : 'KA SULHNU'}
                 </span>
               </div>
-              <p className="text-[10.5px] text-slate-400 font-medium truncate">
-                {currentUserName} {currentUserPhone ? `(${currentUserPhone})` : ''} - Ama sum pekna chauh
+              <p className="text-[10.5px] text-slate-500 font-medium truncate">
+                {currentUserName} {currentUserPhone ? `(${currentUserPhone})` : ''}
               </p>
             </div>
           </div>
@@ -235,21 +311,79 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className="font-bold text-slate-800 truncate">{currentUserName}</span>
             <span className="text-slate-400">•</span>
-            <span className="text-slate-500 truncate">{currentUserPhone || 'Active Device'}</span>
+            <span className="text-slate-500 truncate">{currentUserPhone || 'Active Account'}</span>
           </div>
           <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
-            PRIVATE RECORD
+            SECURE & ISOLATED
           </span>
         </div>
+
+        {/* Creator Scope Switcher (Dawnte vs Thawhte) */}
+        {isCreatorAccount && (receivedCount > 0 || sentCount > 0) && (
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setDirectionFilter('all')}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'all'
+                  ? 'bg-white text-indigo-950 font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>Zawng zawng</span>
+              <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full font-black">
+                {transactions.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDirectionFilter('received')}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'received'
+                  ? 'bg-emerald-600 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Inbox className="w-3 h-3" />
+              <span>Bawm Dawnte</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                directionFilter === 'received' ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {receivedCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDirectionFilter('sent')}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'sent'
+                  ? 'bg-indigo-600 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Send className="w-3 h-3" />
+              <span>Ka Thawhte</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                directionFilter === 'sent' ? 'bg-indigo-800 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {sentCount}
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Summary Card */}
         <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3.5 text-white mb-2.5 shrink-0 shadow-md border border-indigo-800 flex justify-between items-center">
           <div>
             <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">
-              I Pek Zat Zawng Zawng (Your Total)
+              {directionFilter === 'received' ? 'Bawm Sum Dawn Zat (Received Total)' :
+               directionFilter === 'sent' ? 'I Pek/Thawh Zat (Your Giving Total)' :
+               'Sulhnu Sum Zat Zawng Zawng'}
             </span>
             <div className="text-2xl font-black text-amber-400">
-              ₹{totalDonated.toLocaleString('en-IN')}
+              ₹{totalAmount.toLocaleString('en-IN')}
             </div>
           </div>
           <div className="text-right">
@@ -264,23 +398,23 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search by Bawm, Campaign name, or Period..."
+              placeholder="Search by Bawm, Donor name, Phone or Period..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none transition"
             />
           </div>
 
-          {/* Category Tabs with Smooth Scroll and Visual Cue */}
+          {/* Category Tabs with Smooth Scroll */}
           <div className="relative group">
             <div className="flex gap-1.5 overflow-x-auto pb-2 pt-0.5 text-xs scroll-smooth scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-slate-100">
               {[
-                { key: 'all', label: 'All Payments', count: transactions.length },
-                { key: 'ralna', label: 'Ralna Bawm', count: transactions.filter(t => getEffectiveCategory(t) === 'ralna').length },
-                { key: 'khawlsak', label: 'Khawlsak Bawm', count: transactions.filter(t => getEffectiveCategory(t) === 'khawlsak').length },
-                { key: 'rikrum', label: 'Rikrum Bawm', count: transactions.filter(t => getEffectiveCategory(t) === 'rikrum').length },
-                { key: 'kumtluang', label: 'Kumtluang Bawm', count: transactions.filter(t => getEffectiveCategory(t) === 'kumtluang').length },
-                { key: 'others', label: 'Others (Bills/Recharge)', count: transactions.filter(t => getEffectiveCategory(t) === 'others').length },
+                { key: 'all', label: 'All Categories', count: directionFiltered.length },
+                { key: 'ralna', label: 'Ralna Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'ralna').length },
+                { key: 'khawlsak', label: 'Khawlsak Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'khawlsak').length },
+                { key: 'rikrum', label: 'Rikrum Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'rikrum').length },
+                { key: 'kumtluang', label: 'Kumtluang Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'kumtluang').length },
+                { key: 'others', label: 'Others (Bills/Recharge)', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'others').length },
               ].map(tab => {
                 const isActive = filterCategory === tab.key;
                 return (
@@ -316,13 +450,32 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 <HeartHandshake className="w-6 h-6 stroke-1.5" />
               </div>
               <div className="space-y-1">
-                <p className="font-extrabold text-slate-800 text-sm">Pekna sulhnu a la awm rih lo</p>
+                <p className="font-extrabold text-slate-800 text-sm">Sulhnu a la awm rih lo</p>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
-                  He account / phone ({currentUserPhone || 'he device'}) hmanga sum pek leh thawh a la awm lo a ni. Bawm thlangin sum i thawh/pek veleh i receipt leh sulhnute hetah hian a lo lang nghal ang.
+                  {transactions.length > 0 && (filterCategory !== 'all' || directionFilter !== 'all' || searchQuery.trim())
+                    ? 'I filter / search thlanah hian record a awm lo. Filter paihin en leh rawh.'
+                    : isCreatorAccount 
+                      ? 'I Bawm siamah sum thawh a la lut lo a, sum i la thawh ve lo a ni e.'
+                      : `He account / phone (${currentUserPhone || 'he device'}) hmanga sum pek leh thawh a la awm lo a ni. Bawm thlangin sum i thawh/pek veleh i receipt leh sulhnute hetah hian a lo lang nghal ang.`
+                  }
                 </p>
               </div>
 
-              {(onNavigateToDonate || onOpenScanner) && (
+              {transactions.length > 0 && (filterCategory !== 'all' || directionFilter !== 'all' || searchQuery.trim()) ? (
+                <div className="pt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterCategory('all');
+                      setDirectionFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+                  >
+                    Filter Paih Rawh (Show All)
+                  </button>
+                </div>
+              ) : (onNavigateToDonate || onOpenScanner) && (
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                   {onOpenScanner && (
                     <button
@@ -355,14 +508,33 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               const isKhawlsak = effectiveCat === 'khawlsak';
               const isKumtluang = effectiveCat === 'kumtluang';
               const isOthers = effectiveCat === 'others';
+              const direction = getTxDirection(tx);
+              const isReceived = direction === 'received';
 
               return (
                 <div
                   key={tx.id}
-                  className="bg-slate-50 hover:bg-indigo-50/40 p-3 rounded-2xl border border-slate-200 hover:border-indigo-300 transition space-y-2"
+                  className={`p-3 rounded-2xl border transition space-y-2 ${
+                    isReceived 
+                      ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-emerald-200' 
+                      : 'bg-slate-50 hover:bg-indigo-50/40 border-slate-200 hover:border-indigo-300'
+                  }`}
                 >
                   <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Direction Badge */}
+                      {isCreatorAccount && (
+                        <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                          isReceived 
+                            ? 'bg-emerald-700 text-white shadow-2xs' 
+                            : 'bg-indigo-700 text-white shadow-2xs'
+                        }`}>
+                          {isReceived ? <ArrowDownLeft className="w-2.5 h-2.5" /> : <ArrowUpRight className="w-2.5 h-2.5" />}
+                          <span>{isReceived ? 'BAWM DAWNNA' : 'KA PEKNA'}</span>
+                        </span>
+                      )}
+
+                      {/* Category Badge */}
                       <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${
                         isRalna ? 'bg-slate-900 text-white border-slate-800' :
                         isRikrum ? 'bg-rose-100 text-rose-800 border-rose-200' :
@@ -378,8 +550,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <div className="font-black text-sm text-slate-900">
-                        ₹{tx.amount.toLocaleString('en-IN')}
+                      <div className={`font-black text-sm ${isReceived ? 'text-emerald-800' : 'text-slate-900'}`}>
+                        {isReceived ? '+' : ''}₹{tx.amount.toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>
@@ -398,6 +570,26 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Donor details for Bawm Dawnna or Sent */}
+                  <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/80 text-[10.5px]">
+                    <div className="flex items-center gap-1.5 text-slate-700 truncate">
+                      <span className="font-semibold text-slate-400">{isReceived ? 'Petu:' : 'Thawhtu:'}</span>
+                      <span className="font-bold text-slate-900 truncate">
+                        {tx.isAnonymous ? 'Anonymous Donor' : tx.donorName}
+                      </span>
+                      {tx.donorPhone && (
+                        <span className="text-[9.5px] text-slate-500 font-mono">
+                          (+91 {tx.donorPhone})
+                        </span>
+                      )}
+                    </div>
+                    {tx.donorVeng && (
+                      <span className="text-[9.5px] text-slate-500 font-medium shrink-0 ml-1">
+                        {tx.donorVeng}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Sub category tags if available */}
                   {tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-200/60">
@@ -409,7 +601,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     </div>
                   )}
 
-                  {/* Remark if present (Compact space-saving inline) */}
+                  {/* Remark if present */}
                   {tx.remark && (
                     <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-200/80 text-[10px] text-slate-600">
                       <MessageSquare className="w-2.5 h-2.5 text-indigo-500 shrink-0" />

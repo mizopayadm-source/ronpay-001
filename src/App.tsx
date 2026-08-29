@@ -39,6 +39,7 @@ import {
   recordAuditLog,
   restoreFullDatabaseBackup,
   isUserPaidTransaction,
+  getUserOrCreatorVisibleTransactions,
   getStoredUserPaidTxIds,
   isCampaignCreator,
 } from './utils/storage';
@@ -546,7 +547,12 @@ export default function App() {
   };
 
   // Filter transactions for Sulhnu History
-  const userVisibleTransactions = transactions.filter(t => isUserPaidTransaction(t, userPaidIds, creatorProfile));
+  const userVisibleTransactions = getUserOrCreatorVisibleTransactions(
+    transactions,
+    campaigns,
+    creatorProfile,
+    userPaidIds
+  );
 
   return (
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
@@ -765,6 +771,7 @@ export default function App() {
           onClose={() => setIsProfileOpen(false)}
           creatorProfile={creatorProfile}
           onResetData={handleResetData}
+          onOpenHistory={handleOpenHistory}
           onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
           onLogout={handleLogout}
           onLoginClick={() => {
@@ -783,7 +790,9 @@ export default function App() {
         <PeknaSulhnuModal
           isOpen={isHistoryOpen}
           transactions={userVisibleTransactions}
+          campaigns={campaigns}
           creatorProfile={creatorProfile}
+          userPaidIds={userPaidIds}
           onClose={() => setIsHistoryOpen(false)}
           onOpenReceipt={(tx) => {
             setCompletedTransaction(tx);

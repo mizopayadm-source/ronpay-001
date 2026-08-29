@@ -707,16 +707,10 @@ export const recordUserPaidTxId = (id: string) => {
  */
 export const isUserPaidTransaction = (
   tx: Transaction,
-  userPaidIds: string[],
+  userPaidIds: string[] = [],
   creatorProfile?: CreatorProfile | null
 ): boolean => {
   if (!tx) return false;
-
-  // Never match sample foreign transactions
-  if (tx.id === 'TXN-9011' || tx.id === 'TXN-9015') {
-    // Only match if explicitly paid by this user in session and not anonymous foreign donor
-    if (!userPaidIds.includes(tx.id)) return false;
-  }
 
   // 1. Transaction was explicitly paid in this active browser session/device
   if (userPaidIds && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
@@ -738,7 +732,7 @@ export const isUserPaidTransaction = (
     const dName = tx.donorName.trim().toLowerCase();
     const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor'].includes(uName);
     
-    if (!isGeneric && uName.length >= 3 && uName === dName) {
+    if (!isGeneric && uName.length >= 3 && (uName === dName || uName.includes(dName) || dName.includes(uName))) {
       // If both have phone numbers, verify they do not conflict
       if (creatorProfile.phone && tx.donorPhone) {
         const uDigits = creatorProfile.phone.replace(/\D/g, '').slice(-10);
@@ -765,31 +759,190 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
   if (!creatorProfile.phone && !creatorProfile.name) return false;
 
   const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const creatorRawPhone = (creatorProfile.phone || '').trim();
   const creatorName = (creatorProfile.name || '').trim().toLowerCase();
+  const cleanCreatorName = creatorName.replace(/\s*\([^)]*\)/g, '').trim();
+
   const campCreatedBy = (camp.createdBy || '').trim();
   const campCreatedByDigits = campCreatedBy.replace(/\D/g, '').slice(-10);
   const campCreatedByLower = campCreatedBy.toLowerCase();
 
+  const campCreatorPhone = ((camp as any).creatorPhone || (camp as any).contactPhone || '').trim().replace(/\D/g, '').slice(-10);
+  const campCreatorName = ((camp as any).creatorName || (camp as any).contactPerson || '').trim().toLowerCase();
+
+  // Alias match for demo YMA creators
+  if ((creatorPhone === '9862300000' || creatorPhone === '9862311223') && 
+      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
+    return true;
+  }
+
   // 1. Strict Phone Match (last 10 digits or exact string)
-  if (creatorPhone && creatorPhone.length >= 8 && campCreatedByDigits && campCreatedByDigits.length >= 8) {
-    if (campCreatedByDigits === creatorPhone) {
+  if (creatorPhone && creatorPhone.length >= 8) {
+    if (campCreatedByDigits && campCreatedByDigits.length >= 8 && campCreatedByDigits === creatorPhone) {
+      return true;
+    }
+    if (campCreatorPhone && campCreatorPhone.length >= 8 && campCreatorPhone === creatorPhone) {
+      return true;
+    }
+    if (campCreatedBy && campCreatedBy === creatorRawPhone) {
       return true;
     }
   }
 
-  // 2. Exact match with creator phone or exact createdBy
-  if (creatorProfile.phone && campCreatedBy && campCreatedBy === creatorProfile.phone.trim()) {
+  // 2. Creator Name Match (exact or substring)
+  if (cleanCreatorName && cleanCreatorName.length >= 3) {
+    if (campCreatedByLower) {
+      if (campCreatedByLower === creatorName || 
+          campCreatedByLower === cleanCreatorName ||
+          campCreatedByLower.includes(cleanCreatorName) || 
+          cleanCreatorName.includes(campCreatedByLower)) {
+        return true;
+      }
+    }
+    if (campCreatorName) {
+      if (campCreatorName === creatorName || 
+          campCreatorName === cleanCreatorName ||
+          campCreatorName.includes(cleanCreatorName) || 
+          cleanCreatorName.includes(campCreatorName)) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Organization Name Match (if specific and non-generic)
+  if (creatorProfile.orgName && camp.orgName) {
+    const cOrg = creatorProfile.orgName.trim().toLowerCase();
+    const campOrg = camp.orgName.trim().toLowerCase();
+    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay'];
+    if (!genericOrgs.includes(cOrg) && cOrg.length >= 4 && campOrg.length >= 4) {
+      if (cOrg === campOrg || cOrg.includes(campOrg) || campOrg.includes(cOrg)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Determines whether a transaction is visible to the currently active user or creator in Sulhnu (History).
+ * User / Creator isolation rules:
+ * 1. Super Admin: Can view all transactions across the entire platform.
+ * 2. Creator: Can view:
+ *    - All incoming transactions donated to Campaigns created/managed by this Creator (Bawm Thawhlawm Dawnte).
+ *    - Personal transactions paid by this Creator as a donor (Ka Thawhpekte / Pekna).
+ *    - Foreign campaigns created by other users where this creator was not the donor are strictly excluded.
+ * 3. General Member / Donor / Citizen:
+ *    - Sees all transactions made by their phone number, name, or recorded in their local device session.
+ */
+export const isUserOrCreatorTransaction = (
+  tx: Transaction,
+  campaigns: Campaign[],
+  creatorProfile: CreatorProfile | null | undefined,
+  userPaidIds: string[] = []
+): boolean => {
+  if (!tx) return false;
+
+  // 1. Super Admin has unrestricted access
+  if (creatorProfile?.isAdmin) return true;
+
+  // 2. Local device session payments
+  if (userPaidIds && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
     return true;
   }
 
-  // 3. Exact Creator Name Match (strictly exact, not loose includes)
-  if (creatorName && creatorName.length >= 3 && campCreatedByLower) {
-    if (campCreatedByLower === creatorName) {
+  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
+  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
+  const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', ''].includes(cleanCreatorName);
+
+  // 3. Campaign ownership: Check if tx belongs to a campaign created by the active profile
+  if (creatorProfile && (creatorPhoneDigits.length >= 8 || (!isGenericUser && cleanCreatorName.length >= 3))) {
+    const parentCamp = campaigns.find(c => 
+      c.id === tx.campaignId || 
+      (tx.campaignTitle && c.title && c.title.toLowerCase().trim() === tx.campaignTitle.toLowerCase().trim())
+    );
+    if (parentCamp && isCampaignCreator(parentCamp, creatorProfile)) {
+      return true;
+    }
+
+    // Direct check across all campaigns owned by creator
+    const isOwned = campaigns.some(c => 
+      (c.id === tx.campaignId || (tx.campaignTitle && c.title && c.title.toLowerCase().trim() === tx.campaignTitle.toLowerCase().trim())) &&
+      isCampaignCreator(c, creatorProfile)
+    );
+    if (isOwned) {
+      return true;
+    }
+  }
+
+  // 4. Donor Phone Match (Last 10 digits)
+  if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
+    const txDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+    if (txDigits.length >= 8 && creatorPhoneDigits === txDigits) {
+      return true;
+    }
+  }
+
+  // 5. Distinctive Donor Name Match (non-generic names)
+  if (!isGenericUser && cleanCreatorName.length >= 3 && tx.donorName && !tx.isAnonymous) {
+    const dName = tx.donorName.trim().toLowerCase();
+    if (dName === cleanCreatorName || dName.includes(cleanCreatorName) || cleanCreatorName.includes(dName)) {
+      // If phone exists for both, ensure no mismatch
+      if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
+        const txDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+        if (txDigits.length >= 8 && creatorPhoneDigits !== txDigits) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+
+  // 6. Direct Creator/Collector tag match on transaction (if available)
+  if (creatorPhoneDigits && creatorPhoneDigits.length >= 8) {
+    const txCreatorDigits = ((tx as any).creatorPhone || (tx as any).collectorPhone || (tx as any).createdBy || '').replace(/\D/g, '').slice(-10);
+    if (txCreatorDigits && txCreatorDigits.length >= 8 && txCreatorDigits === creatorPhoneDigits) {
       return true;
     }
   }
 
   return false;
+};
+
+/**
+ * Returns all transactions accessible to the current logged-in Creator or User for Sulhnu History.
+ */
+export const getUserOrCreatorVisibleTransactions = (
+  transactions: Transaction[],
+  campaigns: Campaign[],
+  creatorProfile: CreatorProfile | null | undefined,
+  userPaidIds: string[] = []
+): Transaction[] => {
+  if (!transactions || transactions.length === 0) return [];
+
+  // Super Admin gets all transactions
+  if (creatorProfile?.isAdmin) {
+    return transactions;
+  }
+
+  const matched = transactions.filter(tx => 
+    isUserOrCreatorTransaction(tx, campaigns, creatorProfile, userPaidIds)
+  );
+
+  // If user is a brand-new guest explorer (no phone, no specific profile name, no session payment), provide standard demo transactions for receipt exploration
+  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
+  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
+  const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', ''].includes(cleanCreatorName);
+  
+  const hasSpecificAccount = Boolean((creatorPhoneDigits && creatorPhoneDigits.length >= 8) || (!isGeneric && cleanCreatorName.length >= 3));
+
+  if (matched.length === 0 && !hasSpecificAccount && (!userPaidIds || userPaidIds.length === 0)) {
+    return transactions.filter(t => t.id === 'TXN-9011' || t.id === 'TXN-BILL-8801' || t.id === 'TXN-ZONUN-001');
+  }
+
+  return matched;
 };
 
 // ==========================================

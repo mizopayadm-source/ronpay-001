@@ -275,7 +275,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             Instant Pay
           </span>
         </div>
-        <div className="grid grid-cols-5 gap-1 sm:gap-2 text-center">
+        <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center">
           {/* Scan Any QR */}
           <button 
             onClick={() => onStartScanner('any')}
@@ -286,6 +286,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate w-full">
               {t.scanQR}
+            </span>
+          </button>
+
+          {/* Sulhnu / History Quick Action */}
+          <button 
+            onClick={onOpenHistory}
+            className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
+          >
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs border border-purple-200 relative">
+              <History className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-purple-900 group-hover:text-purple-600 transition-colors truncate w-full">
+              Sulhnu
             </span>
           </button>
 
@@ -346,10 +359,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             onClick={onShowBalance}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-100">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-slate-50 text-slate-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-slate-700 group-hover:text-white transition-all shadow-xs border border-slate-200">
               <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-blue-600 transition-colors truncate w-full">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-700 group-hover:text-slate-900 transition-colors truncate w-full">
               {t.checkBalance}
             </span>
           </button>

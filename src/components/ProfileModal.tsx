@@ -23,7 +23,8 @@ import {
   Camera,
   Upload,
   Image as ImageIcon,
-  Trash2
+  Trash2,
+  History
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -33,6 +34,7 @@ interface ProfileModalProps {
   onClose: () => void;
   creatorProfile: CreatorProfile;
   onResetData: () => void;
+  onOpenHistory?: () => void;
   onOpenPhonePePortal?: () => void;
   onLogout?: () => void;
   onLoginClick?: () => void;
@@ -48,6 +50,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onClose,
   creatorProfile,
   onResetData,
+  onOpenHistory,
   onOpenPhonePePortal,
   onLogout,
   onLoginClick,
@@ -387,6 +390,25 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </button>
           )}
         </div>
+
+        {/* Pekna Sulhnu (History & Receipts) Trigger */}
+        {onOpenHistory && (
+          <button
+            onClick={() => {
+              onClose();
+              onOpenHistory();
+            }}
+            className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-950 p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-2xs"
+          >
+            <span className="flex items-center gap-2">
+              <History className="w-4 h-4 text-indigo-600" />
+              Pekna Sulhnu (History & Receipts)
+            </span>
+            <span className="text-[10px] bg-indigo-600 text-white font-black px-2.5 py-0.5 rounded-full uppercase">
+              En Rawh
+            </span>
+          </button>
+        )}
 
         {/* PhonePe PG V2 Management Trigger */}
         {onOpenPhonePePortal && (
