@@ -153,11 +153,29 @@ export const getStoredCampaigns = (): Campaign[] => {
           }
           return camp;
         });
-        return mapped.sort((a, b) => {
+
+        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns
+        const existingIds = new Set(mapped.map(c => c.id));
+        let hasNew = false;
+        const merged = [...mapped];
+        for (const initCamp of INITIAL_CAMPAIGNS) {
+          if (!existingIds.has(initCamp.id)) {
+            merged.push(initCamp);
+            hasNew = true;
+          }
+        }
+
+        const sorted = merged.sort((a, b) => {
           const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return timeB - timeA;
         });
+
+        if (hasNew || mapped.length !== parsed.length) {
+          localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sorted));
+        }
+
+        return sorted;
       }
     }
     // Initialize if never stored before
@@ -366,11 +384,28 @@ export const getStoredTransactions = (): Transaction[] => {
       if (Array.isArray(parsed)) {
         // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
-        return parsed.filter(t => 
+        const cleaned = parsed.filter(t => 
           t.donorName !== 'Liana' && 
           t.donorName !== 'Kunga' && 
           !legacyMismatchedIds.has(t.id)
         );
+
+        // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
+        // (like Zonunmawia or demo accounts) are never missing due to old browser cache
+        const existingIds = new Set(cleaned.map(t => t.id));
+        let hasNew = false;
+        const merged = [...cleaned];
+        for (const initTx of INITIAL_TRANSACTIONS) {
+          if (!existingIds.has(initTx.id)) {
+            merged.push(initTx);
+            hasNew = true;
+          }
+        }
+
+        if (hasNew || cleaned.length !== parsed.length) {
+          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
+        }
+        return merged;
       }
     }
     // Initialize if never stored before
@@ -551,7 +586,20 @@ export const getStoredCreatorsList = (): CreatorProfile[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        const existingPhones = new Set(parsed.map(c => (c.phone || '').trim().replace(/\D/g, '').slice(-10)));
+        let hasNew = false;
+        const merged = [...parsed];
+        for (const initC of INITIAL_REGISTERED_CREATORS) {
+          const initPhoneDigits = (initC.phone || '').trim().replace(/\D/g, '').slice(-10);
+          if (initPhoneDigits && !existingPhones.has(initPhoneDigits)) {
+            merged.push(initC);
+            hasNew = true;
+          }
+        }
+        if (hasNew) {
+          localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(merged));
+        }
+        return merged;
       }
     }
   } catch (e) {

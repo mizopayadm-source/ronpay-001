@@ -796,6 +796,7 @@ export default function App() {
             creatorProfile={creatorProfile}
             userPaidIds={userPaidIds}
             onClose={() => setIsHistoryOpen(false)}
+            onRefreshData={reloadLocalData}
             onOpenReceipt={(tx) => {
               setCompletedTransaction(tx);
               setIsHistoryOpen(false);

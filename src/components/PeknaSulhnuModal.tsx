@@ -16,7 +16,8 @@ import {
   Inbox,
   Send,
   Building2,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
@@ -33,6 +34,7 @@ interface PeknaSulhnuModalProps {
   onOpenReceipt?: (tx: Transaction) => void;
   onNavigateToDonate?: () => void;
   onOpenScanner?: () => void;
+  onRefreshData?: () => void;
 }
 
 // Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
@@ -65,10 +67,25 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onOpenReceipt,
   onNavigateToDonate,
   onOpenScanner,
+  onRefreshData,
 }) => {
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    if (onRefreshData) {
+      onRefreshData();
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+    }
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 600);
+  };
 
   // Defensive array checks
   const safeTransactions = useMemo(() => {
@@ -333,18 +350,34 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             </div>
           </div>
 
-          <button
-            id="sulhnu-modal-close-btn"
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-            }}
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer shrink-0 ml-2"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            <button
+              id="sulhnu-modal-refresh-btn"
+              type="button"
+              title="Sync & Refresh Database"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleManualRefresh();
+              }}
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
+            </button>
+
+            <button
+              id="sulhnu-modal-close-btn"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+              }}
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* User Identity / Privacy Badge */}
