@@ -30,22 +30,10 @@ export const GeneratedQRModal: React.FC<GeneratedQRModalProps> = ({
 
   useEffect(() => {
     if (campaign && isOpen) {
-      if (campaign.category === 'kumtluang') {
-        const portalUrl = getCampaignWebPortalUrl(campaign.id);
-        generateQRCodeDataUrl(portalUrl).then(url => {
-          setQrDataUrl(url);
-        });
-      } else {
-        const upiUri = generateUPILink({
-          upiId: campaign.targetUpiId || campaign.upiId || 'ronpay@axl',
-          name: campaign.creatorName || campaign.orgName || campaign.title,
-          note: `RonPay:${campaign.id}`
-        });
-
-        generateQRCodeDataUrl(upiUri).then(url => {
-          setQrDataUrl(url);
-        });
-      }
+      const portalUrl = getCampaignWebPortalUrl(campaign);
+      generateQRCodeDataUrl(portalUrl).then(url => {
+        setQrDataUrl(url);
+      });
     }
   }, [campaign, isOpen]);
 

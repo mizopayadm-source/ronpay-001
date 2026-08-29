@@ -837,23 +837,19 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
     }
   }
 
-  // 2. Creator Name Match (exact or substring)
-  if (cleanCreatorName && cleanCreatorName.length >= 3) {
-    if (campCreatedByLower) {
-      if (campCreatedByLower === creatorName || 
-          campCreatedByLower === cleanCreatorName ||
-          campCreatedByLower.includes(cleanCreatorName) || 
-          cleanCreatorName.includes(campCreatedByLower)) {
-        return true;
-      }
+  // 2. Creator Name Match (exact normalized name, non-generic)
+  const genericNames = [
+    'user', 'guest', 'ronpay user', 'ronpay', 'donor', 'citizen', 
+    'community donor', 'community citizen', 'valued donor', 'anonymous', ''
+  ];
+  const isGeneric = genericNames.includes(cleanCreatorName) || cleanCreatorName.length < 3;
+
+  if (!isGeneric) {
+    if (campCreatedByLower && (campCreatedByLower === creatorName || campCreatedByLower === cleanCreatorName)) {
+      return true;
     }
-    if (campCreatorName) {
-      if (campCreatorName === creatorName || 
-          campCreatorName === cleanCreatorName ||
-          campCreatorName.includes(cleanCreatorName) || 
-          cleanCreatorName.includes(campCreatorName)) {
-        return true;
-      }
+    if (campCreatorName && (campCreatorName === creatorName || campCreatorName === cleanCreatorName)) {
+      return true;
     }
   }
 
@@ -861,9 +857,9 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
   if (creatorProfile.orgName && camp.orgName) {
     const cOrg = creatorProfile.orgName.trim().toLowerCase();
     const campOrg = camp.orgName.trim().toLowerCase();
-    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay'];
+    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community'];
     if (!genericOrgs.includes(cOrg) && cOrg.length >= 4 && campOrg.length >= 4) {
-      if (cOrg === campOrg || cOrg.includes(campOrg) || campOrg.includes(cOrg)) {
+      if (cOrg === campOrg) {
         return true;
       }
     }

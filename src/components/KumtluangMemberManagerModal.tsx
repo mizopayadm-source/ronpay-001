@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   X, 
   UserPlus, 
@@ -69,32 +69,50 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
-  // Calculate scoped campaigns strictly owned/created by this creator (or all if admin/general viewer)
+  // Calculate scoped campaigns strictly owned/created by this creator (or all if admin)
   const allowedCampaigns = useMemo(() => {
     if (creatorProfile.isAdmin) {
       return campaigns;
     }
-    const myCamps = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-    return myCamps.length > 0 ? myCamps : campaigns;
+    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
   }, [campaigns, creatorProfile]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
 
   // Helper to filter any members array to only this creator's scope
-  const filterMembersForScope = (list: MemberRecord[]) => {
-    if (creatorProfile.isAdmin || allowedCampaigns.length === campaigns.length) return list;
-    if (selectedCampaignId === 'all') return list;
-    const filtered = list.filter(m => {
+  const filterMembersForScope = useCallback((list: MemberRecord[]) => {
+    if (creatorProfile.isAdmin) return list;
+    if (allowedCampaigns.length === 0) return [];
+    return list.filter(m => {
       if (m.campaignId && allowedCampaignIds.has(m.campaignId)) return true;
       if (m.orgCode && allowedOrgCodes.has(m.orgCode.toUpperCase())) return true;
+      if (m.id) {
+        const prefix = m.id.split('-')[0].toUpperCase();
+        if (allowedOrgCodes.has(prefix)) return true;
+      }
       return false;
     });
-    return filtered.length > 0 ? filtered : list;
-  };
+  }, [creatorProfile.isAdmin, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes]);
+
+  // Safe getter for scoped members based on campaign ID
+  const getScopedMembersForView = useCallback((campId: string) => {
+    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) {
+      return [];
+    }
+    if (campId === 'all') {
+      const allM = getMembers('all');
+      return filterMembersForScope(allM);
+    }
+    if (!creatorProfile.isAdmin && !allowedCampaignIds.has(campId)) {
+      return [];
+    }
+    const campMembers = getMembers(campId);
+    return filterMembersForScope(campMembers);
+  }, [allowedCampaigns.length, creatorProfile.isAdmin, filterMembersForScope, allowedCampaignIds]);
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('cmp-kumtluang-1');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
@@ -163,37 +181,44 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     if (isOpen) {
       setActiveTab(initialTab || 'members_list');
       
-      // Determine default campaign ID prioritizing initialCampaignId
-      let activeId = 'cmp-kumtluang-1';
-      if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
-        activeId = initialCampaignId;
-      } else if (selectedCampaignId && allowedCampaignIds.has(selectedCampaignId)) {
-        activeId = selectedCampaignId;
-      } else {
-        const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
-        activeId = initialCamp?.id || (allowedCampaigns[0]?.id || 'cmp-kumtluang-1');
+      let activeId = '';
+      if (allowedCampaigns.length > 0) {
+        if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
+          activeId = initialCampaignId;
+        } else if (selectedCampaignId && (selectedCampaignId === 'all' ? (creatorProfile.isAdmin || allowedCampaigns.length > 1) : allowedCampaignIds.has(selectedCampaignId))) {
+          activeId = selectedCampaignId;
+        } else {
+          const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
+          activeId = initialCamp?.id || allowedCampaigns[0]?.id || '';
+        }
+      } else if (creatorProfile.isAdmin) {
+        activeId = 'all';
       }
 
       setSelectedCampaignId(activeId);
-      setQuickEntryCampaignId(activeId);
-      setRegTargetCampaignId(activeId);
-      setPrintOrgScope(activeId);
+      setQuickEntryCampaignId(activeId || (allowedCampaigns[0]?.id || ''));
+      setRegTargetCampaignId(activeId || (allowedCampaigns[0]?.id || ''));
+      setPrintOrgScope(activeId || (allowedCampaigns[0]?.id || 'all'));
 
-      const mList = getMembers(activeId);
-      setMembers(mList);
+      if (activeId) {
+        const mList = getScopedMembersForView(activeId);
+        setMembers(mList);
 
-      const foundCamp = allowedCampaigns.find(c => c.id === activeId);
-      if (foundCamp?.orgCode) {
-        setNewOrgCode(foundCamp.orgCode);
+        const foundCamp = allowedCampaigns.find(c => c.id === activeId);
+        if (foundCamp?.orgCode) {
+          setNewOrgCode(foundCamp.orgCode);
+        }
+      } else {
+        setMembers([]);
       }
     }
-  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId]);
+  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, creatorProfile.isAdmin, getScopedMembersForView, allowedCampaignIds]);
 
   // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
   useEffect(() => {
     const handleRemoteMembersUpdate = () => {
       if (isOpen && selectedCampaignId) {
-        const refreshed = getMembers(selectedCampaignId);
+        const refreshed = getScopedMembersForView(selectedCampaignId);
         setMembers(refreshed);
       }
     };
@@ -207,12 +232,17 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       window.removeEventListener('ronpay-campaigns-updated', handleRemoteMembersUpdate);
       window.removeEventListener('storage', handleRemoteMembersUpdate);
     };
-  }, [isOpen, selectedCampaignId]);
+  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
 
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
-    if (isOpen && selectedCampaignId) {
-      const mList = getMembers(selectedCampaignId);
+    if (isOpen) {
+      if (!selectedCampaignId || (allowedCampaigns.length === 0 && !creatorProfile.isAdmin)) {
+        setMembers([]);
+        setSelectedMember(null);
+        return;
+      }
+      const mList = getScopedMembersForView(selectedCampaignId);
       setMembers(mList);
 
       if (selectedCampaignId !== 'all') {
@@ -226,7 +256,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           }
         }
       } else {
-        setPrintOrgScope('all');
+        setPrintOrgScope(allowedCampaigns.length > 0 ? (allowedCampaigns[0]?.id || 'all') : 'all');
         const firstCamp = allowedCampaigns[0];
         if (firstCamp) {
           setQuickEntryCampaignId(firstCamp.id);
@@ -238,7 +268,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       setSelectedMember(null);
     }
-  }, [selectedCampaignId, isOpen, allowedCampaigns]);
+  }, [selectedCampaignId, isOpen, allowedCampaigns, getScopedMembersForView, creatorProfile.isAdmin]);
 
   // When regTargetCampaignId changes during member creation, auto sync prefix
   useEffect(() => {
@@ -253,7 +283,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Active campaign object based on quick entry / active filter
   const activeScopedCampaign = (selectedCampaignId !== 'all' 
     ? allowedCampaigns.find(c => c.id === selectedCampaignId) 
-    : allowedCampaigns.find(c => c.id === quickEntryCampaignId)) || allowedCampaigns[0] || campaigns[0];
+    : allowedCampaigns.find(c => c.id === quickEntryCampaignId)) || allowedCampaigns[0] || null;
 
   const activeRegisterCampaign = (regTargetCampaignId 
     ? allowedCampaigns.find(c => c.id === regTargetCampaignId) 
@@ -745,11 +775,24 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 id="active-bawm-dropdown"
                 value={selectedCampaignId}
                 onChange={(e) => setSelectedCampaignId(e.target.value)}
-                className="w-full pl-3.5 pr-8 py-2.5 bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate"
+                disabled={allowedCampaigns.length === 0}
+                className="w-full pl-3.5 pr-8 py-2.5 bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate disabled:bg-slate-100 disabled:text-slate-400"
               >
-                <option value="all">
-                  🌐 All Lists (Bawm Zawng Zawng) — Consolidated Master Roll ({allMembersList.length} Members)
-                </option>
+                {creatorProfile.isAdmin && (
+                  <option value="all">
+                    🌐 All Lists (Bawm Zawng Zawng) — Consolidated Master Roll ({allMembersList.length} Members)
+                  </option>
+                )}
+                {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                  <option value="all">
+                    📂 Ka Bawm Zawng Zawng — Master Roll ({allMembersList.length} Members)
+                  </option>
+                )}
+                {allowedCampaigns.length === 0 && (
+                  <option value="">
+                    ⚠️ Bawm a awm lo (Bawm thar siam a ngai)
+                  </option>
+                )}
                 {allowedCampaigns.map(camp => (
                   <option key={camp.id} value={camp.id}>
                     🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}] — {campaignCounts[camp.id] || 0} Members
@@ -1437,7 +1480,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
                       </option>
                     ))}
-                    <option value="all">🌐 All Campaigns (Consolidated Combined Report)</option>
+                    {creatorProfile.isAdmin && (
+                      <option value="all">🌐 All Campaigns (Consolidated Combined Report)</option>
+                    )}
+                    {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                      <option value="all">📂 Ka Bawm Zawng Zawng (Combined Report)</option>
+                    )}
                   </select>
                 </div>
 
@@ -1647,10 +1695,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       id="table-quick-qr-filter"
                       value={selectedCampaignId}
                       onChange={(e) => setSelectedCampaignId(e.target.value)}
-                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      disabled={allowedCampaigns.length === 0}
+                      className="px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
                     >
-                      <option value="all">🌐 All Lists ({allMembersList.length})</option>
-                      {campaigns.map(c => (
+                      {creatorProfile.isAdmin && (
+                        <option value="all">🌐 All Lists ({allMembersList.length})</option>
+                      )}
+                      {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                        <option value="all">📂 Ka Bawm Zawng Zawng ({allMembersList.length})</option>
+                      )}
+                      {allowedCampaigns.length === 0 && (
+                        <option value="">⚠️ Bawm a awm lo</option>
+                      )}
+                      {allowedCampaigns.map(c => (
                         <option key={c.id} value={c.id}>
                           🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title} ({campaignCounts[c.id] || 0})
                         </option>

@@ -90,13 +90,39 @@ import { BankTransferModal } from './components/BankTransferModal';
 import { RonPayWalletModal } from './components/RonPayWalletModal';
 import { SmartLoginModal } from './components/SmartLoginModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { getUrlRoute, updateBrowserUrl } from './utils/urlRouting';
 
 export default function App() {
+  // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
+  const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
+
   // Navigation & View States
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>('home');
-  const [selectedCategory, setSelectedCategory] = useState<BawmCategory>('ralna');
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
-  const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
+  const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'home');
+  const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
+  const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
+    if (initialRoute?.receiptId) {
+      const txs = getStoredTransactions();
+      const found = txs.find(t => t.id.toLowerCase() === initialRoute.receiptId?.toLowerCase());
+      if (found) return found;
+      return {
+        id: initialRoute.receiptId,
+        campaignId: 'scanned-receipt',
+        campaignTitle: 'RonPay Contribution',
+        category: 'others',
+        donorName: 'RonPay Contributor',
+        donorPhone: '9862300000',
+        amount: 0,
+        platformFee: 0,
+        totalAmount: 0,
+        paymentMethod: 'online',
+        status: 'completed',
+        timestamp: new Date().toISOString(),
+        txHash: initialRoute.receiptId,
+      };
+    }
+    return null;
+  });
   const [isDesktopView, setIsDesktopView] = useState<boolean>(false);
   const [language, setLanguage] = useState<Language>('mizo');
   const [notificationCount, setNotificationCount] = useState<number>(3);
@@ -323,21 +349,102 @@ export default function App() {
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
 
+  // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
+  const applyRouteFromUrl = useCallback(() => {
+    const route = getUrlRoute();
+    if (!route) return;
+
+    if (route.screen) {
+      setCurrentScreen(route.screen);
+    }
+    if (route.campaign) {
+      setSelectedCampaign(route.campaign);
+      setSelectedCategory(route.category || route.campaign.category);
+    }
+    if (route.category && !route.campaign) {
+      setSelectedCategory(route.category);
+    }
+    if (route.receiptId) {
+      const txs = getStoredTransactions();
+      const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+      if (found) {
+        setCompletedTransaction(found);
+      }
+      setCurrentScreen('success');
+    }
+    if (route.isMemberRollOpen) {
+      setKumtluangInitialCampaignId(route.memberRollCampaignId);
+      setKumtluangInitialTab('members_list');
+      setIsKumtluangManagerOpen(true);
+    }
+    if (route.isSulhnuOpen) {
+      setIsHistoryOpen(true);
+    }
+    if (route.isAdminOpen) {
+      setIsAdminDashboardOpen(true);
+    }
+    if (route.isWalletOpen) {
+      setIsWalletOpen(true);
+    }
+  }, []);
+
+  // Deep linking: Listen for popstate and hashchange to keep browser history synchronized
+  useEffect(() => {
+    const handlePopState = () => {
+      applyRouteFromUrl();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+
+    // Run on initial mount
+    applyRouteFromUrl();
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, [applyRouteFromUrl]);
+
+  // Keep selectedCampaign synchronized if campaign record updates via Firestore or local merge
+  useEffect(() => {
+    if (selectedCampaign && campaigns.length > 0) {
+      const matched = campaigns.find(c => c.id.toLowerCase() === selectedCampaign.id.toLowerCase());
+      if (matched && matched !== selectedCampaign) {
+        setSelectedCampaign(matched);
+      }
+    }
+  }, [campaigns, selectedCampaign?.id]);
+
   // Handlers for Navigation
   const handleNavigate = (screen: ScreenId) => {
     setCurrentScreen(screen);
+    if (screen === 'home') {
+      setSelectedCampaign(null);
+      updateBrowserUrl('home', null, null);
+    } else if (screen === 'explorer') {
+      updateBrowserUrl('explorer', null, selectedCategory);
+    } else if (screen === 'checkout' && selectedCampaign) {
+      updateBrowserUrl('checkout', selectedCampaign, selectedCampaign.category);
+    } else {
+      updateBrowserUrl(screen);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectBawm = (category: BawmCategory) => {
     setSelectedCategory(category);
-    handleNavigate('explorer');
+    updateBrowserUrl('explorer', null, category);
+    setCurrentScreen('explorer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectCampaign = (campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
-    handleNavigate('checkout');
+    updateBrowserUrl('checkout', campaign, campaign.category);
+    setCurrentScreen('checkout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStartScanner = (category?: BawmCategory | 'any') => {

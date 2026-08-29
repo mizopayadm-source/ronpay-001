@@ -1,5 +1,6 @@
 import { Campaign, BawmCategory, ScreenId, Transaction } from '../types';
-import { parseScannedPayload } from '../components/QRScannerModal';
+import { INITIAL_CAMPAIGNS } from '../data/initialData';
+import { getStoredCampaigns, getStoredTransactions } from './storage';
 
 export interface ParsedRoute {
   screen?: ScreenId;
@@ -15,38 +16,37 @@ export interface ParsedRoute {
 }
 
 /**
- * Extracts query parameters from current window URL or hash
+ * Extracts query parameters and route information from current window URL or hash
  */
-export function getUrlRoute(campaigns: Campaign[], transactions: Transaction[]): ParsedRoute | null {
+export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Transaction[]): ParsedRoute | null {
   if (typeof window === 'undefined') return null;
 
   try {
     const url = new URL(window.location.href);
-    let searchParams = url.searchParams;
+    const searchParams = new URLSearchParams(url.search);
 
-    // Also check hash for parameters e.g. #/?campaign=xxx or #campaign=xxx
+    // Also check hash for parameters e.g. #/?campaign=xxx, #campaign=xxx, #/c/xxx, #/post/xxx
     if (window.location.hash) {
-      const hash = window.location.hash.replace(/^#\/?/, '');
-      if (hash.includes('?') || hash.includes('=')) {
-        const hashQuery = hash.includes('?') ? hash.split('?')[1] : hash;
+      const rawHash = window.location.hash.replace(/^#\/?/, '');
+      if (rawHash.includes('?') || rawHash.includes('=')) {
+        const hashQuery = rawHash.includes('?') ? rawHash.split('?')[1] : rawHash;
         const hashParams = new URLSearchParams(hashQuery);
-        // Merge or prioritize hash params
         hashParams.forEach((val, key) => {
           if (!searchParams.has(key)) {
             searchParams.set(key, val);
           }
         });
-      } else if (hash.startsWith('campaign/')) {
-        const id = hash.replace('campaign/', '');
-        if (id && !searchParams.has('campaign')) {
-          searchParams.set('campaign', id);
+      } else if (rawHash.match(/^(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i)) {
+        const match = rawHash.match(/^(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
+        if (match && match[1] && !searchParams.has('campaign')) {
+          searchParams.set('campaign', match[1]);
         }
       }
     }
 
-    // Also check pathname for /campaign/:id or /c/:id
+    // Also check pathname for /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
     const pathname = window.location.pathname;
-    const campPathMatch = pathname.match(/\/(?:campaign|c|bawm)\/([a-zA-Z0-9_-]+)/i);
+    const campPathMatch = pathname.match(/\/(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
     if (campPathMatch && campPathMatch[1] && !searchParams.has('campaign')) {
       searchParams.set('campaign', campPathMatch[1]);
     }
@@ -56,7 +56,8 @@ export function getUrlRoute(campaigns: Campaign[], transactions: Transaction[]):
                        searchParams.get('c') || 
                        searchParams.get('id') || 
                        searchParams.get('bawm') || 
-                       searchParams.get('post');
+                       searchParams.get('post') ||
+                       searchParams.get('p');
 
     const receiptId = searchParams.get('receipt') || 
                       searchParams.get('tx') || 
@@ -73,10 +74,16 @@ export function getUrlRoute(campaigns: Campaign[], transactions: Transaction[]):
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
 
-    // 1. If Campaign ID is present: Match or reconstruct campaign
+    // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {
       const cleanId = decodeURIComponent(campaignId).trim();
-      const existing = campaigns.find(c => c.id.toLowerCase() === cleanId.toLowerCase());
+      const allCampaigns = [
+        ...(campaignsList || []),
+        ...getStoredCampaigns(),
+        ...INITIAL_CAMPAIGNS
+      ];
+
+      const existing = allCampaigns.find(c => c.id.toLowerCase() === cleanId.toLowerCase());
       
       if (existing) {
         return {
@@ -87,29 +94,42 @@ export function getUrlRoute(campaigns: Campaign[], transactions: Transaction[]):
         };
       }
 
-      // Reconstruct dynamic campaign from URL parameters if passed in web link
+      // Reconstruct dynamic campaign from URL parameters if passed in smart web link
       const title = searchParams.get('title');
-      const upi = searchParams.get('upi');
-      const loc = searchParams.get('loc');
-      const org = searchParams.get('org');
+      const upi = searchParams.get('upi') || searchParams.get('pa');
+      const loc = searchParams.get('loc') || searchParams.get('location');
+      const org = searchParams.get('org') || searchParams.get('orgName');
       const target = searchParams.get('target');
       const cause = searchParams.get('cause');
-      const creator = searchParams.get('creator');
+      const creator = searchParams.get('creator') || searchParams.get('creatorName') || searchParams.get('pn');
+      const mitthi = searchParams.get('mitthi') || searchParams.get('mitthiHming');
+      const vuiHun = searchParams.get('vuiHun');
+      const vuitu = searchParams.get('vuitu');
+      const thihni = searchParams.get('thihni');
+      const img = searchParams.get('img') || searchParams.get('imageUrl');
 
       const deducedCategory = (catParam as BawmCategory) || 
-        (cleanId.startsWith('cmp-k') ? 'kumtluang' : cleanId.startsWith('cmp-r') ? 'ralna' : 'others');
+        (cleanId.startsWith('cmp-k') ? 'kumtluang' : 
+         cleanId.startsWith('cmp-r') ? 'ralna' : 
+         cleanId.startsWith('cmp-kh') ? 'khawlsak' : 
+         cleanId.startsWith('cmp-rk') ? 'rikrum' : 'others');
 
       const reconstructed: Campaign = {
         id: cleanId,
         category: deducedCategory,
-        title: title ? decodeURIComponent(title) : 'Scanned Bawm',
+        title: title ? decodeURIComponent(title) : (mitthi ? `Ralna: ${decodeURIComponent(mitthi)}` : 'RonPay Bawm'),
         location: loc ? decodeURIComponent(loc) : 'Mizoram',
         gpsCoords: '23.7271, 92.7176',
         upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
-        orgCode: org ? decodeURIComponent(org) : undefined,
+        orgName: org ? decodeURIComponent(org) : undefined,
         targetAmount: target ? Number(target) : undefined,
         cause: cause ? decodeURIComponent(cause) : undefined,
         creatorName: creator ? decodeURIComponent(creator) : undefined,
+        mitthiHming: mitthi ? decodeURIComponent(mitthi) : undefined,
+        vuiHun: vuiHun ? decodeURIComponent(vuiHun) : undefined,
+        vuitu: vuitu ? decodeURIComponent(vuitu) : undefined,
+        thihni: thihni ? decodeURIComponent(thihni) : undefined,
+        imageUrl: img ? decodeURIComponent(img) : undefined,
         validityDate: '2027-12-31',
         status: 'active',
         createdAt: new Date().toISOString()
@@ -187,7 +207,12 @@ export function getUrlRoute(campaigns: Campaign[], transactions: Transaction[]):
 /**
  * Updates the browser URL without reloading page, enabling shareable URLs
  */
-export function updateBrowserUrl(screen: ScreenId, campaign?: Campaign | null, category?: BawmCategory | null) {
+export function updateBrowserUrl(
+  screen: ScreenId, 
+  campaign?: Campaign | null, 
+  category?: BawmCategory | null,
+  options: { replace?: boolean } = { replace: false }
+) {
   if (typeof window === 'undefined') return;
 
   try {
@@ -200,12 +225,17 @@ export function updateBrowserUrl(screen: ScreenId, campaign?: Campaign | null, c
     url.searchParams.delete('id');
     url.searchParams.delete('bawm');
     url.searchParams.delete('post');
+    url.searchParams.delete('p');
     url.searchParams.delete('screen');
     url.searchParams.delete('cat');
     url.searchParams.delete('title');
     url.searchParams.delete('upi');
     url.searchParams.delete('loc');
     url.searchParams.delete('receipt');
+    url.searchParams.delete('roll');
+    url.searchParams.delete('sulhnu');
+    url.searchParams.delete('admin');
+    url.searchParams.delete('wallet');
 
     if (screen === 'checkout' && campaign) {
       url.searchParams.set('campaign', campaign.id);
@@ -213,16 +243,22 @@ export function updateBrowserUrl(screen: ScreenId, campaign?: Campaign | null, c
       if (campaign.title) url.searchParams.set('title', campaign.title);
       if (campaign.upiId) url.searchParams.set('upi', campaign.upiId);
       if (campaign.location) url.searchParams.set('loc', campaign.location);
-    } else if (screen === 'explorer' && category) {
+    } else if (screen === 'explorer') {
       url.searchParams.set('screen', 'explorer');
-      url.searchParams.set('cat', category);
+      if (category) url.searchParams.set('cat', category);
     } else if (screen !== 'home') {
       url.searchParams.set('screen', screen);
     }
 
-    const newUrl = url.searchParams.toString() ? `${url.pathname}?${url.searchParams.toString()}` : url.pathname;
-    window.history.replaceState({}, '', newUrl);
+    const queryStr = url.searchParams.toString();
+    const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
+
+    if (options.replace) {
+      window.history.replaceState({ screen, campaignId: campaign?.id, category }, '', newUrl);
+    } else {
+      window.history.pushState({ screen, campaignId: campaign?.id, category }, '', newUrl);
+    }
   } catch {
-    // Ignore history replace state in strict sandboxes
+    // Ignore history state errors in restricted sandboxes
   }
 }

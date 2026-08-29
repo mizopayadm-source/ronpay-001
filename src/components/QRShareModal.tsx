@@ -35,7 +35,7 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
     note: `RonPay:${campaign.id}`
   });
 
-  const smartWebLink = generateCampaignWebLink(campaign.id, customDomainInput);
+  const smartWebLink = generateCampaignWebLink(campaign, customDomainInput);
   const activeQrValue = qrType === 'smart_link' ? smartWebLink : upiLink;
 
   const handleCopyLink = () => {

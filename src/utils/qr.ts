@@ -56,10 +56,17 @@ export const generateCampaignWebLink = (campaignOrId: string | Campaign, customD
   params.set('campaign', camp.id);
   if (camp.category) params.set('cat', camp.category);
   if (camp.title) params.set('title', camp.title);
-  if (camp.upiId) params.set('upi', camp.upiId);
+  if (camp.targetUpiId || camp.upiId) params.set('upi', camp.targetUpiId || camp.upiId);
   if (camp.location) params.set('loc', camp.location);
-  if (camp.orgCode) params.set('org', camp.orgCode);
+  if (camp.orgName || camp.orgCode) params.set('org', (camp.orgName || camp.orgCode)!);
   if (camp.targetAmount) params.set('target', String(camp.targetAmount));
+  if (camp.cause) params.set('cause', camp.cause);
+  if (camp.creatorName) params.set('creator', camp.creatorName);
+  if (camp.mitthiHming) params.set('mitthi', camp.mitthiHming);
+  if (camp.vuiHun) params.set('vuiHun', camp.vuiHun);
+  if (camp.vuitu) params.set('vuitu', camp.vuitu);
+  if (camp.thihni) params.set('thihni', camp.thihni);
+  if (camp.imageUrl && camp.imageUrl.startsWith('http')) params.set('img', camp.imageUrl);
 
   return `${baseDomain}/?${params.toString()}`;
 };
@@ -130,14 +137,14 @@ export const generateReceiptQRDataUrl = async (transactionId: string): Promise<s
 };
 
 export const generateBawmQRDataUrl = async (campaign: Campaign, mode: 'auto' | 'upi' | 'web' = 'auto'): Promise<string> => {
-  // If mode is 'web' or if auto and it's kumtluang, generate Web Portal link QR
-  if (mode === 'web' || (mode === 'auto' && campaign.category === 'kumtluang')) {
-    const portalUrl = generateCampaignWebLink(campaign.id);
+  // If mode is 'web' or 'auto' (universal compatibility with Google Lens, Phone camera, RonPay Scanner)
+  if (mode === 'web' || mode === 'auto' || campaign.category === 'kumtluang') {
+    const portalUrl = generateCampaignWebLink(campaign);
     return generateQRCodeDataUrl(portalUrl);
   }
 
   const upiPayload = generateUPILink({
-    upiId: campaign.upiId || 'ronpay@axl',
+    upiId: campaign.targetUpiId || campaign.upiId || 'ronpay@axl',
     name: campaign.title || 'RonPay Bawm',
     note: `RonPay:${campaign.id}`
   });

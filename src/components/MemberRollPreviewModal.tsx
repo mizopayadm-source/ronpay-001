@@ -23,6 +23,7 @@ import {
 import { MemberRecord, Transaction, Campaign, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
+import { isCampaignCreator } from '../utils/storage';
 
 export type PreviewReportFormat = 'style1_master' | 'style4_audit' | 'style2_matrix' | 'style3_passbook';
 
@@ -60,43 +61,72 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
   // Month abbreviations
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+  // Allowed campaigns for this creator
+  const allowedCampaigns = useMemo(() => {
+    if (creatorProfile.isAdmin) return campaigns;
+    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+  }, [campaigns, creatorProfile]);
+
+  const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
+  const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
+
   // Sync initial props when opened
   React.useEffect(() => {
     if (isOpen) {
       if (initialFormat) setSelectedFormat(initialFormat);
-      if (initialCampaignId) setSelectedCampaignId(initialCampaignId);
+      if (initialCampaignId && (initialCampaignId === 'all' ? (creatorProfile.isAdmin || allowedCampaigns.length > 1) : allowedCampaignIds.has(initialCampaignId))) {
+        setSelectedCampaignId(initialCampaignId);
+      } else if (allowedCampaigns.length > 0) {
+        setSelectedCampaignId(allowedCampaigns[0].id);
+      } else {
+        setSelectedCampaignId('');
+      }
       if (initialMemberId) setSelectedMemberId(initialMemberId);
     }
-  }, [isOpen, initialFormat, initialCampaignId, initialMemberId]);
+  }, [isOpen, initialFormat, initialCampaignId, initialMemberId, allowedCampaigns, allowedCampaignIds, creatorProfile.isAdmin]);
 
   // Scoped campaign
   const activeCampaign = useMemo(() => {
-    if (selectedCampaignId === 'all') return undefined;
-    return campaigns.find(c => c.id === selectedCampaignId);
-  }, [selectedCampaignId, campaigns]);
+    if (selectedCampaignId === 'all' || !selectedCampaignId) return undefined;
+    return allowedCampaigns.find(c => c.id === selectedCampaignId);
+  }, [selectedCampaignId, allowedCampaigns]);
 
   // Scoped members
   const scopedMembers = useMemo(() => {
-    if (selectedCampaignId === 'all') return members;
-    return members.filter(m => {
+    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) return [];
+    
+    // Base filter by allowed campaigns
+    const allowedList = creatorProfile.isAdmin ? members : members.filter(m => {
+      if (m.campaignId && allowedCampaignIds.has(m.campaignId)) return true;
+      if (m.orgCode && allowedOrgCodes.has(m.orgCode.toUpperCase())) return true;
+      if (m.id) {
+        const prefix = m.id.split('-')[0].toUpperCase();
+        if (allowedOrgCodes.has(prefix)) return true;
+      }
+      return false;
+    });
+
+    if (selectedCampaignId === 'all') return allowedList;
+
+    return allowedList.filter(m => {
       if (m.campaignId === selectedCampaignId) return true;
       if (activeCampaign?.orgCode && m.orgCode && m.orgCode.toUpperCase() === activeCampaign.orgCode.toUpperCase()) return true;
       if (activeCampaign?.orgCode && m.id) {
         const prefix = m.id.split('-')[0].toUpperCase();
         if (prefix === activeCampaign.orgCode.toUpperCase()) return true;
       }
-      if (m.orgCode === 'EBE' && selectedCampaignId === 'cmp-kumtluang-1') return true;
-      if (m.orgCode === 'KTL' && selectedCampaignId === 'cmp-kumtluang-2') return true;
-      if (m.orgCode === 'YMAVT' && (selectedCampaignId === 'cmp-kumtluang-ymavt' || selectedCampaignId.includes('ymavt') || selectedCampaignId.includes('yma-vengthar'))) return true;
       return false;
     });
-  }, [members, selectedCampaignId, activeCampaign]);
+  }, [members, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes, creatorProfile.isAdmin]);
 
   // Scoped transactions
   const scopedTransactions = useMemo(() => {
-    if (selectedCampaignId === 'all') return transactions;
-    return transactions.filter(t => t.campaignId === selectedCampaignId || (activeCampaign?.title && t.campaignTitle === activeCampaign.title));
-  }, [transactions, selectedCampaignId, activeCampaign]);
+    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) return [];
+    
+    const allowedTx = creatorProfile.isAdmin ? transactions : transactions.filter(t => allowedCampaignIds.has(t.campaignId));
+    if (selectedCampaignId === 'all') return allowedTx;
+    return allowedTx.filter(t => t.campaignId === selectedCampaignId || (activeCampaign?.title && t.campaignTitle === activeCampaign.title));
+  }, [transactions, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, creatorProfile.isAdmin]);
 
   // Unique sections for filtering
   const availableSections = useMemo(() => {
@@ -472,14 +502,23 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                   setSelectedCampaignId(e.target.value);
                   setSelectedMemberId('');
                 }}
-                className="bg-white border border-indigo-200 text-slate-900 font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer max-w-[200px] truncate"
+                disabled={allowedCampaigns.length === 0}
+                className="bg-white border border-indigo-200 text-slate-900 font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer max-w-[200px] truncate disabled:bg-slate-100 disabled:text-slate-400"
               >
-                {campaigns.map(c => (
+                {creatorProfile.isAdmin && (
+                  <option value="all">🌐 All Campaigns Combined ({scopedMembers.length} Members)</option>
+                )}
+                {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                  <option value="all">📂 Ka Bawm Zawng Zawng Combined ({scopedMembers.length} Members)</option>
+                )}
+                {allowedCampaigns.length === 0 && (
+                  <option value="">⚠️ Bawm a awm lo</option>
+                )}
+                {allowedCampaigns.map(c => (
                   <option key={c.id} value={c.id}>
                     🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title}
                   </option>
                 ))}
-                <option value="all">🌐 All Campaigns Combined ({members.length} Members)</option>
               </select>
             </div>
 
