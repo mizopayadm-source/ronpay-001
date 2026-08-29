@@ -43,6 +43,7 @@ import {
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
+import { Language } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
@@ -63,6 +64,9 @@ interface CreateQRScreenProps {
   onSelectCampaign?: (campaign: Campaign) => void;
   onUpdateCreatorProfile?: (updated: CreatorProfile) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
+  onOpenAdminDashboard?: () => void;
+  onPreviewImage?: (url: string, title?: string) => void;
+  language?: Language;
 }
 
 export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
@@ -1995,7 +1999,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         {camp.category === 'kumtluang' && onOpenMemberRoll && (
                           <button
                             type="button"
-                            onClick={onOpenMemberRoll}
+                            onClick={() => onOpenMemberRoll()}
                             className="text-[10.5px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
                             title="Open Member Roll & Manual Entry Portal"
                           >
@@ -2174,7 +2178,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [cause, setCause] = useState<string>(campaign.cause || '');
   const [upiId, setUpiId] = useState<string>(campaign.upiId || '');
   const [validityDate, setValidityDate] = useState<string>(() => campaign.validityDate || getTodayDateTimeLocal(23, 59, 0));
-  const [status, setStatus] = useState<'active' | 'pending_approval' | 'expired'>(campaign.status || 'active');
+  const [status, setStatus] = useState<'active' | 'pending_approval' | 'expired'>((campaign.status as any) || 'active');
   const [gpsCoords, setGpsCoords] = useState<string>(campaign.gpsCoords || '23.7271, 92.7176');
   const [imageUrl, setImageUrl] = useState<string | undefined>(campaign.imageUrl);
   
@@ -2186,10 +2190,10 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [vuiHun, setVuiHun] = useState<string>(() => campaign.vuiHun || getTodayDateTimeLocal(13, 0, 0));
   
   const [targetAmount, setTargetAmount] = useState<string>(campaign.targetAmount?.toString() || '');
-  const [targetPeriod, setTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>(campaign.targetPeriod || 'monthly');
+  const [targetPeriod, setTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>((campaign.targetPeriod as any) || 'monthly');
   const [maxLimit, setMaxLimit] = useState<string>(campaign.maxLimit?.toString() || '');
   const [urgencyDeadline, setUrgencyDeadline] = useState<string>(() => campaign.urgencyDeadline || getTodayDateTimeLocal(23, 59, 7));
-  const [urgencyLevel, setUrgencyLevel] = useState<'CRITICAL' | 'URGENT' | 'NORMAL'>(campaign.urgencyLevel || 'URGENT');
+  const [urgencyLevel, setUrgencyLevel] = useState<'CRITICAL' | 'URGENT' | 'NORMAL'>((campaign.urgencyLevel as any) || 'URGENT');
   
   // Kumtluang specifics
   const [orgName, setOrgName] = useState<string>(campaign.orgName || '');
@@ -2203,7 +2207,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   );
   const [newSubCatInput, setNewSubCatInput] = useState<string>('');
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>(
-    campaign.kumtluangFeeBearer || 'org_paid'
+    (campaign.kumtluangFeeBearer as any) || 'org_paid'
   );
 
   // Handle Photo Upload

@@ -4,14 +4,14 @@ import { Language } from '../utils/translations';
 import { getLastSyncTime } from '../utils/storage';
 
 interface OfflineStatusBannerProps {
-  language: Language;
-  campaignsCount: number;
+  language?: Language;
+  campaignsCount?: number;
   onRefreshCache?: () => void;
 }
 
 export const OfflineStatusBanner: React.FC<OfflineStatusBannerProps> = ({
-  language,
-  campaignsCount,
+  language = 'mizo',
+  campaignsCount = 0,
   onRefreshCache,
 }) => {
   const [isOnline, setIsOnline] = useState<boolean>(() => {

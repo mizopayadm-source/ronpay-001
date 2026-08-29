@@ -1613,8 +1613,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 }) => {
   const [donorName, setDonorName] = useState<string>(transaction.donorName || '');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(transaction.isAnonymous || false);
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>(transaction.paymentMethod || 'online');
-  const [status, setStatus] = useState<'completed' | 'pending_verification'>(transaction.status || 'completed');
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
+  const [status, setStatus] = useState<'completed' | 'pending_verification'>((transaction.status as any) || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
   
   // Breakdown state

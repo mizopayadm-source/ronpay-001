@@ -30,6 +30,7 @@ export interface Campaign {
   id: string;
   category: BawmCategory;
   title: string;
+  subTitle?: string;
   orgName?: string;
   orgCode?: string;
   mitthiHming?: string;
@@ -49,12 +50,14 @@ export interface Campaign {
   creatorName?: string;
   cause?: string;
   targetAmount?: number;
+  customAmount?: number;
   maxLimit?: number;
   emergencyTitle?: string;
   urgencyLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | string;
   urgencyDeadline?: string;
   subCategories?: string[];
   trxnFeeBearer?: 'user_paid' | 'creator_paid' | string;
+  kumtluangFeeBearer?: string;
   sectionLabel?: string;
   definedSections?: string[];
   contactPerson?: string;
@@ -137,6 +140,7 @@ export interface CreatorProfile {
   trialExpiresAt?: string;
   customTrialDays?: number;
   freePostsQuota?: number;
+  freePostsUsed?: number;
   customPlatformFeePercent?: number;
   customDiscountPercent?: number;
   isFreeServiceGranted?: boolean;
@@ -232,6 +236,17 @@ export interface AnnouncementBanner {
   autoRotate?: boolean;
   items?: AnnouncementItem[];
   createdAt?: string;
+  updatedAt?: string;
+  globalHeightPreset?: string;
+  globalCustomHeightPx?: number;
+  globalBgTheme?: string;
+  globalCustomGradientFrom?: string;
+  globalCustomGradientTo?: string;
+  globalCustomBgColor?: string;
+  globalMediaFit?: string;
+  bannerMediaUrl?: string;
+  mediaType?: string;
+  mediaLayout?: string;
 }
 
 export interface MemberDependent {

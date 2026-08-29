@@ -388,6 +388,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
     meterNo?: string;
     tagBalance?: number; // FASTag Current Available Balance
     vehicleClass?: string;
+    vehicleModel?: string;
     tagId?: string;
     issuingBank?: string;
     breakdown?: { label: string; amount: number }[];
@@ -1943,7 +1944,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 onClick={onClose}
                 className="w-1/3 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
               >
-                {t.cancel || 'Cancel'}
+                {(t as any)?.cancel || 'Cancel'}
               </button>
               <button
                 type="submit"

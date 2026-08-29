@@ -89,6 +89,7 @@ import { AIHriatpuiModal } from './components/AIHriatpuiModal';
 import { BankTransferModal } from './components/BankTransferModal';
 import { RonPayWalletModal } from './components/RonPayWalletModal';
 import { SmartLoginModal } from './components/SmartLoginModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   // Navigation & View States
@@ -787,27 +788,29 @@ export default function App() {
           onUpdateProfile={handleUpdateCreator}
         />
 
-        <PeknaSulhnuModal
-          isOpen={isHistoryOpen}
-          transactions={userVisibleTransactions}
-          campaigns={campaigns}
-          creatorProfile={creatorProfile}
-          userPaidIds={userPaidIds}
-          onClose={() => setIsHistoryOpen(false)}
-          onOpenReceipt={(tx) => {
-            setCompletedTransaction(tx);
-            setIsHistoryOpen(false);
-            handleNavigate('success');
-          }}
-          onNavigateToDonate={() => {
-            setIsHistoryOpen(false);
-            handleNavigate('home');
-          }}
-          onOpenScanner={() => {
-            setIsHistoryOpen(false);
-            handleStartScanner('any');
-          }}
-        />
+        <ErrorBoundary name="PeknaSulhnuModal">
+          <PeknaSulhnuModal
+            isOpen={isHistoryOpen}
+            transactions={userVisibleTransactions}
+            campaigns={campaigns}
+            creatorProfile={creatorProfile}
+            userPaidIds={userPaidIds}
+            onClose={() => setIsHistoryOpen(false)}
+            onOpenReceipt={(tx) => {
+              setCompletedTransaction(tx);
+              setIsHistoryOpen(false);
+              handleNavigate('success');
+            }}
+            onNavigateToDonate={() => {
+              setIsHistoryOpen(false);
+              handleNavigate('home');
+            }}
+            onOpenScanner={() => {
+              setIsHistoryOpen(false);
+              handleStartScanner('any');
+            }}
+          />
+        </ErrorBoundary>
 
         <PhonePeModal
           isOpen={isPhonePeOpen}

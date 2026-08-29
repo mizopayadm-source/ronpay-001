@@ -65,6 +65,8 @@ interface HomeScreenProps {
   onShareCampaign?: (campaign: Campaign) => void;
   onOpenAIHriatpui?: () => void;
   onOpenLogin?: () => void;
+  onOpenAdminDashboard?: () => void;
+  onPreviewImage?: (url: string, title?: string) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -278,7 +280,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <div className="grid grid-cols-6 gap-1 sm:gap-2 text-center">
           {/* Scan Any QR */}
           <button 
-            onClick={() => onStartScanner('any')}
+            id="home-quick-scan-btn"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onStartScanner('any');
+            }}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform"
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs border border-indigo-100">
@@ -291,7 +299,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* Sulhnu / History Quick Action */}
           <button 
-            onClick={onOpenHistory}
+            id="home-quick-sulhnu-btn"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenHistory && onOpenHistory();
+            }}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs border border-purple-200 relative">
@@ -304,7 +318,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* Member Roll & Entry Quick Action */}
           <button 
-            onClick={() => onOpenMemberRoll && onOpenMemberRoll('members_list')}
+            id="home-quick-member-roll-btn"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenMemberRoll && onOpenMemberRoll('members_list');
+            }}
             className="flex flex-col items-center group cursor-pointer active:scale-95 transition-transform relative"
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-base sm:text-lg mb-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs border border-blue-200 relative">

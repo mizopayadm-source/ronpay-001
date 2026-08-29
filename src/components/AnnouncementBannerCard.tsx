@@ -54,7 +54,7 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
         linkText: announcement.linkText,
         linkAction: announcement.linkAction,
         bannerMediaUrl: announcement.bannerMediaUrl,
-        mediaType: announcement.mediaType,
+        mediaType: (announcement.mediaType as any) || 'image',
         mediaLayout: announcement.mediaLayout
       }] : []);
 
@@ -178,7 +178,7 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
         style={bgStyle}
         className={`p-3.5 sm:p-4 rounded-2xl border shadow-sm relative overflow-hidden transition-all flex flex-col justify-between ${
           !isCustomBg ? `${themeDef.bgClass} ${themeDef.borderClass} ${themeDef.textClass}` : 'text-white border-white/20'
-        } ${heightDef.containerMinHeightClass} ${animationStyle === 'pulse' ? 'animate-pulse' : ''} ${className}`}
+        } ${heightDef.containerMinHeightClass} ${(animationStyle as string) === 'pulse' ? 'animate-pulse' : ''} ${className}`}
       >
         {/* BACKGROUND OVERLAY MODE (if layout is background_overlay) */}
         {parsedMedia && effectiveLayout === 'background_overlay' && !parsedMedia.isCanva && (

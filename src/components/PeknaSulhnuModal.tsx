@@ -36,19 +36,23 @@ interface PeknaSulhnuModalProps {
 }
 
 // Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
-export const getEffectiveCategory = (t: Transaction): BawmCategory => {
+export const getEffectiveCategory = (t?: Transaction | null): BawmCategory => {
   if (!t) return 'others';
-  if (t.category === 'ralna' || t.category === 'khawlsak' || t.category === 'rikrum' || t.category === 'kumtluang') {
-    return t.category;
+  const cat = t.category;
+  if (cat === 'ralna' || cat === 'khawlsak' || cat === 'rikrum' || cat === 'kumtluang') {
+    return cat;
   }
-  if (t.category === 'others') return 'others';
+  if (cat === 'others') return 'others';
+  const idStr = String(t.id || '');
+  const campIdStr = String(t.campaignId || '');
   if (
-    (t.id && (t.id.startsWith('BILL-') || t.id.startsWith('TXN-BILL-'))) || 
-    (t.campaignId && t.campaignId.startsWith('bill-'))
+    idStr.startsWith('BILL-') || 
+    idStr.startsWith('TXN-BILL-') || 
+    campIdStr.startsWith('bill-')
   ) {
     return 'others';
   }
-  return (t.category as BawmCategory) || 'others';
+  return (cat as BawmCategory) || 'others';
 };
 
 export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
@@ -66,24 +70,35 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  if (!isOpen) return null;
+  // Defensive array checks
+  const safeTransactions = useMemo(() => {
+    return Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+  }, [transactions]);
+
+  const safeCampaigns = useMemo(() => {
+    return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
+  }, [campaigns]);
+
+  const safeUserPaidIds = useMemo(() => {
+    return Array.isArray(userPaidIds) ? userPaidIds : [];
+  }, [userPaidIds]);
 
   // Identify campaigns owned by active profile
   const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {
     const ids = new Set<string>();
     const titles = new Set<string>();
     if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
-      campaigns.forEach(c => {
-        if (isCampaignCreator(c, creatorProfile)) {
-          ids.add(c.id);
+      safeCampaigns.forEach(c => {
+        if (c && isCampaignCreator(c, creatorProfile)) {
+          if (c.id) ids.add(c.id);
           if (c.title) {
-            titles.add(c.title.toLowerCase().trim());
+            titles.add(String(c.title).toLowerCase().trim());
           }
         }
       });
     }
     return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
-  }, [campaigns, creatorProfile]);
+  }, [safeCampaigns, creatorProfile]);
 
   const isCreatorAccount = Boolean(
     creatorProfile?.isAdmin || 
@@ -92,7 +107,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   );
 
   // Helper to determine if transaction is received in creator's bawm or sent as donor
-  const getTxDirection = (tx: Transaction): 'received' | 'sent' => {
+  const getTxDirection = (tx?: Transaction | null): 'received' | 'sent' => {
     if (!tx) return 'sent';
     
     // Super admin can view all transactions as received donations across platform
@@ -100,14 +115,17 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       return 'received';
     }
 
-    const isOwned = (tx.campaignId && ownedCampaignIds.has(tx.campaignId)) || 
-      (tx.campaignTitle ? ownedCampaignTitles.has(tx.campaignTitle.toLowerCase().trim()) : false);
+    const campId = tx.campaignId ? String(tx.campaignId) : '';
+    const campTitle = tx.campaignTitle ? String(tx.campaignTitle).toLowerCase().trim() : '';
+
+    const isOwned = (campId && ownedCampaignIds.has(campId)) || 
+      (campTitle ? ownedCampaignTitles.has(campTitle) : false);
 
     if (isOwned) {
       // If creator was also the donor, check if phone matches and not just received
-      const profilePhone = creatorProfile?.phone ? creatorProfile.phone.replace(/\D/g, '').slice(-10) : '';
-      const txPhone = tx.donorPhone ? tx.donorPhone.replace(/\D/g, '').slice(-10) : '';
-      if (profilePhone && txPhone && profilePhone === txPhone && userPaidIds.includes(tx.id)) {
+      const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
+      const txPhone = tx.donorPhone ? String(tx.donorPhone).replace(/\D/g, '').slice(-10) : '';
+      if (profilePhone && txPhone && profilePhone === txPhone && safeUserPaidIds.includes(tx.id)) {
         return 'sent';
       }
       return 'received';
@@ -116,25 +134,27 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   };
 
   const receivedCount = useMemo(() => {
-    return transactions.filter(t => getTxDirection(t) === 'received').length;
-  }, [transactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+    return safeTransactions.filter(t => getTxDirection(t) === 'received').length;
+  }, [safeTransactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
   const sentCount = useMemo(() => {
-    return transactions.filter(t => getTxDirection(t) === 'sent').length;
-  }, [transactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+    return safeTransactions.filter(t => getTxDirection(t) === 'sent').length;
+  }, [safeTransactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
   // Direction-filtered transactions for accurate tab counts
   const directionFiltered = useMemo(() => {
-    return transactions.filter(t => {
+    return safeTransactions.filter(t => {
+      if (!t) return false;
       const dir = getTxDirection(t);
       if (directionFilter === 'received' && dir !== 'received') return false;
       if (directionFilter === 'sent' && dir !== 'sent') return false;
       return true;
     });
-  }, [transactions, directionFilter, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+  }, [safeTransactions, directionFilter, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
   const filtered = useMemo(() => {
-    return transactions.filter(t => {
+    return safeTransactions.filter(t => {
+      if (!t) return false;
       // 1. Direction Filter (Received vs Sent)
       const dir = getTxDirection(t);
       if (directionFilter === 'received' && dir !== 'received') return false;
@@ -147,137 +167,153 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = t.campaignTitle ? t.campaignTitle.toLowerCase().includes(q) : false;
-        const matchId = t.id ? t.id.toLowerCase().includes(q) : false;
-        const matchDonor = t.donorName ? t.donorName.toLowerCase().includes(q) : false;
-        const matchPhone = t.donorPhone ? t.donorPhone.includes(q) : false;
-        const matchPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
-        const matchCategory = effectiveCategory ? effectiveCategory.toLowerCase().includes(q) : false;
-        const matchRemark = t.remark ? t.remark.toLowerCase().includes(q) : false;
+        const matchTitle = t.campaignTitle ? String(t.campaignTitle).toLowerCase().includes(q) : false;
+        const matchId = t.id ? String(t.id).toLowerCase().includes(q) : false;
+        const matchDonor = t.donorName ? String(t.donorName).toLowerCase().includes(q) : false;
+        const matchPhone = t.donorPhone ? String(t.donorPhone).includes(q) : false;
+        const matchPeriod = t.periodLabel ? String(t.periodLabel).toLowerCase().includes(q) : false;
+        const matchCategory = effectiveCategory ? String(effectiveCategory).toLowerCase().includes(q) : false;
+        const matchRemark = t.remark ? String(t.remark).toLowerCase().includes(q) : false;
         if (!matchTitle && !matchId && !matchDonor && !matchPhone && !matchPeriod && !matchCategory && !matchRemark) return false;
       }
       return true;
     });
-  }, [transactions, directionFilter, filterCategory, searchQuery, ownedCampaignIds, ownedCampaignTitles, creatorProfile, userPaidIds]);
+  }, [safeTransactions, directionFilter, filterCategory, searchQuery, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
-  const totalAmount = filtered.reduce((sum, t) => sum + t.amount, 0);
+  const totalAmount = useMemo(() => {
+    return filtered.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
+  }, [filtered]);
+
+  if (!isOpen) return null;
 
   const printSingleReceipt = (tx: Transaction) => {
-    const effectiveCat = getEffectiveCategory(tx);
-    const categoryLabel = effectiveCat === 'others' 
-      ? 'OTHERS (BILLS & RECHARGE)' 
-      : effectiveCat.toUpperCase() + ' BAWM';
+    try {
+      const effectiveCat = getEffectiveCategory(tx);
+      const categoryLabel = effectiveCat === 'others' 
+        ? 'OTHERS (BILLS & RECHARGE)' 
+        : String(effectiveCat).toUpperCase() + ' BAWM';
 
-    const subcatsHtml = tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0
-      ? `<div style="margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
-          <div style="font-weight: 700; font-size: 11px; margin-bottom: 6px; color: #475569;">ITEMIZED BREAKDOWN:</div>
-          ${Object.entries(tx.subCategoryBreakdown).map(([k, v]) => `
-            <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0;">
-              <span>${k}</span>
-              <b>₹${v}</b>
-            </div>
-          `).join('')}
-        </div>`
-      : '';
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>RonPay Official Receipt - ${tx.id}</title>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; padding: 30px 20px; color: #1e1b4b; text-align: center; }
-            .receipt-card { max-width: 380px; margin: 0 auto; border: 2px solid #4338ca; border-radius: 20px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: left; }
-            .badge { background: #dcfce7; color: #166534; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 20px; display: inline-block; }
-            .row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 13px; }
-            .label { color: #64748b; }
-            .val { font-weight: bold; color: #0f172a; }
-            .amount-box { background: #f1f5f9; padding: 15px; border-radius: 12px; text-align: center; margin: 15px 0; border: 1px dashed #cbd5e1; }
-            .amount-val { font-size: 26px; font-weight: 900; color: #047857; }
-            .footer { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="receipt-card">
-            <div style="text-align: center; margin-bottom: 15px;">
-              <h2 style="margin: 0; color: #1e1b4b; font-size: 20px;">RONPAY OFFICIAL RECEIPT</h2>
-              <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Mizoram Community & Bawm Payment</div>
-              <div style="margin-top: 8px;"><span class="badge">PAID & VERIFIED</span></div>
-            </div>
-
-            <div class="amount-box">
-              <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">Pek Zat (Amount)</div>
-              <div class="amount-val">₹${tx.amount.toLocaleString('en-IN')}</div>
-            </div>
-
-            <div class="row">
-              <span class="label">Receipt No / TX ID:</span>
-              <span class="val" style="font-family: monospace;">${tx.id}</span>
-            </div>
-            <div class="row">
-              <span class="label">Date & Time:</span>
-              <span class="val">${formatDateTimeDDMMYYYY(tx.timestamp)}</span>
-            </div>
-            ${tx.periodLabel ? `
-              <div class="row">
-                <span class="label">Pek Hun / Period:</span>
-                <span class="val" style="color: #4338ca;">${tx.periodLabel}</span>
+      const subcatsHtml = tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0
+        ? `<div style="margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div style="font-weight: 700; font-size: 11px; margin-bottom: 6px; color: #475569;">ITEMIZED BREAKDOWN:</div>
+            ${Object.entries(tx.subCategoryBreakdown).map(([k, v]) => `
+              <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0;">
+                <span>${k}</span>
+                <b>₹${v}</b>
               </div>
-            ` : ''}
-            <div class="row">
-              <span class="label">Category / Bawm:</span>
-              <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
-            </div>
-            <div class="row">
-              <span class="label">Campaign / Service:</span>
-              <span class="val">${tx.campaignTitle}</span>
-            </div>
-            <div class="row">
-              <span class="label">Petu Hming:</span>
-              <span class="val">${tx.isAnonymous ? 'Anonymous' : tx.donorName}</span>
-            </div>
-            ${tx.donorPhone ? `
-            <div class="row">
-              <span class="label">Phone:</span>
-              <span class="val font-mono">+91 ${tx.donorPhone}</span>
-            </div>` : ''}
-            <div class="row">
-              <span class="label">Payment Mode:</span>
-              <span class="val" style="text-transform: uppercase;">${tx.paymentMethod === 'online' ? '⚡ ONLINE UPI' : '💵 CASH DEPOSIT'}</span>
-            </div>
-            ${tx.remark ? `
-            <div class="row">
-              <span class="label">Remark:</span>
-              <span class="val" style="font-style: italic;">${tx.remark}</span>
-            </div>
-            ` : ''}
+            `).join('')}
+          </div>`
+        : '';
 
-            ${subcatsHtml}
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>RonPay Official Receipt - ${tx.id || 'TXN'}</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; padding: 30px 20px; color: #1e1b4b; text-align: center; }
+              .receipt-card { max-width: 380px; margin: 0 auto; border: 2px solid #4338ca; border-radius: 20px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: left; }
+              .badge { background: #dcfce7; color: #166534; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 20px; display: inline-block; }
+              .row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 13px; }
+              .label { color: #64748b; }
+              .val { font-weight: bold; color: #0f172a; }
+              .amount-box { background: #f1f5f9; padding: 15px; border-radius: 12px; text-align: center; margin: 15px 0; border: 1px dashed #cbd5e1; }
+              .amount-val { font-size: 26px; font-weight: 900; color: #047857; }
+              .footer { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+            </style>
+          </head>
+          <body>
+            <div class="receipt-card">
+              <div style="text-align: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; color: #1e1b4b; font-size: 20px;">RONPAY OFFICIAL RECEIPT</h2>
+                <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Mizoram Community & Bawm Payment</div>
+                <div style="margin-top: 8px;"><span class="badge">PAID & VERIFIED</span></div>
+              </div>
 
-            <div class="row" style="font-size: 10px; margin-top: 10px;">
-              <span class="label">Hash:</span>
-              <span class="val" style="font-family: monospace; font-size: 9px;">${tx.txHash}</span>
-            </div>
+              <div class="amount-box">
+                <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">Pek Zat (Amount)</div>
+                <div class="amount-val">₹${(Number(tx.amount) || 0).toLocaleString('en-IN')}</div>
+              </div>
 
-            <div class="footer">
-              Hei hi RonPay System generated receipt a ni a, signature a ngai lo.<br/>
-              <b>RonPay Mizoram Community Platform</b>
+              <div class="row">
+                <span class="label">Receipt No / TX ID:</span>
+                <span class="val" style="font-family: monospace;">${tx.id || '—'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date & Time:</span>
+                <span class="val">${formatDateTimeDDMMYYYY(tx.timestamp)}</span>
+              </div>
+              ${tx.periodLabel ? `
+                <div class="row">
+                  <span class="label">Pek Hun / Period:</span>
+                  <span class="val" style="color: #4338ca;">${tx.periodLabel}</span>
+                </div>
+              ` : ''}
+              <div class="row">
+                <span class="label">Category / Bawm:</span>
+                <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
+              </div>
+              <div class="row">
+                <span class="label">Campaign / Service:</span>
+                <span class="val">${tx.campaignTitle || '—'}</span>
+              </div>
+              <div class="row">
+                <span class="label">Petu Hming:</span>
+                <span class="val">${tx.isAnonymous ? 'Anonymous' : (tx.donorName || 'Valued Donor')}</span>
+              </div>
+              ${tx.donorPhone ? `
+              <div class="row">
+                <span class="label">Phone:</span>
+                <span class="val font-mono">+91 ${tx.donorPhone}</span>
+              </div>` : ''}
+              <div class="row">
+                <span class="label">Payment Mode:</span>
+                <span class="val" style="text-transform: uppercase;">${tx.paymentMethod === 'online' ? '⚡ ONLINE UPI' : '💵 CASH DEPOSIT'}</span>
+              </div>
+              ${tx.remark ? `
+                <div class="row">
+                  <span class="label">Remark:</span>
+                  <span class="val">${tx.remark}</span>
+                </div>
+              ` : ''}
+              
+              ${subcatsHtml}
+
+              <div class="footer">
+                RonPay Community Payment Platform • Mizoram<br />
+                Verified & Recorded electronically. No signature required.
+              </div>
             </div>
-          </div>
-        </body>
-      </html>
-    `;
-    printHtmlSafely(html, `RonPay Receipt - ${tx.id}`);
+          </body>
+        </html>
+      `;
+
+      printHtmlSafely(html, `RonPay-Receipt-${tx.id || 'TXN'}`);
+    } catch (err) {
+      console.error('Error printing single receipt:', err);
+    }
   };
 
   const currentUserName = creatorProfile?.name || 'RonPay User';
   const currentUserPhone = creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
-      <div className="bg-white w-full max-w-lg rounded-3xl p-4 sm:p-5 shadow-2xl border border-slate-200 relative flex flex-col h-full sm:h-[90vh] max-h-[90vh] shrink-0 overflow-hidden">
+    <div 
+      id="pekna-sulhnu-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900"
+    >
+      <div 
+        id="pekna-sulhnu-card"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white w-full max-w-lg rounded-3xl p-4 sm:p-5 shadow-2xl border border-slate-200 relative flex flex-col h-full sm:h-[90vh] max-h-[90vh] shrink-0 overflow-hidden"
+      >
         {/* Header */}
         <div className="flex justify-between items-center pb-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -298,7 +334,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            id="sulhnu-modal-close-btn"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
             className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer shrink-0 ml-2"
           >
             <X className="w-4 h-4" />
@@ -322,8 +364,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         {isCreatorAccount && (receivedCount > 0 || sentCount > 0) && (
           <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
             <button
+              id="sulhnu-dir-all-btn"
               type="button"
-              onClick={() => setDirectionFilter('all')}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('all');
+              }}
               className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'all'
                   ? 'bg-white text-indigo-950 font-black shadow-xs'
@@ -337,8 +384,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             </button>
 
             <button
+              id="sulhnu-dir-received-btn"
               type="button"
-              onClick={() => setDirectionFilter('received')}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('received');
+              }}
               className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'received'
                   ? 'bg-emerald-600 text-white font-black shadow-xs'
@@ -355,8 +407,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             </button>
 
             <button
+              id="sulhnu-dir-sent-btn"
               type="button"
-              onClick={() => setDirectionFilter('sent')}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('sent');
+              }}
               className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'sent'
                   ? 'bg-indigo-600 text-white font-black shadow-xs'
@@ -397,10 +454,12 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
+              id="sulhnu-search-input"
               type="text"
               placeholder="Search by Bawm, Donor name, Phone or Period..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none transition"
             />
           </div>
@@ -420,7 +479,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 return (
                   <button
                     key={tab.key}
-                    onClick={() => setFilterCategory(tab.key)}
+                    id={`sulhnu-tab-${tab.key}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setFilterCategory(tab.key);
+                    }}
                     className={`px-3 py-1.5 rounded-xl font-extrabold text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 ${
                     isActive
                         ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
@@ -464,8 +529,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               {transactions.length > 0 && (filterCategory !== 'all' || directionFilter !== 'all' || searchQuery.trim()) ? (
                 <div className="pt-2 flex justify-center">
                   <button
+                    id="sulhnu-reset-filter-btn"
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setFilterCategory('all');
                       setDirectionFilter('all');
                       setSearchQuery('');
@@ -479,8 +547,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                   {onOpenScanner && (
                     <button
+                      id="sulhnu-empty-scanner-btn"
                       type="button"
-                      onClick={onOpenScanner}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onOpenScanner();
+                      }}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
                     >
                       <QrCode className="w-3.5 h-3.5" />
@@ -489,8 +562,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                   )}
                   {onNavigateToDonate && (
                     <button
+                      id="sulhnu-empty-donate-btn"
                       type="button"
-                      onClick={onNavigateToDonate}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onNavigateToDonate();
+                      }}
                       className="bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-300 transition cursor-pointer active:scale-95 flex items-center gap-1"
                     >
                       <span>Bawm Thlang Rawh</span>
@@ -514,6 +592,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               return (
                 <div
                   key={tx.id}
+                  id={`sulhnu-item-${tx.id}`}
                   className={`p-3 rounded-2xl border transition space-y-2 ${
                     isReceived 
                       ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-emerald-200' 
@@ -551,14 +630,14 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
                     <div className="text-right">
                       <div className={`font-black text-sm ${isReceived ? 'text-emerald-800' : 'text-slate-900'}`}>
-                        {isReceived ? '+' : ''}₹{tx.amount.toLocaleString('en-IN')}
+                        {isReceived ? '+' : ''}₹{(Number(tx.amount) || 0).toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>
 
                   <div>
                     <h4 className="font-extrabold text-slate-900 text-xs">
-                      {tx.campaignTitle}
+                      {tx.campaignTitle || 'Campaign'}
                     </h4>
                     <div className="flex items-center justify-between text-[10.5px] text-slate-500 mt-0.5">
                       <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
@@ -575,7 +654,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     <div className="flex items-center gap-1.5 text-slate-700 truncate">
                       <span className="font-semibold text-slate-400">{isReceived ? 'Petu:' : 'Thawhtu:'}</span>
                       <span className="font-bold text-slate-900 truncate">
-                        {tx.isAnonymous ? 'Anonymous Donor' : tx.donorName}
+                        {tx.isAnonymous ? 'Anonymous Donor' : (tx.donorName || 'Valued Donor')}
                       </span>
                       {tx.donorPhone && (
                         <span className="text-[9.5px] text-slate-500 font-mono">
@@ -630,7 +709,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     </div>
 
                     <button
-                      onClick={() => printSingleReceipt(tx)}
+                      id={`sulhnu-print-btn-${tx.id}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        printSingleReceipt(tx);
+                      }}
                       className="bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold py-1 px-2.5 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
                     >
                       <Printer className="w-3 h-3 text-indigo-600" />

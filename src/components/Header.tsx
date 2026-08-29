@@ -591,8 +591,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Quick Actions: Sulhnu (History) & Report (Print / Statement) */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
+              id="header-sulhnu-btn"
               type="button"
-              onClick={onOpenHistory}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenHistory();
+              }}
               title={language === 'mizo' ? 'Pekna Sulhnu (History)' : 'Transaction History'}
               className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >
@@ -602,8 +607,13 @@ export const Header: React.FC<HeaderProps> = ({
 
 
             <button
+              id="header-reports-btn"
               type="button"
-              onClick={onOpenReports}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenReports();
+              }}
               title={language === 'mizo' ? 'Reports & Print Statements' : 'Reports & Print Statements'}
               className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-emerald-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
             >

@@ -4747,7 +4747,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleResetPasswordConfirm}
+                  onClick={() => resettingPasswordCreator && handleResetPasswordConfirm(resettingPasswordCreator, newCreatorPassword)}
                   className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl text-xs transition shadow-md shadow-indigo-200 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" /> Save New Credentials

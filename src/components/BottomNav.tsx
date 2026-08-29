@@ -7,6 +7,7 @@ import {
   User
 } from 'lucide-react';
 import { ScreenId } from '../types';
+import { Language } from '../utils/translations';
 
 interface BottomNavProps {
   currentScreen: ScreenId;
@@ -16,6 +17,7 @@ interface BottomNavProps {
   isProfileOpen?: boolean;
   isKumtluangManagerOpen?: boolean;
   isDesktopView?: boolean;
+  language?: Language;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({

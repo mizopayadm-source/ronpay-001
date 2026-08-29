@@ -5,9 +5,11 @@ import { BAWM_CONFIG } from '../data/initialData';
 
 interface MismatchModalProps {
   isOpen: boolean;
-  intendedCategory: BawmCategory;
-  actualCategory: BawmCategory;
-  onRedirect: () => void;
+  intendedCategory?: BawmCategory;
+  actualCategory?: BawmCategory;
+  category?: BawmCategory;
+  onRedirect?: () => void;
+  onExploreCategory?: (cat: BawmCategory) => void;
   onClose: () => void;
 }
 
@@ -15,10 +17,20 @@ export const MismatchModal: React.FC<MismatchModalProps> = ({
   isOpen,
   intendedCategory,
   actualCategory,
+  category,
   onRedirect,
+  onExploreCategory,
   onClose,
 }) => {
   if (!isOpen) return null;
+
+  const targetCategory = actualCategory || category || 'ralna';
+  const fromCategory = intendedCategory || 'ralna';
+
+  const handleAction = () => {
+    if (onRedirect) onRedirect();
+    else if (onExploreCategory) onExploreCategory(targetCategory);
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
@@ -32,16 +44,16 @@ export const MismatchModal: React.FC<MismatchModalProps> = ({
             I bawm thlang tha rawh!
           </h3>
           <p className="text-[11.5px] text-slate-600 mt-1.5 font-medium leading-relaxed">
-            <b className="text-slate-900">{BAWM_CONFIG[intendedCategory].name}</b> luh i tum a, mahse <b className="text-rose-700">{BAWM_CONFIG[actualCategory].name}</b> QR i scan daih a ni.
+            <b className="text-slate-900">{BAWM_CONFIG[fromCategory]?.name || 'Bawm'}</b> luh i tum a, mahse <b className="text-rose-700">{BAWM_CONFIG[targetCategory]?.name || 'Bawm'}</b> QR i scan daih a ni.
           </p>
         </div>
 
         <div className="space-y-2 pt-1">
           <button
-            onClick={onRedirect}
+            onClick={handleAction}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <span>{BAWM_CONFIG[actualCategory].name}-ah lut rawh</span>
+            <span>{BAWM_CONFIG[targetCategory]?.name || 'Bawm'}-ah lut rawh</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
           <button

@@ -847,7 +847,7 @@ export const isUserOrCreatorTransaction = (
   if (creatorProfile?.isAdmin) return true;
 
   // 2. Local device session payments
-  if (userPaidIds && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
+  if (Array.isArray(userPaidIds) && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
     return true;
   }
 
@@ -856,19 +856,26 @@ export const isUserOrCreatorTransaction = (
   const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
   const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', ''].includes(cleanCreatorName);
 
+  const txCampaignTitle = String(tx.campaignTitle || '').toLowerCase().trim();
+
   // 3. Campaign ownership: Check if tx belongs to a campaign created by the active profile
   if (creatorProfile && (creatorPhoneDigits.length >= 8 || (!isGenericUser && cleanCreatorName.length >= 3))) {
-    const parentCamp = campaigns.find(c => 
-      c.id === tx.campaignId || 
-      (tx.campaignTitle && c.title && c.title.toLowerCase().trim() === tx.campaignTitle.toLowerCase().trim())
+    const parentCamp = (campaigns || []).find(c => 
+      c && (
+        c.id === tx.campaignId || 
+        (txCampaignTitle && c.title && String(c.title).toLowerCase().trim() === txCampaignTitle)
+      )
     );
     if (parentCamp && isCampaignCreator(parentCamp, creatorProfile)) {
       return true;
     }
 
     // Direct check across all campaigns owned by creator
-    const isOwned = campaigns.some(c => 
-      (c.id === tx.campaignId || (tx.campaignTitle && c.title && c.title.toLowerCase().trim() === tx.campaignTitle.toLowerCase().trim())) &&
+    const isOwned = (campaigns || []).some(c => 
+      c && (
+        c.id === tx.campaignId || 
+        (txCampaignTitle && c.title && String(c.title).toLowerCase().trim() === txCampaignTitle)
+      ) &&
       isCampaignCreator(c, creatorProfile)
     );
     if (isOwned) {
@@ -878,7 +885,7 @@ export const isUserOrCreatorTransaction = (
 
   // 4. Donor Phone Match (Last 10 digits)
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
-    const txDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+    const txDigits = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
     if (txDigits.length >= 8 && creatorPhoneDigits === txDigits) {
       return true;
     }
@@ -886,11 +893,11 @@ export const isUserOrCreatorTransaction = (
 
   // 5. Distinctive Donor Name Match (non-generic names)
   if (!isGenericUser && cleanCreatorName.length >= 3 && tx.donorName && !tx.isAnonymous) {
-    const dName = tx.donorName.trim().toLowerCase();
+    const dName = String(tx.donorName).trim().toLowerCase();
     if (dName === cleanCreatorName || dName.includes(cleanCreatorName) || cleanCreatorName.includes(dName)) {
       // If phone exists for both, ensure no mismatch
       if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
-        const txDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+        const txDigits = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
         if (txDigits.length >= 8 && creatorPhoneDigits !== txDigits) {
           return false;
         }
@@ -901,7 +908,7 @@ export const isUserOrCreatorTransaction = (
 
   // 6. Direct Creator/Collector tag match on transaction (if available)
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8) {
-    const txCreatorDigits = ((tx as any).creatorPhone || (tx as any).collectorPhone || (tx as any).createdBy || '').replace(/\D/g, '').slice(-10);
+    const txCreatorDigits = String((tx as any).creatorPhone || (tx as any).collectorPhone || (tx as any).createdBy || '').replace(/\D/g, '').slice(-10);
     if (txCreatorDigits && txCreatorDigits.length >= 8 && txCreatorDigits === creatorPhoneDigits) {
       return true;
     }
@@ -919,15 +926,18 @@ export const getUserOrCreatorVisibleTransactions = (
   creatorProfile: CreatorProfile | null | undefined,
   userPaidIds: string[] = []
 ): Transaction[] => {
-  if (!transactions || transactions.length === 0) return [];
+  if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
 
   // Super Admin gets all transactions
   if (creatorProfile?.isAdmin) {
-    return transactions;
+    return transactions.filter(Boolean);
   }
 
+  const safeCampaigns = Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
+  const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
+
   const matched = transactions.filter(tx => 
-    isUserOrCreatorTransaction(tx, campaigns, creatorProfile, userPaidIds)
+    tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds)
   );
 
   // If user is a brand-new guest explorer (no phone, no specific profile name, no session payment), provide standard demo transactions for receipt exploration
@@ -938,8 +948,8 @@ export const getUserOrCreatorVisibleTransactions = (
   
   const hasSpecificAccount = Boolean((creatorPhoneDigits && creatorPhoneDigits.length >= 8) || (!isGeneric && cleanCreatorName.length >= 3));
 
-  if (matched.length === 0 && !hasSpecificAccount && (!userPaidIds || userPaidIds.length === 0)) {
-    return transactions.filter(t => t.id === 'TXN-9011' || t.id === 'TXN-BILL-8801' || t.id === 'TXN-ZONUN-001');
+  if (matched.length === 0 && !hasSpecificAccount && safeUserPaidIds.length === 0) {
+    return transactions.filter(t => t && (t.id === 'TXN-9011' || t.id === 'TXN-BILL-8801' || t.id === 'TXN-ZONUN-001'));
   }
 
   return matched;
