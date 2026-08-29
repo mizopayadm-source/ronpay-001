@@ -35,13 +35,34 @@ export const generateUPILink = (payload: UPIPayload): string => {
 
 export const getCustomDomain = (): string => {
   if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('ronpay_custom_domain');
-    if (saved && saved.trim()) return saved.trim();
-    if (window.location.origin && window.location.origin !== 'null') {
-      return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
+    const origin = window.location.origin;
+    // Use the actual production origin if deployed on Vercel or custom domain.
+    // Never use local/dev containers or internal AI Studio run.app sandboxes (ais-dev-, ais-pre-, run.app).
+    if (
+      origin &&
+      origin !== 'null' &&
+      !origin.includes('localhost') &&
+      !origin.includes('127.0.0.1') &&
+      !origin.includes('ais-') &&
+      !origin.includes('run.app') &&
+      !origin.includes('aistudio.google.com')
+    ) {
+      return `${origin}${window.location.pathname.replace(/\/+$/, '')}`;
     }
   }
   return 'https://ronpay-001-pi.vercel.app';
+};
+
+export const setCustomDomain = (domain: string): void => {
+  if (typeof window !== 'undefined') {
+    const clean = domain.trim().replace(/\/+$/, '');
+    if (clean) {
+      localStorage.setItem('ronpay_custom_domain', clean);
+    } else {
+      localStorage.removeItem('ronpay_custom_domain');
+    }
+    window.dispatchEvent(new CustomEvent('ronpay-domain-updated', { detail: clean }));
+  }
 };
 
 export const generateCampaignWebLink = (campaignOrId: string | Campaign, customDomain?: string): string => {

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Copy, Download, Share2, Globe, Smartphone, Check, Printer } from 'lucide-react';
+import { X, Copy, Download, Globe, Smartphone, Check, Printer } from 'lucide-react';
 import { Campaign } from '../types';
-import { generateUPILink, generateCampaignWebLink, getCustomDomain } from '../utils/qr';
+import { generateUPILink, generateCampaignWebLink } from '../utils/qr';
 
 interface QRShareModalProps {
   isOpen: boolean;
@@ -15,10 +15,8 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
   const [qrType, setQrType] = useState<'direct_upi' | 'smart_link'>(() =>
     campaign?.category === 'kumtluang' ? 'smart_link' : 'direct_upi'
   );
-  const [customDomainInput, setCustomDomainInput] = useState<string>('');
 
   React.useEffect(() => {
-    setCustomDomainInput(getCustomDomain());
     if (campaign?.category === 'kumtluang') {
       setQrType('smart_link');
     }
@@ -35,7 +33,7 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
     note: `RonPay:${campaign.id}`
   });
 
-  const smartWebLink = generateCampaignWebLink(campaign, customDomainInput);
+  const smartWebLink = generateCampaignWebLink(campaign);
   const activeQrValue = qrType === 'smart_link' ? smartWebLink : upiLink;
 
   const handleCopyLink = () => {
@@ -313,9 +311,16 @@ export const QRShareModal: React.FC<QRShareModalProps> = ({ isOpen, onClose, cam
             bgColor="#ffffff"
             className="w-48 h-48 sm:w-52 sm:h-52"
           />
-          <p className="text-[11px] font-bold text-slate-800 mt-2 font-mono break-all text-center">
-            {qrType === 'smart_link' ? '🌐 WEB PORTAL LINK' : `UPI: ${effectiveUpiId}`}
-          </p>
+          <div className="mt-2 text-center w-full">
+            <p className="text-[11px] font-bold text-slate-800 font-mono break-all text-center">
+              {qrType === 'smart_link' ? '🌐 WEB PORTAL LINK (Google Lens & Camera Compatible)' : `UPI: ${effectiveUpiId}`}
+            </p>
+            {qrType === 'smart_link' && (
+              <p className="text-[9.5px] text-slate-500 font-mono mt-0.5 truncate max-w-full px-2">
+                {smartWebLink}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Actions Grid */}
