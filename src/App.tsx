@@ -783,11 +783,20 @@ export default function App() {
         <PeknaSulhnuModal
           isOpen={isHistoryOpen}
           transactions={userVisibleTransactions}
+          creatorProfile={creatorProfile}
           onClose={() => setIsHistoryOpen(false)}
           onOpenReceipt={(tx) => {
             setCompletedTransaction(tx);
             setIsHistoryOpen(false);
             handleNavigate('success');
+          }}
+          onNavigateToDonate={() => {
+            setIsHistoryOpen(false);
+            handleNavigate('home');
+          }}
+          onOpenScanner={() => {
+            setIsHistoryOpen(false);
+            handleStartScanner('any');
           }}
         />
 

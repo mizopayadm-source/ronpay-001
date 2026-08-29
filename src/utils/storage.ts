@@ -648,7 +648,7 @@ export const syncWithGoogleScript = async (payload: Record<string, any>) => {
   }
 };
 
-const USER_PAID_TX_IDS_KEY = 'ronpay_user_paid_tx_ids_v2';
+const USER_PAID_TX_IDS_KEY = 'ronpay_user_paid_tx_ids_v3';
 
 export const getStoredUserPaidTxIds = (): string[] => {
   try {
@@ -656,16 +656,27 @@ export const getStoredUserPaidTxIds = (): string[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        // Strip out any legacy foreign dummy transaction IDs
+        return parsed.filter(id => id && id !== 'TXN-9011' && id !== 'TXN-9015');
       }
+    }
+    // Also clean up legacy key if present
+    const legacyRaw = localStorage.getItem('ronpay_user_paid_tx_ids_v2');
+    if (legacyRaw) {
+      try {
+        const legacyParsed = JSON.parse(legacyRaw);
+        if (Array.isArray(legacyParsed)) {
+          const cleaned = legacyParsed.filter(id => id && id !== 'TXN-9011' && id !== 'TXN-9015');
+          saveStoredUserPaidTxIds(cleaned);
+          return cleaned;
+        }
+      } catch {}
     }
   } catch (e) {
     console.error('Failed to parse user paid tx ids', e);
   }
-  // Initialize with initial user demo donations so the user has an initial receipt on first load
-  const initialIds = ['TXN-9011', 'TXN-9015'];
-  saveStoredUserPaidTxIds(initialIds);
-  return initialIds;
+  // Brand new clean session starts with empty history (only genuine user contributions)
+  return [];
 };
 
 export const saveStoredUserPaidTxIds = (ids: string[]) => {
@@ -678,6 +689,7 @@ export const saveStoredUserPaidTxIds = (ids: string[]) => {
 
 export const recordUserPaidTxId = (id: string) => {
   try {
+    if (!id || id === 'TXN-9011' || id === 'TXN-9015') return;
     const current = getStoredUserPaidTxIds();
     if (!current.includes(id)) {
       const updated = [id, ...current];
@@ -689,19 +701,56 @@ export const recordUserPaidTxId = (id: string) => {
 };
 
 /**
- * Checks if a transaction was paid by the current user/device.
- * Sulhnu Record must only show transactions made by the active user.
+ * Checks if a transaction was paid by the currently active user/creator or on this device session.
+ * Sulhnu Record must STRICTLY only show transactions made by the active user/creator.
+ * Other users' contributions are strictly excluded.
  */
 export const isUserPaidTransaction = (
   tx: Transaction,
   userPaidIds: string[],
   creatorProfile?: CreatorProfile | null
 ): boolean => {
-  if (userPaidIds.includes(tx.id)) return true;
-  if (tx.id.startsWith('BILL-') || tx.id.startsWith('RPAY-')) return true;
-  if (creatorProfile?.name && tx.donorName && tx.donorName.trim().toLowerCase() === creatorProfile.name.trim().toLowerCase()) {
+  if (!tx) return false;
+
+  // Never match sample foreign transactions
+  if (tx.id === 'TXN-9011' || tx.id === 'TXN-9015') {
+    // Only match if explicitly paid by this user in session and not anonymous foreign donor
+    if (!userPaidIds.includes(tx.id)) return false;
+  }
+
+  // 1. Transaction was explicitly paid in this active browser session/device
+  if (userPaidIds && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
     return true;
   }
+
+  // 2. Strict Phone Match with currently logged-in user/creator profile
+  if (creatorProfile?.phone && tx.donorPhone) {
+    const userPhoneDigits = creatorProfile.phone.replace(/\D/g, '').slice(-10);
+    const txPhoneDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+    if (userPhoneDigits.length >= 8 && txPhoneDigits.length >= 8 && userPhoneDigits === txPhoneDigits) {
+      return true;
+    }
+  }
+
+  // 3. Strict Name Match with verified logged-in creator/user profile (only when name is distinctive and non-generic)
+  if (creatorProfile?.name && tx.donorName && !tx.isAnonymous) {
+    const uName = creatorProfile.name.trim().toLowerCase();
+    const dName = tx.donorName.trim().toLowerCase();
+    const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor'].includes(uName);
+    
+    if (!isGeneric && uName.length >= 3 && uName === dName) {
+      // If both have phone numbers, verify they do not conflict
+      if (creatorProfile.phone && tx.donorPhone) {
+        const uDigits = creatorProfile.phone.replace(/\D/g, '').slice(-10);
+        const tDigits = tx.donorPhone.replace(/\D/g, '').slice(-10);
+        if (uDigits && tDigits && uDigits !== tDigits) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+
   return false;
 };
 

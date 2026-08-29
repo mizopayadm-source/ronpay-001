@@ -16,9 +16,13 @@ import {
   HeartHandshake,
   Zap,
   Banknote,
-  MessageSquare
+  MessageSquare,
+  User,
+  ShieldCheck,
+  QrCode,
+  ArrowRight
 } from 'lucide-react';
-import { Transaction, BawmCategory } from '../types';
+import { Transaction, BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
@@ -26,8 +30,11 @@ import { printHtmlSafely } from '../utils/export';
 interface PeknaSulhnuModalProps {
   isOpen: boolean;
   transactions: Transaction[];
+  creatorProfile?: CreatorProfile | null;
   onClose: () => void;
   onOpenReceipt?: (tx: Transaction) => void;
+  onNavigateToDonate?: () => void;
+  onOpenScanner?: () => void;
 }
 
 // Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
@@ -55,8 +62,11 @@ export const getEffectiveCategory = (t: Transaction): BawmCategory => {
 export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   isOpen,
   transactions,
+  creatorProfile,
   onClose,
   onOpenReceipt,
+  onNavigateToDonate,
+  onOpenScanner,
 }) => {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -186,48 +196,64 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     printHtmlSafely(html, `RonPay Receipt - ${tx.id}`);
   };
 
+  const currentUserName = creatorProfile?.name || 'RonPay User';
+  const currentUserPhone = creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : null;
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
       <div className="bg-white w-full max-w-lg rounded-3xl p-4 sm:p-5 shadow-2xl border border-slate-200 relative flex flex-col h-full sm:h-[90vh] max-h-[90vh] shrink-0 overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center pb-3 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
               <History className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-slate-900">Pekna Sulhnu</h3>
-                <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">
-                  My History
+                <h3 className="text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
+                <span className="text-[9px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                  Ka Sulhnu
                 </span>
               </div>
-              <p className="text-[10.5px] text-slate-400 font-medium">
-                RonPay hmanga sum i lo thawh/pek tawhte leh Receipt-te
+              <p className="text-[10.5px] text-slate-400 font-medium truncate">
+                {currentUserName} {currentUserPhone ? `(${currentUserPhone})` : ''} - Ama sum pekna chauh
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer shrink-0 ml-2"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* User Identity / Privacy Badge */}
+        <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80 my-2 text-[10.5px] shrink-0">
+          <div className="flex items-center gap-1.5 text-slate-600 truncate">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="font-bold text-slate-800 truncate">{currentUserName}</span>
+            <span className="text-slate-400">•</span>
+            <span className="text-slate-500 truncate">{currentUserPhone || 'Active Device'}</span>
+          </div>
+          <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
+            PRIVATE RECORD
+          </span>
+        </div>
+
         {/* Summary Card */}
-        <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3.5 text-white my-3 shrink-0 shadow-md border border-indigo-800 flex justify-between items-center">
+        <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3.5 text-white mb-2.5 shrink-0 shadow-md border border-indigo-800 flex justify-between items-center">
           <div>
             <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">
-              Pek Zat Zawng Zawng (Total Given)
+              I Pek Zat Zawng Zawng (Your Total)
             </span>
             <div className="text-2xl font-black text-amber-400">
               ₹{totalDonated.toLocaleString('en-IN')}
             </div>
           </div>
           <div className="text-right">
-            <span className="text-[10px] text-indigo-200 font-bold">Thawh Zat (Transactions)</span>
+            <span className="text-[10px] text-indigo-200 font-bold">Thawh Zat (Entries)</span>
             <div className="text-lg font-black text-white">{filtered.length} entries</div>
           </div>
         </div>
@@ -262,7 +288,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     key={tab.key}
                     onClick={() => setFilterCategory(tab.key)}
                     className={`px-3 py-1.5 rounded-xl font-extrabold text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 ${
-                      isActive
+                    isActive
                         ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 border border-slate-200/80'
                     }`}
@@ -285,12 +311,41 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         {/* List of Donations */}
         <div className="overflow-y-auto flex-1 min-h-0 space-y-2.5 pr-1 text-xs">
           {filtered.length === 0 ? (
-            <div className="text-center py-10 space-y-2 text-slate-400">
-              <HeartHandshake className="w-10 h-10 mx-auto text-slate-300 stroke-1" />
-              <p className="font-bold text-slate-600 text-sm">Pekna sulhnu a la awm rih lo</p>
-              <p className="text-[11px] text-slate-400">
-                Bawm thlangin sum i thawh/pek veleh hetah hian a lo lang nghal dawn e.
-              </p>
+            <div className="text-center py-8 px-4 space-y-3 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl my-auto">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto border border-indigo-100 shadow-xs">
+                <HeartHandshake className="w-6 h-6 stroke-1.5" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-extrabold text-slate-800 text-sm">Pekna sulhnu a la awm rih lo</p>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                  He account / phone ({currentUserPhone || 'he device'}) hmanga sum pek leh thawh a la awm lo a ni. Bawm thlangin sum i thawh/pek veleh i receipt leh sulhnute hetah hian a lo lang nghal ang.
+                </p>
+              </div>
+
+              {(onNavigateToDonate || onOpenScanner) && (
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  {onOpenScanner && (
+                    <button
+                      type="button"
+                      onClick={onOpenScanner}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>QR Code Scan Rawh</span>
+                    </button>
+                  )}
+                  {onNavigateToDonate && (
+                    <button
+                      type="button"
+                      onClick={onNavigateToDonate}
+                      className="bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-300 transition cursor-pointer active:scale-95 flex items-center gap-1"
+                    >
+                      <span>Bawm Thlang Rawh</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             filtered.map((tx) => {
