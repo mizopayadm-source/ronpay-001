@@ -44,7 +44,7 @@ export interface Campaign {
   vuiHun?: string;
   vuitu?: string;
   validityDate?: string;
-  status?: 'active' | 'completed' | 'expired' | 'pending' | 'rejected' | string;
+  status?: 'active' | 'completed' | 'expired' | 'pending' | 'pending_approval' | 'rejected' | 'voided' | 'cancelled' | string;
   createdAt?: string;
   createdBy?: string;
   creatorName?: string;
@@ -72,6 +72,14 @@ export interface Campaign {
   targetPeriod?: string;
   customPlatformFeePercent?: number;
   customFreeTrialActive?: boolean;
+  // Safety Net & Audit fields
+  isVoided?: boolean;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: string;
+  updatedAt?: string;
+  lastEditedBy?: string;
+  lastEditReason?: string;
 }
 
 export interface Transaction {
@@ -123,6 +131,27 @@ export interface CategoryRequest {
   status?: 'pending' | 'approved' | 'rejected';
 }
 
+export type UserRole = 
+  | 'SUPER_ADMIN' 
+  | 'ADMIN' 
+  | 'MODERATOR' 
+  | 'CREATOR' 
+  | 'MEMBER' 
+  | 'GUEST';
+
+export interface RolePermissions {
+  canAccessCreatorVerification: boolean;
+  canModerateContent: boolean;
+  canViewFinancialReports: boolean;
+  canManagePlatformFinancials: boolean;
+  canManagePayoutConfigs: boolean;
+  canManageAdminAccounts: boolean;
+  canManageSystemBackups: boolean;
+  canManageAnnouncements: boolean;
+  canCreateCampaigns: boolean;
+  canAccessAdminConsole: boolean;
+}
+
 export interface CreatorProfile {
   phone: string;
   name: string;
@@ -130,7 +159,7 @@ export interface CreatorProfile {
   orgName?: string;
   location?: string;
   upiId?: string;
-  role?: string;
+  role?: UserRole | string;
   isApproved?: boolean;
   isAdmin?: boolean;
   isPhoneVerified?: boolean;

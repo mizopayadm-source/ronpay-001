@@ -30,7 +30,8 @@ import {
   Trash2,
   Save,
   Receipt,
-  Smartphone
+  Smartphone,
+  Ban
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
@@ -111,7 +112,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const config = BAWM_CONFIG[category];
-  const isExpired = isCampaignExpired(campaign?.validityDate, campaign?.status);
+  const isVoided = campaign?.status === 'voided' || !!campaign?.isVoided;
+  const isExpired = !isVoided && isCampaignExpired(campaign?.validityDate, campaign?.status);
   const isPendingApproval = campaign?.status === 'pending_approval';
   const isRejected = campaign?.status === 'rejected';
 
@@ -408,6 +410,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const handleProcessPayment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isVoided) {
+      alert('⛔ He Bawm (Campaign) hi cancel & void a nih tawh avangin sum pek luh theih a ni tawh lo.');
+      return;
+    }
     if (isPendingApproval) {
       alert('⚠️ He Bawm / QR Code hi Admin-in a la approve loh avangin sum thawh theih a la ni rih lo. Admin approve a nih veleh a active nghal ang.');
       return;
@@ -560,6 +566,22 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {config.name}
         </span>
       </div>
+
+      {/* Voided / Cancelled Notice */}
+      {isVoided && (
+        <div className="bg-rose-50 border-2 border-rose-400 p-4 rounded-2xl shadow-xs space-y-1 text-rose-950">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-rose-600 text-white rounded-xl">
+              <Ban className="w-4 h-4" />
+            </span>
+            <h4 className="text-xs font-black uppercase text-rose-950">Bawm (Campaign) Tihtawp / Cancel A Ni</h4>
+          </div>
+          <p className="text-xs font-medium text-rose-900 leading-snug">
+            He Bawm (Campaign) hi tihtawp (voided & cancelled) a ni tawh a, pawisa chhun luh / thawh theih a ni tawh lo.
+            {campaign?.voidReason ? ` (Chhan: ${campaign.voidReason})` : ''}
+          </p>
+        </div>
+      )}
 
       {/* Pending Approval / Inactive Notice (Request 7) */}
       {isPendingApproval && (

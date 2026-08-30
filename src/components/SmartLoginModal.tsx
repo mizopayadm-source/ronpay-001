@@ -21,9 +21,10 @@ import {
   ChevronRight,
   ShieldAlert
 } from 'lucide-react';
-import { CreatorProfile } from '../types';
+import { CreatorProfile, UserRole } from '../types';
 import { INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import { saveStoredCreatorProfile } from '../utils/storage';
+import { ROLE_METAS } from '../utils/rbac';
 
 export interface SmartLoginModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export interface SmartLoginModalProps {
 
 export const DEMO_ACCOUNTS: {
   id: string;
+  role: UserRole;
   roleTitle: string;
   roleBadge: string;
   badgeColor: string;
@@ -44,11 +46,13 @@ export const DEMO_ACCOUNTS: {
   phone: string;
   mpin: string;
   isAdmin: boolean;
+  isApproved: boolean;
   avatarUrl: string;
   description: string;
 }[] = [
   {
-    id: 'demo-admin',
+    id: 'demo-super-admin',
+    role: 'SUPER_ADMIN',
     roleTitle: 'Super Admin / Platform HQ',
     roleBadge: 'SUPER ADMIN',
     badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
@@ -58,41 +62,63 @@ export const DEMO_ACCOUNTS: {
     phone: '9436001234',
     mpin: '1234',
     isAdmin: true,
+    isApproved: true,
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    description: 'Full control: All Bawm approvals, Pricing, Audit Logs, Settings & Creator Rights.'
+    description: 'Tier 1: Full system access, platform settings, payout configs, and manages Admin/Moderator accounts.'
   },
   {
-    id: 'demo-treasurer',
-    roleTitle: 'Kohhran / NGO Treasurer',
-    roleBadge: 'KOHHRAN TREASURER',
-    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
+    id: 'demo-admin',
+    role: 'ADMIN',
+    roleTitle: 'Platform Operations Admin',
+    roleBadge: 'ADMIN',
+    badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+    name: 'Lalchhandama Sailo',
+    orgName: 'RonPay Operations Unit',
+    designation: 'Operations & Finance Manager',
+    phone: '9436154321',
+    mpin: '1234',
+    isAdmin: true,
+    isApproved: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    description: 'Tier 2: Platform operations, financial reports, user management, and dispute handling.'
+  },
+  {
+    id: 'demo-moderator',
+    role: 'MODERATOR',
+    roleTitle: 'Compliance & KYC Moderator',
+    roleBadge: 'MODERATOR',
+    badgeColor: 'bg-teal-100 text-teal-800 border-teal-300',
+    name: 'Malsawmtluangi Fanai',
+    orgName: 'RonPay Trust & Verification Cell',
+    designation: 'KYC & Content Reviewer',
+    phone: '9862899001',
+    mpin: '1234',
+    isAdmin: false,
+    isApproved: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+    description: 'Tier 3: Specifically handles Creator KYC verification (approve/reject creators), reviews reports, and moderates content.'
+  },
+  {
+    id: 'demo-creator',
+    role: 'CREATOR',
+    roleTitle: 'Verified Bawm Creator',
+    roleBadge: 'CREATOR',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
     name: 'Rev. Dr. R. Zothansanga',
     orgName: 'BCM Ebenezer, Zobawk Local Church',
     designation: 'Pastor / Secretary',
     phone: '9862599881',
     mpin: '1234',
     isAdmin: false,
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-    description: 'Kumtluang & Ralna Bawm Creator: Member rolls, monthly giving, collections & offline receipts.'
-  },
-  {
-    id: 'demo-yma',
-    roleTitle: 'Branch YMA / NGO Collector',
-    roleBadge: 'YMA CREATOR',
-    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    name: 'Lalmuanpuia Ralte',
-    orgName: 'Bungkawn Branch YMA',
-    designation: 'Secretary',
-    phone: '9862311223',
-    mpin: '1234',
-    isAdmin: false,
+    isApproved: true,
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-    description: 'Verified Community Creator: Ralna & Rikrum campaign creation, dynamic UPI receipts.'
+    description: 'Tier 4: Content/service provider requiring verification to publish Bawms, manage member rolls, and receive collections.'
   },
   {
     id: 'demo-member',
-    roleTitle: 'General Member / Donor',
-    roleBadge: 'COMMUNITY MEMBER',
+    role: 'MEMBER',
+    roleTitle: 'General Member / Customer',
+    roleBadge: 'MEMBER',
     badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
     name: 'Zonunmawia Pachuau',
     orgName: 'Khatla Veng, Aizawl',
@@ -100,8 +126,25 @@ export const DEMO_ACCOUNTS: {
     phone: '8794009999',
     mpin: '1234',
     isAdmin: false,
+    isApproved: false,
     avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-    description: 'Standard Member: Scan & Pay any QR, RonPay Wallet top-up, Sulhnu statements.'
+    description: 'Tier 5: Standard registered end-user/customer. Scan & pay, wallet top-up, and giving statements.'
+  },
+  {
+    id: 'demo-guest',
+    role: 'GUEST',
+    roleTitle: 'Unauthenticated Visitor',
+    roleBadge: 'GUEST',
+    badgeColor: 'bg-slate-200 text-slate-700 border-slate-300',
+    name: 'Guest Explorer',
+    orgName: 'Public Visitor',
+    designation: 'Anonymous Guest',
+    phone: '',
+    mpin: '',
+    isAdmin: false,
+    isApproved: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+    description: 'Tier 6: Unauthenticated visitor browsing public campaigns and exploring the Bawm directory.'
   }
 ];
 
@@ -153,27 +196,39 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     triggerHaptic();
 
     setTimeout(() => {
+      const isStaffOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
+      const isModerator = demo.role === 'MODERATOR';
+      const isCreator = demo.role === 'CREATOR';
+      const isGuest = demo.role === 'GUEST';
+
       const profile: CreatorProfile = {
         name: demo.name,
         orgName: demo.orgName,
         designation: demo.designation,
         phone: demo.phone,
-        isAdmin: demo.isAdmin,
-        isPhoneVerified: true,
-        isApproved: true,
+        role: demo.role,
+        isAdmin: isStaffOrAdmin,
+        isPhoneVerified: !isGuest,
+        isApproved: isStaffOrAdmin || isModerator || isCreator,
         avatarUrl: demo.avatarUrl,
         password: demo.mpin,
         pin: demo.mpin,
-        approvedCategories: demo.isAdmin 
+        approvedCategories: isStaffOrAdmin || isModerator
           ? ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others']
-          : demo.id === 'demo-treasurer'
-          ? ['kumtluang', 'ralna']
-          : ['ralna', 'rikrum'],
-        createdQRsCount: demo.isAdmin ? 12 : demo.id === 'demo-treasurer' ? 5 : 2,
+          : isCreator
+          ? ['kumtluang', 'ralna', 'khawlsak']
+          : [],
+        createdQRsCount: isStaffOrAdmin ? 12 : isCreator ? 5 : 0,
         registeredAt: new Date().toISOString()
       };
 
       saveStoredCreatorProfile(profile);
+      if (demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN' || demo.role === 'MODERATOR') {
+        sessionStorage.setItem('ronpay_admin_auth', 'true');
+      } else {
+        sessionStorage.removeItem('ronpay_admin_auth');
+      }
+
       setIsLoading(false);
       setSuccessNotice(`${demo.name} (${demo.roleBadge}) anga login fel a ni e!`);
       triggerHaptic();

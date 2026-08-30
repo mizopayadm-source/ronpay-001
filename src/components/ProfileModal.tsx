@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
+import { getUserRole, ROLE_METAS, canAccessAdminConsole } from '../utils/rbac';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -164,7 +165,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </button>
             </div>
 
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <div className="flex items-center justify-center gap-1.5">
                 <h3 className="font-black text-slate-900 text-base sm:text-lg">{creatorProfile.name || 'RonPay User'}</h3>
                 <button
@@ -176,6 +177,21 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* 6-Tier Role Badge */}
+              <div className="flex items-center justify-center">
+                {(() => {
+                  const role = getUserRole(creatorProfile);
+                  const meta = ROLE_METAS[role];
+                  return (
+                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-black px-2.5 py-0.5 rounded-full ${meta.badgeColor}`}>
+                      <ShieldCheck className="w-3 h-3" />
+                      {meta.title} ({meta.badge})
+                    </span>
+                  );
+                })()}
+              </div>
+
               <p className="text-xs text-slate-600 font-medium">
                 {creatorProfile.designation || 'Creator Member'} • <strong className="text-slate-900">{creatorProfile.orgName || 'Mizoram Branch'}</strong>
               </p>

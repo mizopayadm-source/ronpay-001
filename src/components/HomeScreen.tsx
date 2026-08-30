@@ -44,6 +44,7 @@ import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
+import { getUserRole, ROLE_METAS, canAccessAdminConsole } from '../utils/rbac';
 
 interface HomeScreenProps {
   onStartScanner: (category?: BawmCategory | 'any') => void;
@@ -245,9 +246,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span className="text-xs font-black text-white truncate">
                 {creatorProfile?.name || 'RonPay User'}
               </span>
-              <span className="text-[8.5px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full uppercase shrink-0">
-                {creatorProfile?.isAdmin ? 'ADMIN' : creatorProfile?.isApproved ? 'CREATOR' : 'MEMBER'}
-              </span>
+              {(() => {
+                const role = getUserRole(creatorProfile);
+                const meta = ROLE_METAS[role];
+                return (
+                  <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full uppercase shrink-0 ${meta.badgeColor}`}>
+                    {meta.badge}
+                  </span>
+                );
+              })()}
             </div>
             <p className="text-[10px] text-indigo-200/80 truncate">
               {creatorProfile?.orgName || 'Mizoram Community'} • {creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : 'Demo Session'}
@@ -696,7 +703,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin) && onOpenMemberRoll && (
+                    {camp.category === 'kumtluang' && (isOwner || canAccessAdminConsole(creatorProfile)) && onOpenMemberRoll && (
                       <button
                         type="button"
                         onClick={(e) => {

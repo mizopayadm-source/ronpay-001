@@ -38,7 +38,10 @@ import {
   UserPlus,
   CreditCard,
   Printer,
-  RefreshCw
+  RefreshCw,
+  Ban,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -47,6 +50,8 @@ import { Language } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
+import { CampaignSafetyModal } from './CampaignSafetyModal';
+import { getCampaignFinancialStats } from '../utils/campaignSafety';
 
 interface CreateQRScreenProps {
   onBack: () => void;
@@ -103,6 +108,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
   const [manageFilter, setManageFilter] = useState<string>('all');
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [safetyModalCampaign, setSafetyModalCampaign] = useState<{
+    campaign: Campaign;
+    mode: 'auto' | 'delete' | 'void';
+  } | null>(null);
 
   // Default to first approved category or ralna
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(
@@ -1825,26 +1834,44 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                             }`}>
                               {camp.category}
                             </span>
-                            <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
-                              camp.status === 'active' 
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : camp.status === 'pending_approval'
-                                ? 'bg-amber-50 text-amber-800 border border-amber-300 font-black'
-                                : 'bg-slate-100 text-slate-600 border border-slate-200'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${
+                            {camp.status === 'voided' || camp.isVoided ? (
+                              <span className="text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase bg-rose-600 text-white flex items-center gap-1 shadow-2xs">
+                                <Ban className="w-2.5 h-2.5" /> VOIDED
+                              </span>
+                            ) : (
+                              <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
                                 camp.status === 'active' 
-                                  ? 'bg-emerald-500 animate-pulse' 
-                                  : camp.status === 'pending_approval' 
-                                  ? 'bg-amber-500 animate-ping' 
-                                  : 'bg-slate-400'
-                              }`} />
-                              {camp.status === 'active' 
-                                ? 'ACTIVE' 
-                                : camp.status === 'pending_approval'
-                                ? 'PENDING APPROVAL'
-                                : 'EXPIRED'}
-                            </span>
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : camp.status === 'pending_approval'
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-300 font-black'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  camp.status === 'active' 
+                                    ? 'bg-emerald-500 animate-pulse' 
+                                    : camp.status === 'pending_approval' 
+                                    ? 'bg-amber-500 animate-ping' 
+                                    : 'bg-slate-400'
+                                }`} />
+                                {camp.status === 'active' 
+                                  ? 'ACTIVE' 
+                                  : camp.status === 'pending_approval'
+                                  ? 'PENDING APPROVAL'
+                                  : 'EXPIRED'}
+                              </span>
+                            )}
+                            {(() => {
+                              const stats = getCampaignFinancialStats(camp, transactions);
+                              return stats.isZeroBalance ? (
+                                <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  ₹0 Collected
+                                </span>
+                              ) : (
+                                <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5 text-amber-700" /> ₹{stats.totalCollected.toLocaleString('en-IN')} Protected
+                                </span>
+                              );
+                            })()}
                           </div>
                           <h4 className="font-black text-slate-900 text-xs truncate mt-0.5">
                             {camp.title}
@@ -1856,7 +1883,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         </div>
                       </div>
 
-                      {/* Actions: Edit and Delete */}
+                      {/* Actions: Edit, Zero-Balance Delete, or Cancel & Void with Safety Net */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
@@ -1865,20 +1892,43 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         >
                           <Edit3 className="w-3.5 h-3.5" /> Edit
                         </button>
-                        {onDeleteCampaign && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`"${camp.title}" hi delete (nawhreh) i duh tak tak em?\n\nHe campaign leh a QR code hi application pumah a lang tawh lo ang.`)) {
-                                onDeleteCampaign(camp.id);
-                              }
-                            }}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold p-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center justify-center"
-                            title="Delete Campaign"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {(() => {
+                          const stats = getCampaignFinancialStats(camp, transactions);
+                          const isVoided = camp.status === 'voided' || camp.isVoided;
+                          if (isVoided) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-2 py-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center gap-1"
+                              >
+                                <Info className="w-3.5 h-3.5" /> Void Info
+                              </button>
+                            );
+                          }
+                          if (stats.isZeroBalance) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'delete' })}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold p-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center justify-center"
+                                title="Delete Zero-Balance Campaign"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
+                              className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2 py-1.5 rounded-xl text-xs border border-amber-200 transition cursor-pointer flex items-center gap-1"
+                              title="Cancel & Void Campaign (Ledger protected)"
+                            >
+                              <Ban className="w-3.5 h-3.5" /> Void
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -2037,6 +2087,32 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
             }
             setEditingCampaign(null);
             alert('✅ QR Campaign data siamthat (updated) hlawhtling ta e!');
+          }}
+        />
+      )}
+
+      {/* SAFETY NET MODAL (Zero-Balance Delete or Void with Audit Trail) */}
+      {safetyModalCampaign && (
+        <CampaignSafetyModal
+          campaign={safetyModalCampaign.campaign}
+          transactions={transactions}
+          initialMode={safetyModalCampaign.mode}
+          onClose={() => setSafetyModalCampaign(null)}
+          onDeleted={(deletedId) => {
+            if (onDeleteCampaign) {
+              onDeleteCampaign(deletedId);
+            }
+            setSafetyModalCampaign(null);
+          }}
+          onVoided={(voidedCamp) => {
+            if (onUpdateCampaign) {
+              onUpdateCampaign(voidedCamp);
+            }
+            setSafetyModalCampaign(null);
+          }}
+          onEditRequested={(campToEdit) => {
+            setSafetyModalCampaign(null);
+            setEditingCampaign(campToEdit);
           }}
         />
       )}

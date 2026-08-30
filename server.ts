@@ -18,8 +18,8 @@ function getGenAI(): GoogleGenAI | null {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Health Check Endpoints for Cloud Run & Ingress
 app.get('/api/health', (req: Request, res: Response) => {
@@ -493,6 +493,102 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
   }
 });
 
+// Delete Campaign endpoint with Zero-Balance Safety Net Check
+app.delete('/api/campaigns/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reason, performedBy } = req.body || {};
+    const db = getDatabase();
+    const campIndex = db.campaigns.findIndex(c => String(c.id).toLowerCase() === String(id).toLowerCase());
+    
+    if (campIndex === -1) {
+      return res.status(404).json({ success: false, message: `Campaign ${id} not found` });
+    }
+
+    const campaign = db.campaigns[campIndex];
+
+    // Check transactions
+    const matchingTxns = db.transactions.filter(t => 
+      String(t.campaignId).toLowerCase() === String(id).toLowerCase() ||
+      (campaign.title && String(t.campaignTitle).toLowerCase() === String(campaign.title).toLowerCase())
+    );
+
+    const totalCollected = matchingTxns
+      .filter(t => t.status !== 'failed' && t.status !== 'rejected')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    if (matchingTxns.length > 0 || totalCollected > 0) {
+      return res.status(403).json({
+        success: false,
+        message: `Financial Safety Lock: Cannot hard delete campaign with ₹${totalCollected} collected (${matchingTxns.length} transactions). Use /void endpoint instead.`
+      });
+    }
+
+    // Hard delete zero-balance campaign
+    db.campaigns.splice(campIndex, 1);
+
+    // Audit log
+    const auditLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      action: 'CAMPAIGN_DELETED_ZERO_BALANCE',
+      details: `Zero-balance campaign '${campaign.title}' (${id}) deleted. Reason: ${reason || 'Mistake entry'}. Performed by: ${performedBy || 'Admin'}.`,
+      targetType: 'campaign',
+      targetId: id,
+      performedBy: performedBy || 'Admin',
+      timestamp: new Date().toISOString()
+    };
+    db.auditLogs = [auditLog, ...(db.auditLogs || []).slice(0, 199)];
+
+    saveDatabase(db);
+    res.json({ success: true, message: `Campaign ${id} deleted successfully`, auditLog });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Void & Cancel Campaign endpoint (Preserves financial transactions and donor records)
+app.post('/api/campaigns/:id/void', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reason, performedBy } = req.body || {};
+    const db = getDatabase();
+    const campIndex = db.campaigns.findIndex(c => String(c.id).toLowerCase() === String(id).toLowerCase());
+    
+    if (campIndex === -1) {
+      return res.status(404).json({ success: false, message: `Campaign ${id} not found` });
+    }
+
+    const campaign = db.campaigns[campIndex];
+    const sanitizedReason = reason?.trim() || 'Campaign cancelled and voided';
+
+    campaign.status = 'voided';
+    campaign.isVoided = true;
+    campaign.voidedAt = new Date().toISOString();
+    campaign.voidedBy = performedBy || 'Admin';
+    campaign.voidReason = sanitizedReason;
+    campaign.updatedAt = new Date().toISOString();
+
+    db.campaigns[campIndex] = campaign;
+
+    // Audit log
+    const auditLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      action: 'CAMPAIGN_VOIDED_AND_CANCELLED',
+      details: `Campaign '${campaign.title}' (${id}) marked as VOIDED. Public payments closed. Reason: ${sanitizedReason}. Performed by: ${performedBy || 'Admin'}.`,
+      targetType: 'campaign',
+      targetId: id,
+      performedBy: performedBy || 'Admin',
+      timestamp: new Date().toISOString()
+    };
+    db.auditLogs = [auditLog, ...(db.auditLogs || []).slice(0, 199)];
+
+    saveDatabase(db);
+    res.json({ success: true, campaign, auditLog });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Members API
 app.get('/api/members', (req: Request, res: Response) => {
   const { campaignId } = req.query;
@@ -565,6 +661,174 @@ app.post('/api/announcement', (req: Request, res: Response) => {
     db.announcement = ann;
     saveDatabase(db);
     res.json({ success: true, announcement: ann });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// 6-TIER ROLE-BASED ACCESS CONTROL (RBAC) API ENDPOINTS
+// -------------------------------------------------------------
+
+// RBAC Middleware Helper
+function requireRole(allowedRoles: string[]) {
+  return (req: Request, res: Response, next: () => void) => {
+    const userRole = (req.headers['x-user-role'] as string || req.body?.requestorRole || 'GUEST').toUpperCase();
+    const isAdminFlag = req.headers['x-is-admin'] === 'true' || req.body?.requestorIsAdmin === true;
+
+    // Super Admin override or exact role match
+    if (userRole === 'SUPER_ADMIN' || (isAdminFlag && allowedRoles.includes('ADMIN')) || allowedRoles.includes(userRole)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: 'FORBIDDEN_INSUFFICIENT_CLEARANCE',
+      message: `Access denied. Clearance role (${allowedRoles.join(', ')}) is required for this action. Current role: ${userRole}`
+    });
+  };
+}
+
+// 1. Creator KYC Verification Endpoint (SUPER_ADMIN, ADMIN, MODERATOR)
+app.post('/api/admin/creators/verify', requireRole(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']), (req: Request, res: Response) => {
+  try {
+    const { phone, action, categories, validityDays, reason, verifiedBy, verifiedByRole } = req.body;
+    if (!phone || !action) {
+      return res.status(400).json({ success: false, message: 'Missing phone or action parameter.' });
+    }
+
+    const db = getDatabase();
+    const creators = Array.isArray(db.creators) ? db.creators : [];
+    const index = creators.findIndex((c: any) => c.phone === phone);
+
+    const now = new Date().toISOString();
+    const expiry = new Date(Date.now() + (Number(validityDays) || 30) * 24 * 60 * 60 * 1000).toISOString();
+
+    if (action === 'approve') {
+      const updatedCreator = {
+        ...(index >= 0 ? creators[index] : { phone, name: 'Verified Creator' }),
+        isApproved: true,
+        role: 'CREATOR',
+        isBlocked: false,
+        approvedCategories: Array.isArray(categories) && categories.length > 0 ? categories : ['ralna', 'kumtluang', 'khawlsak'],
+        subscriptionExpiresAt: expiry,
+        verifiedAt: now,
+        verifiedBy: verifiedBy || 'Staff Reviewer',
+        verifiedByRole: verifiedByRole || 'MODERATOR'
+      };
+
+      if (index >= 0) creators[index] = updatedCreator;
+      else creators.push(updatedCreator);
+
+      db.creators = creators;
+      saveDatabase(db);
+
+      return res.json({
+        success: true,
+        message: `Creator ${phone} successfully verified and approved.`,
+        creator: updatedCreator
+      });
+    } else if (action === 'reject') {
+      const updatedCreator = {
+        ...(index >= 0 ? creators[index] : { phone, name: 'Rejected Applicant' }),
+        isApproved: false,
+        rejectionReason: reason || 'Application details did not meet compliance criteria.',
+        verifiedAt: now,
+        verifiedBy: verifiedBy || 'Staff Reviewer',
+        verifiedByRole: verifiedByRole || 'MODERATOR'
+      };
+
+      if (index >= 0) creators[index] = updatedCreator;
+      else creators.push(updatedCreator);
+
+      db.creators = creators;
+      saveDatabase(db);
+
+      return res.json({
+        success: true,
+        message: `Creator ${phone} application has been rejected.`,
+        creator: updatedCreator
+      });
+    }
+
+    res.status(400).json({ success: false, message: 'Invalid action.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 2. Platform Financials & Pricing Config (SUPER_ADMIN ONLY)
+app.post('/api/admin/financials/config', requireRole(['SUPER_ADMIN']), (req: Request, res: Response) => {
+  try {
+    const config = req.body;
+    const db = getDatabase();
+    db.pricingConfig = {
+      ...(db.pricingConfig || {}),
+      ...config,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.body?.updatedBy || 'Super Administrator'
+    };
+    saveDatabase(db);
+    res.json({ success: true, message: 'Platform financial configuration updated.', pricingConfig: db.pricingConfig });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 3. User & Staff Role Management Endpoint (SUPER_ADMIN ONLY)
+app.post('/api/admin/users/roles', requireRole(['SUPER_ADMIN']), (req: Request, res: Response) => {
+  try {
+    const { targetPhone, newRole, updatedBy } = req.body;
+    const validRoles = ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'];
+
+    if (!targetPhone || !validRoles.includes(newRole)) {
+      return res.status(400).json({ success: false, message: 'Invalid target phone or role.' });
+    }
+
+    const db = getDatabase();
+    const creators = Array.isArray(db.creators) ? db.creators : [];
+    const index = creators.findIndex((c: any) => c.phone === targetPhone);
+
+    const isAdmin = newRole === 'SUPER_ADMIN' || newRole === 'ADMIN';
+    const isApproved = newRole === 'SUPER_ADMIN' || newRole === 'ADMIN' || newRole === 'CREATOR';
+
+    if (index >= 0) {
+      creators[index] = {
+        ...creators[index],
+        role: newRole,
+        isAdmin,
+        isApproved
+      };
+    } else {
+      creators.push({
+        phone: targetPhone,
+        name: `User ${targetPhone.slice(-4)}`,
+        role: newRole,
+        isAdmin,
+        isApproved
+      });
+    }
+
+    db.creators = creators;
+    saveDatabase(db);
+
+    res.json({
+      success: true,
+      message: `User ${targetPhone} assigned role ${newRole} by ${updatedBy || 'SUPER_ADMIN'}.`,
+      user: creators[index >= 0 ? index : creators.length - 1]
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 4. Staff Accounts List (SUPER_ADMIN, ADMIN)
+app.get('/api/admin/staff/list', requireRole(['SUPER_ADMIN', 'ADMIN']), (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const creators = Array.isArray(db.creators) ? db.creators : [];
+    const staff = creators.filter((c: any) => c.role === 'SUPER_ADMIN' || c.role === 'ADMIN' || c.role === 'MODERATOR' || c.isAdmin);
+    res.json({ success: true, staff, total: staff.length });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

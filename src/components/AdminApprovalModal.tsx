@@ -7,13 +7,16 @@ import {
   MapPin, 
   CreditCard,
   Sparkles,
-  Ban
+  Ban,
+  UserCheck
 } from 'lucide-react';
-import { Campaign } from '../types';
+import { Campaign, CreatorProfile } from '../types';
+import { getUserRole, canAccessCreatorVerification, ROLE_METAS } from '../utils/rbac';
 
 interface AdminApprovalModalProps {
   isOpen: boolean;
   campaign: Campaign | null;
+  currentProfile?: CreatorProfile;
   onClose: () => void;
   onApprove: (campaign: Campaign) => void;
   onReject?: (campaign: Campaign) => void;
@@ -22,11 +25,16 @@ interface AdminApprovalModalProps {
 export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
   isOpen,
   campaign,
+  currentProfile,
   onClose,
   onApprove,
   onReject,
 }) => {
   if (!isOpen || !campaign) return null;
+
+  const userRole = getUserRole(currentProfile);
+  const isAuthorized = canAccessCreatorVerification(currentProfile);
+  const roleMeta = ROLE_METAS[userRole];
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
@@ -39,17 +47,22 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Warning Badge */}
+        {/* Warning Badge & Reviewer Clearance */}
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-600 shrink-0">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
-              Admin Approval Required
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
+                Staff Review Queue
+              </span>
+              <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-md ${roleMeta.badgeColor}`}>
+                {roleMeta.badge}
+              </span>
+            </div>
             <h3 className="text-sm font-black text-slate-900 mt-0.5">
-              QR Code La Active Lo (Pending)
+              Campaign Verification & Approval
             </h3>
           </div>
         </div>
@@ -65,7 +78,7 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
 
           <p className="text-[11px] text-slate-500 flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-            {campaign.location}
+            {campaign.location || 'Mizoram'}
           </p>
 
           <p className="text-[11px] text-slate-600 bg-white p-2 rounded-xl border border-slate-200 font-mono">
@@ -73,19 +86,31 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
           </p>
 
           <p className="text-[11px] text-slate-600">
-            He QR Code hi QR Creator in a siam a ni a, Admin in a <b>pawm (Approve)</b> hma chuan mi vantlang tan sum chhunluhna atan hman theih a la ni lo.
+            He Bawm Campaign hi Creator in a thehlut a ni a, <b>Super Admin, Admin, emaw Compliance Moderator</b> in a pawm (Approve) hma chuan mipui tan hman theih a la ni lo.
           </p>
         </div>
 
         {/* Actions */}
         <div className="space-y-2 pt-1">
-          <button
-            onClick={() => onApprove(campaign)}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Admin: Pawm & Active Rawh (Approve QR)</span>
-          </button>
+          {isAuthorized ? (
+            <button
+              onClick={() => onApprove({
+                ...campaign,
+                isApproved: true,
+                status: 'active',
+                approvedBy: currentProfile?.name || 'Authorized Staff',
+                approvedAt: new Date().toISOString()
+              })}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{roleMeta.shortTitle}: Pawm & Active Rawh (Approve QR)</span>
+            </button>
+          ) : (
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold text-center">
+              Clearance insufficient to approve. Moderator or Admin role required.
+            </div>
+          )}
 
           <button
             onClick={onClose}

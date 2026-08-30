@@ -12,6 +12,7 @@ import {
   BillService,
 } from './types';
 import { Language } from './utils/translations';
+import { canHardDeleteCampaign } from './utils/campaignSafety';
 import {
   getStoredCampaigns,
   saveStoredCampaigns,
@@ -535,12 +536,29 @@ export default function App() {
 
   const handleUpdateCampaign = (campaign: Campaign) => {
     saveCampaign(campaign);
-    setCampaigns(getStoredCampaigns());
+    setCampaigns(prev => {
+      const idx = prev.findIndex(c => c.id === campaign.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = campaign;
+        return copy;
+      }
+      return [campaign, ...prev];
+    });
   };
 
   const handleDeleteCampaign = (campaignId: string) => {
+    const cleanId = String(campaignId).toLowerCase().trim();
+    const camp = campaigns.find(c => String(c.id).toLowerCase().trim() === cleanId);
+    if (camp && !canHardDeleteCampaign(camp, transactions)) {
+      alert('⚠️ Harsatna: He Bawm (Campaign) hian transaction record a nei tawh a, delete theih a ni lo. Cancel & Void emaw Edit Details hmang rawh.');
+      return;
+    }
     deleteStoredCampaign(campaignId);
-    setCampaigns(getStoredCampaigns());
+    setCampaigns(prev => prev.filter(c => String(c.id).toLowerCase().trim() !== cleanId));
+    if (selectedCampaign && String(selectedCampaign.id).toLowerCase().trim() === cleanId) {
+      setSelectedCampaign(null);
+    }
   };
 
   const handleApproveCampaign = (campaign: Campaign) => {
@@ -948,6 +966,7 @@ export default function App() {
           campaigns={campaigns}
           transactions={transactions}
           creators={creators}
+          currentProfile={creatorProfile}
           pricingConfig={pricingConfig}
           announcement={announcement}
           auditLogs={auditLogs}
@@ -965,6 +984,7 @@ export default function App() {
         <AdminApprovalModal
           isOpen={isAdminApprovalOpen}
           campaign={adminApprovalCampaign}
+          currentProfile={creatorProfile}
           onClose={() => {
             setIsAdminApprovalOpen(false);
             setAdminApprovalCampaign(null);

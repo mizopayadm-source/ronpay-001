@@ -43,6 +43,7 @@ import {
   Save,
   RotateCcw,
   Tag,
+  Info,
   Coins,
   Receipt,
   AlertCircle,
@@ -80,7 +81,8 @@ import {
   BawmFeeRule, 
   AuditLog, 
   AnnouncementBanner,
-  AnnouncementItem
+  AnnouncementItem,
+  UserRole
 } from '../types';
 import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
@@ -96,7 +98,9 @@ import {
   suggestAlternativePrefixes,
   derivePrefixFromText,
   migrateCampaignMembersPrefix,
-  getStoredCreatorsList
+  getStoredCreatorsList,
+  saveStoredCreatorsList,
+  saveStoredCreatorProfile
 } from '../utils/storage';
 import { 
   pushAllLocalDataToFirestore,
@@ -113,6 +117,20 @@ import {
   ANNOUNCEMENT_HEIGHT_PRESETS
 } from '../utils/media';
 import { compressImageFile } from '../utils/imageCompressor';
+import { CampaignSafetyModal } from './CampaignSafetyModal';
+import { getCampaignFinancialStats, canHardDeleteCampaign } from '../utils/campaignSafety';
+import { 
+  getUserRole, 
+  ROLE_METAS, 
+  canManagePlatformFinancials, 
+  canManageAdminAccounts, 
+  canAccessCreatorVerification, 
+  canViewFinancialReports,
+  canModerateContent,
+  getRolePermissions
+} from '../utils/rbac';
+
+export type AdminTabId = 'campaigns' | 'creators' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'staff';
 
 interface AdminDashboardModalProps {
   isOpen: boolean;
@@ -123,6 +141,7 @@ interface AdminDashboardModalProps {
   pricingConfig: SystemPricingConfig;
   announcement?: AnnouncementBanner;
   auditLogs?: AuditLog[];
+  currentProfile?: CreatorProfile;
   onUpdatePricingConfig: (config: SystemPricingConfig) => void;
   onUpdateCampaign: (campaign: Campaign) => void;
   onDeleteCampaign?: (campaignId: string) => void;
@@ -146,6 +165,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   pricingConfig,
   announcement,
   auditLogs,
+  currentProfile,
   onUpdatePricingConfig,
   onUpdateCampaign,
   onDeleteCampaign,
@@ -159,10 +179,50 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onRestoreDatabase,
   onResetData,
 }) => {
-  // Authentication state
+  // Authentication state & RBAC
+  const baseUserRole = getUserRole(currentProfile);
+  // Default to SUPER_ADMIN if admin or super admin so user sees all capabilities immediately
+  const initialRole: UserRole = baseUserRole === 'MODERATOR' 
+    ? 'MODERATOR' 
+    : 'SUPER_ADMIN';
+
+  const [activeRoleTier, setActiveRoleTier] = useState<UserRole>(initialRole);
+  
+  // Sync if currentProfile changes
+  useEffect(() => {
+    if (currentProfile?.role) {
+      setActiveRoleTier(currentProfile.role as UserRole);
+    }
+  }, [currentProfile?.role]);
+
+  const isSuperAdmin = activeRoleTier === 'SUPER_ADMIN';
+  const isOperationsAdmin = activeRoleTier === 'ADMIN';
+  const isModerator = activeRoleTier === 'MODERATOR';
+  const roleMeta = ROLE_METAS[activeRoleTier];
+
+  const handleSwitchRoleTier = (newRole: UserRole) => {
+    setActiveRoleTier(newRole);
+    if (newRole === 'MODERATOR') {
+      setActiveTab('creators');
+    } else if (newRole === 'ADMIN' && ['rates', 'gateway', 'staff', 'backup'].includes(activeTab)) {
+      setActiveTab('campaigns');
+    }
+
+    if (currentProfile && onUpdateCreator) {
+      const updated: CreatorProfile = {
+        ...currentProfile,
+        role: newRole,
+        isAdmin: newRole === 'SUPER_ADMIN' || newRole === 'ADMIN',
+        isApproved: true
+      };
+      onUpdateCreator(updated);
+      saveStoredCreatorProfile(updated);
+    }
+  };
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('ronpay_admin_auth') === 'true';
+      return sessionStorage.getItem('ronpay_admin_auth') === 'true' || isSuperAdmin || isOperationsAdmin || isModerator;
     } catch (e) {
       return false;
     }
@@ -173,14 +233,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway'>('campaigns');
+  const [activeTab, setActiveTab] = useState<AdminTabId>(() => {
+    if (isModerator) return 'creators';
+    return 'campaigns';
+  });
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Staff tab state (Super Admin only)
+  const [staffFilter, setStaffFilter] = useState<'all' | 'staff' | 'creators' | 'members' | 'blocked'>('all');
+  const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
+  const [roleUpdateNotice, setRoleUpdateNotice] = useState<string>('');
+
+  // Auto-correct tab if role does not allow it
+  useEffect(() => {
+    if (isModerator && !['creators', 'campaigns', 'audit'].includes(activeTab)) {
+      setActiveTab('creators');
+    } else if (isOperationsAdmin && ['rates', 'gateway', 'staff', 'backup'].includes(activeTab)) {
+      setActiveTab('campaigns');
+    }
+  }, [activeRoleTier, activeTab]);
   
   // Creators sub-filter
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'pending' | 'upgrades' | 'approved' | 'blocked'>('all');
   
   // Campaigns sub-filter
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected' | 'voided'>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
   // Rates / Pricing state
@@ -258,6 +335,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Admin Campaign Edit Modal
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+
+  // Safety Net Modal State (Zero-Balance delete or Void with audit trail)
+  const [safetyModalCampaign, setSafetyModalCampaign] = useState<{
+    campaign: Campaign;
+    mode: 'auto' | 'delete' | 'void';
+  } | null>(null);
 
   // Restore file state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -419,7 +502,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
   const activeCampaigns = campaigns.filter(c => c.status === 'active' && !isCampaignExpired(c.validityDate, c.status));
-  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status)));
+  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && c.status !== 'voided' && isCampaignExpired(c.validityDate, c.status)));
+  const voidedCampaigns = campaigns.filter(c => c.status === 'voided' || c.isVoided);
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
 
   // Quick 1-Click Approve for pending creator applications
@@ -890,8 +974,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status))) return false;
-    if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status))) return false;
+    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status) || Boolean(c.isVoided))) return false;
+    if (campaignFilter === 'expired' && !(c.status === 'expired' || (!c.isVoided && c.status !== 'voided' && isCampaignExpired(c.validityDate, c.status)))) return false;
+    if (campaignFilter === 'voided' && !(c.status === 'voided' || Boolean(c.isVoided))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
     if (searchQuery.trim()) {
@@ -924,12 +1009,20 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-white tracking-wide">RonPay Admin Console</h2>
-                <span className="text-[9.5px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full uppercase shadow-xs">
-                  Master Console
+                <h2 className="text-base sm:text-lg font-black text-white tracking-wide">
+                  {isModerator ? 'RonPay Compliance Console' : isOperationsAdmin ? 'RonPay Operations Console' : 'RonPay Master Admin Console'}
+                </h2>
+                <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full uppercase shadow-xs ${roleMeta.badgeColor}`}>
+                  {roleMeta.badge}
                 </span>
               </div>
-              <p className="text-xs text-indigo-100 font-medium">Community Moderation, Biometric Security & Platform Config</p>
+              <p className="text-xs text-indigo-100 font-medium">
+                {isModerator 
+                  ? 'Creator KYC Verification, Content Moderation & Compliance Reports' 
+                  : isOperationsAdmin 
+                  ? 'Operations Management, Financial Reports & Dispute Handling' 
+                  : 'Tier 1 Super Admin: Full System Access, Platform Rates & Staff Accounts'}
+              </p>
             </div>
           </div>
 
@@ -1047,42 +1140,138 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         ) : (
           /* Authenticated Admin Workspace */
           <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Quick RBAC Role Tier Switcher Bar */}
+            <div className="bg-slate-900 text-white px-3 sm:px-4 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+                <span className="text-[11px] sm:text-xs">Active Role Tier:</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${roleMeta.badgeColor}`}>
+                  {roleMeta.title} ({roleMeta.badge})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                <span className="text-[10px] text-slate-400 uppercase font-extrabold mr-1 hidden md:inline">Switch Tier:</span>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchRoleTier('SUPER_ADMIN')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                    isSuperAdmin
+                      ? 'bg-purple-600 text-white shadow-xs ring-1 ring-purple-300'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                  title="Super Admin: Full system control, rates, gateway, backup, staff accounts"
+                >
+                  <span>👑</span>
+                  <span>1. Super Admin</span>
+                  {isSuperAdmin && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchRoleTier('ADMIN')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                    isOperationsAdmin
+                      ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-300'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                  title="Admin: Operations, campaigns, financial reports, announcements"
+                >
+                  <span>💼</span>
+                  <span>2. Admin (Ops)</span>
+                  {isOperationsAdmin && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchRoleTier('MODERATOR')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                    isModerator
+                      ? 'bg-teal-600 text-white shadow-xs ring-1 ring-teal-300'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                  title="Moderator: KYC Verification and Campaign Review"
+                >
+                  <span>🛡️</span>
+                  <span>3. Moderator (KYC)</span>
+                  {isModerator && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
+                </button>
+              </div>
+            </div>
+
             {/* Tab Navigation Bar */}
             <div className="bg-slate-100/80 border-b border-slate-200/90 px-3 pt-2 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
               {[
-                { 
-                  id: 'campaigns', 
+                // 1. Campaigns: Super Admin, Admin, Moderator
+                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
+                  id: 'campaigns' as AdminTabId, 
                   label: 'Campaigns & Moderation', 
                   icon: Layers,
                   badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
                   badgeColor: 'bg-amber-500 text-white'
                 },
-                { 
-                  id: 'creators', 
-                  label: 'Creators & Approval', 
+                // 2. Creators KYC: Super Admin, Admin, Moderator
+                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
+                  id: 'creators' as AdminTabId, 
+                  label: isModerator ? 'Creator KYC Verification' : 'Creators & Approval', 
                   icon: Users,
                   badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
                   badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white'
                 },
-                { 
-                  id: 'announcement', 
+                // 3. Announcement: Super Admin, Admin
+                (isSuperAdmin || isOperationsAdmin) && { 
+                  id: 'announcement' as AdminTabId, 
                   label: 'Announcement Banner', 
                   icon: Megaphone,
                   badge: localAnnouncement.isActive ? 'Active' : undefined,
                   badgeColor: 'bg-emerald-600 text-white'
                 },
-                { id: 'audit', label: 'Audit & Activity Log', icon: History },
-                { id: 'backup', label: 'Backup & Restore', icon: Database },
-                { id: 'rates', label: 'Platform Rates & Fees', icon: Percent },
-                { id: 'finances', label: 'Finances', icon: DollarSign },
-                { id: 'gateway', label: 'PhonePe PG V2', icon: Smartphone },
-              ].map(tab => {
+                // 4. Finances: Super Admin, Admin
+                (isSuperAdmin || isOperationsAdmin) && { 
+                  id: 'finances' as AdminTabId, 
+                  label: 'Financial Reports', 
+                  icon: DollarSign 
+                },
+                // 5. Rates: Strictly Super Admin
+                isSuperAdmin && { 
+                  id: 'rates' as AdminTabId, 
+                  label: 'Platform Rates & Fees', 
+                  icon: Percent 
+                },
+                // 6. Gateway: Strictly Super Admin
+                isSuperAdmin && { 
+                  id: 'gateway' as AdminTabId, 
+                  label: 'PhonePe PG V2', 
+                  icon: Smartphone 
+                },
+                // 7. Staff & RBAC: Strictly Super Admin
+                isSuperAdmin && { 
+                  id: 'staff' as AdminTabId, 
+                  label: 'Staff & Roles (RBAC)', 
+                  icon: ShieldCheck,
+                  badge: 'HQ',
+                  badgeColor: 'bg-purple-600 text-white'
+                },
+                // 8. Audit Log: Super Admin, Admin, Moderator
+                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
+                  id: 'audit' as AdminTabId, 
+                  label: 'Audit & Activity Log', 
+                  icon: History 
+                },
+                // 9. Backup & Restore: Strictly Super Admin
+                isSuperAdmin && { 
+                  id: 'backup' as AdminTabId, 
+                  label: 'Backup & Restore', 
+                  icon: Database 
+                },
+              ].filter(Boolean).map(tab => {
+                if (!tab) return null;
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id)}
                     className={`px-3.5 py-2.5 rounded-t-2xl font-black text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer whitespace-nowrap ${
                       isActive
                         ? 'bg-white text-indigo-700 border-t-2 border-x border-slate-200/90 border-t-indigo-600 shadow-xs'
@@ -1147,6 +1336,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         { key: 'pending', label: `Pending Review (${pendingCampaigns.length})` },
                         { key: 'active', label: `Active QRs (${activeCampaigns.length})` },
                         { key: 'expired', label: `Expired QRs (${expiredCampaigns.length})` },
+                        { key: 'voided', label: `Voided / Cancelled (${voidedCampaigns.length})` },
                         { key: 'rejected', label: `Rejected (${rejectedCampaigns.length})` },
                       ].map(f => (
                         <button
@@ -1185,10 +1375,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {filteredCampaigns.map(camp => {
                         const isPending = camp.status === 'pending_approval';
-                        const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
-                        const isActive = camp.status === 'active' && !isExpired;
+                        const isVoided = camp.status === 'voided' || camp.isVoided;
+                        const isExpired = camp.status === 'expired' || (!isPending && !isVoided && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
+                        const isActive = camp.status === 'active' && !isExpired && !isVoided;
                         const isRejected = camp.status === 'rejected';
                         const catInfo = BAWM_CONFIG[camp.category];
+                        const campStats = getCampaignFinancialStats(camp, transactions);
 
                         const creatorOfCamp = creators.find(
                           c => c.phone === camp.createdBy || c.name === camp.createdBy || (c.orgName && camp.orgName === c.orgName)
@@ -1200,6 +1392,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             className={`p-4 rounded-2xl border transition shadow-2xs space-y-3 ${
                               isPending
                                 ? 'bg-amber-50/70 border-2 border-amber-300 ring-2 ring-amber-100'
+                                : isVoided
+                                ? 'bg-rose-50/40 border-rose-300'
                                 : isExpired
                                 ? 'bg-rose-50/50 border-rose-200'
                                 : isRejected
@@ -1213,12 +1407,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200">
                                     {catInfo?.name || camp.category}
                                   </span>
+                                  {isVoided && (
+                                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-600 text-white flex items-center gap-1 shadow-2xs">
+                                      <Ban className="w-2.5 h-2.5" /> VOIDED / CANCELLED
+                                    </span>
+                                  )}
                                   {isPending && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
                                       ⚠️ PENDING REVIEW
                                     </span>
                                   )}
-                                  {isExpired && (
+                                  {isExpired && !isVoided && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
                                       <Clock className="w-2.5 h-2.5 text-rose-600" /> EXPIRED QR
                                     </span>
@@ -1231,6 +1430,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   {isRejected && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
                                       REJECTED
+                                    </span>
+                                  )}
+                                  {/* Safety Net Status Badge */}
+                                  {campStats.isZeroBalance ? (
+                                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                      ₹0 Collected (Safe to Delete)
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                      <Lock className="w-2.5 h-2.5 text-amber-700" /> ₹{campStats.totalCollected.toLocaleString('en-IN')} ({campStats.txnCount} txns) Protected
                                     </span>
                                   )}
                                 </div>
@@ -1284,15 +1493,20 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   </span>
                                 )}
                               </p>
-                              {camp.approvalRemarks && (
-                                <p className="text-rose-600 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200">
+                              {camp.voidReason && (
+                                <p className="text-rose-700 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200 text-[11px]">
+                                  🚫 Void Reason: {camp.voidReason} {camp.voidedBy && `(by ${camp.voidedBy})`}
+                                </p>
+                              )}
+                              {camp.approvalRemarks && !camp.voidReason && (
+                                <p className="text-rose-600 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200 text-[11px]">
                                   Remark: {camp.approvalRemarks}
                                 </p>
                               )}
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex flex-wrap gap-2 pt-1">
+                            <div className="flex flex-wrap gap-2 pt-1 items-center">
                               <button
                                 onClick={() => setEditingCampaign({ ...camp })}
                                 className="px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black py-1.5 rounded-xl text-xs transition border border-indigo-200 flex items-center gap-1 cursor-pointer"
@@ -1318,7 +1532,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 </>
                               )}
 
-                              {isExpired && (
+                              {isExpired && !isVoided && (
                                 <button
                                   onClick={() => {
                                     const now = new Date();
@@ -1369,19 +1583,32 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 </button>
                               )}
 
-                              {onDeleteCampaign && (
+                              {/* Rule 1 & Rule 2: Zero-Balance Delete OR Cancel & Void with Audit Trail */}
+                              {isVoided ? (
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Are you sure you want to delete campaign '${camp.title}'?`)) {
-                                      onDeleteCampaign(camp.id);
-                                      recordAuditLog('Campaign Deleted', `Deleted campaign '${camp.title}' (${camp.id}).`, 'campaign', camp.id);
-                                      setLogsList(getStoredAuditLogs());
-                                    }
-                                  }}
-                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto"
-                                  title="Delete Campaign"
+                                  type="button"
+                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
+                                  className="px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold py-1.5 rounded-xl text-xs transition border border-rose-200 cursor-pointer ml-auto flex items-center gap-1"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Info className="w-3.5 h-3.5" /> Voided Details
+                                </button>
+                              ) : campStats.isZeroBalance ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'delete' })}
+                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto flex items-center gap-1"
+                                  title="Delete Zero-Balance Campaign"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" /> Delete (₹0)
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
+                                  className="px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 rounded-xl text-xs transition border border-rose-200 cursor-pointer ml-auto flex items-center gap-1"
+                                  title="Cancel & Void Campaign (Ledger protected)"
+                                >
+                                  <Ban className="w-3.5 h-3.5" /> Cancel & Void
                                 </button>
                               )}
                             </div>
@@ -3335,6 +3562,256 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </div>
               )}
 
+              {/* ========================================================= */}
+              {/* TAB 9: STAFF & RBAC ACCOUNTS (SUPER_ADMIN ONLY)           */}
+              {/* ========================================================= */}
+              {activeTab === 'staff' && (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Role Hierarchy Header Banner */}
+                  <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 rounded-3xl border border-purple-700/60 shadow-lg space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-purple-500/30 border border-purple-400/50 flex items-center justify-center text-purple-200 font-black shadow-inner">
+                          <ShieldCheck className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm sm:text-base font-black text-white">6-Tier Role-Based Access Control (RBAC)</h3>
+                            <span className="text-[9px] font-black bg-purple-400 text-purple-950 px-2 py-0.5 rounded-full uppercase">
+                              Super Admin Only
+                            </span>
+                          </div>
+                          <p className="text-xs text-purple-200/90 font-medium mt-0.5">
+                            Manage permissions, promote moderators, configure operations staff, and assign access tiers.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Role Hierarchy Legend Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-2 border-t border-purple-700/40 text-[10px]">
+                      <div className="bg-purple-950/60 p-2 rounded-xl border border-purple-700/50 space-y-0.5">
+                        <span className="font-black text-purple-300 block">1. SUPER_ADMIN</span>
+                        <p className="text-purple-200/70 text-[9.5px]">Full system, rates & staff accounts</p>
+                      </div>
+                      <div className="bg-indigo-950/60 p-2 rounded-xl border border-indigo-700/50 space-y-0.5">
+                        <span className="font-black text-indigo-300 block">2. ADMIN</span>
+                        <p className="text-indigo-200/70 text-[9.5px]">Platform ops, finances & users</p>
+                      </div>
+                      <div className="bg-teal-950/60 p-2 rounded-xl border border-teal-700/50 space-y-0.5">
+                        <span className="font-black text-teal-300 block">3. MODERATOR</span>
+                        <p className="text-teal-200/70 text-[9.5px]">Creator KYC & content review</p>
+                      </div>
+                      <div className="bg-emerald-950/60 p-2 rounded-xl border border-emerald-700/50 space-y-0.5">
+                        <span className="font-black text-emerald-300 block">4. CREATOR</span>
+                        <p className="text-emerald-200/70 text-[9.5px]">Verified Bawm & QR publisher</p>
+                      </div>
+                      <div className="bg-amber-950/60 p-2 rounded-xl border border-amber-700/50 space-y-0.5">
+                        <span className="font-black text-amber-300 block">5. MEMBER</span>
+                        <p className="text-amber-200/70 text-[9.5px]">Standard registered user/customer</p>
+                      </div>
+                      <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-700/50 space-y-0.5">
+                        <span className="font-black text-slate-300 block">6. GUEST</span>
+                        <p className="text-slate-400 text-[9.5px]">Unauthenticated visitor</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Success Notice */}
+                  {roleUpdateNotice && (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{roleUpdateNotice}</span>
+                    </div>
+                  )}
+
+                  {/* Staff List Filter Bar */}
+                  <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {[
+                        { key: 'all', label: `All Users (${creators.length})` },
+                        { 
+                          key: 'staff', 
+                          label: `Staff & Admins (${creators.filter(c => {
+                            const r = getUserRole(c);
+                            return r === 'SUPER_ADMIN' || r === 'ADMIN' || r === 'MODERATOR';
+                          }).length})` 
+                        },
+                        { 
+                          key: 'creators', 
+                          label: `Creators (${creators.filter(c => getUserRole(c) === 'CREATOR').length})` 
+                        },
+                        { 
+                          key: 'members', 
+                          label: `Members (${creators.filter(c => getUserRole(c) === 'MEMBER').length})` 
+                        },
+                        { 
+                          key: 'blocked', 
+                          label: `Blocked (${creators.filter(c => c.isBlocked).length})` 
+                        },
+                      ].map(f => (
+                        <button
+                          key={f.key}
+                          onClick={() => setStaffFilter(f.key as any)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+                            staffFilter === f.key
+                              ? 'bg-purple-900 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative min-w-[220px]">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search name, phone, designation..."
+                        value={staffSearchQuery}
+                        onChange={(e) => setStaffSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-purple-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Users / Staff Table */}
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
+                            <th className="py-3 px-4">User / Staff Member</th>
+                            <th className="py-3 px-3">Organization & Phone</th>
+                            <th className="py-3 px-3">Current Role Tier</th>
+                            <th className="py-3 px-3">Role Assignment</th>
+                            <th className="py-3 px-4 text-right">Status & Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {creators
+                            .filter(c => {
+                              const r = getUserRole(c);
+                              if (staffFilter === 'staff') {
+                                if (r !== 'SUPER_ADMIN' && r !== 'ADMIN' && r !== 'MODERATOR') return false;
+                              } else if (staffFilter === 'creators') {
+                                if (r !== 'CREATOR') return false;
+                              } else if (staffFilter === 'members') {
+                                if (r !== 'MEMBER') return false;
+                              } else if (staffFilter === 'blocked') {
+                                if (!c.isBlocked) return false;
+                              }
+
+                              if (staffSearchQuery.trim()) {
+                                const q = staffSearchQuery.toLowerCase();
+                                return (
+                                  c.name.toLowerCase().includes(q) ||
+                                  (c.orgName && c.orgName.toLowerCase().includes(q)) ||
+                                  (c.phone && c.phone.includes(q)) ||
+                                  (c.designation && c.designation.toLowerCase().includes(q))
+                                );
+                              }
+                              return true;
+                            })
+                            .map((u) => {
+                              const currentRole = getUserRole(u);
+                              const meta = ROLE_METAS[currentRole];
+
+                              const handleRoleChange = (newRole: UserRole) => {
+                                const isStaff = newRole === 'SUPER_ADMIN' || newRole === 'ADMIN';
+                                const isMod = newRole === 'MODERATOR';
+                                const isCreator = newRole === 'CREATOR';
+
+                                const updated: CreatorProfile = {
+                                  ...u,
+                                  role: newRole,
+                                  isAdmin: isStaff,
+                                  isApproved: isStaff || isMod || isCreator,
+                                  approvedCategories: isStaff || isMod
+                                    ? ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others']
+                                    : isCreator
+                                    ? (u.approvedCategories && u.approvedCategories.length > 0 ? u.approvedCategories : ['ralna', 'khawlsak', 'rikrum'])
+                                    : []
+                                };
+
+                                onUpdateCreator(updated);
+                                recordAuditLog('Staff Role Updated', `Role for ${u.name} (${u.phone}) updated from ${currentRole} to ${newRole} by Super Admin`, 'creator');
+
+                                setRoleUpdateNotice(`${u.name} role chu ${ROLE_METAS[newRole].title} (${newRole})-ah thlak fel a ni e!`);
+                                setTimeout(() => setRoleUpdateNotice(''), 4000);
+                              };
+
+                              return (
+                                <tr key={u.phone || u.name} className="hover:bg-slate-50/60 transition">
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <img
+                                        src={u.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`}
+                                        alt={u.name}
+                                        className="w-8 h-8 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
+                                      />
+                                      <div className="min-w-0">
+                                        <span className="font-black text-slate-900 block truncate">
+                                          {u.name}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 truncate block">
+                                          {u.designation || 'Member'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className="font-bold text-slate-800 block truncate">
+                                      {u.orgName || 'RonPay Community'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      +91 {u.phone || 'N/A'}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full border ${meta.badgeColor}`}>
+                                      {meta.badge}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3">
+                                    <select
+                                      value={currentRole}
+                                      onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                                      className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 focus:bg-white focus:border-purple-600 focus:outline-none cursor-pointer"
+                                    >
+                                      <option value="SUPER_ADMIN">1. SUPER_ADMIN (Platform HQ)</option>
+                                      <option value="ADMIN">2. ADMIN (Operations & Finance)</option>
+                                      <option value="MODERATOR">3. MODERATOR (KYC & Verification)</option>
+                                      <option value="CREATOR">4. CREATOR (Verified Publisher)</option>
+                                      <option value="MEMBER">5. MEMBER (Standard Customer)</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
+                                    {onBlockCreator && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onBlockCreator(u.phone, !u.isBlocked)}
+                                        className={`px-2.5 py-1 rounded-xl text-[10.5px] font-black transition cursor-pointer ${
+                                          u.isBlocked
+                                            ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        {u.isBlocked ? 'Blocked (Unblock)' : 'Block User'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
         )}
@@ -3832,6 +4309,34 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               </form>
             </div>
           </div>
+        )}
+
+        {/* Campaign Safety Net Modal (Zero-Balance Delete or Void with Audit Trail) */}
+        {safetyModalCampaign && (
+          <CampaignSafetyModal
+            campaign={safetyModalCampaign.campaign}
+            transactions={transactions}
+            initialMode={safetyModalCampaign.mode}
+            onClose={() => setSafetyModalCampaign(null)}
+            onDeleted={(deletedId) => {
+              if (onDeleteCampaign) {
+                onDeleteCampaign(deletedId);
+              }
+              setLogsList(getStoredAuditLogs());
+              setSafetyModalCampaign(null);
+            }}
+            onVoided={(voidedCamp) => {
+              if (onUpdateCampaign) {
+                onUpdateCampaign(voidedCamp);
+              }
+              setLogsList(getStoredAuditLogs());
+              setSafetyModalCampaign(null);
+            }}
+            onEditRequested={(campToEdit) => {
+              setSafetyModalCampaign(null);
+              setEditingCampaign({ ...campToEdit });
+            }}
+          />
         )}
 
         {/* Creator Review, Photo Studio, Inspection & Rights Modal Sheet */}

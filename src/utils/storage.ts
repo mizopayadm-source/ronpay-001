@@ -14,6 +14,7 @@ import {
 } from '../services/firestoreSync';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
+const DELETED_CAMPAIGNS_KEY = 'ronpay_deleted_campaign_ids_v1';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
 const CREATOR_PROFILE_KEY = 'ronpay_creator_profile_v2';
 const CREATORS_LIST_KEY = 'ronpay_creators_list_v2';
@@ -22,6 +23,43 @@ const PRICING_CONFIG_KEY = 'ronpay_pricing_config_v1';
 const CAMPAIGNS_LAST_SYNC_KEY = 'ronpay_campaigns_last_sync_v1';
 const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
 const ANNOUNCEMENT_KEY = 'ronpay_announcement_v1';
+
+export const getDeletedCampaignIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_CAMPAIGNS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr.map(id => String(id).toLowerCase().trim()));
+      }
+    }
+  } catch (e) {}
+  return new Set<string>();
+};
+
+export const recordDeletedCampaignId = (id: string): void => {
+  if (!id) return;
+  try {
+    const set = getDeletedCampaignIds();
+    set.add(String(id).toLowerCase().trim());
+    localStorage.setItem(DELETED_CAMPAIGNS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
+
+export const unrecordDeletedCampaignId = (id: string): void => {
+  if (!id) return;
+  try {
+    const set = getDeletedCampaignIds();
+    set.delete(String(id).toLowerCase().trim());
+    localStorage.setItem(DELETED_CAMPAIGNS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
+
+export const clearDeletedCampaignIds = (): void => {
+  try {
+    localStorage.removeItem(DELETED_CAMPAIGNS_KEY);
+  } catch (e) {}
+};
 
 export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
   {
@@ -141,11 +179,17 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 
 export const getStoredCampaigns = (): Campaign[] => {
   try {
+    const deletedIds = getDeletedCampaignIds();
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const mapped = parsed.map((camp: Campaign) => {
+        // Filter out any explicitly deleted campaigns
+        const validParsed = parsed.filter((camp: Campaign) => 
+          camp && camp.id && !deletedIds.has(String(camp.id).toLowerCase().trim())
+        );
+
+        const mapped = validParsed.map((camp: Campaign) => {
           if (!camp.orgCode) {
             const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
             const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
@@ -154,12 +198,13 @@ export const getStoredCampaigns = (): Campaign[] => {
           return camp;
         });
 
-        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns
-        const existingIds = new Set(mapped.map(c => c.id));
+        // Smart merge: ensure default initial campaigns exist unless explicitly deleted
+        const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...mapped];
         for (const initCamp of INITIAL_CAMPAIGNS) {
-          if (!existingIds.has(initCamp.id)) {
+          const initIdLower = String(initCamp.id).toLowerCase().trim();
+          if (!existingIds.has(initIdLower) && !deletedIds.has(initIdLower)) {
             merged.push(initCamp);
             hasNew = true;
           }
@@ -179,7 +224,8 @@ export const getStoredCampaigns = (): Campaign[] => {
       }
     }
     // Initialize if never stored before
-    const initialSorted = [...INITIAL_CAMPAIGNS].sort((a, b) => {
+    const initialFiltered = INITIAL_CAMPAIGNS.filter(c => !deletedIds.has(String(c.id).toLowerCase().trim()));
+    const initialSorted = [...initialFiltered].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
@@ -189,7 +235,8 @@ export const getStoredCampaigns = (): Campaign[] => {
   } catch (e) {
     console.error('Failed to parse stored campaigns', e);
   }
-  return INITIAL_CAMPAIGNS;
+  const deletedIds = getDeletedCampaignIds();
+  return INITIAL_CAMPAIGNS.filter(c => !deletedIds.has(String(c.id).toLowerCase().trim()));
 };
 
 // Helper to derive 3-letter prefix from string
@@ -319,13 +366,6 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sortedSanitized }));
     }
 
-    // Direct Sync to Firebase Firestore
-    for (const camp of sortedSanitized) {
-      if (camp && camp.id) {
-        syncCampaignToFirestore(camp).catch(() => {});
-      }
-    }
-
     // Asynchronously push to backend server for multi-device sync
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
@@ -341,8 +381,9 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
 
 export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
+  unrecordDeletedCampaignId(camp.id);
   const current = getStoredCampaigns();
-  const idx = current.findIndex(c => c.id === camp.id);
+  const idx = current.findIndex(c => String(c.id).toLowerCase().trim() === String(camp.id).toLowerCase().trim());
   let updated: Campaign[];
   if (idx >= 0) {
     updated = [...current];
@@ -365,13 +406,17 @@ export const saveCampaign = (camp: Campaign): void => {
 
 export const deleteStoredCampaign = (campaignId: string): void => {
   if (!campaignId) return;
+  const cleanId = String(campaignId).toLowerCase().trim();
+  recordDeletedCampaignId(cleanId);
   const current = getStoredCampaigns();
-  const updated = current.filter(c => c.id !== campaignId);
+  const updated = current.filter(c => String(c.id).toLowerCase().trim() !== cleanId);
   saveStoredCampaigns(updated);
   deleteCampaignFromFirestore(campaignId).catch(() => {});
   if (typeof fetch !== 'undefined') {
     fetch(`/api/campaigns/${campaignId}`, {
       method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Zero-balance delete from client', performedBy: 'Admin/Creator' })
     }).catch(() => {});
   }
 };
@@ -424,13 +469,6 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
     // Broadcast local event for immediate real-time sync
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
-    }
-
-    // Direct Sync to Firebase Firestore
-    for (const tx of transactions) {
-      if (tx && tx.id) {
-        syncTransactionToFirestore(tx).catch(() => {});
-      }
     }
 
     if (typeof fetch !== 'undefined') {
@@ -623,12 +661,6 @@ export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
           window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: updatedActive }));
           window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: updatedActive }));
         }
-      }
-    }
-
-    for (const c of creators) {
-      if (c && c.phone) {
-        syncCreatorToFirestore(c).catch(() => {});
       }
     }
 
@@ -1471,11 +1503,6 @@ export const saveMembers = (members: MemberRecord[]): void => {
       window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: members }));
     }
 
-    for (const m of members) {
-      if (m && m.id) {
-        syncMemberToFirestore(m).catch(() => {});
-      }
-    }
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
         method: 'POST',
