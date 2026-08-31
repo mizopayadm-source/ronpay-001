@@ -1,17 +1,189 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #070f1e;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>QR Bawm & Member Roll Manager</title>
-    <meta name="description" content="QR Code Bawm collection system, Creator QR Manager, UPI payment tracking, and live BBPS Mizoram P&ED/PHED utility bill verification." />
-    <meta property="og:title" content="QR Bawm & Member Roll Manager" />
-    <meta property="og:description" content="QR Code Bawm collection system, Creator QR Manager, UPI payment tracking, and live BBPS Mizoram P&ED/PHED utility bill verification." />
+    <meta name="theme-color" content="#070f1e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>RonPay - QR Bawm & Member Roll Manager</title>
+    <meta name="description" content="RonPay - Mizoram Community Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager." />
+    <meta property="og:title" content="RonPay - QR Bawm & Member Roll Manager" />
+    <meta property="og:description" content="RonPay - Mizoram Community Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <style>
+      /* Critical instantaneous styles to eliminate white flash on mobile startup */
+      html, body {
+        background-color: #070f1e !important;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow-x: hidden;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      #root {
+        width: 100%;
+        min-height: 100vh;
+        min-height: 100dvh;
+        background-color: #070f1e;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Native Instant Splash Screen */
+      .ronpay-instant-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        background: radial-gradient(circle at 50% 30%, #0d1e38 0%, #070f1e 75%, #040914 100%);
+        color: #ffffff;
+        padding: 24px 20px;
+        z-index: 99999;
+        box-sizing: border-box;
+      }
+
+      .ronpay-splash-hero {
+        margin: auto 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .ronpay-logo-badge {
+        width: 84px;
+        height: 84px;
+        border-radius: 22%;
+        background: linear-gradient(145deg, #14294d, #081224);
+        padding: 10px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 20px rgba(249, 115, 22, 0.25);
+        border: 1px solid rgba(30, 58, 107, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        animation: ronpayPulse 2s infinite ease-in-out;
+      }
+
+      @keyframes ronpayPulse {
+        0%, 100% { transform: scale(1); filter: brightness(1); }
+        50% { transform: scale(1.03); filter: brightness(1.12); }
+      }
+
+      .ronpay-title {
+        margin-top: 16px;
+        font-size: 32px;
+        font-weight: 900;
+        letter-spacing: -0.5px;
+        color: #ffffff;
+        line-height: 1.1;
+      }
+
+      .ronpay-highlight {
+        color: #f97316;
+      }
+
+      .ronpay-subtitle {
+        margin-top: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #94a3b8;
+        letter-spacing: 0.2px;
+      }
+
+      .ronpay-loader-bar {
+        width: 180px;
+        height: 4px;
+        background: rgba(30, 41, 59, 0.8);
+        border-radius: 9999px;
+        margin-top: 24px;
+        overflow: hidden;
+        position: relative;
+        border: 1px solid rgba(51, 65, 85, 0.5);
+      }
+
+      .ronpay-loader-progress {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 40%;
+        background: linear-gradient(90deg, #f97316, #fbbf24, #10b981);
+        border-radius: 9999px;
+        animation: ronpayLoading 1.4s infinite ease-in-out;
+      }
+
+      @keyframes ronpayLoading {
+        0% { left: -40%; width: 30%; }
+        50% { width: 60%; }
+        100% { left: 100%; width: 40%; }
+      }
+
+      .ronpay-footer-badge {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant Zero-Latency Splash Screen rendered prior to JS bundle execution -->
+      <div class="ronpay-instant-splash" id="instant-splash">
+        <div style="width: 100%; display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: #64748b;">
+          <span>RONPAY FINTECH</span>
+          <span style="color: #f97316;">MIZORAM</span>
+        </div>
+
+        <div class="ronpay-splash-hero">
+          <div class="ronpay-logo-badge">
+            <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="initOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#FB923C" />
+                  <stop offset="50%" stopColor="#F97316" />
+                  <stop offset="100%" stopColor="#EA580C" />
+                </linearGradient>
+              </defs>
+              <rect x="20" y="18" width="12" height="64" rx="3" fill="url(#initOrange)" />
+              <rect x="20" y="26" width="34" height="8" rx="2.5" fill="url(#initOrange)" />
+              <rect x="20" y="42" width="28" height="7" rx="2" fill="url(#initOrange)" />
+              <path d="M32 18H56C69 18 78 27 78 39C78 51 69 60 56 60H32V48H54C60 48 65 44 65 39C65 34 60 30 54 30H32V18Z" fill="url(#initOrange)" />
+              <path d="M32 50L60 82H76L46 50H32Z" fill="#ffffff" />
+            </svg>
+          </div>
+
+          <div class="ronpay-title">
+            Ron<span class="ronpay-highlight">Pay</span>
+          </div>
+          <div class="ronpay-subtitle">
+            Community Bawm & QR Portal
+          </div>
+
+          <div class="ronpay-loader-bar">
+            <div class="ronpay-loader-progress"></div>
+          </div>
+        </div>
+
+        <div class="ronpay-footer-badge">
+          Mizoram • Fast & Secure
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

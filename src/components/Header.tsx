@@ -399,36 +399,21 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {/* Logo Squircle */}
             <div className="relative shrink-0">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-0.5 bg-gradient-to-br from-amber-400 via-indigo-500 to-indigo-700 shadow-md group-hover:scale-105 transition-transform duration-200">
-                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center relative overflow-hidden">
-                  <svg viewBox="0 0 40 40" className="w-5 h-5 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-[1.5px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md group-hover:scale-105 transition-transform duration-200 border border-[#2b5191]/50">
+                <div className="w-full h-full bg-[#081224] rounded-[10px] flex items-center justify-center relative overflow-hidden">
+                  <svg viewBox="0 0 100 100" className="w-5 h-5 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <defs>
-                      <linearGradient id="rPayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#FDE047" />
-                        <stop offset="45%" stopColor="#F59E0B" />
-                        <stop offset="100%" stopColor="#FB7185" />
-                      </linearGradient>
-                      <linearGradient id="rPayGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#38BDF8" />
-                        <stop offset="100%" stopColor="#818CF8" />
+                      <linearGradient id="headerOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#FB923C" />
+                        <stop offset="50%" stopColor="#F97316" />
+                        <stop offset="100%" stopColor="#EA580C" />
                       </linearGradient>
                     </defs>
-                    <circle cx="20" cy="20" r="17" stroke="url(#rPayGrad2)" strokeWidth="1.5" strokeDasharray="4 2" strokeOpacity="0.4" />
-                    <rect x="10" y="9" width="4.5" height="22" rx="2.25" fill="url(#rPayGrad)" />
-                    <path 
-                      d="M13 9H22C25.5 9 28.5 12 28.5 15.5C28.5 19 25.5 22 22 22H13" 
-                      stroke="url(#rPayGrad)" 
-                      strokeWidth="4.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                    />
-                    <path 
-                      d="M19 20L27 31" 
-                      stroke="url(#rPayGrad)" 
-                      strokeWidth="4.5" 
-                      strokeLinecap="round" 
-                    />
-                    <circle cx="29" cy="11" r="2.2" fill="#38BDF8" />
+                    <rect x="20" y="18" width="12" height="64" rx="3" fill="url(#headerOrange)" />
+                    <rect x="20" y="26" width="34" height="8" rx="2.5" fill="url(#headerOrange)" />
+                    <rect x="20" y="42" width="28" height="7" rx="2" fill="url(#headerOrange)" />
+                    <path d="M32 18H56C69 18 78 27 78 39C78 51 69 60 56 60H32V48H54C60 48 65 44 65 39C65 34 60 30 54 30H32V18Z" fill="url(#headerOrange)" />
+                    <path d="M32 50L60 82H76L46 50H32Z" fill="#ffffff" />
                   </svg>
                 </div>
               </div>
@@ -439,9 +424,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="shrink-0 flex flex-col justify-center">
               <div className="flex items-center gap-1 leading-tight">
                 <span className="font-black text-base sm:text-lg tracking-tight text-white font-sans whitespace-nowrap">
-                  RON<span className="text-amber-400">PAY</span>
+                  Ron<span className="text-[#f97316]">Pay</span>
                 </span>
-                <span className="hidden sm:inline-flex bg-amber-400/15 text-amber-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-amber-400/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
+                <span className="hidden sm:inline-flex bg-orange-500/15 text-orange-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-orange-500/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
                   FINTECH
                 </span>
                 {!isOnline && (

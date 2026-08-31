@@ -91,10 +91,14 @@ import { AIHriatpuiModal } from './components/AIHriatpuiModal';
 import { BankTransferModal } from './components/BankTransferModal';
 import { RonPayWalletModal } from './components/RonPayWalletModal';
 import { SmartLoginModal } from './components/SmartLoginModal';
+import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { getUrlRoute, updateBrowserUrl } from './utils/urlRouting';
 
 export default function App() {
+  // Splash screen state for smooth UX
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
 
@@ -679,6 +683,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
+      {/* Animated Zero-White-Screen Splash Overlay */}
+      {showSplash && (
+        <SplashScreen onFinish={() => setShowSplash(false)} minDurationMs={600} />
+      )}
+
       {/* Container with responsive boundary */}
       <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
         {/* Offline & Connection Status Banner */}

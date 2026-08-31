@@ -4,8 +4,8 @@
   "description": "RonPay Community Bawm & UPI Payments Platform",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#4f46e5",
+  "background_color": "#070f1e",
+  "theme_color": "#070f1e",
   "icons": [
     {
       "src": "/pwa-192x192.png",

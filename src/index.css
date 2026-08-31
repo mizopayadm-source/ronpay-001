@@ -17,7 +17,7 @@
     position: relative;
     margin: 0;
     padding: 0;
-    background-color: #f1f5f9;
+    background-color: #070f1e;
     color: #0f172a;
     -webkit-overflow-scrolling: touch;
   }
@@ -25,9 +25,11 @@
     width: 100%;
     max-width: 100vw;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
+    background-color: #f8fafc;
   }
 }
 

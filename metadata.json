@@ -1,6 +1,6 @@
 {
-  "name": "QR Bawm & Member Roll Manager",
-  "description": "QR Code Bawm collection system, Creator QR Manager, UPI payment tracking, and live BBPS Mizoram P&ED/PHED utility bill verification.",
+  "name": "RonPay - QR Bawm & Member Roll Manager",
+  "description": "RonPay - Mizoram Community Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
