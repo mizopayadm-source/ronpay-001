@@ -1697,6 +1697,69 @@ export const saveTransaction = (tx: Transaction): void => {
   }
 };
 
+export const saveMultipleTransactions = (txs: Transaction[]): void => {
+  if (!Array.isArray(txs) || txs.length === 0) return;
+  const current = getStoredTransactions();
+  const map = new Map<string, Transaction>();
+  current.forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
+  
+  txs.forEach(t => {
+    if (t && t.id) {
+      unrecordDeletedTransactionId(t.id);
+      map.set(String(t.id).toLowerCase().trim(), t);
+      syncTransactionToFirestore(t).catch(() => {});
+    }
+  });
+
+  const updated = Array.from(map.values()).sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  saveStoredTransactions(updated);
+};
+
+export const deleteMultipleTransactions = (transactionIds: string[]): void => {
+  if (!Array.isArray(transactionIds) || transactionIds.length === 0) return;
+  const set = new Set(transactionIds.map(id => String(id).toLowerCase().trim()));
+  set.forEach(id => recordDeletedTransactionId(id));
+  const current = getStoredTransactions();
+  const updated = current.filter(t => !set.has(String(t.id).toLowerCase().trim()));
+  saveStoredTransactions(updated);
+  transactionIds.forEach(id => {
+    deleteTransactionFromFirestore(id).catch(() => {});
+  });
+};
+
+export const updateDonorTransactions = (
+  donorName: string,
+  updatedTxs: Transaction[],
+  deletedTxIds: string[]
+): void => {
+  const deletedSet = new Set(deletedTxIds.map(id => String(id).toLowerCase().trim()));
+  deletedSet.forEach(id => recordDeletedTransactionId(id));
+  
+  const current = getStoredTransactions();
+  // Filter out deleted IDs and any old versions of updated transactions
+  const updatedIdSet = new Set(updatedTxs.map(t => String(t.id).toLowerCase().trim()));
+  
+  const remaining = current.filter(t => {
+    const cleanId = String(t.id).toLowerCase().trim();
+    if (deletedSet.has(cleanId)) return false;
+    if (updatedIdSet.has(cleanId)) return false;
+    return true;
+  });
+
+  updatedTxs.forEach(t => {
+    unrecordDeletedTransactionId(t.id);
+    syncTransactionToFirestore(t).catch(() => {});
+  });
+
+  const allUpdated = [...updatedTxs, ...remaining].sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  saveStoredTransactions(allUpdated);
+};
+
 export const deleteStoredTransaction = (transactionId: string): void => {
   if (!transactionId) return;
   const cleanId = String(transactionId).toLowerCase().trim();

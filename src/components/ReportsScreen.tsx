@@ -55,15 +55,28 @@ import {
   computeMonthlyDistribution,
   MonthRangeConfig,
   ALL_MONTH_NAMES_SHORT,
-  TargetExportInfo
+  TargetExportInfo,
+  GroupedDonorRecord,
+  buildGroupedDonorRecords
 } from '../utils/export';
 import { 
   isTransactionInPeriodFilter, 
   getTransactionMonthInfo, 
   ALL_MONTH_NAMES_FULL 
 } from '../utils/monthHelper';
-import { getMembers, isCampaignCreator, saveTransaction, deleteStoredTransaction } from '../utils/storage';
+import { 
+  getMembers, 
+  isCampaignCreator, 
+  saveTransaction, 
+  deleteStoredTransaction, 
+  DEFAULT_INITIAL_CREATOR, 
+  saveStoredCreatorProfile,
+  updateDonorTransactions,
+  saveMultipleTransactions,
+  deleteMultipleTransactions
+} from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
+import { DonorPaymentsEditorModal } from './DonorPaymentsEditorModal';
 
 interface ReportsScreenProps {
   transactions: Transaction[];
@@ -92,16 +105,29 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onOpenImagePreview,
   onOpenMemberRoll,
 }) => {
-  const [selectedFilter, setSelectedFilter] = useState<string>('kumtluang');
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>(() => getCurrentMonthStartString());
-  const [endDate, setEndDate] = useState<string>(() => getCurrentMonthEndString());
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'>('date-desc');
   
   // Transaction Editing State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Grouping & Display States (Defaults to Grouped by Donor as requested)
+  const [groupByDonor, setGroupByDonor] = useState<boolean>(true);
+  const [showDateTime, setShowDateTime] = useState<boolean>(true);
+
+  // Multi-Month Donor Payments Editing Modal State
+  const [donorPaymentsModalData, setDonorPaymentsModalData] = useState<{
+    donorName: string;
+    donorMemberId?: string;
+    donorPhone?: string;
+    donorSection?: string;
+    transactions: Transaction[];
+  } | null>(null);
   
   // CSV / Excel Export Feedback Toast State
   const [exportFeedback, setExportFeedback] = useState<{ message: string; count: number } | null>(null);
@@ -122,11 +148,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }), [chartStartMonth, chartEndMonth]);
 
   // Check if current user is an authenticated QR creator
-  const isCreator = Boolean(creatorProfile.isApproved && creatorProfile.phone);
+  const isCreator = Boolean(creatorProfile && (creatorProfile.isApproved || creatorProfile.phone || creatorProfile.isAdmin));
 
   // Filter campaigns strictly owned/created by this creator (no cross-creator leakage)
   const creatorCampaigns = useMemo(() => {
     if (!isCreator) return [];
+    if (creatorProfile.isAdmin) return campaigns;
     return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
   }, [campaigns, isCreator, creatorProfile]);
 
@@ -192,12 +219,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation)
   const filteredTransactions = useMemo(() => {
-    if (!isCreator || creatorCampaignIds.size === 0) return [];
+    if (!isCreator) return [];
 
     return transactions.filter(t => {
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's own verified campaigns
-      if (!creatorCampaignIds.has(t.campaignId)) {
-        return false;
+      if (!creatorProfile.isAdmin) {
+        if (creatorCampaignIds.size > 0 && !creatorCampaignIds.has(t.campaignId)) {
+          return false;
+        }
       }
 
       // 2. Category filter
@@ -215,8 +244,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (!isTransactionInPeriodFilter(t, selectedPeriodFilter)) {
           return false;
         }
-      } else {
-        // 5. Date range filter (only applied when all periods are shown or no specific month filter)
+      }
+
+      // 5. Date range filter (only applied when startDate or endDate is explicitly set)
+      if (startDate || endDate) {
         const txDate = t.timestamp.slice(0, 10);
         if (startDate && txDate < startDate) return false;
         if (endDate && txDate > endDate) return false;
@@ -234,7 +265,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorProfile, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -273,6 +304,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const kumtluangMatrix = useMemo(() => {
     return buildKumtluangMatrix(filteredTransactions, sortOrder, selectedCampaignObj?.subCategories);
   }, [filteredTransactions, sortOrder, selectedCampaignObj?.subCategories]);
+
+  // Grouped donor records computation (Mi pakhat tlar khatah belhkhawm)
+  const groupedDonorRecords = useMemo(() => {
+    return buildGroupedDonorRecords(sortedTransactions, sortOrder);
+  }, [sortedTransactions, sortOrder]);
 
   // Scoped members for the current selected campaign
   const scopedMembers = useMemo(() => {
@@ -546,10 +582,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         includeMonthlyChart,
         monthRangeConfig,
         includeSignatures,
-        targetInfo: activeTargetInfo || undefined
+        targetInfo: activeTargetInfo || undefined,
+        groupByDonor,
+        showDateTime,
+        members: scopedMembers
       }
     );
-    showExportSuccessToast('Format 2: Official Financial Statement PDF', sortedTransactions.length);
+    showExportSuccessToast('Format 1: Official Financial Statement PDF', sortedTransactions.length);
   };
 
   const toggleNameSort = () => {
@@ -559,14 +598,36 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // State for deleting entire donor's record from Matrix
   const [deletingDonorInfo, setDeletingDonorInfo] = useState<{ donorName: string; total: number; txCount: number } | null>(null);
 
-  // Find a transaction by donor name for Kumtluang matrix row edit
+  // Open Multi-Month / Multi-Payment Donor Editor Modal
   const handleEditDonorRow = (donorName: string) => {
-    const tx = filteredTransactions.find(t => t.donorName === donorName);
-    if (tx) {
-      setEditingTransaction(tx);
+    const txs = filteredTransactions.filter(t => (t.donorName || '').toLowerCase().trim() === donorName.toLowerCase().trim());
+    if (txs.length > 0) {
+      const member = scopedMembers.find(m => m.name.toLowerCase().trim() === donorName.toLowerCase().trim());
+      const firstTx = txs[0];
+      setDonorPaymentsModalData({
+        donorName: firstTx.donorName || donorName,
+        donorMemberId: member?.id || firstTx.memberId,
+        donorPhone: member?.phoneLast4 || member?.fullPhone || firstTx.donorPhone,
+        donorSection: member?.section || firstTx.donorVeng,
+        transactions: txs,
+      });
     } else {
       alert('Transaction record hmuh a ni lo.');
     }
+  };
+
+  // Save all donor transactions from DonorPaymentsEditorModal
+  const handleSaveAllDonorPayments = (updatedTxs: Transaction[], deletedIds: string[]) => {
+    updateDonorTransactions(updatedTxs, deletedIds);
+    // Notify parent handlers for live state sync
+    if (deletedIds && deletedIds.length > 0 && onDeleteTransaction) {
+      deletedIds.forEach(id => onDeleteTransaction(id));
+    }
+    if (updatedTxs && updatedTxs.length > 0 && onUpdateTransaction) {
+      updatedTxs.forEach(tx => onUpdateTransaction(tx));
+    }
+    setDonorPaymentsModalData(null);
+    showExportSuccessToast(`Siamthatna hlawhtling ta! (${updatedTxs.length} records updated)`, updatedTxs.length);
   };
 
   const handleDeleteDonorRow = (donorName: string, total: number) => {
@@ -577,12 +638,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const handleConfirmDeleteDonorTxs = () => {
     if (!deletingDonorInfo) return;
     const txs = filteredTransactions.filter(t => t.donorName === deletingDonorInfo.donorName);
-    txs.forEach(t => {
-      deleteStoredTransaction(t.id);
-      if (onDeleteTransaction) {
-        onDeleteTransaction(t.id);
-      }
-    });
+    deleteMultipleTransactions(txs.map(t => t.id));
+    if (onDeleteTransaction) {
+      txs.forEach(t => onDeleteTransaction(t.id));
+    }
     setDeletingDonorInfo(null);
   };
 
@@ -635,12 +694,20 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             </p>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
             <button
               onClick={onOpenLogin}
               className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
             >
               Creator Login / Verify Account
+            </button>
+            <button
+              onClick={() => {
+                saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-4 py-2.5 rounded-xl text-xs border border-amber-400/40 transition cursor-pointer"
+            >
+              ✨ Quick Login as Demo Creator (BCM Ebenezer)
             </button>
           </div>
         </div>
@@ -823,25 +890,72 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* Date pickers */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                />
+            {/* Date pickers with quick presets */}
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                />
+
+              {/* Quick Date Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                    setSelectedPeriodFilter('all');
+                  }}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                    !startDate && !endDate && selectedPeriodFilter === 'all'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  }`}
+                >
+                  🌟 All Time
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartDate(getCurrentMonthStartString());
+                    setEndDate(getCurrentMonthEndString());
+                  }}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                    startDate === getCurrentMonthStartString() && endDate === getCurrentMonthEndString()
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                  }`}
+                >
+                  📅 This Month
+                </button>
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                    }}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                  >
+                    ✕ Clear Date
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1273,6 +1387,40 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     )}
                   </div>
 
+                  {/* Group By Donor Option (Format 1) */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-slate-800">Mi pakhat tlar khatah belhkhawm (Group by Donor)</p>
+                        <p className="text-[10px] text-slate-500">Mi pakhatin vawi tam tak a pek pawhin PDF-ah tlar khatah a total tarlanna</p>
+                      </div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={groupByDonor} 
+                      onChange={(e) => setGroupByDonor(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Show Date and Time Option */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-slate-800">Date & Hun Column Tarlan (Show Date / Time)</p>
+                        <p className="text-[10px] text-slate-500">PDF table-ah Date & Time / Thla pek hun column dah lan duh tan</p>
+                      </div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={showDateTime} 
+                      onChange={(e) => setShowDateTime(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                    />
+                  </label>
+
                   {/* Digital Signature Toggle */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
                     <div className="flex items-center gap-2">
@@ -1534,16 +1682,56 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               )}
             </div>
           ) : (
-            /* STANDARD DETAILED TRANSACTIONS LIST VIEW */
+            /* STANDARD / GROUPED TRANSACTIONS VIEW */
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              {/* View Mode & Column Visibility Toolbar */}
               <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-indigo-600" />
-                  <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                    Transaction Records ({sortedTransactions.length})
-                  </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 mr-1">
+                    <Receipt className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                      {groupByDonor ? `Donors (${groupedDonorRecords.length})` : `Transactions (${sortedTransactions.length})`}
+                    </h3>
+                  </div>
+                  
+                  {/* Group By Donor Switcher */}
+                  <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-xs">
+                    <button
+                      onClick={() => setGroupByDonor(true)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer flex items-center gap-1 ${
+                        groupByDonor ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Mi pakhat pek zawng zawng tlar khatah belhkhawm (Group by donor)"
+                    >
+                      <Users className="w-3 h-3" />
+                      <span>👥 Group by Donor</span>
+                    </button>
+                    <button
+                      onClick={() => setGroupByDonor(false)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer flex items-center gap-1 ${
+                        !groupByDonor ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Transaction zawng zawng a mal malin tarlanna (Itemized view)"
+                    >
+                      <Receipt className="w-3 h-3" />
+                      <span>📋 Itemized</span>
+                    </button>
+                  </div>
+
+                  {/* Date Column Toggle */}
+                  <button
+                    onClick={() => setShowDateTime(!showDateTime)}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
+                      showDateTime ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                    }`}
+                    title="Toggle Date & Time display"
+                  >
+                    <Calendar className="w-3 h-3" />
+                    <span>{showDateTime ? '🕒 Date: Lang' : '🕒 Date: Hliah'}</span>
+                  </button>
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={toggleNameSort}
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
@@ -1576,7 +1764,150 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   <p className="text-xs font-bold text-slate-700">No transactions match your filters</p>
                   <p className="text-[10px] text-slate-400">Try selecting a different date range or category.</p>
                 </div>
+              ) : groupByDonor ? (
+                /* GROUPED BY DONOR TABLE VIEW */
+                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-800 font-extrabold border-b border-slate-200 text-[11px]">
+                        <th className="py-2.5 px-3 text-center w-10 border-r border-slate-200 text-slate-500">#</th>
+                        <th className="py-2.5 px-3 border-r border-slate-200">
+                          <button
+                            onClick={toggleNameSort}
+                            className="flex items-center gap-1.5 font-black text-slate-900 hover:text-indigo-600 transition cursor-pointer"
+                          >
+                            <span>Petu Hming (Donor)</span>
+                            {sortOrder === 'name-asc' ? (
+                              <ArrowUp className="w-3 h-3 text-indigo-600" />
+                            ) : sortOrder === 'name-desc' ? (
+                              <ArrowDown className="w-3 h-3 text-indigo-600" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                            )}
+                          </button>
+                        </th>
+                        <th className="py-2.5 px-2.5 text-center border-r border-slate-200 whitespace-nowrap text-[10px] text-slate-600">Mode</th>
+                        {showDateTime && (
+                          <th className="py-2.5 px-3 border-r border-slate-200 text-slate-700 whitespace-nowrap text-[10.5px]">
+                            Date / Thla Pek Zat
+                          </th>
+                        )}
+                        <th className="py-2.5 px-3 border-r border-slate-200 text-slate-700 text-[10.5px]">
+                          Hman Chhan / Breakdown
+                        </th>
+                        <th className="py-2.5 px-3 text-right bg-indigo-100 text-indigo-950 font-black whitespace-nowrap text-xs">
+                          Total (₹)
+                        </th>
+                        <th className="py-2.5 px-2.5 text-center bg-slate-100 text-slate-700 font-black text-[10.5px] w-24">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-medium text-slate-700 text-xs">
+                      {groupedDonorRecords.map((row, idx) => {
+                        const member = scopedMembers.find(m => m.name.toLowerCase().trim() === row.donorName.toLowerCase().trim());
+                        const displayVeng = row.donorSection || member?.section;
+                        const displayId = row.donorMemberId || member?.id;
+
+                        return (
+                          <tr key={idx} className="hover:bg-indigo-50/30 transition-colors">
+                            <td className="py-2.5 px-3 text-center font-mono text-[10px] text-slate-400 border-r border-slate-200">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2.5 px-3 border-r border-slate-200">
+                              <div className="font-bold text-slate-900">{row.donorName}</div>
+                              {(displayVeng || displayId) && (
+                                <div className="text-[10px] text-slate-500 font-normal">
+                                  {displayVeng && <span>{displayVeng}</span>}
+                                  {displayVeng && displayId && <span> • </span>}
+                                  {displayId && <span className="font-mono text-indigo-600 font-bold">#{displayId}</span>}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-2 text-center border-r border-slate-200 whitespace-nowrap">
+                              {row.paymentMethodLabel === 'CASH' ? (
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded">💵 Cash</span>
+                              ) : row.paymentMethodLabel === 'ONLINE' ? (
+                                <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.5 rounded">⚡ Online</span>
+                              ) : (
+                                <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded">⚡+💵 Mix ({row.txCount})</span>
+                              )}
+                            </td>
+                            {showDateTime && (
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-[11px] text-slate-600">
+                                {row.datesPaid.length > 0 && (
+                                  <div className="font-mono text-[10px] text-slate-500">{row.datesPaid.join(', ')}</div>
+                                )}
+                                {row.monthsPaid.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {row.monthsPaid.map(m => (
+                                      <span key={m} className="bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded text-[9px] font-bold border border-indigo-100">
+                                        {m}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                            <td className="py-2.5 px-3 border-r border-slate-200 text-[11px]">
+                              {Object.keys(row.categoryBreakdown).length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(row.categoryBreakdown).map(([cat, amt]) => (
+                                    <span key={cat} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[9.5px] font-medium">
+                                      {cat}: <strong className="font-mono text-slate-900">₹{amt.toLocaleString('en-IN')}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-500 italic text-[10px]">General / Uncategorized</span>
+                              )}
+                              {row.remarks.length > 0 && (
+                                <div className="text-[10px] text-slate-500 italic mt-0.5 flex items-center gap-1">
+                                  <MessageSquare className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                                  <span>{row.remarks.join('; ')}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-black font-mono text-indigo-950 bg-indigo-50/40 text-xs">
+                              ₹{row.totalAmount.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleEditDonorRow(row.donorName)}
+                                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs active:scale-95"
+                                  title="Edit all payments, dates and months for this donor"
+                                >
+                                  <Edit3 className="w-3 h-3" /> Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDonorRow(row.donorName, row.totalAmount)}
+                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-extrabold transition cursor-pointer border border-rose-200 shadow-2xs active:scale-95"
+                                  title="Paih (Delete all payments for this donor)"
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-600" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-900 text-white font-black text-xs">
+                        <td colSpan={showDateTime ? 5 : 4} className="py-2.5 px-3 uppercase tracking-wider text-right">
+                          GRAND TOTAL ({groupedDonorRecords.length} Donors, {sortedTransactions.length} Payments):
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-400 bg-slate-950 font-black text-sm">
+                          ₹{groupedDonorRecords.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-2.5 px-2 bg-slate-950"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               ) : (
+                /* ITEMIZED INDIVIDUAL TRANSACTIONS VIEW */
                 <div className="space-y-2">
                   {sortedTransactions.map((tx) => (
                     <div 
@@ -1602,11 +1933,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             ₹{tx.amount.toLocaleString('en-IN')}
                           </span>
                           <button
-                            onClick={() => setEditingTransaction(tx)}
-                            className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                            title="Edit transaction / categories"
+                            onClick={() => handleEditDonorRow(tx.donorName)}
+                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs active:scale-95"
+                            title="Edit transaction / categories / months"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
+                            <Edit3 className="w-3 h-3" /> Edit
                           </button>
                         </div>
                       </div>
@@ -1669,7 +2000,21 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         </>
       )}
 
-      {/* TRANSACTION & CATEGORY BREAKDOWN EDIT MODAL */}
+      {/* MULTI-MONTH & MULTI-PAYMENT DONOR EDITOR MODAL */}
+      {donorPaymentsModalData && (
+        <DonorPaymentsEditorModal
+          donorName={donorPaymentsModalData.donorName}
+          donorMemberId={donorPaymentsModalData.donorMemberId}
+          donorPhone={donorPaymentsModalData.donorPhone}
+          donorSection={donorPaymentsModalData.donorSection}
+          transactions={donorPaymentsModalData.transactions}
+          campaigns={campaigns}
+          onClose={() => setDonorPaymentsModalData(null)}
+          onSaveAll={handleSaveAllDonorPayments}
+        />
+      )}
+
+      {/* SINGLE TRANSACTION BACKUP EDIT MODAL */}
       {editingTransaction && (
         <EditTransactionModal
           transaction={editingTransaction}

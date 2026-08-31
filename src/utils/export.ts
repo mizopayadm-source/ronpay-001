@@ -45,10 +45,34 @@ export interface PDFExportOptions {
   includeMonthlyChart?: boolean;
   monthRangeConfig?: MonthRangeConfig;
   includeSignatures?: boolean;
+  groupByDonor?: boolean;
+  showDateTime?: boolean;
   preparedByTitle?: string;
   verifiedByTitle?: string;
   approvedByTitle?: string;
   targetInfo?: TargetExportInfo;
+}
+
+export interface GroupedDonorRecord {
+  donorName: string;
+  isAnonymous: boolean;
+  memberId?: string;
+  section?: string;
+  phone?: string;
+  donorMemberId?: string;
+  donorSection?: string;
+  donorPhone?: string;
+  paymentMethods: ('online' | 'cash')[];
+  paymentMethodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH';
+  totalAmount: number;
+  transactionsCount: number;
+  txCount: number;
+  transactions: Transaction[];
+  monthsPaid: string[];
+  datesPaid: string[];
+  dateRange: string;
+  categoryBreakdown: { [category: string]: number };
+  remarks: string[];
 }
 
 /**
@@ -304,6 +328,167 @@ export const buildKumtluangMatrix = (
     onlineTotal,
     cashTotal,
   };
+};
+
+/**
+ * Groups and aggregates transactions by Donor / Member into consolidated single-row records.
+ * Solves the issue of multiple transactions for the same donor cluttering statements or tables.
+ */
+export const buildGroupedDonorRecords = (
+  transactions: Transaction[],
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
+): GroupedDonorRecord[] => {
+  const donorMap = new Map<string, {
+    donorName: string;
+    isAnonymous: boolean;
+    memberId?: string;
+    section?: string;
+    phone?: string;
+    paymentMethods: Set<'online' | 'cash'>;
+    totalAmount: number;
+    transactions: Transaction[];
+    monthsSet: Set<string>;
+    datesList: Date[];
+    categoryBreakdown: { [cat: string]: number };
+    remarksSet: Set<string>;
+  }>();
+
+  transactions.forEach(t => {
+    const rawName = t.isAnonymous ? 'Anonymous' : (t.donorName?.trim() || 'Unknown Donor');
+    // Group key: normalize donor name
+    const groupKey = rawName.toLowerCase();
+
+    if (!donorMap.has(groupKey)) {
+      donorMap.set(groupKey, {
+        donorName: rawName,
+        isAnonymous: Boolean(t.isAnonymous),
+        memberId: t.memberId || undefined,
+        section: t.donorVeng || undefined,
+        phone: t.donorPhone || undefined,
+        paymentMethods: new Set<'online' | 'cash'>(),
+        totalAmount: 0,
+        transactions: [],
+        monthsSet: new Set<string>(),
+        datesList: [],
+        categoryBreakdown: {},
+        remarksSet: new Set<string>(),
+      });
+    }
+
+    const donorRec = donorMap.get(groupKey)!;
+    donorRec.totalAmount += (t.amount || 0);
+    donorRec.transactions.push(t);
+
+    if (t.memberId && !donorRec.memberId) {
+      donorRec.memberId = t.memberId;
+    }
+    if (t.donorVeng && !donorRec.section) {
+      donorRec.section = t.donorVeng;
+    }
+    if (t.donorPhone && !donorRec.phone) {
+      donorRec.phone = t.donorPhone;
+    }
+
+    const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
+    donorRec.paymentMethods.add(method);
+
+    // Track month / period label
+    const mInfo = getTransactionMonthInfo(t);
+    const mLabel = t.periodLabel || `${mInfo.shortMonth} ${mInfo.year}`;
+    donorRec.monthsSet.add(mLabel);
+
+    try {
+      const d = new Date(t.timestamp);
+      if (!isNaN(d.getTime())) {
+        donorRec.datesList.push(d);
+      }
+    } catch {}
+
+    // Track category breakdown
+    if (t.subCategoryBreakdown && typeof t.subCategoryBreakdown === 'object') {
+      Object.entries(t.subCategoryBreakdown).forEach(([k, v]) => {
+        const amt = Number(v) || 0;
+        if (amt > 0) {
+          donorRec.categoryBreakdown[k] = (donorRec.categoryBreakdown[k] || 0) + amt;
+        }
+      });
+    } else if (t.subCategory) {
+      donorRec.categoryBreakdown[t.subCategory] = (donorRec.categoryBreakdown[t.subCategory] || 0) + t.amount;
+    }
+
+    if (t.remark && t.remark.trim()) {
+      donorRec.remarksSet.add(t.remark.trim());
+    }
+  });
+
+  const records: GroupedDonorRecord[] = [];
+
+  donorMap.forEach(d => {
+    const methodsArr = Array.from(d.paymentMethods);
+    let methodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH' = 'ONLINE';
+    if (d.paymentMethods.has('online') && d.paymentMethods.has('cash')) {
+      methodLabel = 'ONLINE + CASH';
+    } else if (d.paymentMethods.has('cash')) {
+      methodLabel = 'CASH';
+    } else {
+      methodLabel = 'ONLINE';
+    }
+
+    // Determine date range text
+    let dateRange = '';
+    if (d.datesList.length === 1) {
+      dateRange = formatDateDDMMYYYY(d.datesList[0]);
+    } else if (d.datesList.length > 1) {
+      const sortedDates = [...d.datesList].sort((a, b) => a.getTime() - b.getTime());
+      const minD = formatDateDDMMYYYY(sortedDates[0]);
+      const maxD = formatDateDDMMYYYY(sortedDates[sortedDates.length - 1]);
+      dateRange = minD === maxD ? minD : `${minD} - ${maxD}`;
+    }
+
+    const uniqueDatesFormatted = Array.from(
+      new Set(d.datesList.map(dt => formatDateDDMMYYYY(dt)))
+    );
+
+    records.push({
+      donorName: d.donorName,
+      isAnonymous: d.isAnonymous,
+      memberId: d.memberId,
+      section: d.section,
+      phone: d.phone,
+      donorMemberId: d.memberId,
+      donorSection: d.section,
+      donorPhone: d.phone,
+      paymentMethods: methodsArr,
+      paymentMethodLabel: methodLabel,
+      totalAmount: d.totalAmount,
+      transactionsCount: d.transactions.length,
+      txCount: d.transactions.length,
+      transactions: d.transactions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+      monthsPaid: Array.from(d.monthsSet),
+      datesPaid: uniqueDatesFormatted,
+      dateRange,
+      categoryBreakdown: d.categoryBreakdown || {},
+      remarks: Array.from(d.remarksSet),
+    });
+  });
+
+  // Apply sorting
+  if (sortOrder === 'name-asc') {
+    records.sort((a, b) => a.donorName.localeCompare(b.donorName));
+  } else if (sortOrder === 'name-desc') {
+    records.sort((a, b) => b.donorName.localeCompare(a.donorName));
+  } else if (sortOrder === 'amount-desc') {
+    records.sort((a, b) => b.totalAmount - a.totalAmount);
+  } else {
+    // date-desc (newest payment first)
+    records.sort((a, b) => {
+      const timeA = a.transactions[0] ? new Date(a.transactions[0].timestamp).getTime() : 0;
+      const timeB = b.transactions[0] ? new Date(b.transactions[0].timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+  }
+
+  return records;
 };
 
 /**
@@ -1338,34 +1523,114 @@ export const generateTransactionsPDFHtml = (
     `;
   }
 
-  // Standard itemized report for Ralna, Khawlsak, Rikrum, etc.
-  const rowsHtml = transactions.map((t, idx) => {
-    const isCash = t.paymentMethod.toLowerCase().includes('cash');
-    const paymentBadge = isCash
-      ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
-      : `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`;
+  // Standard report (Grouped by Donor by default, or Itemized if unselected)
+  const shouldGroupByDonor = options.groupByDonor !== false;
+  const showDateTime = options.showDateTime !== false;
 
-    let remarks = t.periodLabel || '';
-    if (t.remark && t.remark.trim()) {
-      remarks = remarks ? `${remarks} • Note: ${t.remark.trim()}` : t.remark.trim();
-    }
-    if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
-      const parts = Object.entries(t.subCategoryBreakdown).map(([k, v]) => `${k}: ₹${v}`);
-      remarks = remarks ? `${remarks} (${parts.join(', ')})` : parts.join(', ');
-    }
+  let tableHeaderHtml = '';
+  let rowsHtml = '';
+  let tableFooterColspan = 4;
 
-    return `
-      <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; font-family: monospace;">${formatDateTimeDDMMYYYY(t.timestamp)}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">${t.isAnonymous ? '<i>Anonymous</i>' : t.donorName}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${paymentBadge}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">${remarks || '-'}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 9.5px; color: #64748b;">${t.txHash || t.id.slice(0, 12)}</td>
-        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11px; color: #0f172a;">₹${t.amount.toLocaleString('en-IN')}</td>
+  if (shouldGroupByDonor) {
+    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder);
+    tableFooterColspan = showDateTime ? 5 : 4;
+
+    tableHeaderHtml = `
+      <tr>
+        <th style="width: 45px; text-align: center;">SL NO.</th>
+        <th style="padding: 10px 12px;">HMING (DONOR)</th>
+        <th style="width: 95px; text-align: center;">PAYMENT MODE</th>
+        ${showDateTime ? '<th style="padding: 10px 12px;">DATE / THLA BI</th>' : ''}
+        <th style="padding: 10px 12px;">PEK ZAT / DETAILS</th>
+        <th style="padding: 10px 12px;">REMARKS / NOTE</th>
+        <th style="text-align: right; padding: 10px 12px;">TOTAL AMOUNT (₹)</th>
       </tr>
     `;
-  }).join('');
+
+    rowsHtml = groupedRecords.map((d, idx) => {
+      const modeBadge = d.paymentMethodLabel === 'CASH'
+        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+        : d.paymentMethodLabel === 'ONLINE'
+        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
+        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
+
+      const memberBadge = d.memberId ? `<span style="font-family: monospace; font-size: 9px; background: #e2e8f0; color: #334155; padding: 1px 4px; border-radius: 3px; margin-left: 6px;">${d.memberId}</span>` : '';
+      const sectionInfo = d.section ? `<span style="font-size: 9.5px; color: #64748b; margin-left: 4px;">• ${d.section}</span>` : '';
+      
+      const countLabel = d.transactionsCount > 1 
+        ? `<span style="font-weight: 700; color: #1e293b;">${d.transactionsCount} payments</span>` 
+        : `<span style="color: #64748b;">1 payment</span>`;
+
+      const breakdownParts = Object.entries(d.categoryBreakdown).map(([k, v]) => `${k}: ₹${v.toLocaleString('en-IN')}`);
+      const breakdownText = breakdownParts.length > 1 ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">${breakdownParts.join(', ')}</div>` : '';
+
+      const dateOrMonths = d.dateRange || d.monthsPaid.join(', ') || '-';
+      const remarksText = d.remarks.length > 0 ? d.remarks.join(' • ') : '-';
+
+      return `
+        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">
+            ${d.isAnonymous ? '<i>Anonymous</i>' : d.donorName}
+            ${memberBadge}
+            ${sectionInfo}
+          </td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${modeBadge}</td>
+          ${showDateTime ? `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #475569;">${dateOrMonths}</td>` : ''}
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">
+            ${countLabel}
+            ${breakdownText}
+          </td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #64748b;">${remarksText}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11.5px; color: #0f172a; background-color: ${idx % 2 === 0 ? '#f8fafc' : '#f1f5f9'};">
+            ₹${d.totalAmount.toLocaleString('en-IN')}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } else {
+    // Itemized line by line view
+    tableFooterColspan = showDateTime ? 5 : 4;
+    tableHeaderHtml = `
+      <tr>
+        <th style="width: 45px; text-align: center;">SL NO.</th>
+        ${showDateTime ? '<th style="padding: 10px 12px;">DATE & TIME</th>' : ''}
+        <th style="padding: 10px 12px;">HMING (DONOR)</th>
+        <th style="width: 85px; text-align: center;">MODE</th>
+        <th style="padding: 10px 12px;">REMARKS / NOTE</th>
+        <th style="padding: 10px 12px;">TXN REF</th>
+        <th style="text-align: right; padding: 10px 12px;">AMOUNT (₹)</th>
+      </tr>
+    `;
+
+    rowsHtml = transactions.map((t, idx) => {
+      const isCash = t.paymentMethod.toLowerCase().includes('cash');
+      const paymentBadge = isCash
+        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+        : `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`;
+
+      let remarks = t.periodLabel || '';
+      if (t.remark && t.remark.trim()) {
+        remarks = remarks ? `${remarks} • Note: ${t.remark.trim()}` : t.remark.trim();
+      }
+      if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
+        const parts = Object.entries(t.subCategoryBreakdown).map(([k, v]) => `${k}: ₹${v}`);
+        remarks = remarks ? `${remarks} (${parts.join(', ')})` : parts.join(', ');
+      }
+
+      return `
+        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
+          ${showDateTime ? `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; font-family: monospace;">${formatDateTimeDDMMYYYY(t.timestamp)}</td>` : ''}
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">${t.isAnonymous ? '<i>Anonymous</i>' : t.donorName}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${paymentBadge}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">${remarks || '-'}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 9.5px; color: #64748b;">${t.txHash || t.id.slice(0, 12)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11px; color: #0f172a;">₹${t.amount.toLocaleString('en-IN')}</td>
+        </tr>
+      `;
+    }).join('');
+  }
 
   return `
     <!DOCTYPE html>
@@ -1395,22 +1660,14 @@ export const generateTransactionsPDFHtml = (
 
         <table>
           <thead>
-            <tr>
-              <th style="width: 45px; text-align: center;">SL NO.</th>
-              <th>DATE & TIME</th>
-              <th>HMING (DONOR)</th>
-              <th style="text-align: center;">PAYMENT MODE</th>
-              <th>REMARKS / NOTE</th>
-              <th>REFERENCE / HASH</th>
-              <th style="text-align: right;">AMOUNT (₹)</th>
-            </tr>
+            ${tableHeaderHtml}
           </thead>
           <tbody>
             ${rowsHtml}
           </tbody>
           <tfoot>
             <tr style="background: #e2e8f0; font-weight: 900;">
-              <td colspan="6" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
+              <td colspan="${tableFooterColspan + 1}" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
               <td style="padding: 11px 12px; border-top: 2px solid #0f172a; text-align: right; font-size: 13px; color: #047857; background: #dcfce7;">
                 ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
