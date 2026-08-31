@@ -36,6 +36,7 @@ import {
   getMembers,
   saveMembers,
   saveTransaction,
+  deleteStoredTransaction,
   recordUserPaidTxId,
   recordAuditLog,
   restoreFullDatabaseBackup,
@@ -575,17 +576,13 @@ export default function App() {
   };
 
   const handleUpdateTransaction = (transaction: Transaction) => {
-    const updated = transactions.map(t => (t.id === transaction.id ? transaction : t));
-    setTransactions(updated);
-    saveStoredTransactions(updated);
     saveTransaction(transaction);
+    setTransactions(getStoredTransactions());
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
-    const updated = transactions.filter(t => t.id !== transactionId);
-    setTransactions(updated);
-    saveStoredTransactions(updated);
-    deleteTransactionFromFirestore(transactionId).catch(() => {});
+    deleteStoredTransaction(transactionId);
+    setTransactions(getStoredTransactions());
   };
 
   const handleUpdateCreator = (creator: CreatorProfile) => {

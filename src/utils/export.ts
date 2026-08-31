@@ -179,9 +179,16 @@ export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
  */
 export const buildKumtluangMatrix = (
   transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc',
+  preferredCategories?: string[]
 ): KumtluangMatrixData => {
   const categorySet = new Set<string>();
+  if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 0) {
+    preferredCategories.forEach(cat => {
+      if (cat && cat.trim()) categorySet.add(cat.trim());
+    });
+  }
+
   const donorMap = new Map<string, { [cat: string]: number }>();
   const donorPaymentMethods = new Map<string, Set<'online' | 'cash'>>();
   const donorRemarks = new Map<string, string[]>();
@@ -229,7 +236,9 @@ export const buildKumtluangMatrix = (
         }
       });
     } else {
-      const fallbackCat = t.campaignTitle || 'General Collection';
+      const fallbackCat = (preferredCategories && preferredCategories.length > 0)
+        ? preferredCategories[0]
+        : (t.subCategory || t.campaignTitle || 'General Collection');
       categorySet.add(fallbackCat);
       donorCats[fallbackCat] = (donorCats[fallbackCat] || 0) + t.amount;
     }

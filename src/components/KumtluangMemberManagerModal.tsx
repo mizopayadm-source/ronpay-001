@@ -8,6 +8,7 @@ import {
   CreditCard, 
   Users, 
   PlusCircle, 
+  Edit2,
   Edit3, 
   Trash2, 
   CheckCircle2, 
@@ -30,7 +31,16 @@ import {
   Lock
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
+import { 
+  getMembers, 
+  addOrUpdateMember, 
+  deleteMember, 
+  saveTransaction, 
+  deleteStoredTransaction, 
+  isCampaignCreator,
+  getStoredTransactions,
+  saveStoredTransactions
+} from '../utils/storage';
 import { 
   exportMasterLedgerPrint, 
   exportMemberCategoryMatrixPrint, 
@@ -70,12 +80,49 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
   // Calculate scoped campaigns strictly owned/created by this creator (or all if admin)
+  // Kumtluang / Organization member-based campaigns should be prioritized; 
+  // only Kumtluang category campaigns genuinely manage member rolls.
   const allowedCampaigns = useMemo(() => {
-    if (creatorProfile.isAdmin) {
-      return campaigns;
-    }
-    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+    const baseList = creatorProfile.isAdmin
+      ? campaigns
+      : campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+
+    // Filter to Kumtluang category campaigns first if any exist, or campaigns having members/orgCodes
+    const kumtluangList = baseList.filter(c => c.category === 'kumtluang');
+    const targetList = kumtluangList.length > 0 ? kumtluangList : baseList;
+
+    return [...targetList].sort((a, b) => {
+      const isKumA = a.category === 'kumtluang' ? 1 : 0;
+      const isKumB = b.category === 'kumtluang' ? 1 : 0;
+      if (isKumA !== isKumB) return isKumB - isKumA;
+
+      const actA = a.status === 'active' ? 1 : 0;
+      const actB = b.status === 'active' ? 1 : 0;
+      if (actA !== actB) return actB - actA;
+
+      return (a.title || '').localeCompare(b.title || '');
+    });
   }, [campaigns, creatorProfile]);
+
+  // Helper to format campaign label clearly showing Bawm Creator / Bawm Pui Hming (no individual member names)
+  const formatCampaignOptionLabel = useCallback((camp: Campaign, count?: number) => {
+    const prefix = camp.orgCode || 'QR';
+    const isKum = camp.category === 'kumtluang';
+    const icon = isKum ? '🏛️' : '📁';
+    const title = (camp.title || '').trim();
+    const org = (camp.orgName || '').trim();
+    const creator = (camp.creatorName || '').trim();
+    
+    let mainName = title;
+    if (org && org.toLowerCase() !== title.toLowerCase()) {
+      mainName = `${title} • ${org}`;
+    } else if (creator && creator.toLowerCase() !== title.toLowerCase()) {
+      mainName = `${title} (${creator})`;
+    }
+
+    const countSuffix = typeof count === 'number' ? ` — ${count} Members` : '';
+    return `${icon} [${prefix}] ${mainName}${countSuffix}`;
+  }, []);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
@@ -114,6 +161,30 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
+  // Local synchronized transactions list for zero-latency UI updates
+  const [localTxList, setLocalTxList] = useState<Transaction[]>(() => getStoredTransactions());
+
+  useEffect(() => {
+    setLocalTxList(getStoredTransactions());
+  }, [transactions, isOpen]);
+
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const custom = e as CustomEvent<Transaction[]>;
+      if (custom.detail && Array.isArray(custom.detail)) {
+        setLocalTxList(custom.detail);
+      } else {
+        setLocalTxList(getStoredTransactions());
+      }
+    };
+    window.addEventListener('ronpay_transactions_updated', handleSync);
+    window.addEventListener('ronpay-transactions-updated', handleSync);
+    return () => {
+      window.removeEventListener('ronpay_transactions_updated', handleSync);
+      window.removeEventListener('ronpay-transactions-updated', handleSync);
+    };
+  }, []);
+
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
@@ -123,8 +194,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [selectedMonth, setSelectedMonth] = useState<string>('August');
   const [selectedYear, setSelectedYear] = useState<string>('2026');
   const [entryAmount, setEntryAmount] = useState<string>('500');
+  const [entryPaymentMethod, setEntryPaymentMethod] = useState<'cash' | 'online'>('cash');
+  const [entryTxRef, setEntryTxRef] = useState<string>('');
   const [entryRemark, setEntryRemark] = useState<string>('');
   const [entrySuccess, setEntrySuccess] = useState<string | null>(null);
+  const [entryFilterType, setEntryFilterType] = useState<'all' | 'cash' | 'online'>('all');
+  const [entrySearchQuery, setEntrySearchQuery] = useState<string>('');
+
+  // Edit / Delete Transaction State (inside Kumtluang modal)
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editTxDonorName, setEditTxDonorName] = useState<string>('');
+  const [editTxAmount, setEditTxAmount] = useState<string>('');
+  const [editTxCategory, setEditTxCategory] = useState<string>('Pathian Ram Zauna');
+  const [editTxMonth, setEditTxMonth] = useState<string>('August');
+  const [editTxYear, setEditTxYear] = useState<string>('2026');
+  const [editTxPaymentMethod, setEditTxPaymentMethod] = useState<'cash' | 'online'>('cash');
+  const [editTxRemark, setEditTxRemark] = useState<string>('');
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
 
   // New Member Registration State
   const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
@@ -364,7 +450,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
 
     const targetCampaign = campaigns.find(c => c.id === quickEntryCampaignId) || activeScopedCampaign;
-    const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
+    const modeLabel = entryPaymentMethod === 'cash' ? 'Cash' : 'Direct UPI';
+    const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] [${modeLabel}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
+
+    const refPrefix = entryPaymentMethod === 'cash' ? 'CASH' : 'UPI';
+    const generatedRef = `${refPrefix}-${payerId}-${Date.now().toString().slice(-6)}`;
+    const finalRef = entryPaymentMethod === 'online' && entryTxRef.trim() ? entryTxRef.trim() : generatedRef;
 
     const newTx: Transaction = {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -379,26 +470,93 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       platformFee: 0,
       totalAmount: amt,
       timestamp: new Date().toISOString(),
-      txHash: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
+      txHash: finalRef,
       status: 'completed',
-      paymentMethod: 'cash',
-      referenceNo: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
+      paymentMethod: entryPaymentMethod,
+      referenceNo: finalRef,
       remark: txRemark,
       isSynced: true,
       createdAt: new Date().toISOString(),
       subCategory: selectedCategory,
+      subCategoryBreakdown: { [selectedCategory]: amt },
       periodMonth: selectedMonth,
       periodYear: selectedYear,
       platformFeeBearer: 'org_paid'
     };
 
     saveTransaction(newTx);
-    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin record fel a ni ta!`);
+    const refreshed = getStoredTransactions();
+    setLocalTxList(refreshed);
+    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin [${modeLabel}] record fel a ni ta!`);
     onDataUpdated();
     setTimeout(() => {
       setEntrySuccess(null);
       setEntryRemark('');
+      setEntryTxRef('');
     }, 4000);
+  };
+
+  const handleOpenEditTx = (tx: Transaction) => {
+    setEditingTx(tx);
+    setEditTxDonorName(tx.donorName || '');
+    setEditTxAmount(String(tx.amount || 0));
+    setEditTxCategory(tx.subCategory || tx.category || 'Pathian Ram Zauna');
+    setEditTxMonth(tx.periodMonth || selectedMonth || 'August');
+    setEditTxYear(tx.periodYear || selectedYear || '2026');
+    setEditTxPaymentMethod((tx.paymentMethod === 'online' ? 'online' : 'cash'));
+    setEditTxRemark(tx.remark || '');
+  };
+
+  const handleSaveEditedTx = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+    const amt = Number(editTxAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('Pawisa zat dik tak chhu lut rawh le.');
+      return;
+    }
+
+    const catName = editTxCategory.trim() || 'General';
+    const updatedTx: Transaction = {
+      ...editingTx,
+      donorName: editTxDonorName.trim() || editingTx.donorName,
+      amount: amt,
+      totalAmount: amt,
+      paymentMethod: editTxPaymentMethod,
+      category: editingTx.category || 'kumtluang',
+      subCategory: catName,
+      subCategoryBreakdown: { [catName]: amt },
+      periodMonth: editTxMonth,
+      periodYear: editTxYear,
+      remark: editTxRemark.trim() || undefined
+    };
+
+    saveTransaction(updatedTx);
+    const refreshed = getStoredTransactions();
+    setLocalTxList(refreshed);
+    setEditingTx(null);
+    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} record chu hlawhtling takin siamthat (updated) a ni ta!`);
+    onDataUpdated();
+    setTimeout(() => setEntrySuccess(null), 3500);
+  };
+
+  const handleRequestDeleteTx = (tx: Transaction) => {
+    setDeletingTx(tx);
+  };
+
+  const handleConfirmDeleteTx = () => {
+    if (!deletingTx) return;
+    const targetId = deletingTx.id;
+    deleteStoredTransaction(targetId);
+    const refreshed = getStoredTransactions();
+    setLocalTxList(refreshed);
+    if (editingTx?.id === targetId) {
+      setEditingTx(null);
+    }
+    setDeletingTx(null);
+    setEntrySuccess(`Transaction record (ID: ${targetId}) chu hlawhtling takin paih (deleted) a ni ta!`);
+    onDataUpdated();
+    setTimeout(() => setEntrySuccess(null), 3500);
   };
 
   // Add dependent to new member draft
@@ -653,6 +811,81 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     return getMembers(printOrgScope);
   }, [printOrgScope, allowedCampaigns]);
 
+  // Selected member transactions for Quick Entry History / Edit / Delete
+  const selectedMemberTransactions = useMemo(() => {
+    if (!selectedMember) return [];
+    const p4 = selectedMember.phoneLast4;
+    const fullP = selectedMember.fullPhone;
+    const mId = (selectedMember.id || '').toLowerCase().trim();
+    const mName = (selectedMember.name || '').toLowerCase().trim();
+    const depIds = (selectedMember.dependents || []).map(d => (d.subId || '').toLowerCase().trim()).filter(Boolean);
+    const depNames = (selectedMember.dependents || []).map(d => (d.name || '').toLowerCase().trim()).filter(Boolean);
+
+    return localTxList.filter(t => {
+      if (!t || !t.id) return false;
+      const r = (t.remark || '').toLowerCase();
+      const ref = (t.referenceNo || '').toLowerCase();
+      const hash = (t.txHash || '').toLowerCase();
+      const dName = (t.donorName || '').toLowerCase();
+      const dPhone = (t.donorPhone || '').toLowerCase();
+      const tId = (t.id || '').toLowerCase();
+
+      // Check payment type filter
+      if (entryFilterType === 'cash' && t.paymentMethod !== 'cash') return false;
+      if (entryFilterType === 'online' && t.paymentMethod === 'cash') return false;
+
+      // Check search query if typed
+      if (entrySearchQuery.trim()) {
+        const sq = entrySearchQuery.toLowerCase().trim();
+        const matchesQuery = dName.includes(sq) || r.includes(sq) || ref.includes(sq) || tId.includes(sq) || String(t.amount || '').includes(sq) || (t.subCategory || '').toLowerCase().includes(sq) || (t.periodMonth || '').toLowerCase().includes(sq);
+        if (!matchesQuery) return false;
+      }
+
+      if (mId && (r.includes(mId) || ref.includes(mId) || hash.includes(mId) || tId.includes(mId))) return true;
+      if (depIds.some(did => did && (r.includes(did) || ref.includes(did) || hash.includes(did)))) return true;
+      if (fullP && (dPhone === fullP.toLowerCase() || dPhone.includes(fullP.toLowerCase()))) return true;
+      if (p4 && dPhone.endsWith(p4)) return true;
+      if (mName && dName.includes(mName)) return true;
+      if (depNames.some(dn => dn && dName.includes(dn))) return true;
+      return false;
+    }).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
+  }, [selectedMember, localTxList, entryFilterType, entrySearchQuery]);
+
+  // Active Bawm recent transactions
+  const activeBawmTransactions = useMemo(() => {
+    return localTxList.filter(t => {
+      if (!t || !t.id) return false;
+      
+      // Filter by active campaign if scoped
+      if (activeScopedCampaign) {
+        const campId = activeScopedCampaign.id;
+        const campTitle = (activeScopedCampaign.title || '').toLowerCase();
+        const orgCode = (activeScopedCampaign.orgCode || '').toLowerCase();
+        const isCampMatch = t.campaignId === campId || 
+          (campTitle && (t.campaignTitle || '').toLowerCase().includes(campTitle)) ||
+          (orgCode && ((t.referenceNo || '').toLowerCase().includes(orgCode) || (t.remark || '').toLowerCase().includes(orgCode) || (t.txHash || '').toLowerCase().includes(orgCode)));
+        if (!isCampMatch) return false;
+      }
+
+      // Check payment type filter
+      if (entryFilterType === 'cash' && t.paymentMethod !== 'cash') return false;
+      if (entryFilterType === 'online' && t.paymentMethod === 'cash') return false;
+
+      // Check search query if typed
+      if (entrySearchQuery.trim()) {
+        const sq = entrySearchQuery.toLowerCase().trim();
+        const dName = (t.donorName || '').toLowerCase();
+        const r = (t.remark || '').toLowerCase();
+        const ref = (t.referenceNo || '').toLowerCase();
+        const tId = (t.id || '').toLowerCase();
+        const matchesQuery = dName.includes(sq) || r.includes(sq) || ref.includes(sq) || tId.includes(sq) || String(t.amount || '').includes(sq) || (t.subCategory || '').toLowerCase().includes(sq) || (t.periodMonth || '').toLowerCase().includes(sq);
+        if (!matchesQuery) return false;
+      }
+
+      return true;
+    }).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime()).slice(0, 50);
+  }, [activeScopedCampaign, localTxList, entryFilterType, entrySearchQuery]);
+
   if (!isOpen) return null;
 
   // Enforce QR Creator exclusive access check
@@ -795,7 +1028,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 )}
                 {allowedCampaigns.map(camp => (
                   <option key={camp.id} value={camp.id}>
-                    🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}] — {campaignCounts[camp.id] || 0} Members
+                    {formatCampaignOptionLabel(camp, campaignCounts[camp.id] || 0)}
                   </option>
                 ))}
               </select>
@@ -866,9 +1099,56 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         </div>
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 bg-white">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 bg-white space-y-4">
+          {/* ACTIVE BAWM PUI SUMMARY CARD */}
+          {activeScopedCampaign && (
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-xl shrink-0">
+                  {activeScopedCampaign.category === 'kumtluang' ? '🏛️' : '📁'}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide truncate">
+                      {activeScopedCampaign.title}
+                    </h4>
+                    <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                      Prefix: {activeScopedCampaign.orgCode || 'QR'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                    <span className="font-semibold text-slate-200">{activeScopedCampaign.orgName || creatorProfile.orgName || 'Organization'}</span>
+                    {activeScopedCampaign.creatorName && (
+                      <>
+                        <span className="text-slate-500 mx-1.5">•</span>
+                        <span className="text-slate-400">Creator: {activeScopedCampaign.creatorName}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Enrolled Members</div>
+                  <div className="text-sm sm:text-base font-black font-mono text-emerald-400">
+                    {campaignCounts[activeScopedCampaign.id] || members.length || 0} Members
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('register_member')}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1 active:scale-95"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>+ Add Member</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {allowedCampaigns.length === 0 && (
-            <div className="mb-4 p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2.5">
                 <Building2 className="w-5 h-5 text-indigo-600 shrink-0" />
                 <div>
@@ -1078,7 +1358,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       >
                         {allowedCampaigns.map(c => (
-                          <option key={c.id} value={c.id}>{c.title} [{c.orgCode || 'QR'}]</option>
+                          <option key={c.id} value={c.id}>{formatCampaignOptionLabel(c)}</option>
                         ))}
                       </select>
                     </div>
@@ -1112,8 +1392,44 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       </div>
                     </div>
 
-                    {/* Amount & Remark */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Payment Mode Selector */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Pekna Hmanraw Thlan Tur (Payment Mode) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEntryPaymentMethod('cash')}
+                          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
+                            entryPaymentMethod === 'cash'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>💵 Cash Counter (Cash)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEntryPaymentMethod('online')}
+                          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
+                            entryPaymentMethod === 'online'
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>⚡ Direct UPI / Bank</span>
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {entryPaymentMethod === 'cash' 
+                          ? 'Kut-a pawisa fai (cash) dawn chhinchhiahna.' 
+                          : 'Biakin/Pawl UPI ID / Account-a an lo thawn direct (Outside RonPay) chhinchhiahna.'}
+                      </p>
+                    </div>
+
+                    {/* Amount, UTR/Ref & Remark */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">Pek Zat (Amount ₹) <span className="text-red-500">*</span></label>
                         <div className="relative">
@@ -1128,27 +1444,270 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         </div>
                       </div>
 
+                      {entryPaymentMethod === 'online' ? (
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">UPI Ref / UTR (Optional)</label>
+                          <input
+                            type="text"
+                            value={entryTxRef}
+                            onChange={(e) => setEntryTxRef(e.target.value)}
+                            placeholder="e.g. UTR123456789"
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
+                          <input
+                            type="text"
+                            value={entryRemark}
+                            onChange={(e) => setEntryRemark(e.target.value)}
+                            placeholder="e.g. Inkhawm thawh / Cash counter"
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {entryPaymentMethod === 'online' && (
                       <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Remark / Note (Optional)</label>
                         <input
                           type="text"
                           value={entryRemark}
                           onChange={(e) => setEntryRemark(e.target.value)}
-                          placeholder="e.g. Inkhawm thawh / Cash"
+                          placeholder="e.g. GPay kaltlanga rawn pe / Direct UPI"
                           className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         />
                       </div>
-                    </div>
+                    )}
 
                     <button
                       type="submit"
                       disabled={!selectedMember}
-                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      className={`w-full py-3.5 text-white rounded-2xl text-xs font-black transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                        entryPaymentMethod === 'cash'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                          : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
+                      }`}
                     >
                       <Check className="w-4 h-4" />
-                      <span>Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)</span>
+                      <span>
+                        {entryPaymentMethod === 'cash'
+                          ? 'Cash Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)'
+                          : 'Direct UPI Thawhkhawm Chhinchhiah Rawh (Save UPI Payment)'}
+                      </span>
                     </button>
                   </form>
+                </div>
+
+                {/* RECENT ENTRIES & EDIT/DELETE SECTION */}
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900">
+                          {selectedMember 
+                            ? `${selectedMember.name} (${selectedMember.id}) Sulhnu & Records`
+                            : `${activeScopedCampaign?.title || 'Kumtluang Bawm'} Sulhnu & Records`}
+                        </h4>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          Record-te hi [✏️ Edit / Siamtha] emaw [🗑️ Paih / Delete] awlsam takin a tih theih
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setEntryFilterType('all')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                          entryFilterType === 'all'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEntryFilterType('cash')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                          entryFilterType === 'cash'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        💵 Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEntryFilterType('online')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                          entryFilterType === 'online'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        ⚡ UPI
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search box within recent entries */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={entrySearchQuery}
+                      onChange={(e) => setEntrySearchQuery(e.target.value)}
+                      placeholder="Zawnna (Hming, ID, Amount, Category, Thla...)"
+                      className="w-full pl-8 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    {entrySearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setEntrySearchQuery('')}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedMember ? (
+                    selectedMemberTransactions.length === 0 ? (
+                      <div className="text-center py-6 text-slate-400 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                        He member tan hian record zawn hmuh a awm rih lo.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                        {selectedMemberTransactions.map(tx => (
+                          <div 
+                            key={tx.id}
+                            className="bg-slate-50 border border-slate-200/80 hover:border-indigo-300 rounded-xl p-3 flex items-center justify-between gap-3 transition shadow-2xs"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  tx.paymentMethod === 'cash' 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                }`}>
+                                  {tx.paymentMethod === 'cash' ? '💵 Cash' : '⚡ UPI'}
+                                </span>
+                                <span className="text-xs font-black text-slate-900">
+                                  ₹{tx.amount?.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  {tx.subCategory || tx.category}
+                                </span>
+                                {tx.periodMonth && (
+                                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                    {tx.periodMonth} {tx.periodYear || ''}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
+                                <span className="font-medium">{new Date(tx.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                {tx.donorName && tx.donorName !== selectedMember.name && (
+                                  <span className="font-bold text-slate-700">Pual: {tx.donorName}</span>
+                                )}
+                                {tx.remark && <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">{tx.remark}</span>}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditTx(tx)}
+                                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-indigo-500 hover:text-indigo-600 text-slate-700 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Siamtha / Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRequestDeleteTx(tx)}
+                                className="px-2.5 py-1.5 bg-white border border-rose-200 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-700 text-rose-600 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Paih / Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Paih</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    activeBawmTransactions.length === 0 ? (
+                      <div className="text-center py-6 text-slate-400 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                        He bawm pual hian transaction zawn hmuh a awm rih lo.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                        {activeBawmTransactions.map(tx => (
+                          <div 
+                            key={tx.id}
+                            className="bg-slate-50 border border-slate-200/80 hover:border-indigo-300 rounded-xl p-3 flex items-center justify-between gap-3 transition shadow-2xs"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  tx.paymentMethod === 'cash' 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                }`}>
+                                  {tx.paymentMethod === 'cash' ? '💵 Cash' : '⚡ UPI'}
+                                </span>
+                                <span className="text-xs font-black text-slate-900">
+                                  ₹{tx.amount?.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-xs font-bold text-slate-800 truncate">
+                                  {tx.donorName || 'Anonymous'}
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-500">
+                                  ({tx.subCategory || tx.category || 'General'})
+                                </span>
+                                {tx.periodMonth && (
+                                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                    {tx.periodMonth} {tx.periodYear || ''}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
+                                <span className="font-medium">{new Date(tx.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                {tx.remark && <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[220px]">{tx.remark}</span>}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditTx(tx)}
+                                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-indigo-500 hover:text-indigo-600 text-slate-700 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Siamtha / Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRequestDeleteTx(tx)}
+                                className="px-2.5 py-1.5 bg-white border border-rose-200 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-700 text-rose-600 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Paih / Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Paih</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
                 </div>
 
               </div>
@@ -1208,7 +1767,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   >
                     {allowedCampaigns.map(c => (
                       <option key={c.id} value={c.id}>
-                        🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
+                        {formatCampaignOptionLabel(c)}
                       </option>
                     ))}
                   </select>
@@ -1288,24 +1847,38 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Section / Bial / Veng
-                  </label>
-                  <select
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    <option value="">-- Thlang Rawh (Bial / Section) --</option>
-                    {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
-                      ? activeRegisterCampaign.definedSections
-                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                    ).map((sec, idx) => (
-                      <option key={idx} value={sec}>
-                        {sec}
-                      </option>
-                    ))}
-                  </select>
+                  {activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0 ? (
+                    <>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        {activeRegisterCampaign.sectionLabel || 'Section / Bial / Veng'}
+                      </label>
+                      <select
+                        value={newSection}
+                        onChange={(e) => setNewSection(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        <option value="">-- Thlang Rawh ({activeRegisterCampaign.sectionLabel || 'Bial / Section'}) --</option>
+                        {activeRegisterCampaign.definedSections.map((sec, idx) => (
+                          <option key={idx} value={sec}>
+                            {sec}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Section / Bial / Veng (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={newSection}
+                        onChange={(e) => setNewSection(e.target.value)}
+                        placeholder="Optional: Veng / Bial / Area chhu lut rawh (Dah loh theih)..."
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                    </>
+                  )}
                 </div>
 
                 {/* Member Profile Photo Upload */}
@@ -1477,7 +2050,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   >
                     {allowedCampaigns.map(camp => (
                       <option key={camp.id} value={camp.id}>
-                        🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
+                        {formatCampaignOptionLabel(camp)}
                       </option>
                     ))}
                     {creatorProfile.isAdmin && (
@@ -1709,7 +2282,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       )}
                       {allowedCampaigns.map(c => (
                         <option key={c.id} value={c.id}>
-                          🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title} ({campaignCounts[c.id] || 0})
+                          {formatCampaignOptionLabel(c, campaignCounts[c.id] || 0)}
                         </option>
                       ))}
                     </select>
@@ -2047,7 +2620,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 >
                   {allowedCampaigns.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.orgName || c.title} [{c.orgCode || 'QR'}]
+                      {formatCampaignOptionLabel(c)}
                     </option>
                   ))}
                 </select>
@@ -2119,27 +2692,41 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </div>
 
               <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                  Section / Bial
-                </label>
-                <select
-                  value={editSection}
-                  onChange={(e) => setEditSection(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                >
-                  <option value="">-- Thlang Rawh --</option>
-                  {(activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0
-                    ? activeEditCampaign.definedSections
-                    : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                  ).map((sec, idx) => (
-                    <option key={idx} value={sec}>
-                      {sec}
-                    </option>
-                  ))}
-                  {editSection && !activeEditCampaign?.definedSections?.includes(editSection) && (
-                    <option value={editSection}>{editSection} (Existing)</option>
-                  )}
-                </select>
+                {activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0 ? (
+                  <>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      {activeEditCampaign.sectionLabel || 'Section / Bial'}
+                    </label>
+                    <select
+                      value={editSection}
+                      onChange={(e) => setEditSection(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                    >
+                      <option value="">-- Thlang Rawh ({activeEditCampaign.sectionLabel || 'Section / Bial'}) --</option>
+                      {activeEditCampaign.definedSections.map((sec, idx) => (
+                        <option key={idx} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                      {editSection && !activeEditCampaign.definedSections.includes(editSection) && (
+                        <option value={editSection}>{editSection} (Existing)</option>
+                      )}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Section / Bial (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editSection}
+                      onChange={(e) => setEditSection(e.target.value)}
+                      placeholder="Optional: Veng / Bial / Area..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                    />
+                  </>
+                )}
               </div>
 
               {/* Photo Upload in Edit Modal */}
@@ -2262,6 +2849,213 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT TRANSACTION MODAL */}
+      {editingTx && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn text-slate-800">
+          <div className="bg-white border border-indigo-200 rounded-3xl w-full max-w-md p-6 shadow-2xl relative my-auto shrink-0 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Thawhkhawm Record Siamthatna</h3>
+                  <p className="text-[10px] text-slate-500 font-mono">ID: {editingTx.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTx(null)}
+                className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedTx} className="space-y-4 text-xs">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  Puitu / Member Hming <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editTxDonorName}
+                  onChange={(e) => setEditTxDonorName(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Pek Zat (Amount ₹) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      value={editTxAmount}
+                      onChange={(e) => setEditTxAmount(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={editTxPaymentMethod}
+                    onChange={(e) => setEditTxPaymentMethod(e.target.value as any)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="cash">💵 Cash Counter</option>
+                    <option value="online">⚡ Direct UPI / Online</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Fund Head / Category</label>
+                  <select
+                    value={editTxCategory}
+                    onChange={(e) => setEditTxCategory(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    {campaignCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    {!campaignCategories.includes(editTxCategory) && editTxCategory && (
+                      <option value={editTxCategory}>{editTxCategory}</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Thla (Month)</label>
+                  <select
+                    value={editTxMonth}
+                    onChange={(e) => setEditTxMonth(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    {monthsList.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Kum (Year)</label>
+                  <select
+                    value={editTxYear}
+                    onChange={(e) => setEditTxYear(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    {['2024', '2025', '2026', '2027', '2028', '2029', '2030'].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Remark / Note</label>
+                <input
+                  type="text"
+                  value={editTxRemark}
+                  onChange={(e) => setEditTxRemark(e.target.value)}
+                  placeholder="e.g. Inkhawm thawh / UTR ref"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => handleRequestDeleteTx(editingTx)}
+                  className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-black rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Paih Bo Rawh (Delete)</span>
+                </button>
+
+                <div className="flex-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTx(null)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Save Siamthatna</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE TRANSACTION MODAL */}
+      {deletingTx && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
+          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl relative my-auto text-center space-y-4">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <div>
+              <h3 className="text-base font-black text-slate-900">Transaction Paih I Chiang Em?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                He thawhkhawm record (₹{deletingTx.amount?.toLocaleString('en-IN')} - {deletingTx.donorName}) hi database atangin paih hlen a ni dawn e.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-left text-xs font-medium space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">ID:</span>
+                <span className="font-mono text-slate-800">{deletingTx.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Pual / Hming:</span>
+                <span className="font-bold text-slate-800">{deletingTx.donorName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Pek Zat:</span>
+                <span className="font-black text-slate-900">₹{deletingTx.amount?.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeletingTx(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTx}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Paih Bo Rawh</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

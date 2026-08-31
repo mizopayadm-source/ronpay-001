@@ -232,8 +232,23 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
 
       if (remoteTxList.length > 0) {
-        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS);
-        const merged = smartMerge(localTx, remoteTxList, 'id');
+        let deletedTxIds = new Set<string>();
+        try {
+          const rawDel = localStorage.getItem('ronpay_deleted_transaction_ids_v1');
+          if (rawDel) {
+            const arr = JSON.parse(rawDel);
+            if (Array.isArray(arr)) {
+              deletedTxIds = new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
+            }
+          }
+        } catch {}
+
+        const filteredRemote = remoteTxList.filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
+        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS)
+          .filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
+        const merged = smartMerge(localTx, filteredRemote, 'id')
+          .filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
+
         setLocalJson('ronpay_transactions_v2', merged);
         if (callbacks.onTransactionsUpdate) {
           callbacks.onTransactionsUpdate(merged);

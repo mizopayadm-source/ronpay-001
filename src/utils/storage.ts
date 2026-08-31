@@ -421,27 +421,59 @@ export const deleteStoredCampaign = (campaignId: string): void => {
   }
 };
 
+const DELETED_TRANSACTIONS_KEY = 'ronpay_deleted_transaction_ids_v1';
+
+export const getDeletedTransactionIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_TRANSACTIONS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
+      }
+    }
+  } catch {}
+  return new Set<string>();
+};
+
+export const recordDeletedTransactionId = (txId: string): void => {
+  if (!txId) return;
+  const set = getDeletedTransactionIds();
+  set.add(String(txId).toLowerCase().trim());
+  localStorage.setItem(DELETED_TRANSACTIONS_KEY, JSON.stringify(Array.from(set)));
+};
+
+export const unrecordDeletedTransactionId = (txId: string): void => {
+  if (!txId) return;
+  const set = getDeletedTransactionIds();
+  set.delete(String(txId).toLowerCase().trim());
+  localStorage.setItem(DELETED_TRANSACTIONS_KEY, JSON.stringify(Array.from(set)));
+};
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
+    const deletedIds = getDeletedTransactionIds();
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
+        // Filter out legacy sample entries for Liana & Kunga or deleted transactions
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
         const cleaned = parsed.filter(t => 
+          t && t.id &&
+          !deletedIds.has(String(t.id).toLowerCase().trim()) &&
           t.donorName !== 'Liana' && 
           t.donorName !== 'Kunga' && 
           !legacyMismatchedIds.has(t.id)
         );
 
-        // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
-        // (like Zonunmawia or demo accounts) are never missing due to old browser cache
-        const existingIds = new Set(cleaned.map(t => t.id));
+        // Smart merge with INITIAL_TRANSACTIONS only if never deleted
+        const existingIds = new Set(cleaned.map(t => String(t.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
-          if (!existingIds.has(initTx.id)) {
+          const cleanInitId = String(initTx.id).toLowerCase().trim();
+          if (!existingIds.has(cleanInitId) && !deletedIds.has(cleanInitId)) {
             merged.push(initTx);
             hasNew = true;
           }
@@ -453,9 +485,10 @@ export const getStoredTransactions = (): Transaction[] => {
         return merged;
       }
     }
-    // Initialize if never stored before
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
-    return INITIAL_TRANSACTIONS;
+    // Initialize if never stored before, filtering out deleted ones
+    const initialFiltered = INITIAL_TRANSACTIONS.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(initialFiltered));
+    return initialFiltered;
   } catch (e) {
     console.error('Failed to parse stored transactions', e);
   }
@@ -1589,8 +1622,17 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 };
 
 export const saveTransaction = (tx: Transaction): void => {
+  if (!tx || !tx.id) return;
+  unrecordDeletedTransactionId(tx.id);
   const current = getStoredTransactions();
-  const updated = [tx, ...current];
+  const idx = current.findIndex(t => String(t.id).toLowerCase().trim() === String(tx.id).toLowerCase().trim());
+  let updated: Transaction[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = tx;
+  } else {
+    updated = [tx, ...current];
+  }
   saveStoredTransactions(updated);
   if (tx && tx.id) {
     syncTransactionToFirestore(tx).catch(() => {});
@@ -1600,6 +1642,23 @@ export const saveTransaction = (tx: Transaction): void => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tx)
+    }).catch(() => {});
+  }
+};
+
+export const deleteStoredTransaction = (transactionId: string): void => {
+  if (!transactionId) return;
+  const cleanId = String(transactionId).toLowerCase().trim();
+  recordDeletedTransactionId(cleanId);
+  const current = getStoredTransactions();
+  const updated = current.filter(t => String(t.id).toLowerCase().trim() !== cleanId);
+  saveStoredTransactions(updated);
+  deleteTransactionFromFirestore(transactionId).catch(() => {});
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/transactions/${encodeURIComponent(transactionId)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Deleted by user / admin' })
     }).catch(() => {});
   }
 };

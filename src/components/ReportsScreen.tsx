@@ -210,8 +210,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
   const isKumtluang = selectedFilter === 'kumtluang';
   const kumtluangMatrix = useMemo(() => {
-    return buildKumtluangMatrix(filteredTransactions, sortOrder);
-  }, [filteredTransactions, sortOrder]);
+    return buildKumtluangMatrix(filteredTransactions, sortOrder, selectedCampaignObj?.subCategories);
+  }, [filteredTransactions, sortOrder, selectedCampaignObj?.subCategories]);
 
   // Scoped members for the current selected campaign
   const scopedMembers = useMemo(() => {
@@ -434,7 +434,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+        : (kumtluangMatrix.categories.length > 0 ? kumtluangMatrix.categories : ['General Collection']);
       if (m) {
         exportMemberCategoryMatrixPrint(
           m, 
@@ -458,7 +458,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+        : (kumtluangMatrix.categories.length > 0 ? kumtluangMatrix.categories : ['General Collection']);
       if (m) {
         exportMemberPassbookVerticalPrint(
           m, 
@@ -501,6 +501,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     setSortOrder(prev => prev === 'name-asc' ? 'name-desc' : 'name-asc');
   };
 
+  // State for deleting entire donor's record from Matrix
+  const [deletingDonorInfo, setDeletingDonorInfo] = useState<{ donorName: string; total: number; txCount: number } | null>(null);
+
   // Find a transaction by donor name for Kumtluang matrix row edit
   const handleEditDonorRow = (donorName: string) => {
     const tx = filteredTransactions.find(t => t.donorName === donorName);
@@ -509,6 +512,23 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     } else {
       alert('Transaction record hmuh a ni lo.');
     }
+  };
+
+  const handleDeleteDonorRow = (donorName: string, total: number) => {
+    const txs = filteredTransactions.filter(t => t.donorName === donorName);
+    setDeletingDonorInfo({ donorName, total, txCount: txs.length });
+  };
+
+  const handleConfirmDeleteDonorTxs = () => {
+    if (!deletingDonorInfo) return;
+    const txs = filteredTransactions.filter(t => t.donorName === deletingDonorInfo.donorName);
+    txs.forEach(t => {
+      deleteStoredTransaction(t.id);
+      if (onDeleteTransaction) {
+        onDeleteTransaction(t.id);
+      }
+    });
+    setDeletingDonorInfo(null);
   };
 
   return (
@@ -1403,13 +1423,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             {row.total.toLocaleString('en-IN')}
                           </td>
                           <td className="py-2 px-2.5 text-center">
-                            <button
-                              onClick={() => handleEditDonorRow(row.donorName)}
-                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200 shadow-2xs"
-                              title="Mimal Categories an pek dan siamtha rawh"
-                            >
-                              <Edit3 className="w-3 h-3" /> Edit
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleEditDonorRow(row.donorName)}
+                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs"
+                                title="Mimal Categories an pek dan siamtha rawh"
+                              >
+                                <Edit3 className="w-3 h-3" /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDonorRow(row.donorName, row.total)}
+                                className="px-1.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-rose-200 shadow-2xs"
+                                title="He donor record leh payment zawng zawng hi paih rawh"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-600" /> Paih
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1576,18 +1605,71 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           campaigns={campaigns}
           onClose={() => setEditingTransaction(null)}
           onSave={(updatedTx) => {
+            saveTransaction(updatedTx);
             if (onUpdateTransaction) {
               onUpdateTransaction(updatedTx);
             }
             setEditingTransaction(null);
           }}
           onDelete={(id) => {
+            deleteStoredTransaction(id);
             if (onDeleteTransaction) {
               onDeleteTransaction(id);
             }
             setEditingTransaction(null);
           }}
         />
+      )}
+
+      {/* CONFIRM DELETE DONOR'S ALL TRANSACTIONS MODAL */}
+      {deletingDonorInfo && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
+          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl relative my-auto text-center space-y-4">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <div>
+              <h3 className="text-base font-black text-slate-900">Donor Record Paih I Chiang Em?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                He donor <span className="font-bold text-slate-800">"{deletingDonorInfo.donorName}"</span> record leh transaction zawng zawng ({deletingDonorInfo.txCount} record, Total ₹{deletingDonorInfo.total.toLocaleString('en-IN')}) hi database atangin paih hlen a ni dawn e.
+              </p>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-left text-xs font-medium space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-rose-700 font-bold">Donor Hming:</span>
+                <span className="font-black text-rose-950">{deletingDonorInfo.donorName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-rose-700 font-bold">Pek Zat Total:</span>
+                <span className="font-black text-rose-950 font-mono">₹{deletingDonorInfo.total.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-rose-700 font-bold">Records Zat:</span>
+                <span className="font-bold text-rose-900">{deletingDonorInfo.txCount} tx</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeletingDonorInfo(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDonorTxs}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Paih Bo Rawh</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1619,13 +1701,31 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   
   // Breakdown state
   const campaign = campaigns.find(c => c.id === transaction.campaignId);
-  const defaultCategories = campaign?.subCategories && campaign.subCategories.length > 0 
+  const campaignSubcats = campaign?.subCategories && campaign.subCategories.length > 0 
     ? campaign.subCategories 
-    : ['Pathian Ram', 'Mission', 'Building Fund'];
+    : [];
 
-  const initialBreakdown: { [key: string]: number } = transaction.subCategoryBreakdown || {
-    [defaultCategories[0]]: transaction.amount || 0
-  };
+  const initialBreakdown: { [key: string]: number } = {};
+  if (transaction.subCategoryBreakdown && Object.keys(transaction.subCategoryBreakdown).length > 0) {
+    Object.entries(transaction.subCategoryBreakdown).forEach(([k, v]) => {
+      initialBreakdown[k] = Number(v) || 0;
+    });
+  } else if (transaction.subCategory) {
+    initialBreakdown[transaction.subCategory] = transaction.amount || 0;
+  } else if (campaignSubcats.length > 0) {
+    campaignSubcats.forEach((cat, idx) => {
+      initialBreakdown[cat] = idx === 0 ? (transaction.amount || 0) : 0;
+    });
+  } else {
+    initialBreakdown['General Collection'] = transaction.amount || 0;
+  }
+
+  // Also include any campaign defined categories that might not be in the breakdown yet with 0
+  campaignSubcats.forEach(cat => {
+    if (initialBreakdown[cat] === undefined) {
+      initialBreakdown[cat] = 0;
+    }
+  });
 
   const [breakdown, setBreakdown] = useState<{ [key: string]: number }>(initialBreakdown);
   const [newCatName, setNewCatName] = useState<string>('');
@@ -1670,34 +1770,49 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const platformFee: number = Math.round(currentSubtotal * 0.01);
   const totalAmount: number = currentSubtotal + platformFee;
 
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (currentSubtotal <= 0) {
-      alert('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
+      const wantDelete = window.confirm('Pek zat hi ₹0 a ni a, he transaction record hi paih (delete) i duh em?');
+      if (wantDelete) {
+        handleConfirmDelete();
+      }
       return;
     }
 
+    // Filter out 0-amount categories from breakdown to keep data clean
+    const cleanBreakdown: { [k: string]: number } = {};
+    Object.entries(breakdown).forEach(([k, v]) => {
+      const n = Number(v) || 0;
+      if (n > 0) {
+        cleanBreakdown[k] = n;
+      }
+    });
+
+    const primaryCat = Object.keys(cleanBreakdown)[0] || Object.keys(breakdown)[0] || 'General';
+
     const updated: Transaction = {
       ...transaction,
-      donorName: donorName.trim(),
+      donorName: donorName.trim() || 'Unknown Donor',
       isAnonymous: isAnonymous,
       amount: currentSubtotal,
       platformFee: platformFee,
       totalAmount: totalAmount,
       paymentMethod: paymentMethod,
       status: status,
+      subCategory: isKumtluang ? primaryCat : transaction.subCategory,
       remark: remark.trim() || undefined,
-      subCategoryBreakdown: isKumtluang ? breakdown : undefined,
+      subCategoryBreakdown: isKumtluang ? (Object.keys(cleanBreakdown).length > 0 ? cleanBreakdown : breakdown) : undefined,
     };
 
     onSave(updated);
   };
 
-  const handleDeleteClick = () => {
-    if (window.confirm(`I chiang maw? He transaction (Donor: ${transaction.donorName}, Amount: ₹${transaction.amount}) hi paih hlen a ni dawn e.`)) {
-      onDelete(transaction.id);
-    }
+  const handleConfirmDelete = () => {
+    onDelete(transaction.id);
   };
 
   return (
@@ -1888,13 +2003,37 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleDeleteClick}
-              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
-            </button>
+            {confirmDelete ? (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-center space-y-2 animate-fadeIn">
+                <p className="text-xs font-bold text-rose-900">
+                  I chiang chiah em? He transaction record (₹{transaction.amount?.toLocaleString('en-IN')}) hi paih hlen a ni dawn e.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 bg-white border border-slate-200 text-slate-700 font-bold py-1.5 rounded-lg text-xs hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Paih Bo Rawh
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
+              </button>
+            )}
           </div>
         </form>
       </div>

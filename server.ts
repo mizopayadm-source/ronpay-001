@@ -648,6 +648,19 @@ app.post('/api/transactions', (req: Request, res: Response) => {
   }
 });
 
+app.delete('/api/transactions/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    const cleanId = String(id).toLowerCase().trim();
+    db.transactions = (db.transactions || []).filter((t: any) => String(t.id).toLowerCase().trim() !== cleanId);
+    saveDatabase(db);
+    res.json({ success: true, message: `Transaction ${id} deleted successfully` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Announcement API
 app.get('/api/announcement', (req: Request, res: Response) => {
   const db = getDatabase();
