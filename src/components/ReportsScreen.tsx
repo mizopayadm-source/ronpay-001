@@ -57,7 +57,7 @@ import {
   ALL_MONTH_NAMES_SHORT,
   TargetExportInfo
 } from '../utils/export';
-import { getMembers, isCampaignCreator } from '../utils/storage';
+import { getMembers, isCampaignCreator, saveTransaction, deleteStoredTransaction } from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
 
 interface ReportsScreenProps {
@@ -207,6 +207,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
   const grandTotal = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
 
+  // Selected campaign display name
+  const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
+  const currentCampaignDisplayName = selectedCampaignObj 
+    ? selectedCampaignObj.title 
+    : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
+
   // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
   const isKumtluang = selectedFilter === 'kumtluang';
   const kumtluangMatrix = useMemo(() => {
@@ -217,12 +223,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const scopedMembers = useMemo(() => {
     return getMembers(selectedCampaignId);
   }, [selectedCampaignId]);
-
-  // Selected campaign display name
-  const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
-  const currentCampaignDisplayName = selectedCampaignObj 
-    ? selectedCampaignObj.title 
-    : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
 
   // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
   const headerTitle = useMemo(() => {
