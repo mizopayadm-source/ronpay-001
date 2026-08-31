@@ -57,6 +57,11 @@ import {
   ALL_MONTH_NAMES_SHORT,
   TargetExportInfo
 } from '../utils/export';
+import { 
+  isTransactionInPeriodFilter, 
+  getTransactionMonthInfo, 
+  ALL_MONTH_NAMES_FULL 
+} from '../utils/monthHelper';
 import { getMembers, isCampaignCreator, saveTransaction, deleteStoredTransaction } from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
 
@@ -135,6 +140,56 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
   }, [isCreator, creatorCampaigns, selectedFilter]);
 
+  // Available periods list for filter dropdown (All months, quarters, years, custom labels)
+  const availablePeriodOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+    
+    const monthlyList: { value: string; label: string }[] = [];
+    ALL_MONTH_NAMES_FULL.forEach(m => {
+      monthlyList.push({
+        value: `${m} ${currentYear}`,
+        label: `📅 ${m} ${currentYear}`,
+      });
+    });
+
+    const quartersList = [
+      { value: `Q1 ${currentYear}`, label: `📊 Q1 (Jan - Mar) ${currentYear}` },
+      { value: `Q2 ${currentYear}`, label: `📊 Q2 (Apr - Jun) ${currentYear}` },
+      { value: `Q3 ${currentYear}`, label: `📊 Q3 (Jul - Sep) ${currentYear}` },
+      { value: `Q4 ${currentYear}`, label: `📊 Q4 (Oct - Dec) ${currentYear}` },
+    ];
+
+    const yearsList = years.map(yr => ({
+      value: `${yr}`,
+      label: `🗓️ ${yr} Full Year (Kumtluan)`,
+    }));
+
+    const customList: { value: string; label: string }[] = [];
+    transactions.forEach(t => {
+      if (t.periodLabel && t.periodLabel.trim()) {
+        const val = t.periodLabel.trim();
+        const exists = monthlyList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
+          quartersList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
+          yearsList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
+          customList.some(o => o.value.toLowerCase() === val.toLowerCase());
+        if (!exists) {
+          customList.push({
+            value: val,
+            label: `🏷️ ${val}`,
+          });
+        }
+      }
+    });
+
+    return {
+      monthlyList,
+      quartersList,
+      yearsList,
+      customList,
+    };
+  }, [transactions]);
+
   // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation)
   const filteredTransactions = useMemo(() => {
     if (!isCreator || creatorCampaignIds.size === 0) return [];
@@ -155,17 +210,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (t.campaignId !== selectedCampaignId) return false;
       }
 
-      // 4. Period / Month filter
+      // 4. Period / Month filter (using robust month, quarter, year, and label matching)
       if (selectedPeriodFilter !== 'all') {
-        if (t.periodLabel && !t.periodLabel.toLowerCase().includes(selectedPeriodFilter.toLowerCase())) {
+        if (!isTransactionInPeriodFilter(t, selectedPeriodFilter)) {
           return false;
         }
+      } else {
+        // 5. Date range filter (only applied when all periods are shown or no specific month filter)
+        const txDate = t.timestamp.slice(0, 10);
+        if (startDate && txDate < startDate) return false;
+        if (endDate && txDate > endDate) return false;
       }
-
-      // 5. Date range filter
-      const txDate = t.timestamp.slice(0, 10);
-      if (startDate && txDate < startDate) return false;
-      if (endDate && txDate > endDate) return false;
 
       // 6. Search query filter
       if (searchQuery.trim()) {
@@ -173,7 +228,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         const matchesTitle = (t.campaignTitle || '').toLowerCase().includes(q);
         const matchesDonor = (t.donorName || '').toLowerCase().includes(q);
         const matchesId = (t.id || '').toLowerCase().includes(q);
-        const matchesPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
+        const matchesPeriod = isTransactionInPeriodFilter(t, q);
         if (!matchesTitle && !matchesDonor && !matchesId && !matchesPeriod) return false;
       }
 
@@ -711,13 +766,29 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   onChange={(e) => setSelectedPeriodFilter(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
                 >
-                  <option value="all">All Months & Periods</option>
-                  <option value="August">August 2026</option>
-                  <option value="July">July 2026</option>
-                  <option value="June">June 2026</option>
-                  <option value="Q3">Q3 (Jul - Sep)</option>
-                  <option value="Q2">Q2 (Apr - Jun)</option>
-                  <option value="2026">2026 Full Year</option>
+                  <option value="all">🌟 All Months & Periods (Zawng zawng)</option>
+                  <optgroup label="Thla tin (Monthly Selection)">
+                    {availablePeriodOptions.monthlyList.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Quarters (Thla 3 dan zela pek)">
+                    {availablePeriodOptions.quartersList.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Kumtluan (Full Year)">
+                    {availablePeriodOptions.yearsList.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
+                  {availablePeriodOptions.customList.length > 0 && (
+                    <optgroup label="Other / Custom Records">
+                      {availablePeriodOptions.customList.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
@@ -1693,12 +1764,21 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onSave,
   onDelete,
 }) => {
+  const initialMonthInfo = getTransactionMonthInfo(transaction);
   const [donorName, setDonorName] = useState<string>(transaction.donorName || '');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(transaction.isAnonymous || false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
   const [status, setStatus] = useState<'completed' | 'pending_verification'>((transaction.status as any) || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
   
+  // Period & Month Editing States
+  const [periodType, setPeriodType] = useState<string>(transaction.periodType || 'monthly');
+  const [periodMonth, setPeriodMonth] = useState<string>(transaction.periodMonth || initialMonthInfo.fullMonth);
+  const [periodQuarter, setPeriodQuarter] = useState<string>(
+    transaction.periodMonth && transaction.periodMonth.includes('Q') ? transaction.periodMonth : 'Q1 (Jan - Mar)'
+  );
+  const [periodYear, setPeriodYear] = useState<string>(transaction.periodYear || initialMonthInfo.year || '2026');
+
   // Breakdown state
   const campaign = campaigns.find(c => c.id === transaction.campaignId);
   const campaignSubcats = campaign?.subCategories && campaign.subCategories.length > 0 
@@ -1735,6 +1815,14 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [flatAmount, setFlatAmount] = useState<string>(transaction.amount.toString());
 
   const isKumtluang = transaction.category === 'kumtluang';
+
+  // Compute live computed preview label
+  const livePeriodLabel = useMemo(() => {
+    if (periodType === 'monthly') return `${periodMonth} ${periodYear}`;
+    if (periodType === 'quarterly') return `${periodQuarter} ${periodYear}`;
+    if (periodType === 'yearly') return `${periodYear} (Kumtluan)`;
+    return `${periodMonth} ${periodYear}`;
+  }, [periodType, periodMonth, periodQuarter, periodYear]);
 
   const handleAmountChange = (catName: string, val: string) => {
     const num = parseFloat(val) || 0;
@@ -1793,6 +1881,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     });
 
     const primaryCat = Object.keys(cleanBreakdown)[0] || Object.keys(breakdown)[0] || 'General';
+    const finalMonth = periodType === 'monthly' ? periodMonth : periodType === 'quarterly' ? periodQuarter : 'All Months';
 
     const updated: Transaction = {
       ...transaction,
@@ -1805,6 +1894,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       status: status,
       subCategory: isKumtluang ? primaryCat : transaction.subCategory,
       remark: remark.trim() || undefined,
+      periodType: periodType,
+      periodMonth: finalMonth,
+      periodYear: periodYear,
+      periodLabel: livePeriodLabel,
       subCategoryBreakdown: isKumtluang ? (Object.keys(cleanBreakdown).length > 0 ? cleanBreakdown : breakdown) : undefined,
     };
 
@@ -1859,6 +1952,84 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             />
             <span>Hming thup (Anonymous Donation)</span>
           </label>
+
+          {/* PEK HUN THLA BI / PERIOD SELECTOR */}
+          <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Pek Hun / Thla Bi (Payment Month & Period)</span>
+              </span>
+              <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
+                {livePeriodLabel}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Frequency */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Pek Dan (Type)</label>
+                <select
+                  value={periodType}
+                  onChange={(e) => setPeriodType(e.target.value)}
+                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
+                >
+                  <option value="monthly">Thla tin (Monthly)</option>
+                  <option value="quarterly">Thla 3 dan (Quarterly)</option>
+                  <option value="yearly">Kumtluan (Yearly)</option>
+                  <option value="one_time">Vawi khat pek (One-time)</option>
+                </select>
+              </div>
+
+              {/* Target Year */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Kum (Year)</label>
+                <select
+                  value={periodYear}
+                  onChange={(e) => setPeriodYear(e.target.value)}
+                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
+                >
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                  <option value="2028">2028</option>
+                  <option value="2029">2029</option>
+                  <option value="2030">2030</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Target Month or Quarter */}
+            {periodType === 'monthly' || periodType === 'one_time' ? (
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Pek Thla (Target Month)</label>
+                <select
+                  value={periodMonth}
+                  onChange={(e) => setPeriodMonth(e.target.value)}
+                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
+                >
+                  {ALL_MONTH_NAMES_FULL.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            ) : periodType === 'quarterly' ? (
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Quarter (Thla 3 Bi)</label>
+                <select
+                  value={periodQuarter}
+                  onChange={(e) => setPeriodQuarter(e.target.value)}
+                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
+                >
+                  <option value="Q1 (Jan - Mar)">Q1 (Jan - Mar)</option>
+                  <option value="Q2 (Apr - Jun)">Q2 (Apr - Jun)</option>
+                  <option value="Q3 (Jul - Sep)">Q3 (Jul - Sep)</option>
+                  <option value="Q4 (Oct - Dec)">Q4 (Oct - Dec)</option>
+                </select>
+              </div>
+            ) : null}
+          </div>
 
           {/* KUMTLUANG SUB-CATEGORIES ALLOCATION */}
           {isKumtluang ? (

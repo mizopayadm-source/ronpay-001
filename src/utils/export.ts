@@ -1,5 +1,6 @@
 import { Transaction, MemberRecord } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
+import { isTransactionInMonth, getTransactionMonthInfo } from './monthHelper';
 
 export interface MatrixRow {
   donorName: string;
@@ -316,15 +317,12 @@ export const computeMonthlyDistribution = (
   const monthTotals: Record<string, number> = {};
   months.forEach(m => { monthTotals[m] = 0; });
 
-  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
   transactions.forEach(t => {
     try {
-      const d = new Date(t.timestamp);
-      const mIdx = d.getMonth(); // 0=Jan, 3=Apr, 7=Aug
-      const mName = monthNamesShort[mIdx];
+      const monthInfo = getTransactionMonthInfo(t);
+      const mName = monthInfo.shortMonth;
       if (monthTotals[mName] !== undefined) {
-        monthTotals[mName] += t.amount;
+        monthTotals[mName] += (t.amount || 0);
       }
     } catch {
       // fallback
@@ -1589,11 +1587,7 @@ export const generateMasterLedgerPrintHtml = (
 
     let rowTotal = 0;
     const monthCols = months.map(m => {
-      const monthTxns = memberTxns.filter(t => {
-        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-        const d = new Date(t.timestamp);
-        return months[d.getMonth()] === m;
-      });
+      const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
       const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
       rowTotal += sum;
       monthTotals[m] += sum;
@@ -1732,11 +1726,7 @@ export const generateMemberCategoryMatrixPrintHtml = (
   const rowsHtml = categories.map((cat, idx) => {
     let rowTotal = 0;
     const monthCols = months.map(m => {
-      const monthTxns = memberTxns.filter(t => {
-        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-        const d = new Date(t.timestamp);
-        return months[d.getMonth()] === m;
-      });
+      const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
       const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
       rowTotal += sum;
       monthTotals[m] += sum;
@@ -1873,11 +1863,7 @@ export const generateMemberPassbookVerticalPrintHtml = (
 
   const rowsHtml = months.map((month, idx) => {
     let monthTotal = 0;
-    const monthTxns = memberTxns.filter(t => {
-      if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
-      const d = new Date(t.timestamp);
-      return months[d.getMonth()] === month;
-    });
+    const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, month));
 
     const catCols = categories.map(cat => {
       const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);

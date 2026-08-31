@@ -24,6 +24,7 @@ import { MemberRecord, Transaction, Campaign, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { isCampaignCreator } from '../utils/storage';
+import { isTransactionInMonth } from '../utils/monthHelper';
 
 export type PreviewReportFormat = 'style1_master' | 'style4_audit' | 'style2_matrix' | 'style3_passbook';
 
@@ -199,11 +200,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
       const monthAmounts: { [month: string]: number } = {};
 
       months.forEach(m => {
-        const monthTxns = memberTxns.filter(t => {
-          if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-          const d = new Date(t.timestamp);
-          return months[d.getMonth()] === m;
-        });
+        const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
         const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
         monthAmounts[m] = sum;
         rowTotal += sum;
@@ -871,11 +868,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                           <td className="p-2 border border-slate-200 font-bold text-slate-800">{cat}</td>
                           {months.map(m => {
-                            const sum = memberTxns.filter(t => {
-                              if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-                              const d = new Date(t.timestamp);
-                              return months[d.getMonth()] === m;
-                            }).reduce((acc, t) => acc + (t.amount || 0), 0);
+                            const sum = memberTxns.filter(t => isTransactionInMonth(t, m)).reduce((acc, t) => acc + (t.amount || 0), 0);
                             catTotal += sum;
                             return (
                               <td key={m} className="p-2 border border-slate-200 text-right font-mono font-bold text-slate-700">
@@ -938,7 +931,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                     const memberTxns = scopedTransactions.filter(t => 
                       ((t.donorName && t.donorName.toLowerCase().trim() === activeMember.name.toLowerCase().trim()) ||
                        (t.remark && t.remark.includes(activeMember.id))) &&
-                      (t.periodMonth?.toLowerCase() === m.toLowerCase() || months[new Date(t.timestamp).getMonth()] === m)
+                      isTransactionInMonth(t, m)
                     );
                     const sum = memberTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
                     return (

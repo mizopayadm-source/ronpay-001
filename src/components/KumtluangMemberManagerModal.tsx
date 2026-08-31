@@ -479,8 +479,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       createdAt: new Date().toISOString(),
       subCategory: selectedCategory,
       subCategoryBreakdown: { [selectedCategory]: amt },
+      periodType: 'monthly',
       periodMonth: selectedMonth,
       periodYear: selectedYear,
+      periodLabel: `${selectedMonth} ${selectedYear}`,
       platformFeeBearer: 'org_paid'
     };
 
@@ -526,8 +528,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       category: editingTx.category || 'kumtluang',
       subCategory: catName,
       subCategoryBreakdown: { [catName]: amt },
+      periodType: 'monthly',
       periodMonth: editTxMonth,
       periodYear: editTxYear,
+      periodLabel: `${editTxMonth} ${editTxYear}`,
       remark: editTxRemark.trim() || undefined
     };
 
