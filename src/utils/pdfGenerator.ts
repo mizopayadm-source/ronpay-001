@@ -12,6 +12,58 @@ export interface PDFExportResult {
 }
 
 /**
+ * Sanitize all <style> tags and element inline styles in a cloned document
+ * to prevent html2canvas crashing on modern CSS features like oklch(), color-mix(), etc.
+ */
+function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement) {
+  try {
+    // 1. Sanitize all <style> tags
+    const styleTags = clonedDoc.querySelectorAll('style');
+    styleTags.forEach((styleTag) => {
+      if (styleTag.textContent) {
+        let css = styleTag.textContent;
+        // Replace oklch(...) occurrences with safe hex / rgb values
+        if (css.includes('oklch')) {
+          css = css.replace(/oklch\([^)]+\)/gi, '#1e293b');
+        }
+        // Replace color-mix(...) if any
+        if (css.includes('color-mix')) {
+          css = css.replace(/color-mix\([^)]+\)/gi, '#334155');
+        }
+        styleTag.textContent = css;
+      }
+    });
+
+    // 2. Sanitize inline styles on all elements
+    const allElements = clonedDoc.querySelectorAll('*');
+    const colorProps = ['color', 'backgroundColor', 'borderColor', 'outlineColor', 'fill', 'stroke', 'boxShadow', 'textDecorationColor'];
+    
+    allElements.forEach((el: any) => {
+      if (el.style) {
+        colorProps.forEach((prop) => {
+          try {
+            const val = el.style[prop];
+            if (val && typeof val === 'string' && (val.includes('oklch') || val.includes('color-mix'))) {
+              el.style[prop] = '#0f172a';
+            }
+          } catch {}
+        });
+      }
+    });
+
+    // 3. Ensure the target root element has clean solid background and text color
+    if (clonedEl) {
+      clonedEl.style.backgroundColor = '#ffffff';
+      clonedEl.style.color = '#0f172a';
+      clonedEl.style.transform = 'none';
+      clonedEl.style.margin = '0 auto';
+    }
+  } catch (err) {
+    console.warn('Error during cloned document style sanitization:', err);
+  }
+}
+
+/**
  * High-quality client-side PDF generator that works reliably across all devices,
  * Mobile WebViews, Android, iOS, and sandboxed iframes.
  */
@@ -33,17 +85,35 @@ export async function exportElementToPDF(
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: Math.max(element.scrollWidth, 850),
-    });
-
-    // Restore original transform
-    element.style.transform = originalTransform;
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: Math.max(element.scrollWidth, 850),
+        onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
+          sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+        }
+      });
+    } catch (h2cError: any) {
+      console.warn('First html2canvas attempt failed, retrying with minimal scale:', h2cError);
+      canvas = await html2canvas(element, {
+        scale: 1.5,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
+          sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+        }
+      });
+    } finally {
+      // Restore original transform
+      element.style.transform = originalTransform;
+    }
 
     if (onProgress) onProgress('PDF phek rem fel mek a ni...');
 
@@ -187,7 +257,32 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
     const frameDoc = frame.contentWindow?.document || frame.contentDocument;
     if (frameDoc) {
       frameDoc.open();
-      frameDoc.write(htmlContent);
+      // Ensure UTF-8 charset and document title are properly preserved
+      let completeHtml = htmlContent;
+      if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
+        completeHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>${docTitle || 'RonPay Document'}</title>
+              <style>
+                @page { size: auto; margin: 8mm; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 10px; color: #0f172a; background: #ffffff; }
+                table { width: 100%; border-collapse: collapse; }
+                @media print {
+                  body { padding: 0; }
+                  .no-print { display: none !important; }
+                }
+              </style>
+            </head>
+            <body>
+              ${htmlContent}
+            </body>
+          </html>
+        `;
+      }
+      frameDoc.write(completeHtml);
       frameDoc.close();
 
       setTimeout(() => {
@@ -202,7 +297,7 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
           console.warn('Iframe print failed, falling back to window.print', e);
           window.print();
         }
-      }, 400);
+      }, 450);
       return;
     }
   } catch (e) {

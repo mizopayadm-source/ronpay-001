@@ -1447,6 +1447,42 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   }
 ];
 
+export const getDeletedMemberIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('ronpay_deleted_member_ids');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.map(x => String(x).toLowerCase().trim()));
+      }
+    }
+  } catch (e) {
+    console.error('Failed to parse deleted member IDs', e);
+  }
+  return new Set();
+};
+
+export const recordDeletedMemberId = (memberId: string): void => {
+  try {
+    const set = getDeletedMemberIds();
+    set.add(memberId.toLowerCase().trim());
+    localStorage.setItem('ronpay_deleted_member_ids', JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.error('Failed to record deleted member ID', e);
+  }
+};
+
+export const unrecordDeletedMemberId = (memberId: string): void => {
+  try {
+    const set = getDeletedMemberIds();
+    if (set.delete(memberId.toLowerCase().trim())) {
+      localStorage.setItem('ronpay_deleted_member_ids', JSON.stringify(Array.from(set)));
+    }
+  } catch (e) {
+    console.error('Failed to unrecord deleted member ID', e);
+  }
+};
+
 export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
     let storedMembers: MemberRecord[] = [];
@@ -1458,16 +1494,25 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     }
 
+    const deletedIds = getDeletedMemberIds();
+
     // Merge default initial members with stored members
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id) map.set(m.id.toLowerCase(), m);
+      if (m && m.id) {
+        const idLower = m.id.toLowerCase().trim();
+        if (!deletedIds.has(idLower)) {
+          map.set(idLower, m);
+        }
+      }
     }
     for (const m of storedMembers) {
       if (m && m.id) {
-        const k = m.id.toLowerCase();
-        const existing = map.get(k);
-        map.set(k, { ...(existing || {}), ...m });
+        const idLower = m.id.toLowerCase().trim();
+        if (!deletedIds.has(idLower)) {
+          // Stored member is authoritative and completely overwrites default properties
+          map.set(idLower, m);
+        }
       }
     }
 
@@ -1549,6 +1594,9 @@ export const saveMembers = (members: MemberRecord[]): void => {
 };
 
 export const addOrUpdateMember = (member: MemberRecord): void => {
+  if (member && member.id) {
+    unrecordDeletedMemberId(member.id);
+  }
   const allList = getMembers(); // Load all members across all Bawms
   const targetId = (member.id || '').trim().toLowerCase();
   const idx = allList.findIndex(m => 
@@ -1574,6 +1622,9 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
+  if (memberId) {
+    recordDeletedMemberId(memberId);
+  }
   const allList = getMembers();
   const targetId = (memberId || '').trim().toLowerCase();
   const filtered = allList.filter(m => {

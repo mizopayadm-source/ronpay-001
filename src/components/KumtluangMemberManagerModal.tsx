@@ -727,7 +727,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       orgCode: org,
       phoneLast4: p4,
       fullPhone: editFullPhone.trim() || undefined,
-      section: editSection.trim() || undefined,
+      section: editSection.trim() || '',
       avatarUrl: editAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: updatedDeps,
@@ -2694,15 +2694,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               <div>
                 {activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0 ? (
                   <>
-                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                      {activeEditCampaign.sectionLabel || 'Section / Bial'}
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10.5px] font-bold text-slate-700">
+                        {activeEditCampaign.sectionLabel || 'Section / Bial'}
+                      </label>
+                      {editSection && (
+                        <button
+                          type="button"
+                          onClick={() => setEditSection('')}
+                          className="text-[10px] text-rose-600 font-extrabold hover:underline cursor-pointer"
+                        >
+                          Paih / Clear Section
+                        </button>
+                      )}
+                    </div>
                     <select
                       value={editSection}
                       onChange={(e) => setEditSection(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                     >
-                      <option value="">-- Thlang Rawh ({activeEditCampaign.sectionLabel || 'Section / Bial'}) --</option>
+                      <option value="">-- A awm lo / Paih / None --</option>
                       {activeEditCampaign.definedSections.map((sec, idx) => (
                         <option key={idx} value={sec}>
                           {sec}
@@ -2715,9 +2726,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </>
                 ) : (
                   <>
-                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                      Section / Bial (Optional)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10.5px] font-bold text-slate-700">
+                        Section / Bial (Optional)
+                      </label>
+                      {editSection && (
+                        <button
+                          type="button"
+                          onClick={() => setEditSection('')}
+                          className="text-[10px] text-rose-600 font-extrabold hover:underline cursor-pointer"
+                        >
+                          Paih / Clear
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={editSection}
