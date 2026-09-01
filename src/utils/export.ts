@@ -51,6 +51,7 @@ export interface PDFExportOptions {
   verifiedByTitle?: string;
   approvedByTitle?: string;
   targetInfo?: TargetExportInfo;
+  members?: MemberRecord[];
 }
 
 export interface GroupedDonorRecord {
@@ -336,7 +337,8 @@ export const buildKumtluangMatrix = (
  */
 export const buildGroupedDonorRecords = (
   transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc',
+  members?: MemberRecord[]
 ): GroupedDonorRecord[] => {
   const donorMap = new Map<string, {
     donorName: string;
@@ -449,15 +451,28 @@ export const buildGroupedDonorRecords = (
       new Set(d.datesList.map(dt => formatDateDDMMYYYY(dt)))
     );
 
+    // If member info is missing on transaction, attempt lookup from members directory
+    let memberId = d.memberId;
+    let section = d.section;
+    let phone = d.phone;
+    if (members && members.length > 0 && !d.isAnonymous) {
+      const match = members.find(m => m.name.toLowerCase().trim() === d.donorName.toLowerCase().trim());
+      if (match) {
+        if (!memberId) memberId = match.id;
+        if (!section) section = match.section;
+        if (!phone) phone = match.phoneLast4 || match.fullPhone;
+      }
+    }
+
     records.push({
       donorName: d.donorName,
       isAnonymous: d.isAnonymous,
-      memberId: d.memberId,
-      section: d.section,
-      phone: d.phone,
-      donorMemberId: d.memberId,
-      donorSection: d.section,
-      donorPhone: d.phone,
+      memberId,
+      section,
+      phone,
+      donorMemberId: memberId,
+      donorSection: section,
+      donorPhone: phone,
       paymentMethods: methodsArr,
       paymentMethodLabel: methodLabel,
       totalAmount: d.totalAmount,
@@ -1532,7 +1547,7 @@ export const generateTransactionsPDFHtml = (
   let tableFooterColspan = 4;
 
   if (shouldGroupByDonor) {
-    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder);
+    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder, options.members);
     tableFooterColspan = showDateTime ? 5 : 4;
 
     tableHeaderHtml = `
