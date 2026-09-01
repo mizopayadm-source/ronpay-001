@@ -38,6 +38,8 @@ import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { getMembers, addOrUpdateMember } from '../utils/storage';
+import { UPIIntentModal } from './UPIIntentModal';
+import { validateUpiId } from '../utils/upi';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -69,17 +71,35 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
+  const [isUPIIntentModalOpen, setIsUPIIntentModalOpen] = useState<boolean>(false);
+  const [onlineDonorPayload, setOnlineDonorPayload] = useState<{
+    donorName: string;
+    donorPhone?: string;
+    donorVeng?: string;
+    memberId?: string;
+    subId?: string;
+    isDependent: boolean;
+    isAnonymous: boolean;
+  }>({
+    donorName: '',
+    donorPhone: undefined,
+    donorVeng: undefined,
+    memberId: undefined,
+    subId: undefined,
+    isDependent: false,
+    isAnonymous: false,
+  });
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
-  const [donorSection, setDonorSection] = useState<string>('Bial 1 (Vengchhak)');
+  const [donorSection, setDonorSection] = useState<string>('');
   const [phoneSearchQuery, setPhoneSearchQuery] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId (e.g. EBE-1460-01)
   const [isNewMemberMode, setIsNewMemberMode] = useState<boolean>(false);
   const [newRegName, setNewRegName] = useState<string>('');
   const [newRegPhone, setNewRegPhone] = useState<string>('');
-  const [newRegSection, setNewRegSection] = useState<string>('Bial 1 (Vengchhak)');
+  const [newRegSection, setNewRegSection] = useState<string>('');
   const [isCustomSection, setIsCustomSection] = useState<boolean>(false);
   const [customSectionText, setCustomSectionText] = useState<string>('');
   const [newDependentName, setNewDependentName] = useState<string>('');
@@ -186,7 +206,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setSelectedMember(match);
       setDonorName(match.name);
       setDonorPhone(match.fullPhone || '');
-      setDonorSection(match.section || 'Section A');
+      setDonorSection(match.section || '');
       setSelectedPayerType('primary');
       setIsNewMemberMode(false);
     } else {
@@ -212,8 +232,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const newId = `${orgCode}-${phoneLast4}`;
 
     const sectionToUse = isCustomSection 
-      ? (customSectionText.trim() || 'General') 
-      : (newRegSection || 'General');
+      ? (customSectionText.trim() || undefined) 
+      : (newRegSection.trim() || undefined);
 
     const newMember: MemberRecord = {
       id: newId,
@@ -232,7 +252,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setSelectedMember(newMember);
     setDonorName(newMember.name);
     setDonorPhone(newMember.fullPhone || '');
-    setDonorSection(newMember.section || 'General');
+    setDonorSection(newMember.section || '');
     setPhoneSearchQuery(phoneLast4);
     setSelectedPayerType('primary');
     setIsNewMemberMode(false);
@@ -268,17 +288,21 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setEditMemberPhone(selectedMember.fullPhone || selectedMember.phoneLast4);
     
     const currentSec = selectedMember.section || '';
-    const isCustom = campaign?.definedSections && campaign.definedSections.length > 0
-      ? !campaign.definedSections.includes(currentSec)
-      : false;
+    const hasDefinedSections = Boolean(campaign?.definedSections && campaign.definedSections.length > 0);
     
-    if (isCustom && currentSec) {
-      setIsEditCustomSection(true);
-      setEditCustomSectionText(currentSec);
-      setEditMemberSection('__custom__');
+    if (hasDefinedSections) {
+      const isCustom = !campaign!.definedSections!.includes(currentSec);
+      if (isCustom && currentSec) {
+        setIsEditCustomSection(true);
+        setEditCustomSectionText(currentSec);
+        setEditMemberSection('__custom__');
+      } else {
+        setIsEditCustomSection(false);
+        setEditMemberSection(currentSec || '');
+      }
     } else {
       setIsEditCustomSection(false);
-      setEditMemberSection(currentSec || campaign?.definedSections?.[0] || 'General');
+      setEditMemberSection(currentSec || '');
     }
 
     setEditMemberDependents(selectedMember.dependents ? JSON.parse(JSON.stringify(selectedMember.dependents)) : []);
@@ -293,9 +317,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     const cleanPhone = editMemberPhone.replace(/\D/g, '');
     const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : selectedMember.phoneLast4;
-    const finalSection = isEditCustomSection 
-      ? (editCustomSectionText.trim() || 'General') 
-      : (editMemberSection || 'General');
+    const finalSection = campaign?.definedSections && campaign.definedSections.length > 0
+      ? (isEditCustomSection ? editCustomSectionText.trim() : editMemberSection.trim())
+      : (selectedMember.section || undefined);
 
     const updated: MemberRecord = {
       ...selectedMember,
@@ -475,43 +499,29 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setIsProcessing(true);
 
     if (paymentMethod === 'online') {
-      setPhonePeStatus('CALLING_PG');
+      // 1. Strict recipient UPI ID validation
+      const targetUpi = campaign?.targetUpiId || campaign?.upiId || '';
+      const upiValidation = validateUpiId(targetUpi);
+      
+      if (!upiValidation.isValid) {
+        setIsProcessing(false);
+        alert(`⛔ UPI ID A DIK LO EMAW A AWM LO:\n"${targetUpi || 'A ruak'}"\n\n${upiValidation.error || 'Campaign siamtu / Creator hian UPI ID dik a dah leh dah loh check a ni e.'}\n\nUPI ID dik lo a nih avangin sum pek luh theih a ni lo.`);
+        return;
+      }
 
-      setTimeout(() => {
-        setPhonePeStatus('SUCCESS');
+      // 2. Set online donor payload and trigger UPI Intent Modal
+      setOnlineDonorPayload({
+        donorName: resolvedDonorName || 'Valued Donor',
+        donorPhone: resolvedDonorPhone || undefined,
+        donorVeng: resolvedDonorVeng || undefined,
+        memberId: resolvedMemberId,
+        subId: resolvedSubId,
+        isDependent: resolvedIsDependent,
+        isAnonymous: isAnonymous
+      });
 
-        setTimeout(() => {
-          const transaction: Transaction = {
-            id: 'RPAY-' + Math.floor(100000 + Math.random() * 900000),
-            campaignId: campaign?.id || `cmp-${category}-custom`,
-            campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
-            category: category,
-            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
-            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
-            memberId: isAnonymous ? undefined : resolvedMemberId,
-            subId: isAnonymous ? undefined : resolvedSubId,
-            isDependent: isAnonymous ? false : resolvedIsDependent,
-            isAnonymous: isAnonymous,
-            amount: subtotal,
-            platformFee: platformFee,
-            totalAmount: totalPayable,
-            paymentMethod: 'online',
-            status: 'completed',
-            remark: remark.trim() || undefined,
-            subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
-            periodType: category === 'kumtluang' ? periodType : undefined,
-            periodMonth: category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined,
-            periodYear: category === 'kumtluang' ? selectedYear : undefined,
-            periodLabel: category === 'kumtluang' ? periodLabel : undefined,
-            timestamp: new Date().toISOString(),
-            txHash: 'UPI' + Math.random().toString(36).substring(2, 12).toUpperCase(),
-          };
-
-          setIsProcessing(false);
-          onPaymentSuccess(transaction);
-        }, 900);
-      }, 1200);
+      setIsProcessing(false);
+      setIsUPIIntentModalOpen(true);
     } else {
       // Cash payment
       const transaction: Transaction = {
@@ -1056,33 +1066,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
-                        </label>
-                        <select
-                          value={isEditCustomSection ? '__custom__' : editMemberSection}
-                          onChange={(e) => {
-                            if (e.target.value === '__custom__') {
-                              setIsEditCustomSection(true);
-                            } else {
-                              setIsEditCustomSection(false);
-                              setEditMemberSection(e.target.value);
-                            }
-                          }}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
-                        >
-                          {(campaign?.definedSections && campaign.definedSections.length > 0
-                            ? campaign.definedSections
-                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                          ).map((sec, idx) => (
-                            <option key={idx} value={sec}>
-                              {sec}
-                            </option>
-                          ))}
-                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
-                        </select>
-                      </div>
+                      {campaign?.definedSections && campaign.definedSections.length > 0 && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                            {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                          </label>
+                          <select
+                            value={isEditCustomSection ? '__custom__' : editMemberSection}
+                            onChange={(e) => {
+                              if (e.target.value === '__custom__') {
+                                setIsEditCustomSection(true);
+                              } else {
+                                setIsEditCustomSection(false);
+                                setEditMemberSection(e.target.value);
+                              }
+                            }}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                          >
+                            {campaign.definedSections.map((sec, idx) => (
+                              <option key={idx} value={sec}>
+                                {sec}
+                              </option>
+                            ))}
+                            <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                          </select>
+                        </div>
+                      )}
 
                       {isEditCustomSection && (
                         <div>
@@ -1322,37 +1331,37 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                           className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
                         />
                       </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
-                        </label>
-                        <select
-                          value={isCustomSection ? '__custom__' : newRegSection}
-                          onChange={(e) => {
-                            if (e.target.value === '__custom__') {
-                              setIsCustomSection(true);
-                            } else {
-                              setIsCustomSection(false);
-                              setNewRegSection(e.target.value);
-                              setDonorSection(e.target.value);
-                            }
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
-                        >
-                          {(campaign?.definedSections && campaign.definedSections.length > 0
-                            ? campaign.definedSections
-                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
-                          ).map((sec, idx) => (
-                            <option key={idx} value={sec}>
-                              {sec}
-                            </option>
-                          ))}
-                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
-                        </select>
-                      </div>
+                      {campaign?.definedSections && campaign.definedSections.length > 0 && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                            {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                          </label>
+                          <select
+                            value={isCustomSection ? '__custom__' : newRegSection}
+                            onChange={(e) => {
+                              if (e.target.value === '__custom__') {
+                                setIsCustomSection(true);
+                              } else {
+                                setIsCustomSection(false);
+                                setNewRegSection(e.target.value);
+                                setDonorSection(e.target.value);
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
+                          >
+                            <option value="">-- Thlang Rawh ({campaign.sectionLabel || 'Bial / Section'}) --</option>
+                            {campaign.definedSections.map((sec, idx) => (
+                              <option key={idx} value={sec}>
+                                {sec}
+                              </option>
+                            ))}
+                            <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
 
-                    {isCustomSection && (
+                    {campaign?.definedSections && campaign.definedSections.length > 0 && isCustomSection && (
                       <div className="pt-1">
                         <label className="text-[10px] font-bold text-blue-900 block mb-0.5">
                           Custom {campaign?.sectionLabel || 'Bial / Section'} Hming Ziak Rawh:
@@ -1412,20 +1421,35 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               )}
             </div>
           ) : (
-            /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum) */
+            /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum, etc.) */
             !isAnonymous && (
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                  I Hming Pum (Donor Full Name) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={donorName}
-                  onChange={(e) => setDonorName(e.target.value)}
-                  placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                    I Hming Pum (Donor Full Name) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={donorName}
+                    onChange={(e) => setDonorName(e.target.value)}
+                    placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                    Veng / Location (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={donorSection}
+                    onChange={(e) => setDonorSection(e.target.value)}
+                    placeholder="e.g. Chanmari / Ramhlun / Aizawl (a duh tan chauh)"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                  />
+                </div>
               </div>
             )
           )}
@@ -1714,6 +1738,34 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </button>
       </form>
+
+      {/* UPI Intent & App Launcher Modal */}
+      {isUPIIntentModalOpen && campaign && (
+        <UPIIntentModal
+          isOpen={isUPIIntentModalOpen}
+          onClose={() => setIsUPIIntentModalOpen(false)}
+          campaign={campaign}
+          amount={subtotal}
+          platformFee={platformFee}
+          donorName={onlineDonorPayload.donorName}
+          donorPhone={onlineDonorPayload.donorPhone}
+          donorVeng={onlineDonorPayload.donorVeng}
+          memberId={onlineDonorPayload.memberId}
+          subId={onlineDonorPayload.subId}
+          isDependent={onlineDonorPayload.isDependent}
+          isAnonymous={onlineDonorPayload.isAnonymous}
+          subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+          periodType={category === 'kumtluang' ? periodType : undefined}
+          periodMonth={category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined}
+          periodYear={category === 'kumtluang' ? selectedYear : undefined}
+          periodLabel={category === 'kumtluang' ? periodLabel : undefined}
+          remark={remark.trim() || undefined}
+          onPaymentSuccess={(tx) => {
+            setIsUPIIntentModalOpen(false);
+            onPaymentSuccess(tx);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -45,11 +45,20 @@ interface DonorPaymentsEditorModalProps {
   donorSection?: string;
   transactions: Transaction[];
   campaigns: Campaign[];
-  activeCampaignId: string;
+  activeCampaignId?: string;
   isKumtluang?: boolean;
   memberRecord?: MemberRecord | null;
   onClose: () => void;
-  onSaveAll: (updatedTransactions: Transaction[], deletedTransactionIds: string[]) => void;
+  onSaveAll: (
+    updatedTransactions: Transaction[], 
+    deletedTransactionIds: string[],
+    donorProfile?: {
+      name: string;
+      memberId?: string;
+      phone?: string;
+      section?: string;
+    }
+  ) => void;
   onDeleteAll?: () => void;
 }
 
@@ -69,9 +78,9 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 }) => {
   // 1. Basic donor info state
   const [currentDonorName, setCurrentDonorName] = useState(donorName);
-  const [currentMemberId, setCurrentMemberId] = useState(donorMemberId || memberRecord?.memberId || '');
-  const [currentPhone, setCurrentPhone] = useState(donorPhone || memberRecord?.phone || '');
-  const [currentSection, setCurrentSection] = useState(donorSection || memberRecord?.veng || '');
+  const [currentMemberId, setCurrentMemberId] = useState(donorMemberId || memberRecord?.id || '');
+  const [currentPhone, setCurrentPhone] = useState(donorPhone || memberRecord?.fullPhone || memberRecord?.phoneLast4 || '');
+  const [currentSection, setCurrentSection] = useState(donorSection || memberRecord?.section || '');
 
   // 2. Active Year selection for month grid
   const defaultYear = useMemo(() => {
@@ -331,9 +340,16 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       };
     });
 
-    onSaveAll(finalTransactions, deletedIds);
+    onSaveAll(finalTransactions, deletedIds, {
+      name: currentDonorName.trim(),
+      memberId: currentMemberId.trim() || undefined,
+      phone: currentPhone.trim() || undefined,
+      section: currentSection.trim() || undefined,
+    });
     onClose();
   };
+
+  const [isConfirmingDeleteAll, setIsConfirmingDeleteAll] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
@@ -738,20 +754,40 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
             </div>
 
             {onDeleteAll && transactions.length > 0 && (
-              <button
-                type="button"
-                id="delete-all-donor-txs-btn"
-                onClick={() => {
-                  if (window.confirm(`"${currentDonorName}" record leh transaction zawng zawng hi paih vek i duh tak tak em?`)) {
-                    onDeleteAll();
-                    onClose();
-                  }
-                }}
-                className="px-3 py-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-900 transition-colors ml-2"
-              >
-                <Trash2 className="w-3.5 h-3.5 inline mr-1" />
-                Paih Vek (Delete All)
-              </button>
+              !isConfirmingDeleteAll ? (
+                <button
+                  type="button"
+                  id="delete-all-donor-txs-btn"
+                  onClick={() => setIsConfirmingDeleteAll(true)}
+                  className="px-3 py-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-900 transition-colors ml-2 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                  Paih Vek (Delete All)
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 ml-2 bg-rose-50 dark:bg-rose-950/50 p-1 rounded-xl border border-rose-300 dark:border-rose-800">
+                  <span className="text-[11px] font-bold text-rose-800 dark:text-rose-200 px-1.5">
+                    Records {transactions.length} paih vek i chiang em?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteAll();
+                      onClose();
+                    }}
+                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-black transition-colors cursor-pointer"
+                  >
+                    Paih Rawh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDeleteAll(false)}
+                    className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Kansel
+                  </button>
+                </div>
+              )
             )}
           </div>
 

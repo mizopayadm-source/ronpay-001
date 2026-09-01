@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   FileSpreadsheet, 
@@ -43,7 +43,7 @@ import {
   Target,
   Printer
 } from 'lucide-react';
-import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
+import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
 import { 
   exportTransactionsToCSV, 
   exportFormattedExcel,
@@ -66,6 +66,8 @@ import {
 } from '../utils/monthHelper';
 import { 
   getMembers, 
+  deleteMember,
+  addOrUpdateMember,
   isCampaignCreator, 
   saveTransaction, 
   deleteStoredTransaction, 
@@ -134,8 +136,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // PDF & Report Customization State
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
-  const [chartStartMonth, setChartStartMonth] = useState<string>('Apr');
-  const [chartEndMonth, setChartEndMonth] = useState<string>('Mar');
+  const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
+  const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [showExportOptions, setShowExportOptions] = useState<boolean>(false);
   const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
@@ -310,10 +312,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return buildGroupedDonorRecords(sortedTransactions, sortOrder);
   }, [sortedTransactions, sortOrder]);
 
+  const [membersVersion, setMembersVersion] = useState<number>(0);
+  
+  useEffect(() => {
+    const handleMembersUpdated = () => {
+      setMembersVersion(v => v + 1);
+    };
+    window.addEventListener('ronpay-members-updated', handleMembersUpdated);
+    window.addEventListener('ronpay_members_updated', handleMembersUpdated);
+    return () => {
+      window.removeEventListener('ronpay-members-updated', handleMembersUpdated);
+      window.removeEventListener('ronpay_members_updated', handleMembersUpdated);
+    };
+  }, []);
+
   // Scoped members for the current selected campaign
   const scopedMembers = useMemo(() => {
     return getMembers(selectedCampaignId);
-  }, [selectedCampaignId]);
+  }, [selectedCampaignId, membersVersion]);
 
   // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
   const headerTitle = useMemo(() => {
@@ -617,8 +633,42 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   // Save all donor transactions from DonorPaymentsEditorModal
-  const handleSaveAllDonorPayments = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    updateDonorTransactions(updatedTxs, deletedIds);
+  const handleSaveAllDonorPayments = (
+    updatedTxs: Transaction[], 
+    deletedIds: string[],
+    donorProfile?: {
+      name: string;
+      memberId?: string;
+      phone?: string;
+      section?: string;
+    }
+  ) => {
+    updateDonorTransactions(
+      donorPaymentsModalData?.donorName || '',
+      updatedTxs,
+      deletedIds
+    );
+
+    // Also update / sync Member record if one exists, ensuring section can be cleared
+    const oldName = (donorPaymentsModalData?.donorName || '').toLowerCase().trim();
+    const oldMemberId = (donorPaymentsModalData?.donorMemberId || '').toLowerCase().trim();
+    const allExistingMembers = getMembers('all');
+    const matchedMember = allExistingMembers.find(m => 
+      (oldMemberId && m.id.toLowerCase().trim() === oldMemberId) ||
+      (m.name && m.name.toLowerCase().trim() === oldName)
+    );
+
+    if (matchedMember) {
+      const updatedMem: MemberRecord = {
+        ...matchedMember,
+        name: donorProfile?.name || matchedMember.name,
+        section: donorProfile?.section ? donorProfile.section.trim() : undefined,
+        fullPhone: donorProfile?.phone || matchedMember.fullPhone,
+        phoneLast4: donorProfile?.phone ? donorProfile.phone.replace(/\D/g, '').slice(-4) : matchedMember.phoneLast4,
+      };
+      addOrUpdateMember(updatedMem);
+    }
+
     // Notify parent handlers for live state sync
     if (deletedIds && deletedIds.length > 0 && onDeleteTransaction) {
       deletedIds.forEach(id => onDeleteTransaction(id));
@@ -637,12 +687,21 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   const handleConfirmDeleteDonorTxs = () => {
     if (!deletingDonorInfo) return;
-    const txs = filteredTransactions.filter(t => t.donorName === deletingDonorInfo.donorName);
+    const cleanName = (deletingDonorInfo.donorName || '').toLowerCase().trim();
+    const txs = filteredTransactions.filter(t => (t.donorName || '').toLowerCase().trim() === cleanName);
     deleteMultipleTransactions(txs.map(t => t.id));
+    
+    // Also clean up any member record with matching name or memberId if present
+    const matchingMem = scopedMembers.find(m => (m.name || '').toLowerCase().trim() === cleanName);
+    if (matchingMem) {
+      deleteMember(matchingMem.id, selectedCampaignId !== 'all' ? selectedCampaignId : undefined);
+    }
+    
     if (onDeleteTransaction) {
       txs.forEach(t => onDeleteTransaction(t.id));
     }
     setDeletingDonorInfo(null);
+    showExportSuccessToast(`"${deletingDonorInfo.donorName}" record leh transactions chu paih bo fel a ni ta!`, txs.length);
   };
 
   return (
@@ -1164,8 +1223,36 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     </div>
                   </div>
 
-                  {/* Clean From - Upto Month Selectors & Paih Button */}
+                  {/* Clean From - Upto Month Selectors, Quick Presets & Paih Button */}
                   <div className="flex items-center gap-1.5 flex-wrap justify-between sm:justify-end text-xs">
+                    {/* Quick 1-Click Range Presets */}
+                    <div className="flex items-center gap-1 bg-slate-900/90 border border-indigo-500/30 rounded-xl p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
+                        className={`text-[9.5px] px-2 py-1 rounded-lg font-black transition cursor-pointer ${
+                          chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="Jan – Dec (Calendar Year - Default)"
+                      >
+                        Jan–Dec (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
+                        className={`text-[9.5px] px-2 py-1 rounded-lg font-black transition cursor-pointer ${
+                          chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title="Apr – Mar (Financial Year)"
+                      >
+                        Apr–Mar (Fin Year)
+                      </button>
+                    </div>
+
                     <div className="flex items-center gap-1 bg-slate-900 border border-indigo-500/40 rounded-xl px-2 py-1">
                       <span className="text-[10px] text-indigo-300 font-bold">From:</span>
                       <select
@@ -1351,9 +1438,36 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
                     {includeMonthlyChart && (
                       <div className="pt-2 border-t border-slate-100 pl-6 space-y-2.5">
-                        <label className="text-[10.5px] font-bold text-slate-700 block">
-                          Thla Tin Trend Hun Thlanna (From – Upto):
-                        </label>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <label className="text-[10.5px] font-bold text-slate-700 block">
+                            Thla Tin Trend Hun Thlanna (From – Upto):
+                          </label>
+                          {/* Quick Range Presets */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
+                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                                chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              Jan–Dec (Default)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
+                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                                chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              Apr–Mar (Fin Year)
+                            </button>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-2 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
                           <div>
                             <label className="text-[10px] font-bold text-indigo-950 block mb-1">From (Start Month)</label>
@@ -1830,17 +1944,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               ) : row.paymentMethodLabel === 'ONLINE' ? (
                                 <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.5 rounded">⚡ Online</span>
                               ) : (
-                                <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded">⚡+💵 Mix ({row.txCount})</span>
+                                <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded">⚡+💵 Mix ({row.txCount || row.transactionsCount || 1})</span>
                               )}
                             </td>
                             {showDateTime && (
                               <td className="py-2.5 px-3 border-r border-slate-200 text-[11px] text-slate-600">
-                                {row.datesPaid.length > 0 && (
+                                {Array.isArray(row.datesPaid) && row.datesPaid.length > 0 && (
                                   <div className="font-mono text-[10px] text-slate-500">{row.datesPaid.join(', ')}</div>
                                 )}
-                                {row.monthsPaid.length > 0 && (
+                                {Array.isArray(row.monthsPaid) && row.monthsPaid.length > 0 && (
                                   <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {row.monthsPaid.map(m => (
+                                    {row.monthsPaid.map((m: string) => (
                                       <span key={m} className="bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded text-[9px] font-bold border border-indigo-100">
                                         {m}
                                       </span>
@@ -1850,18 +1964,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               </td>
                             )}
                             <td className="py-2.5 px-3 border-r border-slate-200 text-[11px]">
-                              {Object.keys(row.categoryBreakdown).length > 0 ? (
+                              {row.categoryBreakdown && Object.keys(row.categoryBreakdown).length > 0 ? (
                                 <div className="flex flex-wrap gap-1">
                                   {Object.entries(row.categoryBreakdown).map(([cat, amt]) => (
                                     <span key={cat} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[9.5px] font-medium">
-                                      {cat}: <strong className="font-mono text-slate-900">₹{amt.toLocaleString('en-IN')}</strong>
+                                      {cat}: <strong className="font-mono text-slate-900">₹{Number(amt || 0).toLocaleString('en-IN')}</strong>
                                     </span>
                                   ))}
                                 </div>
                               ) : (
                                 <span className="text-slate-500 italic text-[10px]">General / Uncategorized</span>
                               )}
-                              {row.remarks.length > 0 && (
+                              {Array.isArray(row.remarks) && row.remarks.length > 0 && (
                                 <div className="text-[10px] text-slate-500 italic mt-0.5 flex items-center gap-1">
                                   <MessageSquare className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
                                   <span>{row.remarks.join('; ')}</span>
@@ -2009,6 +2123,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           donorSection={donorPaymentsModalData.donorSection}
           transactions={donorPaymentsModalData.transactions}
           campaigns={campaigns}
+          activeCampaignId={selectedCampaignId}
           onClose={() => setDonorPaymentsModalData(null)}
           onSaveAll={handleSaveAllDonorPayments}
         />
