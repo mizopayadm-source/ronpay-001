@@ -344,11 +344,26 @@ export const Header: React.FC<HeaderProps> = ({
       }
     };
 
-    navigator.geolocation.getCurrentPosition(
-      handleSuccess,
-      handleError,
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
-    );
+    const runGeolocation = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        handleSuccess,
+        (err) => {
+          if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
+            // Fast automatic retry with low accuracy (cell tower / Wi-Fi)
+            runGeolocation(false);
+          } else {
+            handleError(err);
+          }
+        },
+        { 
+          enableHighAccuracy: highAccuracy, 
+          timeout: highAccuracy ? 10000 : 8000, 
+          maximumAge: 30000 
+        }
+      );
+    };
+
+    runGeolocation(true);
   }, []);
 
   // Quick select explicit location
