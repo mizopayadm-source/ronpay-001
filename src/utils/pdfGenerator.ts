@@ -7,6 +7,7 @@ export interface PDFExportResult {
   fileName: string;
   blobUrl?: string;
   blob?: Blob;
+  file?: File;
   dataUri?: string;
   error?: string;
 }
@@ -14,6 +15,7 @@ export interface PDFExportResult {
 /**
  * Sanitize all <style> tags and element inline styles in a cloned document
  * to prevent html2canvas crashing on modern CSS features like oklch(), color-mix(), etc.
+ * Also standardizes layout to crisp printable A4 document format regardless of phone viewport.
  */
 function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement) {
   try {
@@ -51,16 +53,97 @@ function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement
       }
     });
 
-    // 3. Ensure the target root element has clean solid background and text color
+    // 3. Format cloned root element to standard crisp printable A4 dimensions
     if (clonedEl) {
+      clonedEl.classList.remove('mobile-phone-flow');
       clonedEl.style.backgroundColor = '#ffffff';
       clonedEl.style.color = '#0f172a';
       clonedEl.style.transform = 'none';
       clonedEl.style.margin = '0 auto';
+      clonedEl.style.width = '794px';
+      clonedEl.style.minWidth = '794px';
+      clonedEl.style.maxWidth = '794px';
+      clonedEl.style.boxSizing = 'border-box';
+      clonedEl.style.padding = '24px';
+      clonedEl.style.overflow = 'visible';
+
+      // Ensure all internal tables and scroll containers are unrolled for complete capture
+      const tables = clonedEl.querySelectorAll('table');
+      tables.forEach((tbl) => {
+        tbl.style.display = 'table';
+        tbl.style.width = '100%';
+        tbl.style.tableLayout = 'auto';
+        tbl.style.overflow = 'visible';
+        tbl.style.borderCollapse = 'collapse';
+      });
+
+      const overflowContainers = clonedEl.querySelectorAll('div');
+      overflowContainers.forEach((div) => {
+        if (div.style.overflow || div.style.overflowX) {
+          div.style.overflow = 'visible';
+          div.style.overflowX = 'visible';
+        }
+      });
     }
   } catch (err) {
     console.warn('Error during cloned document style sanitization:', err);
   }
+}
+
+/**
+ * Universal Mobile & Desktop file trigger helper that ensures files actually get downloaded
+ * or saved to phone storage on Android, iOS Safari, PWA, and WebViews.
+ */
+export async function triggerFileDownload(
+  blob: Blob,
+  fileName: string,
+  dataUri?: string
+): Promise<boolean> {
+  let triggered = false;
+
+  // 1. Direct Blob URL anchor click
+  try {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch {}
+    }, 1200);
+    triggered = true;
+  } catch (e) {
+    console.warn('Blob anchor download failed', e);
+  }
+
+  // 2. Data URI fallback for Android WebViews that ignore blob URLs
+  if (dataUri) {
+    try {
+      const dataA = document.createElement('a');
+      dataA.href = dataUri;
+      dataA.download = fileName;
+      dataA.target = '_blank';
+      dataA.rel = 'noopener noreferrer';
+      document.body.appendChild(dataA);
+      dataA.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(dataA);
+        } catch {}
+      }, 1200);
+      triggered = true;
+    } catch (e) {
+      console.warn('Data URI download failed', e);
+    }
+  }
+
+  return triggered;
 }
 
 /**
@@ -93,7 +176,7 @@ export async function exportElementToPDF(
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: Math.max(element.scrollWidth, 850),
+        windowWidth: 850,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
         }
@@ -106,6 +189,7 @@ export async function exportElementToPDF(
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
+        windowWidth: 850,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
         }
@@ -179,33 +263,22 @@ export async function exportElementToPDF(
 
     if (onProgress) onProgress('PDF download & save mek a ni...');
 
-    // Generate Blob & Data URI for universal multi-channel handling
+    // Generate Blob, File & Data URI for universal multi-channel handling
     const pdfBlob = pdf.output('blob');
     const blobUrl = URL.createObjectURL(pdfBlob);
     const dataUri = pdf.output('datauristring');
+    const pdfFile = new File([pdfBlob], cleanFileName, { 
+      type: 'application/pdf',
+      lastModified: Date.now() 
+    });
 
-    // Multi-tier download execution for Android WebViews and mobile browsers
+    // Multi-tier download execution for Android WebViews, mobile browsers, and desktop
+    await triggerFileDownload(pdfBlob, cleanFileName, dataUri);
+
     try {
-      // 1. Trigger direct anchor download using Blob Object URL
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = cleanFileName;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(a);
-        } catch {}
-      }, 800);
-    } catch (e) {
-      console.warn('Anchor blob download failed, trying dataUri and pdf.save', e);
-      try {
-        pdf.save(cleanFileName);
-      } catch (saveErr) {
-        console.warn('pdf.save failed', saveErr);
-      }
+      pdf.save(cleanFileName);
+    } catch (saveErr) {
+      console.warn('pdf.save failed', saveErr);
     }
 
     return {
@@ -213,6 +286,7 @@ export async function exportElementToPDF(
       fileName: cleanFileName,
       blobUrl,
       blob: pdfBlob,
+      file: pdfFile,
       dataUri,
     };
   } catch (error: any) {
