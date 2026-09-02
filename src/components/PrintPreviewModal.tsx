@@ -241,27 +241,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       return;
     }
 
-    // 1. Check if Mobile Web Share with PDF File is available (Allows user to tap "Save to Files", "Drive", "Downloads", etc.)
-    if (result.file && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-      try {
-        if (navigator.canShare({ files: [result.file] })) {
-          const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement PDF';
-          await navigator.share({
-            title,
-            text: `${title} - RonPay Report PDF`,
-            files: [result.file]
-          });
-          setWaToast('PDF Save / Share fel ta!');
-          setTimeout(() => setWaToast(''), 3000);
-          return;
-        }
-      } catch (shareErr: any) {
-        if (shareErr?.name === 'AbortError') return;
-        console.warn('Native share error, falling back to direct download', shareErr);
-      }
-    }
-
-    // 2. Direct browser / WebView file download trigger
+    // Direct single download execution (Android bridge or Browser download)
     if (result.blob) {
       await triggerFileDownload(result.blob, result.fileName, result.dataUri);
       setWaToast('PDF Download mek a ni...');
@@ -294,8 +274,34 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
     // Ensure real PDF file is generated
     const result = await ensurePdfReady('WhatsApp-a thawn tur PDF buatsaih mek a ni...');
+    if (!result) return;
 
-    // 1. Native Web Share with PDF File (Standard on Android WhatsApp, iOS, Mobile WebViews)
+    // 0. Android Native APK WhatsApp PDF File Share Bridge
+    const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
+    if (androidBridge && typeof androidBridge.shareFileToWhatsApp === 'function') {
+      try {
+        if (result.dataUri) {
+          androidBridge.shareFileToWhatsApp(result.dataUri, 'application/pdf', result.fileName, summaryText);
+          setWaToast('WhatsApp PDF share a in hawng mek e...');
+          setTimeout(() => setWaToast(''), 3000);
+          return;
+        } else if (result.blob) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            androidBridge.shareFileToWhatsApp(base64data, 'application/pdf', result.fileName, summaryText);
+          };
+          reader.readAsDataURL(result.blob);
+          setWaToast('WhatsApp PDF share a in hawng mek e...');
+          setTimeout(() => setWaToast(''), 3000);
+          return;
+        }
+      } catch (bridgeShareErr) {
+        console.warn('Android bridge WhatsApp share error:', bridgeShareErr);
+      }
+    }
+
+    // 1. Native Web Share with PDF File (Standard on iOS & Chrome Mobile)
     if (result?.file && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
         if (navigator.canShare({ files: [result.file] })) {
@@ -314,8 +320,8 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       }
     }
 
-    // 2. Fallback for Desktop WhatsApp Web or browsers without file share support:
-    // Download the PDF file to user's device so they have the file ready
+    // 2. Fallback for Desktop WhatsApp Web:
+    // Download the PDF file once so the user has it ready
     if (result?.blob) {
       triggerFileDownload(result.blob, result.fileName, result.dataUri);
     }
@@ -342,7 +348,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           document.body.removeChild(waLink);
         } catch {}
       }, 1000);
-      setWaToast('PDF download a ni a, WhatsApp a in hawng mek e!');
+      setWaToast('WhatsApp a in hawng mek e!');
       setTimeout(() => setWaToast(''), 3500);
     } catch (e) {
       console.warn('WhatsApp launch error', e);

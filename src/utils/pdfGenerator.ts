@@ -92,22 +92,20 @@ function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement
 
 /**
  * Universal Mobile & Desktop file trigger helper that ensures files actually get downloaded
- * or saved to phone storage on Android, iOS Safari, PWA, and WebViews.
+ * or saved to phone storage on Android, iOS Safari, PWA, and WebViews without duplicate triggers.
  */
 export async function triggerFileDownload(
   blob: Blob,
   fileName: string,
   dataUri?: string
 ): Promise<boolean> {
-  let triggered = false;
-
   // 0. Direct Android Native WebView Bridge (if running inside APK with JavascriptInterface)
   const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
   if (androidBridge && typeof androidBridge.getBase64FromBlobData === 'function') {
     try {
       if (dataUri) {
         androidBridge.getBase64FromBlobData(dataUri, 'application/pdf', fileName);
-        triggered = true;
+        return true;
       } else {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -119,21 +117,19 @@ export async function triggerFileDownload(
           }
         };
         reader.readAsDataURL(blob);
-        triggered = true;
+        return true;
       }
     } catch (bridgeErr) {
       console.warn('Android bridge invocation failed', bridgeErr);
     }
   }
 
-  // 1. Direct Blob URL anchor click
+  // 1. Direct Single Blob URL anchor click for browsers
   try {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = fileName;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -141,34 +137,32 @@ export async function triggerFileDownload(
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
       } catch {}
-    }, 1200);
-    triggered = true;
+    }, 1000);
+    return true;
   } catch (e) {
     console.warn('Blob anchor download failed', e);
   }
 
-  // 2. Data URI fallback for Android WebViews that ignore blob URLs
+  // 2. Data URI fallback ONLY if Blob anchor failed
   if (dataUri) {
     try {
       const dataA = document.createElement('a');
       dataA.href = dataUri;
       dataA.download = fileName;
-      dataA.target = '_blank';
-      dataA.rel = 'noopener noreferrer';
       document.body.appendChild(dataA);
       dataA.click();
       setTimeout(() => {
         try {
           document.body.removeChild(dataA);
         } catch {}
-      }, 1200);
-      triggered = true;
+      }, 1000);
+      return true;
     } catch (e) {
       console.warn('Data URI download failed', e);
     }
   }
 
-  return triggered;
+  return false;
 }
 
 /**
@@ -286,9 +280,7 @@ export async function exportElementToPDF(
       page++;
     }
 
-    if (onProgress) onProgress('PDF download & save mek a ni...');
-
-    // Generate Blob, File & Data URI for universal multi-channel handling
+    // Generate Blob, File & Data URI for caller
     const pdfBlob = pdf.output('blob');
     const blobUrl = URL.createObjectURL(pdfBlob);
     const dataUri = pdf.output('datauristring');
@@ -296,15 +288,6 @@ export async function exportElementToPDF(
       type: 'application/pdf',
       lastModified: Date.now() 
     });
-
-    // Multi-tier download execution for Android WebViews, mobile browsers, and desktop
-    await triggerFileDownload(pdfBlob, cleanFileName, dataUri);
-
-    try {
-      pdf.save(cleanFileName);
-    } catch (saveErr) {
-      console.warn('pdf.save failed', saveErr);
-    }
 
     return {
       success: true,
