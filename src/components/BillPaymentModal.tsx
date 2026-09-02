@@ -20,10 +20,23 @@ import {
   AlertTriangle,
   RefreshCw,
   Wallet,
-  Check
+  Check,
+  Building2,
+  MapPin,
+  Search,
+  Pencil
 } from 'lucide-react';
 import { BillService } from '../types';
 import { Language, TRANSLATIONS } from '../utils/translations';
+import { 
+  ALL_INDIA_ELECTRICITY_BOARDS, 
+  ALL_INDIA_WATER_BOARDS, 
+  ALL_FASTAG_BANKS, 
+  ALL_GAS_PROVIDERS, 
+  ALL_BROADBAND_PROVIDERS,
+  INDIAN_STATES,
+  BillerInfo
+} from '../data/allIndiaBillers';
 
 interface BillPaymentModalProps {
   service: BillService | null;
@@ -67,18 +80,7 @@ const PREPAID_PLANS: Record<string, RechargePlan[]> = {
   ]
 };
 
-const FASTAG_BANKS = [
-  'HDFC Bank FASTag',
-  'State Bank of India (SBI FASTag)',
-  'ICICI Bank FASTag',
-  'Axis Bank FASTag',
-  'Airtel Payments Bank FASTag',
-  'IDFC First Bank FASTag',
-  'Kotak Mahindra Bank FASTag',
-  'Paytm Payments Bank FASTag',
-  'Bank of Baroda FASTag',
-  'Punjab National Bank (PNB FASTag)'
-];
+const FASTAG_BANKS = ALL_FASTAG_BANKS;
 
 const DTH_OPERATORS = [
   'Tata Play (Tata Sky)',
@@ -326,8 +328,15 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   const [operator, setOperator] = useState<string>('Jio');
   const [selectedPlan, setSelectedPlan] = useState<RechargePlan | null>(null);
 
-  // Electricity states
+  // Electricity states (All India State & DISCOM selection)
+  const [selectedElectricityState, setSelectedElectricityState] = useState<string>('Mizoram');
+  const [selectedElectricityBoardId, setSelectedElectricityBoardId] = useState<string>('PED_MIZORAM');
   const [consumerNumber, setConsumerNumber] = useState<string>('');
+  const [isEditingElectricity, setIsEditingElectricity] = useState<boolean>(false);
+  const [editElecConsumerName, setEditElecConsumerName] = useState<string>('');
+  const [editElecAmount, setEditElecAmount] = useState<string>('');
+  const [editElecMeterNo, setEditElecMeterNo] = useState<string>('');
+  const [editElecSubDivision, setEditElecSubDivision] = useState<string>('');
 
   // FASTag states
   const [vehicleNumber, setVehicleNumber] = useState<string>('');
@@ -341,8 +350,13 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
   const [dthOperator, setDthOperator] = useState<string>(DTH_OPERATORS[0]);
   const [subscriberId, setSubscriberId] = useState<string>('');
 
-  // Water Bill states
+  // Water Bill states (All India Water Boards)
+  const [selectedWaterState, setSelectedWaterState] = useState<string>('Mizoram');
+  const [selectedWaterBoardId, setSelectedWaterBoardId] = useState<string>('PHED_MIZORAM');
   const [waterConsumerId, setWaterConsumerId] = useState<string>('');
+  const [isEditingWater, setIsEditingWater] = useState<boolean>(false);
+  const [editWaterConsumerName, setEditWaterConsumerName] = useState<string>('');
+  const [editWaterAmount, setEditWaterAmount] = useState<string>('');
 
   // Municipal Tax states
   const [municipalAuthority, setMunicipalAuthority] = useState<string>(MUNICIPAL_AUTHORITIES[0]);
@@ -436,14 +450,19 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
 
     setIsFetchingBill(true);
 
-    if (type === 'electricity' || type === 'water') {
+    if (type === 'electricity') {
       try {
+        const boardsInState = ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || [];
+        const currentBoard = boardsInState.find(b => b.id === selectedElectricityBoardId) || boardsInState[0];
+
         const response = await fetch('/api/bbps/fetch-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            category: type,
-            billerId: type === 'electricity' ? 'PED_MIZORAM' : 'PHED_MIZORAM',
+            category: 'electricity',
+            state: selectedElectricityState,
+            billerId: currentBoard?.id || 'PED_MIZORAM',
+            billerName: currentBoard?.name || 'Power & Electricity Department',
             consumerNumber: rawId
           })
         });
@@ -452,16 +471,27 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
         setIsFetchingBill(false);
 
         if (resData.success) {
-          setAmount(resData.billAmount.toString());
+          const fetchedAmount = resData.billAmount.toString();
+          setAmount(fetchedAmount);
+          const fetchedName = resData.consumerName || `${currentBoard?.shortName || 'Consumer'} (${rawId})`;
+          const fetchedSub = resData.subDivision || `${selectedElectricityState} Power Grid`;
+          const fetchedMeter = resData.meterNumber || '';
+
+          setEditElecConsumerName(fetchedName);
+          setEditElecAmount(fetchedAmount);
+          setEditElecMeterNo(fetchedMeter);
+          setEditElecSubDivision(fetchedSub);
+          setIsEditingElectricity(false);
+
           setLinkedBillData({
-            consumerName: resData.consumerName || (type === 'electricity' ? `P&ED Consumer (${rawId})` : `PHED Consumer (${rawId})`),
+            consumerName: fetchedName,
             accountNo: resData.consumerNumber || rawId,
             dueDate: resData.dueDate || '20/09/2026',
             billAmount: resData.billAmount,
-            subDivisionOrLocality: resData.subDivision || (type === 'electricity' ? 'P&ED Mizoram State Power Grid' : 'PHED Mizoram Supply'),
-            meterNo: resData.meterNumber,
-            portalUrl: resData.portalUrl || (type === 'electricity' ? 'https://power.mizoram.gov.in' : 'https://phed.mizoram.gov.in'),
-            status: resData.status || (language === 'english' ? 'BBPS Live Server Verified' : 'P&ED Server-ah Bill Hmuh A Ni'),
+            subDivisionOrLocality: fetchedSub,
+            meterNo: fetchedMeter,
+            portalUrl: resData.portalUrl || currentBoard?.portalUrl || 'https://power.mizoram.gov.in',
+            status: resData.status || (language === 'english' ? 'BBPS Live Server Verified' : 'BBPS Server-ah Bill Hmuh A Ni'),
             breakdown: resData.breakdown
           });
         } else {
@@ -474,6 +504,61 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
         console.warn('Live API fetch error:', err);
         setIsFetchingBill(false);
         setErrorMessage(language === 'english' ? 'Unable to reach utility server. Please try again.' : 'Utility server biak tlang theih a ni rih lo. Khawngaihin vawi khat dang han tum leh teh.');
+        return;
+      }
+    }
+
+    if (type === 'water') {
+      try {
+        const waterBoardsInState = ALL_INDIA_WATER_BOARDS[selectedWaterState] || [];
+        const currentWaterBoard = waterBoardsInState.find(b => b.id === selectedWaterBoardId) || waterBoardsInState[0];
+
+        const response = await fetch('/api/bbps/fetch-bill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: 'water',
+            state: selectedWaterState,
+            billerId: currentWaterBoard?.id || 'PHED_MIZORAM',
+            billerName: currentWaterBoard?.name || 'Public Health Engineering Department',
+            consumerNumber: rawId
+          })
+        });
+
+        const resData = await response.json();
+        setIsFetchingBill(false);
+
+        if (resData.success) {
+          const fetchedAmount = resData.billAmount.toString();
+          setAmount(fetchedAmount);
+          const fetchedName = resData.consumerName || `${currentWaterBoard?.shortName || 'Water Consumer'} (${rawId})`;
+          const fetchedSub = resData.subDivision || `${selectedWaterState} Water Works`;
+
+          setEditWaterConsumerName(fetchedName);
+          setEditWaterAmount(fetchedAmount);
+          setIsEditingWater(false);
+
+          setLinkedBillData({
+            consumerName: fetchedName,
+            accountNo: resData.consumerNumber || rawId,
+            dueDate: resData.dueDate || '20/09/2026',
+            billAmount: resData.billAmount,
+            subDivisionOrLocality: fetchedSub,
+            meterNo: resData.meterNumber,
+            portalUrl: resData.portalUrl || currentWaterBoard?.portalUrl || 'https://phed.mizoram.gov.in',
+            status: resData.status || (language === 'english' ? 'BBPS Verified Water Bill' : 'PHED Server Verified'),
+            breakdown: resData.breakdown
+          });
+        } else {
+          setLinkedBillData(null);
+          setAmount('');
+          setErrorMessage(resData.message || (language === 'english' ? 'Failed to fetch water bill.' : 'Water bill hmuh a ni lo. Consumer ID check rawh.'));
+        }
+        return;
+      } catch (err: any) {
+        console.warn('Live API fetch error:', err);
+        setIsFetchingBill(false);
+        setErrorMessage(language === 'english' ? 'Unable to reach water utility server.' : 'Water utility server biak tlang theih a ni rih lo.');
         return;
       }
     }
@@ -844,75 +929,155 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* 2. ELECTRICITY BILL (POWER & ELECTRICITY DEPARTMENT - MIZORAM) */}
+            {/* 2. ELECTRICITY BILL (ALL INDIA BBPS STATE & DISCOM DIRECTORY) */}
             {service.id === 'electricity' && (
               <div className="space-y-3">
-                {/* Unified State BBPS Biller info as in PhonePe / GPay */}
-                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 font-black shrink-0">
-                      <Zap className="w-4 h-4 text-amber-700" />
-                    </div>
-                    <div>
-                      <h4 className="text-[11px] font-black text-slate-900 leading-tight">
-                        Power & Electricity Department, Mizoram (P&ED)
-                      </h4>
-                      <p className="text-[9.5px] text-slate-500 font-medium">State Electricity Board • Bharat BillPay</p>
-                    </div>
+                {/* State & Electricity Board Selectors (All India PhonePe / GPay style) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-amber-600" /> State / UT *
+                    </label>
+                    <select
+                      value={selectedElectricityState}
+                      onChange={(e) => {
+                        const newState = e.target.value;
+                        setSelectedElectricityState(newState);
+                        const boards = ALL_INDIA_ELECTRICITY_BOARDS[newState] || [];
+                        if (boards.length > 0) {
+                          setSelectedElectricityBoardId(boards[0].id);
+                        }
+                        setLinkedBillData(null);
+                        setAmount('');
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
+                    >
+                      {INDIAN_STATES.map((st) => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
                   </div>
-                  <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                    BBPS Biller
-                  </span>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                      <Building2 className="w-3 h-3 text-amber-600" /> Electricity Board / DISCOM *
+                    </label>
+                    <select
+                      value={selectedElectricityBoardId}
+                      onChange={(e) => {
+                        setSelectedElectricityBoardId(e.target.value);
+                        setLinkedBillData(null);
+                        setAmount('');
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
+                    >
+                      {(ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || []).map((b) => (
+                        <option key={b.id} value={b.id}>{b.shortName || b.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+
+                {/* Selected Biller Badge Card */}
+                {(() => {
+                  const currentBoards = ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || [];
+                  const activeBiller = currentBoards.find(b => b.id === selectedElectricityBoardId) || currentBoards[0];
+                  return (
+                    <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 font-black shrink-0">
+                          <Zap className="w-4 h-4 text-amber-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-[11px] font-black text-slate-900 leading-tight truncate">
+                            {activeBiller?.name || 'Electricity Department'}
+                          </h4>
+                          <p className="text-[9.5px] text-slate-500 font-medium">
+                            {selectedElectricityState} • Bharat BillPay Central Switch
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                        BBPS Verified
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      Consumer ID / CA Number *
+                      Consumer ID / CA Number / Account No. *
                     </label>
                     <span className="text-[9px] text-amber-700 font-bold flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> Sample ID Hmet Rawh
+                      <Sparkles className="w-2.5 h-2.5" /> Sample ID
                     </span>
                   </div>
                   
-                  {/* Verified Quick Sample IDs in Mizoram */}
+                  {/* Dynamic Sample IDs based on chosen State & Board */}
                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConsumerNumber('1002948201');
-                        handleFetchLiveBill('electricity', '1002948201');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        consumerNumber === '1002948201' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      ⚡ 1002948201 (Aizawl - ₹940)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConsumerNumber('2004819203');
-                        handleFetchLiveBill('electricity', '2004819203');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        consumerNumber === '2004819203' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      ⚡ 2004819203 (Lunglei - ₹1,480)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConsumerNumber('3001827492');
-                        handleFetchLiveBill('electricity', '3001827492');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        consumerNumber === '3001827492' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      ⚡ 3001827492 (Champhai - ₹760)
-                    </button>
+                    {selectedElectricityState === 'Mizoram' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConsumerNumber('1002948201');
+                            handleFetchLiveBill('electricity', '1002948201');
+                          }}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                            consumerNumber === '1002948201' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          ⚡ 1002948201 (Aizawl - ₹940)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConsumerNumber('2004819203');
+                            handleFetchLiveBill('electricity', '2004819203');
+                          }}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                            consumerNumber === '2004819203' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          ⚡ 2004819203 (Lunglei - ₹1,480)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConsumerNumber('3001827492');
+                            handleFetchLiveBill('electricity', '3001827492');
+                          }}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                            consumerNumber === '3001827492' && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          ⚡ 3001827492 (Champhai - ₹760)
+                        </button>
+                      </>
+                    ) : (
+                      (() => {
+                        const boards = ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || [];
+                        const b = boards.find(x => x.id === selectedElectricityBoardId) || boards[0];
+                        if (!b?.sampleConsumerId) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConsumerNumber(b.sampleConsumerId!);
+                              handleFetchLiveBill('electricity', b.sampleConsumerId!);
+                            }}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                              consumerNumber === b.sampleConsumerId && linkedBillData ? 'bg-amber-500 text-slate-950 border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            ⚡ {b.sampleConsumerId} ({b.sampleName} - ₹{b.sampleAmount})
+                          </button>
+                        );
+                      })()
+                    )}
                   </div>
 
                   <div className="flex gap-1.5">
@@ -924,7 +1089,11 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         setConsumerNumber(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="Enter Consumer ID (e.g. 1002948201)"
+                      placeholder={
+                        (ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || []).find(b => b.id === selectedElectricityBoardId)?.idFormatHint 
+                          ? `Enter ${(ALL_INDIA_ELECTRICITY_BOARDS[selectedElectricityState] || []).find(b => b.id === selectedElectricityBoardId)?.idFormatHint}`
+                          : 'Enter Consumer ID / CA Number'
+                      }
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-amber-600"
                     />
                     <button
@@ -947,32 +1116,115 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     </button>
                   </div>
                   <p className="text-[9.5px] text-slate-400 font-medium mt-1">
-                    Consumer ID hi i electricity bill paper chunglamah a inziak e.
+                    Consumer ID / Account Number hi i electricity bill paper chunglamah a inziak e.
                   </p>
                 </div>
 
-                {/* Verified Live Bill Card with Details Breakdown */}
+                {/* Verified Live Bill Card with Details Breakdown and Live Editable Option */}
                 {linkedBillData && (
-                  <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 space-y-2 text-amber-950 animate-fadeIn">
+                  <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 space-y-2.5 text-amber-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="font-bold text-slate-600">Due Date: {linkedBillData.dueDate}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
-                        {linkedBillData.meterNo && (
-                          <p className="text-[9.5px] text-slate-500 font-mono">Meter: {linkedBillData.meterNo}</p>
-                        )}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditElecConsumerName(linkedBillData.consumerName);
+                            setEditElecAmount(linkedBillData.billAmount.toString());
+                            setEditElecMeterNo(linkedBillData.meterNo || '');
+                            setIsEditingElectricity(!isEditingElectricity);
+                          }}
+                          className="text-[9.5px] font-black text-amber-800 hover:text-amber-950 bg-white border border-amber-300 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          ✏️ {isEditingElectricity ? 'Done' : 'Siamrem / Edit Details'}
+                        </button>
+                        <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9.5px] text-slate-500 font-bold block">Live Due Amount</span>
-                        <span className="text-base font-black text-amber-800">₹{linkedBillData.billAmount}</span>
-                      </div>
                     </div>
+
+                    {/* If in edit mode, show custom form to match real paper bill */}
+                    {isEditingElectricity ? (
+                      <div className="bg-white/95 border border-amber-300 rounded-xl p-2.5 space-y-2 text-slate-900 animate-fadeIn">
+                        <div className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                          <Pencil className="w-3 h-3" /> I bill paper-a inziak mil in thlak rawh:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9.5px] font-bold text-slate-600 block mb-0.5">
+                              Consumer Hming (Name):
+                            </label>
+                            <input
+                              type="text"
+                              value={editElecConsumerName}
+                              onChange={(e) => setEditElecConsumerName(e.target.value)}
+                              placeholder="e.g. Lalmuanpuia"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9.5px] font-bold text-slate-600 block mb-0.5">
+                              Bill Amount Dik Tak (₹):
+                            </label>
+                            <input
+                              type="number"
+                              value={editElecAmount}
+                              onChange={(e) => setEditElecAmount(e.target.value)}
+                              placeholder="e.g. 940"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:border-amber-600"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9.5px] font-bold text-slate-600 block mb-0.5">
+                            Meter Number (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            value={editElecMeterNo}
+                            onChange={(e) => setEditElecMeterNo(e.target.value)}
+                            placeholder="e.g. MTR-AZ-9842"
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-600"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newAmt = parseFloat(editElecAmount) || linkedBillData.billAmount;
+                              setAmount(newAmt.toString());
+                              setLinkedBillData({
+                                ...linkedBillData,
+                                consumerName: editElecConsumerName || linkedBillData.consumerName,
+                                billAmount: newAmt,
+                                meterNo: editElecMeterNo || linkedBillData.meterNo
+                              });
+                              setIsEditingElectricity(false);
+                            }}
+                            className="text-[10px] font-black bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3 h-3" /> Save & Update Bill
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
+                          <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
+                          {linkedBillData.meterNo && (
+                            <p className="text-[9.5px] text-slate-500 font-mono">Meter: {linkedBillData.meterNo}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9.5px] text-slate-500 font-bold block">Live Due Amount</span>
+                          <span className="text-base font-black text-amber-800">₹{linkedBillData.billAmount}</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Breakdown */}
                     {linkedBillData.breakdown && (
@@ -986,14 +1238,19 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                       </div>
                     )}
 
-                    <a
-                      href={linkedBillData.portalUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-bold text-amber-800 hover:underline flex items-center gap-1 pt-1 border-t border-amber-200"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5" /> Open Official P&ED Department Portal
-                    </a>
+                    <div className="flex items-center justify-between pt-1 border-t border-amber-200/80 text-[10px]">
+                      <a
+                        href={linkedBillData.portalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-bold text-amber-800 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" /> Department Portal
+                      </a>
+                      <span className="text-[9px] text-slate-500 font-medium">
+                        NPCI Central Switch Ready
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -1352,62 +1609,143 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
               </div>
             )}
 
-            {/* 5. WATER BILL (PHED MIZORAM) */}
+            {/* 5. WATER BILL (ALL INDIA BBPS WATER UTILITY DIRECTORY) */}
             {service.id === 'water' && (
               <div className="space-y-3">
-                <div className="bg-cyan-50/80 border border-cyan-200/90 rounded-2xl p-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-800 font-black shrink-0">
-                      <Droplet className="w-4 h-4 text-cyan-700" />
-                    </div>
-                    <div>
-                      <h4 className="text-[11px] font-black text-slate-900 leading-tight">
-                        Public Health Engineering Dept, Mizoram (PHED)
-                      </h4>
-                      <p className="text-[9.5px] text-slate-500 font-medium">State Water Utility • Bharat BillPay</p>
-                    </div>
+                {/* State & Water Board Selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-cyan-700" /> State / UT *
+                    </label>
+                    <select
+                      value={selectedWaterState}
+                      onChange={(e) => {
+                        const newState = e.target.value;
+                        setSelectedWaterState(newState);
+                        const boards = ALL_INDIA_WATER_BOARDS[newState] || [];
+                        if (boards.length > 0) {
+                          setSelectedWaterBoardId(boards[0].id);
+                        }
+                        setLinkedBillData(null);
+                        setAmount('');
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
+                    >
+                      {Object.keys(ALL_INDIA_WATER_BOARDS).map((st) => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
                   </div>
-                  <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                    BBPS Biller
-                  </span>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                      <Building2 className="w-3 h-3 text-cyan-700" /> Water Board / Utility *
+                    </label>
+                    <select
+                      value={selectedWaterBoardId}
+                      onChange={(e) => {
+                        setSelectedWaterBoardId(e.target.value);
+                        setLinkedBillData(null);
+                        setAmount('');
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
+                    >
+                      {(ALL_INDIA_WATER_BOARDS[selectedWaterState] || []).map((b) => (
+                        <option key={b.id} value={b.id}>{b.shortName || b.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+
+                {/* Selected Water Biller Badge Card */}
+                {(() => {
+                  const currentBoards = ALL_INDIA_WATER_BOARDS[selectedWaterState] || [];
+                  const activeBiller = currentBoards.find(b => b.id === selectedWaterBoardId) || currentBoards[0];
+                  return (
+                    <div className="bg-cyan-50/80 border border-cyan-200/90 rounded-2xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-800 font-black shrink-0">
+                          <Droplet className="w-4 h-4 text-cyan-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-[11px] font-black text-slate-900 leading-tight truncate">
+                            {activeBiller?.name || 'Water Department'}
+                          </h4>
+                          <p className="text-[9.5px] text-slate-500 font-medium">
+                            {selectedWaterState} • Bharat BillPay Central Switch
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[8.5px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                        BBPS Verified
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10.5px] font-bold text-slate-700">
-                      PHED Consumer Connection ID *
+                      Consumer Connection ID / K-Number *
                     </label>
                     <span className="text-[9px] text-cyan-700 font-bold flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5" /> Sample ID Hmet Rawh
+                      <Sparkles className="w-2.5 h-2.5" /> Sample ID
                     </span>
                   </div>
 
-                  {/* Sample PHED IDs */}
+                  {/* Sample Water IDs */}
                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWaterConsumerId('PHED/AIZ/2024/0981');
-                        handleFetchLiveBill('water', 'PHED/AIZ/2024/0981');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        waterConsumerId === 'PHED/AIZ/2024/0981' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      💧 AIZ/0981 (Mission Veng - ₹420)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWaterConsumerId('PHED/LGL/2024/1102');
-                        handleFetchLiveBill('water', 'PHED/LGL/2024/1102');
-                      }}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
-                        waterConsumerId === 'PHED/LGL/2024/1102' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      💧 LGL/1102 (Lunglei - ₹650)
-                    </button>
+                    {selectedWaterState === 'Mizoram' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWaterConsumerId('PHED/AIZ/2024/0981');
+                            handleFetchLiveBill('water', 'PHED/AIZ/2024/0981');
+                          }}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                            waterConsumerId === 'PHED/AIZ/2024/0981' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          💧 AIZ/0981 (Mission Veng - ₹420)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWaterConsumerId('PHED/LGL/2024/1102');
+                            handleFetchLiveBill('water', 'PHED/LGL/2024/1102');
+                          }}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                            waterConsumerId === 'PHED/LGL/2024/1102' && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          💧 LGL/1102 (Lunglei - ₹650)
+                        </button>
+                      </>
+                    ) : (
+                      (() => {
+                        const boards = ALL_INDIA_WATER_BOARDS[selectedWaterState] || [];
+                        const b = boards.find(x => x.id === selectedWaterBoardId) || boards[0];
+                        if (!b?.sampleConsumerId) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWaterConsumerId(b.sampleConsumerId!);
+                              handleFetchLiveBill('water', b.sampleConsumerId!);
+                            }}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer shrink-0 ${
+                              waterConsumerId === b.sampleConsumerId && linkedBillData ? 'bg-cyan-600 text-white border-cyan-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            💧 {b.sampleConsumerId} ({b.sampleName} - ₹{b.sampleAmount})
+                          </button>
+                        );
+                      })()
+                    )}
                   </div>
 
                   <div className="flex gap-1.5">
@@ -1419,7 +1757,11 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         setWaterConsumerId(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      placeholder="e.g. PHED/AIZ/2024/0981"
+                      placeholder={
+                        (ALL_INDIA_WATER_BOARDS[selectedWaterState] || []).find(b => b.id === selectedWaterBoardId)?.idFormatHint
+                          ? `Enter ${(ALL_INDIA_WATER_BOARDS[selectedWaterState] || []).find(b => b.id === selectedWaterBoardId)?.idFormatHint}`
+                          : 'Enter Water Consumer ID'
+                      }
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-cyan-600"
                     />
                     <button
@@ -1444,26 +1786,93 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                 </div>
 
                 {linkedBillData && (
-                  <div className="bg-cyan-50/90 border border-cyan-300 rounded-2xl p-3 space-y-2 text-cyan-950 animate-fadeIn">
+                  <div className="bg-cyan-50/90 border border-cyan-300 rounded-2xl p-3 space-y-2.5 text-cyan-950 animate-fadeIn">
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="font-extrabold flex items-center gap-1 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" /> {linkedBillData.status}
                       </span>
-                      <span className="font-bold text-slate-600">Due Date: {linkedBillData.dueDate}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
-                        <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
-                        {linkedBillData.meterNo && (
-                          <p className="text-[9.5px] text-slate-500 font-mono">Water Meter: {linkedBillData.meterNo}</p>
-                        )}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditWaterConsumerName(linkedBillData.consumerName);
+                            setEditWaterAmount(linkedBillData.billAmount.toString());
+                            setIsEditingWater(!isEditingWater);
+                          }}
+                          className="text-[9.5px] font-black text-cyan-800 hover:text-cyan-950 bg-white border border-cyan-300 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          ✏️ {isEditingWater ? 'Done' : 'Siamrem / Edit'}
+                        </button>
+                        <span className="font-bold text-slate-600">Due: {linkedBillData.dueDate}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9.5px] text-slate-500 font-bold block">Due Bill Amount</span>
-                        <span className="text-base font-black text-cyan-800">₹{linkedBillData.billAmount}</span>
-                      </div>
                     </div>
+
+                    {isEditingWater ? (
+                      <div className="bg-white/95 border border-cyan-300 rounded-xl p-2.5 space-y-2 text-slate-900 animate-fadeIn">
+                        <div className="text-[10px] font-bold text-cyan-800 flex items-center gap-1">
+                          <Pencil className="w-3 h-3" /> Water bill paper milin siamrem rawh:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9.5px] font-bold text-slate-600 block mb-0.5">
+                              Consumer Hming (Name):
+                            </label>
+                            <input
+                              type="text"
+                              value={editWaterConsumerName}
+                              onChange={(e) => setEditWaterConsumerName(e.target.value)}
+                              placeholder="e.g. Lalhmingliana"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-cyan-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9.5px] font-bold text-slate-600 block mb-0.5">
+                              Water Bill Amount (₹):
+                            </label>
+                            <input
+                              type="number"
+                              value={editWaterAmount}
+                              onChange={(e) => setEditWaterAmount(e.target.value)}
+                              placeholder="e.g. 520"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-cyan-600"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newAmt = parseFloat(editWaterAmount) || linkedBillData.billAmount;
+                              setAmount(newAmt.toString());
+                              setLinkedBillData({
+                                ...linkedBillData,
+                                consumerName: editWaterConsumerName || linkedBillData.consumerName,
+                                billAmount: newAmt
+                              });
+                              setIsEditingWater(false);
+                            }}
+                            className="text-[10px] font-black bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+                          >
+                            <Check className="w-3 h-3" /> Save & Update Bill
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-black text-xs text-slate-900">{linkedBillData.consumerName}</h4>
+                          <p className="text-[10px] text-slate-600 font-medium">{linkedBillData.subDivisionOrLocality}</p>
+                          {linkedBillData.meterNo && (
+                            <p className="text-[9.5px] text-slate-500 font-mono">Water Meter: {linkedBillData.meterNo}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9.5px] text-slate-500 font-bold block">Due Bill Amount</span>
+                          <span className="text-base font-black text-cyan-800">₹{linkedBillData.billAmount}</span>
+                        </div>
+                      </div>
+                    )}
 
                     {linkedBillData.breakdown && (
                       <div className="bg-white/90 rounded-xl p-2 border border-cyan-200/80 space-y-1 text-[10px]">
@@ -1475,6 +1884,20 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                         ))}
                       </div>
                     )}
+
+                    <div className="flex items-center justify-between pt-1 border-t border-cyan-200/80 text-[10px]">
+                      <a
+                        href={linkedBillData.portalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-bold text-cyan-800 hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" /> Department Portal
+                      </a>
+                      <span className="text-[9px] text-slate-500 font-medium">
+                        NPCI Central Switch Ready
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -1594,11 +2017,9 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     onChange={(e) => setGasAgency(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-red-600"
                   >
-                    <option value="Aizawl Indane Gas Agency (Chanmari)">Aizawl Indane Gas Agency (Chanmari)</option>
-                    <option value="Lunglei Indane Gas Service">Lunglei Indane Gas Service</option>
-                    <option value="Champhai Indane Agency">Champhai Indane Agency</option>
-                    <option value="Kolasib Gas Distributor">Kolasib Gas Distributor</option>
-                    <option value="Bharat Gas Mizoram (HPCL / BPCL)">Bharat Gas Mizoram</option>
+                    {ALL_GAS_PROVIDERS.map((gp) => (
+                      <option key={gp} value={gp}>{gp}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1623,7 +2044,7 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     onChange={(e) => setAmount(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-black text-slate-900 text-sm focus:outline-none focus:bg-white focus:border-red-600"
                   />
-                  <p className="text-[9.5px] text-slate-400 mt-1">Subsidized Indane 14.2kg Domestic Cylinder: ₹930</p>
+                  <p className="text-[9.5px] text-slate-400 mt-1">Subsidized Indane / HP / Bharat 14.2kg Domestic Cylinder: ₹930</p>
                 </div>
               </div>
             )}
@@ -1638,10 +2059,9 @@ export const BillPaymentModal: React.FC<BillPaymentModalProps> = ({
                     onChange={(e) => setBroadbandProvider(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:outline-none focus:border-teal-600"
                   >
-                    <option value="JioFiber Mizoram">JioFiber / AirFiber (Mizoram)</option>
-                    <option value="Airtel Xstream Fiber">Airtel Xstream Fiber</option>
-                    <option value="BSNL Bharat Fiber (FTTH)">BSNL Bharat Fiber (FTTH)</option>
-                    <option value="Skylink Broadband Mizoram">Skylink Broadband (Mizoram Local)</option>
+                    {ALL_BROADBAND_PROVIDERS.map((bp) => (
+                      <option key={bp} value={bp}>{bp}</option>
+                    ))}
                   </select>
                 </div>
 
