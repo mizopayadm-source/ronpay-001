@@ -822,6 +822,7 @@ export default function App() {
               transactions={transactions}
               campaigns={campaigns}
               creatorProfile={creatorProfile}
+              language={language}
               onBack={() => handleNavigate('home')}
               onOpenLogin={() => handleNavigate('creator_reg')}
               onOpenCreateQR={() => handleNavigate('create_qr')}

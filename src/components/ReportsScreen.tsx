@@ -41,9 +41,11 @@ import {
   Banknote,
   MessageSquare,
   Target,
-  Printer
+  Printer,
+  QrCode
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
+import { Language } from '../utils/translations';
 import { 
   exportTransactionsToCSV, 
   exportFormattedExcel,
@@ -84,6 +86,7 @@ interface ReportsScreenProps {
   transactions: Transaction[];
   campaigns: Campaign[];
   creatorProfile: CreatorProfile;
+  language?: Language;
   onBack: () => void;
   onOpenLogin?: () => void;
   onOpenCreateQR?: () => void;
@@ -98,6 +101,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   transactions,
   campaigns,
   creatorProfile,
+  language = 'mizo',
   onBack,
   onOpenLogin,
   onOpenCreateQR,
@@ -331,27 +335,36 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return getMembers(selectedCampaignId);
   }, [selectedCampaignId, membersVersion]);
 
-  // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
+  // 1. Text chung ber atan: NGO / Church / Hming / Title
   const headerTitle = useMemo(() => {
     if (selectedCampaignObj) {
-      return selectedCampaignObj.title || selectedCampaignObj.orgName || creatorProfile.orgName || creatorProfile.name || 'RonPay Community';
+      return selectedCampaignObj.title || selectedCampaignObj.orgName || creatorProfile.orgName || creatorProfile.name || 'RonPay Campaign';
     }
-    return creatorProfile.orgName || creatorProfile.name || (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM`);
-  }, [selectedCampaignObj, creatorProfile, selectedFilter]);
+    if (selectedFilter !== 'all') {
+      const catLabel = selectedFilter === 'ralna' ? 'Ralna Bawm' :
+                       selectedFilter === 'khawlsak' ? 'Khawlsak Bawm' :
+                       selectedFilter === 'rikrum' ? 'Rikrum Bawm' : 'Kumtluang Bawm';
+      return `${catLabel} (All Campaigns)`;
+    }
+    return language === 'english' ? 'Overall Financial Report' : 'Pek Tlingkhawm Zawng Zawng (Overall)';
+  }, [selectedCampaignObj, creatorProfile, selectedFilter, language]);
 
-  // 2. A hnuai ah: Veng / Khua / Location (Creator-in a dah luh)
+  // 2. A hnuai ah: Veng / Khua / Location
   const headerLocation = useMemo(() => {
     if (selectedCampaignObj?.location) {
       return selectedCampaignObj.location;
     }
-    if (creatorProfile.address) {
-      return creatorProfile.address;
+    if (selectedFilter !== 'all') {
+      const catLabel = selectedFilter === 'ralna' ? 'Ralna Bawm' :
+                       selectedFilter === 'khawlsak' ? 'Khawlsak Bawm' :
+                       selectedFilter === 'rikrum' ? 'Rikrum Bawm' : 'Kumtluang Bawm';
+      return `${catLabel} Summary • Mizoram, India`;
     }
-    return 'Mizoram, India';
-  }, [selectedCampaignObj, creatorProfile]);
+    return language === 'english' ? 'All Bawm & Campaigns Combined' : 'Bawm & Campaign Zawng Zawng';
+  }, [selectedCampaignObj, selectedFilter, language]);
 
-  // Active uploaded image associated with campaign / QR
-  const activeCampaignImage = selectedCampaignObj?.imageUrl || (availableCampaigns.find(c => Boolean(c.imageUrl))?.imageUrl);
+  // Active uploaded image associated with campaign / QR (ONLY for the currently selected specific campaign)
+  const activeCampaignImage = selectedCampaignObj?.imageUrl || undefined;
 
   const dateRangeText = startDate && endDate
     ? `${formatDateDDMMYYYY(startDate)} to ${formatDateDDMMYYYY(endDate)}`
@@ -364,54 +377,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     address: headerLocation
   } : undefined;
 
-  // Active target information for the current campaign or filter context
+  // Active target information: ONLY when a specific campaign with targetAmount > 0 is selected
   const activeTargetInfo: TargetExportInfo | null = useMemo(() => {
-    // 1. When a specific campaign is selected (selectedCampaignId !== 'all')
-    if (selectedCampaignId !== 'all') {
-      if (selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
-        const targetAmount = selectedCampaignObj.targetAmount;
-        const targetPeriod = selectedCampaignObj.targetPeriod;
-        const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
-        const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-        const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
-        const isCompleted = grandTotal >= targetAmount;
-        const remaining = Math.max(0, targetAmount - grandTotal);
-        const surplus = Math.max(0, grandTotal - targetAmount);
-
-        return {
-          targetAmount,
-          targetPeriod,
-          periodLabel,
-          periodSuffix,
-          progressPct,
-          isCompleted,
-          remaining,
-          surplus,
-          campaignTitle: selectedCampaignObj.title
-        };
-      }
-      // If the selected specific campaign has no target configured, DO NOT show/mix targets from other campaigns!
-      return null;
-    }
-
-    // 2. Only when "All My Campaigns in this Bawm" is selected (selectedCampaignId === 'all')
-    const targetedCampaigns = (selectedFilter === 'all' 
-      ? creatorCampaigns 
-      : creatorCampaigns.filter(c => c.category === selectedFilter)
-    ).filter(c => Boolean(c.targetAmount && c.targetAmount > 0));
-
-    if (targetedCampaigns.length === 1) {
-      const c = targetedCampaigns[0];
-      const targetAmount = c.targetAmount!;
-      const targetPeriod = c.targetPeriod;
-      const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
+    // Only display target progress when viewing a single specific campaign with target set
+    if (selectedCampaignObj && selectedCampaignObj.targetAmount && selectedCampaignObj.targetAmount > 0) {
+      const targetAmount = selectedCampaignObj.targetAmount;
+      const targetPeriod = selectedCampaignObj.targetPeriod;
+      const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Target Goal';
       const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-      const campTxns = filteredTransactions.filter(t => t.campaignId === c.id || t.campaignTitle === c.title);
-      const campTotal = campTxns.reduce((sum, t) => sum + t.amount, 0);
-      const progressPct = targetAmount > 0 ? Math.round((campTotal / targetAmount) * 100) : 0;
-      const isCompleted = campTotal >= targetAmount;
-      const remaining = Math.max(0, targetAmount - campTotal);
-      const surplus = Math.max(0, campTotal - targetAmount);
+      const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
+      const isCompleted = grandTotal >= targetAmount;
+      const remaining = Math.max(0, targetAmount - grandTotal);
+      const surplus = Math.max(0, grandTotal - targetAmount);
 
       return {
         targetAmount,
@@ -422,30 +399,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         isCompleted,
         remaining,
         surplus,
-        campaignTitle: c.title
-      };
-    } else if (targetedCampaigns.length > 1) {
-      const combinedTarget = targetedCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
-      const progressPct = combinedTarget > 0 ? Math.round((grandTotal / combinedTarget) * 100) : 0;
-      const isCompleted = grandTotal >= combinedTarget;
-      const remaining = Math.max(0, combinedTarget - grandTotal);
-      const surplus = Math.max(0, grandTotal - combinedTarget);
-
-      return {
-        targetAmount: combinedTarget,
-        targetPeriod: undefined,
-        periodLabel: `${targetedCampaigns.length} Bawm Targets Combined`,
-        periodSuffix: '',
-        progressPct,
-        isCompleted,
-        remaining,
-        surplus,
-        campaignTitle: `${targetedCampaigns.length} Bawm Targets`
+        campaignTitle: selectedCampaignObj.title
       };
     }
 
+    // When viewing overall / all campaigns, do not show artificial combined targets
     return null;
-  }, [selectedCampaignId, selectedCampaignObj, grandTotal, selectedFilter, creatorCampaigns, filteredTransactions]);
+  }, [selectedCampaignObj, grandTotal]);
 
   // Compute monthly trend for the live banner & reports with customizable month range
   const monthlyDistribution = useMemo(() => {
@@ -515,8 +475,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
 
     const targetMembers = scopedMembers.length > 0 ? scopedMembers : getMembers(selectedCampaignId);
-    const resolvedOrgName = selectedCampaignObj?.orgName || selectedCampaignObj?.title || creatorProfile.orgName || creatorProfile.name || 'RonPay Organization';
-    const resolvedLogoUrl = activeCampaignImage || creatorProfile.logoUrl;
+    const resolvedOrgName = selectedCampaignObj 
+      ? (selectedCampaignObj.orgName || selectedCampaignObj.title || creatorProfile.orgName || creatorProfile.name || 'RonPay Organization')
+      : headerTitle;
+    const resolvedLogoUrl = selectedCampaignObj ? (activeCampaignImage || creatorProfile.logoUrl) : undefined;
     const resolvedLocation = headerLocation;
 
     if (reportPrintStyle === 'master_ledger') {
@@ -1042,34 +1004,43 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             {/* Active Report Focus Banner with Uploaded Campaign Image (Spacious & High-Visibility) */}
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5.5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div className="flex items-start sm:items-center gap-3.5 sm:gap-4.5 min-w-0 flex-1">
-                {/* Vei lamah: Creator-in Thlalak a dah sa */}
-                {activeCampaignImage ? (
-                  <div 
-                    onClick={() => onOpenImagePreview && onOpenImagePreview(
-                      activeCampaignImage, 
-                      headerTitle, 
-                      headerLocation,
-                      `Trxn Date: ${dateRangeText}`
-                    )}
-                    className="relative group shrink-0 cursor-pointer"
-                    title="Click to preview full high-res photo"
-                  >
-                    <img 
-                      src={activeCampaignImage} 
-                      alt={headerTitle} 
-                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-amber-400 shadow-md transition-transform group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent rounded-2xl flex items-center justify-center transition-colors">
-                      <span className="text-[8px] sm:text-[9px] font-black bg-slate-950/85 text-amber-300 px-1.5 py-0.5 rounded-md backdrop-blur-xs absolute bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap border border-amber-400/40 flex items-center gap-1 shadow-sm">
-                        <ZoomIn className="w-2.5 h-2.5" /> Thlalak
-                      </span>
+                {/* Vei lamah: Specific Campaign Image emaw Overall Report Icon Badge */}
+                {selectedCampaignObj ? (
+                  activeCampaignImage ? (
+                    <div 
+                      onClick={() => onOpenImagePreview && onOpenImagePreview(
+                        activeCampaignImage, 
+                        headerTitle, 
+                        headerLocation,
+                        `Trxn Date: ${dateRangeText}`
+                      )}
+                      className="relative group shrink-0 cursor-pointer"
+                      title="Click to preview full high-res photo"
+                    >
+                      <img 
+                        src={activeCampaignImage} 
+                        alt={headerTitle} 
+                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-amber-400 shadow-md transition-transform group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent rounded-2xl flex items-center justify-center transition-colors">
+                        <span className="text-[8px] sm:text-[9px] font-black bg-slate-950/85 text-amber-300 px-1.5 py-0.5 rounded-md backdrop-blur-xs absolute bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap border border-amber-400/40 flex items-center gap-1 shadow-sm">
+                          <ZoomIn className="w-2.5 h-2.5" /> Thlalak
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
+                      <QrCode className="w-8 h-8 text-indigo-400" />
+                      <span className="text-[8.5px] text-indigo-300 font-bold uppercase tracking-wider">{selectedCampaignObj.category}</span>
+                    </div>
+                  )
                 ) : (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
-                    <ImageIcon className="w-8 h-8 text-indigo-400" />
-                    <span className="text-[8.5px] text-indigo-300 font-bold uppercase tracking-wider">No Photo</span>
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-800 to-slate-900 border border-indigo-500/50 flex flex-col items-center justify-center text-white shrink-0 gap-1.5 shadow-md">
+                    <Receipt className="w-8 h-8 text-amber-400" />
+                    <span className="text-[8px] sm:text-[8.5px] text-amber-300 font-black uppercase tracking-wider text-center px-1">
+                      {selectedFilter === 'all' ? 'Overall Report' : `${selectedFilter.toUpperCase()}`}
+                    </span>
                   </div>
                 )}
 

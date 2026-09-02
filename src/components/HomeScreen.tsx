@@ -31,11 +31,16 @@ import {
   CheckCircle2,
   Info,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   ArrowRight,
   Pause,
   Play,
-  Users
+  Users,
+  Filter,
+  RotateCcw,
+  X as CloseIcon
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -43,7 +48,7 @@ import { BILL_SERVICES } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
-import { Megaphone, X as CloseIcon } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
 import { getUserRole, ROLE_METAS, canAccessAdminConsole } from '../utils/rbac';
 
 interface HomeScreenProps {
@@ -96,6 +101,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
   const [currentAnnounceIdx, setCurrentAnnounceIdx] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+
+  // QR Search & Filter State in Home
+  const [qrSearchQuery, setQrSearchQuery] = useState<string>('');
+  const [qrCategoryFilter, setQrCategoryFilter] = useState<'all' | BawmCategory>('all');
+  const [showAllQRs, setShowAllQRs] = useState<boolean>(false);
 
   // Active items for rotating announcement banner
   const bannerItems: AnnouncementItem[] = announcement?.items && announcement.items.length > 0
@@ -189,16 +199,66 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  // Recent Created QRs (Strictly sorted newest first by createdAt timestamp)
-  const recentCreatedQRs = useMemo(() => {
-    return [...campaigns]
-      .sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeB - timeA;
-      })
-      .slice(0, 5);
+  // Sorted campaigns newest first by createdAt timestamp
+  const sortedCampaigns = useMemo(() => {
+    return [...campaigns].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [campaigns]);
+
+  // Filtered campaigns based on search query and category filter
+  const filteredQRs = useMemo(() => {
+    let list = sortedCampaigns;
+    if (qrCategoryFilter !== 'all') {
+      list = list.filter(c => c.category === qrCategoryFilter);
+    }
+    const q = qrSearchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(c => 
+        (c.title && c.title.toLowerCase().includes(q)) ||
+        (c.location && c.location.toLowerCase().includes(q)) ||
+        (c.description && c.description.toLowerCase().includes(q)) ||
+        (c.creatorName && c.creatorName.toLowerCase().includes(q)) ||
+        (c.upiId && c.upiId.toLowerCase().includes(q)) ||
+        (c.category && c.category.toLowerCase().includes(q)) ||
+        (c.id && c.id.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [sortedCampaigns, qrCategoryFilter, qrSearchQuery]);
+
+  const isSearchingOrFiltered = qrSearchQuery.trim().length > 0 || qrCategoryFilter !== 'all';
+
+  // Display list: if searching/filtering or user toggled showAllQRs, show all matched QRs; otherwise show top 5
+  const displayedQRs = useMemo(() => {
+    if (isSearchingOrFiltered || showAllQRs) {
+      return filteredQRs;
+    }
+    return filteredQRs.slice(0, 5);
+  }, [filteredQRs, isSearchingOrFiltered, showAllQRs]);
+
+  // Counts for filter pills
+  const categoryCounts = useMemo(() => {
+    const q = qrSearchQuery.trim().toLowerCase();
+    const baseList = q ? sortedCampaigns.filter(c => 
+      (c.title && c.title.toLowerCase().includes(q)) ||
+      (c.location && c.location.toLowerCase().includes(q)) ||
+      (c.description && c.description.toLowerCase().includes(q)) ||
+      (c.creatorName && c.creatorName.toLowerCase().includes(q)) ||
+      (c.upiId && c.upiId.toLowerCase().includes(q)) ||
+      (c.id && c.id.toLowerCase().includes(q))
+    ) : sortedCampaigns;
+
+    return {
+      all: baseList.length,
+      ralna: baseList.filter(c => c.category === 'ralna').length,
+      khawlsak: baseList.filter(c => c.category === 'khawlsak').length,
+      rikrum: baseList.filter(c => c.category === 'rikrum').length,
+      kumtluang: baseList.filter(c => c.category === 'kumtluang').length,
+    };
+  }, [sortedCampaigns, qrSearchQuery]);
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
@@ -632,179 +692,396 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* 5. Recent Created QRs Section (Replaces Recent Transactions as requested) */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5">
-            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-            <h3 className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider">
-              Recent Created QRs
-            </h3>
+      {/* 5. QR Zawnna & Recent Created QRs Section */}
+      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-3">
+        {/* Section Header */}
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 shadow-2xs">
+              <QrCode className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-wider">
+                  {language === 'english' ? 'QR Search & Recent QRs' : 'QR Zawnna & Recent QRs'}
+                </h3>
+                <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded-md border border-indigo-100/80">
+                  {campaigns.length} {language === 'english' ? 'Total' : 'Awmsa'}
+                </span>
+              </div>
+              <p className="text-[9.5px] text-slate-500 font-medium">
+                {language === 'english' 
+                  ? 'Instant QR lookup, creator filter & recent campaigns' 
+                  : 'QR pil bo tawh leh thar zawng zawng zawn chhuahna awlsam'}
+              </p>
+            </div>
           </div>
+          
           <button 
             onClick={onCreateQRClick}
-            className="text-[10px] text-indigo-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-[10px] text-indigo-600 font-bold hover:text-indigo-700 hover:underline flex items-center gap-1 cursor-pointer shrink-0 bg-indigo-50/60 px-2.5 py-1 rounded-lg border border-indigo-100/60 active:scale-95 transition"
           >
-            + Create / Manage QRs <ChevronRight className="w-3 h-3" />
+            + {language === 'english' ? 'Create QR' : 'Create QR'} <ChevronRight className="w-3 h-3" />
           </button>
         </div>
 
+        {/* Search Bar Input */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input 
+            type="text"
+            value={qrSearchQuery}
+            onChange={(e) => setQrSearchQuery(e.target.value)}
+            placeholder={
+              language === 'english'
+                ? 'Search QR by name, creator, location, or UPI...'
+                : 'QR / Bawm hming, vawngtu, hmun, UPI zawng rawh...'
+            }
+            className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-xs font-semibold text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition shadow-2xs"
+          />
+          {qrSearchQuery && (
+            <button
+              type="button"
+              onClick={() => setQrSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition cursor-pointer"
+              title="Clear search"
+            >
+              <CloseIcon className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Category Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 pt-0.5 text-[10.5px]">
+          <button
+            type="button"
+            onClick={() => setQrCategoryFilter('all')}
+            className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1 ${
+              qrCategoryFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60'
+            }`}
+          >
+            <span>{language === 'english' ? 'All QRs' : 'Zawng zawng'}</span>
+            <span className={`text-[9px] px-1 rounded-md ${qrCategoryFilter === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>
+              {categoryCounts.all}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQrCategoryFilter('ralna')}
+            className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1 ${
+              qrCategoryFilter === 'ralna'
+                ? 'bg-slate-800 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60'
+            }`}
+          >
+            <Ribbon className="w-3 h-3 text-rose-500 shrink-0" />
+            <span>Ralna</span>
+            <span className={`text-[9px] px-1 rounded-md ${qrCategoryFilter === 'ralna' ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>
+              {categoryCounts.ralna}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQrCategoryFilter('khawlsak')}
+            className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1 ${
+              qrCategoryFilter === 'khawlsak'
+                ? 'bg-emerald-700 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60'
+            }`}
+          >
+            <HandHeart className="w-3 h-3 text-emerald-500 shrink-0" />
+            <span>Khawlsak</span>
+            <span className={`text-[9px] px-1 rounded-md ${qrCategoryFilter === 'khawlsak' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'}`}>
+              {categoryCounts.khawlsak}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQrCategoryFilter('rikrum')}
+            className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1 ${
+              qrCategoryFilter === 'rikrum'
+                ? 'bg-rose-700 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60'
+            }`}
+          >
+            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+            <span>Rikrum</span>
+            <span className={`text-[9px] px-1 rounded-md ${qrCategoryFilter === 'rikrum' ? 'bg-rose-800 text-rose-100' : 'bg-slate-200 text-slate-700'}`}>
+              {categoryCounts.rikrum}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQrCategoryFilter('kumtluang')}
+            className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1 ${
+              qrCategoryFilter === 'kumtluang'
+                ? 'bg-blue-700 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60'
+            }`}
+          >
+            <InfinityIcon className="w-3 h-3 text-blue-400 shrink-0" />
+            <span>Kumtluang</span>
+            <span className={`text-[9px] px-1 rounded-md ${qrCategoryFilter === 'kumtluang' ? 'bg-blue-800 text-blue-100' : 'bg-slate-200 text-slate-700'}`}>
+              {categoryCounts.kumtluang}
+            </span>
+          </button>
+        </div>
+
+        {/* Active Filter Info / Reset Pill */}
+        {isSearchingOrFiltered && (
+          <div className="flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-xl px-2.5 py-1.5 text-[10px] text-indigo-900">
+            <span className="font-semibold truncate">
+              {qrSearchQuery ? (
+                <>
+                  <span className="font-bold">"{qrSearchQuery}"</span> {language === 'english' ? 'atan' : 'atan'} <strong className="font-black text-indigo-700">{filteredQRs.length}</strong> {language === 'english' ? 'QRs found' : 'QR hmuh a ni'}
+                </>
+              ) : (
+                <>
+                  Category filter: <strong className="capitalize font-black text-indigo-700">{qrCategoryFilter}</strong> ({filteredQRs.length} QRs)
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setQrSearchQuery('');
+                setQrCategoryFilter('all');
+              }}
+              className="text-[9.5px] font-bold text-indigo-700 hover:text-indigo-900 underline flex items-center gap-0.5 shrink-0 ml-2 cursor-pointer"
+            >
+              <RotateCcw className="w-2.5 h-2.5" /> {language === 'english' ? 'Clear filter' : 'Tifai rawh'}
+            </button>
+          </div>
+        )}
+
+        {/* QRs List */}
         <div className="space-y-2.5">
-          {recentCreatedQRs.length === 0 ? (
-            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/90 text-center space-y-2">
-              <QrCode className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">QR Siam a la awm lo</p>
-              <p className="text-[11px] text-slate-500">QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.</p>
+          {displayedQRs.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/90 text-center space-y-2.5">
+              <Search className="w-8 h-8 text-slate-400 mx-auto" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-slate-700">
+                  {isSearchingOrFiltered 
+                    ? (language === 'english' ? 'No QRs match your search' : 'QR zawn hmuh a ni lo') 
+                    : (language === 'english' ? 'No QRs created yet' : 'QR Siam a la awm lo')}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {isSearchingOrFiltered
+                    ? (language === 'english' ? 'Try searching with a different name or clear the filter.' : 'Hming dang emaw category dang thlang la zawng chhin rawh.')
+                    : (language === 'english' ? 'Click "+ Create QR" to create a new campaign.' : 'QR Code thar siam turin "+ Create QR" hmet rawh.')}
+                </p>
+              </div>
+              {isSearchingOrFiltered && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrSearchQuery('');
+                    setQrCategoryFilter('all');
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[10px] font-bold shadow-2xs hover:bg-indigo-700 transition cursor-pointer"
+                >
+                  {language === 'english' ? 'Clear Search & Filters' : 'Filter & Search tifai rawh'}
+                </button>
+              )}
             </div>
           ) : (
-            recentCreatedQRs.map(camp => {
-            const isOwner = isCampaignCreator(camp, creatorProfile);
-            const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
-            const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
-            const target = camp.targetAmount || (
-              camp.category === 'ralna' ? 25000 :
-              camp.category === 'khawlsak' ? 50000 :
-              camp.category === 'rikrum' ? 100000 :
-              camp.category === 'kumtluang' ? 100000 : 50000
-            );
-            const percentage = target > 0 ? Math.round((totalRaised / target) * 100) : 0;
-            const clampedPercentage = Math.min(percentage, 100);
+            displayedQRs.map(camp => {
+              const isOwner = isCampaignCreator(camp, creatorProfile);
+              const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
+              const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
+              
+              const hasTarget = Boolean(camp.targetAmount && camp.targetAmount > 0);
+              const target = hasTarget ? camp.targetAmount! : 0;
+              const percentage = target > 0 ? Math.round((totalRaised / target) * 100) : 0;
+              const clampedPercentage = Math.min(percentage, 100);
+              const targetPeriodText = camp.targetPeriod === 'monthly' ? (language === 'english' ? '/m' : '/thla') :
+                                       camp.targetPeriod === 'yearly' ? (language === 'english' ? '/yr' : '/kum') : '';
 
-            const progressColor = 
-              camp.category === 'khawlsak' ? 'bg-emerald-500' :
-              camp.category === 'rikrum' ? 'bg-rose-500' :
-              camp.category === 'kumtluang' ? 'bg-blue-600' :
-              camp.category === 'ralna' ? 'bg-slate-900' : 'bg-indigo-600';
+              const progressColor = 
+                camp.category === 'khawlsak' ? 'bg-emerald-500' :
+                camp.category === 'rikrum' ? 'bg-rose-500' :
+                camp.category === 'kumtluang' ? 'bg-blue-600' :
+                camp.category === 'ralna' ? 'bg-slate-900' : 'bg-indigo-600';
 
-            return (
-              <div 
-                key={camp.id} 
-                onClick={() => onSelectCampaign ? onSelectCampaign(camp) : onSelectBawm(camp.category)}
-                className="p-3 rounded-2xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/90 hover:border-indigo-300 transition cursor-pointer text-xs group space-y-2.5 shadow-2xs"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs font-bold ${
-                      camp.category === 'ralna' ? 'bg-slate-900 border border-rose-500' :
-                      camp.category === 'khawlsak' ? 'bg-emerald-600' :
-                      camp.category === 'rikrum' ? 'bg-rose-600' : 'bg-blue-600'
-                    }`}>
-                      <QrCode className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
-                        {translateDynamicText(camp.title, language)}
-                      </p>
-                      <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
-                        <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
-                        <span className="truncate">{camp.location}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    {camp.category === 'kumtluang' && (isOwner || canAccessAdminConsole(creatorProfile)) && onOpenMemberRoll && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenMemberRoll('members_list', camp.id);
-                        }}
-                        title="Open Member Roll"
-                        className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                      >
-                        <Users className="w-3 h-3" /> Roll
-                      </button>
-                    )}
-
-                    {onShareCampaign && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onShareCampaign(camp);
-                        }}
-                        title="Share Link & QR Code"
-                        className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition shadow-2xs cursor-pointer active:scale-95"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    <div className="text-right flex flex-col items-end">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onSelectCampaign) {
-                            onSelectCampaign(camp);
-                          } else {
-                            onSelectBawm(camp.category);
-                          }
-                        }}
-                        className="text-[9.5px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-2.5 py-1 rounded-lg border border-indigo-100/80 flex items-center gap-0.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                      >
-                        {language === 'mizo' ? 'Pekna' : 'Contribute'} <ChevronRight className="w-3 h-3" />
-                      </button>
-                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
-                        {formatDateDDMMYYYY(camp.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
-                {isOwner && (
-                  <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
-                    {camp.category === 'ralna' ? (
-                      <div className="flex items-center justify-between text-[10px]">
-                        <div className="flex items-center gap-1 font-bold text-slate-700">
-                          <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
-                          <span className="text-slate-500 font-medium">Pek tlingkhawm zat</span>
-                          <span className="text-[7.5px] font-black uppercase text-slate-700 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
-                            {language === 'english' ? 'Creator Only' : 'Creator View'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] text-slate-600 font-bold bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded-md">
-                            {campTransactions.length} {campTransactions.length === 1 ? 'txn' : 'txns'}
-                          </span>
-                        </div>
+              return (
+                <div 
+                  key={camp.id} 
+                  onClick={() => onSelectCampaign ? onSelectCampaign(camp) : onSelectBawm(camp.category)}
+                  className="p-3 rounded-2xl bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/90 hover:border-indigo-300 transition cursor-pointer text-xs group space-y-2.5 shadow-2xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs font-bold ${
+                        camp.category === 'ralna' ? 'bg-slate-900 border border-rose-500' :
+                        camp.category === 'khawlsak' ? 'bg-emerald-600' :
+                        camp.category === 'rikrum' ? 'bg-rose-600' : 'bg-blue-600'
+                      }`}>
+                        <QrCode className="w-4 h-4" />
                       </div>
-                    ) : (
-                      <>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
+                            {translateDynamicText(camp.title, language)}
+                          </p>
+                          <span className={`text-[7.5px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                            camp.category === 'ralna' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                            camp.category === 'khawlsak' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            camp.category === 'rikrum' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {camp.category}
+                          </span>
+                        </div>
+                        <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                          <span className="truncate">{camp.location}</span>
+                          {camp.creatorName && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500 truncate">{camp.creatorName}</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                      {camp.category === 'kumtluang' && (isOwner || canAccessAdminConsole(creatorProfile)) && onOpenMemberRoll && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMemberRoll('members_list', camp.id);
+                          }}
+                          title="Open Member Roll"
+                          className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                        >
+                          <Users className="w-3 h-3" /> Roll
+                        </button>
+                      )}
+
+                      {onShareCampaign && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onShareCampaign(camp);
+                          }}
+                          title="Share Link & QR Code"
+                          className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition shadow-2xs cursor-pointer active:scale-95"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      <div className="text-right flex flex-col items-end">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectCampaign) {
+                              onSelectCampaign(camp);
+                            } else {
+                              onSelectBawm(camp.category);
+                            }
+                          }}
+                          className="text-[9.5px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white px-2.5 py-1 rounded-lg border border-indigo-100/80 flex items-center gap-0.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                        >
+                          {language === 'mizo' ? 'Pekna' : 'Contribute'} <ChevronRight className="w-3 h-3" />
+                        </button>
+                        <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
+                          {formatDateDDMMYYYY(camp.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
+                  {isOwner && (
+                    <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
+                      {!hasTarget ? (
                         <div className="flex items-center justify-between text-[10px]">
                           <div className="flex items-center gap-1 font-bold text-slate-700">
                             <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
-                            <span className="text-slate-400 font-normal">/ ₹{target.toLocaleString('en-IN')}</span>
-                            <span className="text-[7.5px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded ml-1">
-                              {language === 'english' ? 'Creator Goal' : 'Creator View'}
+                            <span className="text-slate-500 font-medium">{language === 'english' ? 'Total Collected' : 'Pek tlingkhawm zat'}</span>
+                            <span className="text-[7.5px] font-black uppercase text-slate-700 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
+                              {language === 'english' ? 'Creator Only' : 'Creator View'}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] text-slate-400 font-medium">
+                            <span className="text-[9px] text-slate-600 font-bold bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded-md">
                               {campTransactions.length} {campTransactions.length === 1 ? 'txn' : 'txns'}
-                            </span>
-                            <span className="font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md text-[9.5px]">
-                              {percentage}%
                             </span>
                           </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-[10px]">
+                            <div className="flex items-center gap-1 font-bold text-slate-700">
+                              <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
+                              <span className="text-slate-400 font-normal">/ ₹{target.toLocaleString('en-IN')}{targetPeriodText}</span>
+                              <span className="text-[7.5px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded ml-1">
+                                {language === 'english' ? 'Creator Goal' : 'Creator View'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] text-slate-400 font-medium">
+                                {campTransactions.length} {campTransactions.length === 1 ? 'txn' : 'txns'}
+                              </span>
+                              <span className="font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md text-[9.5px]">
+                                {percentage}%
+                              </span>
+                            </div>
+                          </div>
 
-                        {/* Progress Track */}
-                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/50">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
-                            style={{ width: `${clampedPercentage}%` }}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          }))}
+                          {/* Progress Track */}
+                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/50">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+                              style={{ width: `${clampedPercentage}%` }}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
+
+        {/* View All / Toggle Button (When not actively searching and more than 5 QRs exist) */}
+        {!isSearchingOrFiltered && filteredQRs.length > 5 && (
+          <div className="pt-1 text-center">
+            <button
+              type="button"
+              onClick={() => setShowAllQRs(!showAllQRs)}
+              className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-200 text-xs font-bold text-slate-700 hover:text-indigo-600 transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-2xs"
+            >
+              {showAllQRs ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{language === 'english' ? 'Show Recent 5 Only' : 'Recent 5 chauh ti lang rawh'}</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {language === 'english' 
+                      ? `View all ${filteredQRs.length} QRs (${filteredQRs.length - 5} more)` 
+                      : `QRs dang ${filteredQRs.length - 5} a la awm • QRs zawng zawng (${filteredQRs.length}) ti lang rawh`}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-indigo-600" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

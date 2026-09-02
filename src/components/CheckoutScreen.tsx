@@ -754,11 +754,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
-                <span className="font-black text-slate-900">₹{(campaign?.targetAmount || 50000).toLocaleString('en-IN')}</span>
+                <span className="font-black text-slate-900">{campaign?.targetAmount && campaign.targetAmount > 0 ? `₹${campaign.targetAmount.toLocaleString('en-IN')}` : (language === 'english' ? 'No Target' : 'Target Set loh')}</span>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
-                <span className="font-black text-slate-900">₹{(campaign?.maxLimit || 100000).toLocaleString('en-IN')}</span>
+                <span className="font-black text-slate-900">{campaign?.maxLimit && campaign.maxLimit > 0 ? `₹${campaign.maxLimit.toLocaleString('en-IN')}` : (language === 'english' ? 'No Limit' : 'Limit awm lo')}</span>
               </div>
             </div>
           </div>
