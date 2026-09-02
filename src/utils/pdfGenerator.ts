@@ -101,6 +101,31 @@ export async function triggerFileDownload(
 ): Promise<boolean> {
   let triggered = false;
 
+  // 0. Direct Android Native WebView Bridge (if running inside APK with JavascriptInterface)
+  const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
+  if (androidBridge && typeof androidBridge.getBase64FromBlobData === 'function') {
+    try {
+      if (dataUri) {
+        androidBridge.getBase64FromBlobData(dataUri, 'application/pdf', fileName);
+        triggered = true;
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          try {
+            androidBridge.getBase64FromBlobData(base64data, 'application/pdf', fileName);
+          } catch (e) {
+            console.warn('Android bridge error', e);
+          }
+        };
+        reader.readAsDataURL(blob);
+        triggered = true;
+      }
+    } catch (bridgeErr) {
+      console.warn('Android bridge invocation failed', bridgeErr);
+    }
+  }
+
   // 1. Direct Blob URL anchor click
   try {
     const blobUrl = URL.createObjectURL(blob);

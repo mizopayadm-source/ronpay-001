@@ -109,6 +109,25 @@ export const downloadFileUniversal = async (
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
 
+    // Step 0: Check if Android Native WebView Bridge is available
+    const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
+    if (androidBridge && typeof androidBridge.getBase64FromBlobData === 'function') {
+      try {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          try {
+            androidBridge.getBase64FromBlobData(base64data, mimeType, fileName);
+          } catch (e) {
+            console.warn('Android bridge error', e);
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (bridgeErr) {
+        console.warn('Error passing file to Android bridge:', bridgeErr);
+      }
+    }
+
     // Step 1: Check Web Share API with files (Android / iOS / Mobile WebViews)
     if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
