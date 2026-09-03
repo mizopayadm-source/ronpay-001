@@ -40,6 +40,14 @@ import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translati
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { UPIIntentModal } from './UPIIntentModal';
 import { validateUpiId } from '../utils/upi';
+import { 
+  ALL_MONTH_NAMES_FULL, 
+  getCurrentMonthName, 
+  getCurrentYear, 
+  getCurrentQuarterName, 
+  getPreviousMonthName, 
+  getYearOptions 
+} from '../utils/monthHelper';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -118,11 +126,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const t = TRANSLATIONS[language];
 
-  // Kumtluang period & frequency selection
+  // Kumtluang period & frequency selection (defaults dynamically to current month & year)
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>('August');
-  const [selectedQuarter, setSelectedQuarter] = useState<string>('Q3 (Jul - Sep)');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentMonthName());
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => getCurrentQuarterName());
+  const [selectedYear, setSelectedYear] = useState<string>(() => getCurrentYear());
 
   // Kumtluang subcategory breakdown
   const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
@@ -1530,15 +1538,38 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 {periodType === 'monthly' && (
                   <div>
-                    <label className="text-[10px] text-slate-500 font-bold block mb-1">Thla (Month)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-slate-600 font-bold block">Thla (Month)</label>
+                      {selectedMonth !== getCurrentMonthName() && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMonth(getCurrentMonthName());
+                            setSelectedYear(getCurrentYear());
+                          }}
+                          className="text-[9.5px] font-black text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                        >
+                          Tun thla thlang rawh
+                        </button>
+                      )}
+                    </div>
                     <select
                       value={selectedMonth}
                       onChange={(e) => setSelectedMonth(e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                     >
-                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
+                      {ALL_MONTH_NAMES_FULL.map((m, idx) => {
+                        const curM = getCurrentMonthName();
+                        const curY = getCurrentYear();
+                        const isCurrent = m === curM && selectedYear === curY;
+                        const isPast = (Number(selectedYear) < Number(curY)) || 
+                                       (selectedYear === curY && idx < new Date().getMonth());
+                        return (
+                          <option key={m} value={m}>
+                            {m} {isCurrent ? '⭐ (Tun thla / Current)' : isPast ? '(Thla liam ta / Past)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 )}
@@ -1566,12 +1597,76 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     onChange={(e) => setSelectedYear(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                   >
-                    {['2025', '2026', '2027', '2028'].map(yr => (
-                      <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
+                    {getYearOptions().map(yr => (
+                      <option key={yr} value={yr}>
+                        {yr} {yr === getCurrentYear() ? '(Kum kal lai)' : Number(yr) < Number(getCurrentYear()) ? '(Kum hmasa)' : ''} {periodType === 'yearly' ? '(Kumtluan)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
+
+              {/* Quick shortcut pills for Current & Past Months */}
+              {periodType === 'monthly' && (() => {
+                const curM = getCurrentMonthName();
+                const curY = getCurrentYear();
+                const prev1 = getPreviousMonthName(1);
+                const prev2 = getPreviousMonthName(2);
+                return (
+                  <div className="pt-2 border-t border-blue-100/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
+                      <span>Thlan awlsamna (Quick Select):</span>
+                      <span className="text-[9.5px] text-indigo-600 font-normal">Thla liam ta pawh thlan theih reng e</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(curM);
+                          setSelectedYear(curY);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer flex items-center gap-1 ${
+                          selectedMonth === curM && selectedYear === curY
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>⚡</span> Tun thla ({curM})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(prev1.month);
+                          setSelectedYear(prev1.year);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                          selectedMonth === prev1.month && selectedYear === prev1.year
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>⏮️</span> Thla hmasa ({prev1.month})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(prev2.month);
+                          setSelectedYear(prev2.year);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                          selectedMonth === prev2.month && selectedYear === prev2.year
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>⏮️</span> {prev2.month}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

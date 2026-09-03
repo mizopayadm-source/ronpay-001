@@ -50,6 +50,7 @@ import {
   exportKumtluangMatrixToCSV
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
+import { getCurrentMonthName, getCurrentYear } from '../utils/monthHelper';
 
 interface KumtluangMemberManagerModalProps {
   isOpen: boolean;
@@ -191,8 +192,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
-  const [selectedMonth, setSelectedMonth] = useState<string>('August');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentMonthName());
+  const [selectedYear, setSelectedYear] = useState<string>(() => getCurrentYear());
   const [entryAmount, setEntryAmount] = useState<string>('500');
   const [entryPaymentMethod, setEntryPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [entryTxRef, setEntryTxRef] = useState<string>('');
@@ -206,8 +207,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editTxDonorName, setEditTxDonorName] = useState<string>('');
   const [editTxAmount, setEditTxAmount] = useState<string>('');
   const [editTxCategory, setEditTxCategory] = useState<string>('Pathian Ram Zauna');
-  const [editTxMonth, setEditTxMonth] = useState<string>('August');
-  const [editTxYear, setEditTxYear] = useState<string>('2026');
+  const [editTxMonth, setEditTxMonth] = useState<string>(() => getCurrentMonthName());
+  const [editTxYear, setEditTxYear] = useState<string>(() => getCurrentYear());
   const [editTxPaymentMethod, setEditTxPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [editTxRemark, setEditTxRemark] = useState<string>('');
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);

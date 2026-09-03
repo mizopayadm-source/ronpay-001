@@ -26,6 +26,7 @@ import { Campaign, MemberRecord, MemberDependent } from '../types';
 import { createUPIPaymentString } from '../utils/qr';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { getMembers } from '../utils/storage';
+import { getCurrentMonthName, getCurrentYear } from '../utils/monthHelper';
 
 interface ExternalUPILandingModalProps {
   isOpen: boolean;
@@ -69,7 +70,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
   const [guestSection, setGuestSection] = useState<string>('Tualchhung');
 
   // Month / Period selector
-  const [selectedMonth, setSelectedMonth] = useState<string>('August 2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => `${getCurrentMonthName()} ${getCurrentYear()}`);
 
   // Dynamic category amounts
   const [categoryAmounts, setCategoryAmounts] = useState<{ [categoryName: string]: number }>({});
