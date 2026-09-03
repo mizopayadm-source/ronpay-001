@@ -167,8 +167,13 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     }
 
     // 5. If specific screen or category requested
+    const modeParam = searchParams.get('mode');
+    if (modeParam === 'website' || window.location.hash.toLowerCase().includes('website')) {
+      return { screen: 'website' };
+    }
+
     if (screenParam) {
-      const validScreens: ScreenId[] = ['home', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'cash_pending'];
+      const validScreens: ScreenId[] = ['home', 'website', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'cash_pending'];
       const matched = validScreens.find(s => s === screenParam.toLowerCase());
       if (matched) {
         return {

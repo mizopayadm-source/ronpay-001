@@ -68,6 +68,7 @@ import { SuccessScreen } from './components/SuccessScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BottomNav } from './components/BottomNav';
+import { RonPayWebsite } from './components/RonPayWebsite';
 
 // Modals
 import { QRScannerModal } from './components/QRScannerModal';
@@ -720,30 +721,45 @@ export default function App() {
       )}
 
       {/* Container with responsive boundary */}
-      <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
-        {/* Offline & Connection Status Banner */}
-        <OfflineStatusBanner onRefreshCache={reloadLocalData} />
+      <div className={`w-full ${currentScreen === 'website' ? 'max-w-none bg-slate-950 text-slate-100' : `${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white text-slate-900 shadow-xl`} min-h-screen flex flex-col transition-all duration-300 relative overflow-x-hidden`}>
+        {currentScreen === 'website' ? (
+          <RonPayWebsite
+            onLaunchApp={() => handleNavigate('home')}
+            onOpenCreateQR={() => {
+              if (creatorProfile.isApproved && creatorProfile.phone) {
+                handleNavigate('create_qr');
+              } else {
+                handleNavigate('creator_reg');
+              }
+            }}
+            onOpenRegister={() => handleNavigate('creator_reg')}
+            initialLanguage={language}
+          />
+        ) : (
+          <>
+            {/* Offline & Connection Status Banner */}
+            <OfflineStatusBanner onRefreshCache={reloadLocalData} />
 
-        {/* Global Header */}
-        <Header
-          currentScreen={currentScreen}
-          onNavigate={handleNavigate}
-          onOpenScanner={() => handleStartScanner('any')}
-          onOpenReports={handleOpenReports}
-          isDesktopView={isDesktopView}
-          onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
-          notificationCount={notificationCount}
-          onOpenNotifications={handleOpenNotifications}
-          language={language}
-          onToggleLanguage={setLanguage}
-          onOpenHistory={handleOpenHistory}
-          onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
-          onOpenLogin={() => setIsLoginModalOpen(true)}
-          creatorProfile={creatorProfile}
-        />
+            {/* Global Header */}
+            <Header
+              currentScreen={currentScreen}
+              onNavigate={handleNavigate}
+              onOpenScanner={() => handleStartScanner('any')}
+              onOpenReports={handleOpenReports}
+              isDesktopView={isDesktopView}
+              onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
+              notificationCount={notificationCount}
+              onOpenNotifications={handleOpenNotifications}
+              language={language}
+              onToggleLanguage={setLanguage}
+              onOpenHistory={handleOpenHistory}
+              onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
+              onOpenLogin={() => setIsLoginModalOpen(true)}
+              creatorProfile={creatorProfile}
+            />
 
-        {/* Main Body Screen Router */}
-        <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
+            {/* Main Body Screen Router */}
+            <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
           {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}
@@ -905,6 +921,8 @@ export default function App() {
             isKumtluangManagerOpen={isKumtluangManagerOpen}
             language={language}
           />
+        )}
+          </>
         )}
 
         {/* Global Floating Actions / Modals */}

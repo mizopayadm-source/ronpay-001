@@ -6,7 +6,8 @@ export type ScreenId =
   | 'creator_reg' 
   | 'reports' 
   | 'success' 
-  | 'cash_pending';
+  | 'cash_pending'
+  | 'website';
 
 export type BawmCategory = 'ralna' | 'khawlsak' | 'rikrum' | 'kumtluang' | 'others';
 

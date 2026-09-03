@@ -20,7 +20,8 @@ import {
   AlertCircle,
   User,
   LogIn,
-  KeyRound
+  KeyRound,
+  Globe
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
@@ -143,6 +144,7 @@ function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  currentScreen,
   onNavigate,
   onOpenScanner,
   onOpenReports,
@@ -482,6 +484,22 @@ export const Header: React.FC<HeaderProps> = ({
                 EN
               </button>
             </div>
+
+            {/* Official Website / Landing Page Switcher */}
+            <button
+              type="button"
+              id="header-website-btn"
+              onClick={() => onNavigate(currentScreen === 'website' ? 'home' : 'website')}
+              title={currentScreen === 'website' ? "RonPay Web App-ah Kir Rawh" : "RonPay Official Website En Rawh"}
+              className={`h-7 sm:h-8 px-1.5 sm:px-2 rounded-lg border flex items-center justify-center gap-1 text-[9.5px] sm:text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
+                currentScreen === 'website'
+                  ? 'bg-purple-600 border-purple-400 text-white shadow-purple-600/30 ring-1 ring-purple-400'
+                  : 'bg-slate-900 border-slate-800 hover:border-purple-500/70 text-slate-200 hover:text-white'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Website</span>
+            </button>
 
             {/* Viewport Toggle (Desktop / Mobile Frame - Hidden on small mobile screens to save space) */}
             <button
