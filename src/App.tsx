@@ -585,6 +585,36 @@ export default function App() {
     setTransactions(getStoredTransactions());
   };
 
+  const handleApproveTransaction = (transaction: Transaction) => {
+    const updated: Transaction = {
+      ...transaction,
+      status: 'completed',
+      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
+      verifiedAt: new Date().toISOString(),
+    };
+    saveTransaction(updated);
+    setTransactions(getStoredTransactions());
+    if (completedTransaction && completedTransaction.id === transaction.id) {
+      setCompletedTransaction(updated);
+    }
+    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
+  };
+
+  const handleRejectTransaction = (transaction: Transaction) => {
+    const updated: Transaction = {
+      ...transaction,
+      status: 'rejected',
+      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
+      verifiedAt: new Date().toISOString(),
+    };
+    saveTransaction(updated);
+    setTransactions(getStoredTransactions());
+    if (completedTransaction && completedTransaction.id === transaction.id) {
+      setCompletedTransaction(updated);
+    }
+    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
+  };
+
   const handleDeleteTransaction = (transactionId: string) => {
     deleteStoredTransaction(transactionId);
     setTransactions(getStoredTransactions());
@@ -846,7 +876,14 @@ export default function App() {
           {currentScreen === 'cash_pending' && (
             <CashPendingScreen
               transaction={completedTransaction}
+              campaigns={campaigns}
+              creatorProfile={creatorProfile}
               onGoHome={() => handleNavigate('home')}
+              onApproveCash={handleApproveTransaction}
+              onOpenSulhnu={() => {
+                setIsHistoryOpen(true);
+                handleNavigate('home');
+              }}
             />
           )}
         </main>
@@ -930,6 +967,8 @@ export default function App() {
             userPaidIds={userPaidIds}
             onClose={() => setIsHistoryOpen(false)}
             onRefreshData={reloadLocalData}
+            onApproveTransaction={handleApproveTransaction}
+            onRejectTransaction={handleRejectTransaction}
             onOpenReceipt={(tx) => {
               setCompletedTransaction(tx);
               setIsHistoryOpen(false);

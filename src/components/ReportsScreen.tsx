@@ -2266,11 +2266,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleApproveCashTransaction(tx)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] px-2 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs cursor-pointer active:scale-95 transition"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9.5px] px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition"
                                 title="Pawisa ka dawng ngei e tiin hmuhpui rawh"
                               >
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
-                                <span>Approve</span>
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>Hmuhpui (Approve)</span>
                               </button>
                             </div>
                           ) : (
