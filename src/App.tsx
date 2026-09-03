@@ -75,6 +75,7 @@ import { QRShareModal } from './components/QRShareModal';
 import { GeneratedQRModal } from './components/GeneratedQRModal';
 import { ProfileModal } from './components/ProfileModal';
 import { PeknaSulhnuModal } from './components/PeknaSulhnuModal';
+import { NotificationsModal } from './components/NotificationsModal';
 import { PhonePeModal } from './components/PhonePeModal';
 import { BillPaymentModal } from './components/BillPaymentModal';
 import { AdminDashboardModal } from './components/AdminDashboardModal';
@@ -157,6 +158,7 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
@@ -463,8 +465,7 @@ export default function App() {
   };
 
   const handleOpenNotifications = () => {
-    setNotificationCount(0);
-    setIsHistoryOpen(true);
+    setIsNotificationsOpen(true);
   };
 
   const handleOpenHistory = () => {
@@ -942,6 +943,30 @@ export default function App() {
               setIsHistoryOpen(false);
               handleStartScanner('any');
             }}
+          />
+        </ErrorBoundary>
+
+        <ErrorBoundary name="NotificationsModal">
+          <NotificationsModal
+            isOpen={isNotificationsOpen}
+            onClose={() => setIsNotificationsOpen(false)}
+            transactions={userVisibleTransactions}
+            campaigns={campaigns}
+            creatorProfile={creatorProfile}
+            onOpenReceipt={(tx) => {
+              setCompletedTransaction(tx);
+              setIsNotificationsOpen(false);
+              handleNavigate('success');
+            }}
+            onNavigateToCampaign={(camp) => {
+              setIsNotificationsOpen(false);
+              handleSelectCampaign(camp);
+            }}
+            onOpenMemberRoll={() => {
+              setIsNotificationsOpen(false);
+              setIsKumtluangManagerOpen(true);
+            }}
+            onUnreadCountChange={(count) => setNotificationCount(count)}
           />
         </ErrorBoundary>
 

@@ -10,10 +10,7 @@ import {
   Image as ImageIcon, 
   RotateCcw,
   Smartphone,
-  HelpCircle,
-  ShieldAlert,
-  Copy,
-  Check
+  ShieldAlert
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BawmCategory, Campaign } from '../types';
@@ -315,8 +312,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
   const [isStartingCamera, setIsStartingCamera] = useState<boolean>(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
-  const [isAndroidHelpOpen, setIsAndroidHelpOpen] = useState<boolean>(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [, setLastScannedText] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -961,14 +956,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsAndroidHelpOpen(true)}
-            className="p-2 bg-amber-500/20 border border-amber-400/40 rounded-full text-amber-300 hover:bg-amber-500/30 transition cursor-pointer"
-            title="Android App (APK) & Camera Guide"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </button>
           {hasTorch && (
             <button
               onClick={toggleTorch}
@@ -1121,17 +1108,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 >
                   <Camera className="w-3.5 h-3.5" /> Snap Photo (Camera)
                 </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsAndroidHelpOpen(true);
-                  }}
-                  className="text-[10px] text-amber-300 underline hover:text-amber-200 mt-0.5 cursor-pointer font-medium"
-                >
-                  Android App-ah Camera a in-on thei lo em?
-                </button>
               </div>
             </div>
           )}
@@ -1193,121 +1169,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           RonPay Bawm QR, Google Pay, PhonePe, Paytm, leh UPI QR hrim hrim auto-scan theih a ni.
         </p>
       </div>
-
-      {/* Android Studio WebView Camera & Permission Help Modal */}
-      {isAndroidHelpOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="text-sm font-black text-white">Android App (APK) Camera Setup</h3>
-                  <p className="text-[11px] text-slate-400">WebView-a Camera leh File picker phal dan</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAndroidHelpOpen(false)}
-                className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-slate-300 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
-              <div className="bg-amber-950/40 border border-amber-500/30 p-3 rounded-2xl space-y-1.5">
-                <p className="font-bold text-amber-300 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 shrink-0" />
-                  Engvangin nge Android Apps ah camera a in-on theih loh?
-                </p>
-                <p className="text-[11px] text-amber-100/90">
-                  Android WebView hian default-in JavaScript Media (`getUserMedia`) leh File Chooser a block tlat thin. Android Studio i code ah permission phalna code i dah a ngai a ni.
-                </p>
-              </div>
-
-              {/* Step 1: AndroidManifest.xml */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-white text-[11px]">1. AndroidManifest.xml ah dah tur:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`<uses-permission android:name="android.permission.CAMERA" />\n<uses-feature android:name="android.hardware.camera" android:required="false" />`);
-                      setCopiedKey('manifest');
-                      setTimeout(() => setCopiedKey(null), 2000);
-                    }}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-bold cursor-pointer"
-                  >
-                    {copiedKey === 'manifest' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copiedKey === 'manifest' ? 'Copied!' : 'Copy Code'}
-                  </button>
-                </div>
-                <pre className="bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-mono text-[10px] text-amber-300 overflow-x-auto">
-{`<uses-permission android:name="android.permission.CAMERA" />
-<uses-feature android:name="android.hardware.camera" android:required="false" />`}
-                </pre>
-              </div>
-
-              {/* Step 2: MainActivity.java */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-white text-[11px]">2. MainActivity.java (WebChromeClient):</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const codeSnippet = `webView.getSettings().setJavaScriptEnabled(true);
-webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-
-webView.setWebChromeClient(new WebChromeClient() {
-    @Override
-    public void onPermissionRequest(final PermissionRequest request) {
-        // Hian Camera permission a grant nghal ang
-        request.grant(request.getResources());
-    }
-});`;
-                      navigator.clipboard.writeText(codeSnippet);
-                      setCopiedKey('java');
-                      setTimeout(() => setCopiedKey(null), 2000);
-                    }}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-bold cursor-pointer"
-                  >
-                    {copiedKey === 'java' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copiedKey === 'java' ? 'Copied!' : 'Copy Code'}
-                  </button>
-                </div>
-                <pre className="bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-mono text-[10px] text-emerald-300 overflow-x-auto">
-{`webView.getSettings().setJavaScriptEnabled(true);
-webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-
-webView.setWebChromeClient(new WebChromeClient() {
-    @Override
-    public void onPermissionRequest(final PermissionRequest request) {
-        request.grant(request.getResources());
-    }
-});`}
-                </pre>
-              </div>
-
-              {/* Step 3: Web Security note */}
-              <div className="p-3 bg-slate-800/60 rounded-2xl border border-slate-700/60 space-y-1">
-                <p className="font-bold text-white text-[11px]">3. Web (Browser) ah Camera a in-on theih nan:</p>
-                <p className="text-[10.5px] text-slate-400 leading-relaxed">
-                  Web browser (Chrome, Safari) ah chuan URL hi <strong>https://</strong> a nih ngei a ngai. HTTP (insecure) a nih chuan camera hi browser-in a phal ngai lo.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                onClick={() => setIsAndroidHelpOpen(false)}
-                className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer"
-              >
-                Ka hrethiam e, Scanner-ah let leh rawh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
