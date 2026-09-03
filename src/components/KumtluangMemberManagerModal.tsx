@@ -35,6 +35,7 @@ import {
   getMembers, 
   addOrUpdateMember, 
   deleteMember, 
+  deleteMemberWithTransactions,
   saveTransaction, 
   deleteStoredTransaction, 
   isCampaignCreator,
@@ -47,7 +48,9 @@ import {
   exportMemberPassbookVerticalPrint,
   printTransactionsPDF,
   exportFormattedExcel,
-  exportKumtluangMatrixToCSV
+  exportKumtluangMatrixToCSV,
+  ALL_MONTH_NAMES_SHORT,
+  MonthRangeConfig
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 import { getCurrentMonthName, getCurrentYear } from '../utils/monthHelper';
@@ -226,6 +229,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [depRelInput, setDepRelInput] = useState<string>('Fa');
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [existingDuplicateMatch, setExistingDuplicateMatch] = useState<MemberRecord | null>(null);
+  const [duplicateModalTarget, setDuplicateModalTarget] = useState<{
+    existingMember: MemberRecord;
+    newDraft: MemberRecord;
+    reason: string;
+  } | null>(null);
 
   // Editing Member State
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
@@ -252,6 +261,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [printYear, setPrintYear] = useState<string>('2026');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
+  const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
+  const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
@@ -260,8 +271,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-
-  const defaultCategories = ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
 
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
@@ -382,7 +391,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
     ? activeScopedCampaign.subCategories
-    : defaultCategories;
+    : [];
+
+  const hasCampaignSections = useMemo(() => {
+    if (selectedCampaignId === 'all') {
+      return Boolean(allowedCampaigns.some(c => c.definedSections && c.definedSections.length > 0));
+    }
+    return Boolean(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0);
+  }, [selectedCampaignId, allowedCampaigns, activeScopedCampaign]);
 
   const resolvedOrgTitle = activeScopedCampaign?.orgName || activeScopedCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
   const resolvedLogoUrl = activeScopedCampaign?.imageUrl || creatorProfile.logoUrl;
@@ -575,33 +591,94 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewDependents(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Check duplicate when typing in Registration
+  const checkDuplicate = (org: string, p4: string, fullPhone: string, name: string, targetCampId: string) => {
+    const targetId = `${(org || 'EBE').toUpperCase()}-${p4}`.trim();
+    const allList = getMembers('all');
+
+    if (p4 && p4.length === 4) {
+      const idMatch = allList.find(m => m.id.toUpperCase() === targetId.toUpperCase());
+      if (idMatch) {
+        setDuplicateWarning(`Hriattirna: Member ID [${idMatch.id}] (${idMatch.name}) hi a awm sa tawh a ni.`);
+        setExistingDuplicateMatch(idMatch);
+        return idMatch;
+      }
+    }
+
+    const cleanFull = fullPhone.replace(/\D/g, '');
+    if (cleanFull.length === 10) {
+      const phoneMatch = allList.find(m => m.fullPhone === cleanFull || (m.campaignId === targetCampId && m.phoneLast4 === cleanFull.slice(-4)));
+      if (phoneMatch) {
+        setDuplicateWarning(`Hriattirna: Phone number [${cleanFull}] hi ${phoneMatch.name} (${phoneMatch.id}) hian a hmang tawh a ni.`);
+        setExistingDuplicateMatch(phoneMatch);
+        return phoneMatch;
+      }
+    }
+
+    if (name.trim().length >= 2 && targetCampId) {
+      const nameMatch = allList.find(m => m.campaignId === targetCampId && m.name.toLowerCase().trim() === name.toLowerCase().trim());
+      if (nameMatch) {
+        setDuplicateWarning(`Hriattirna: Hming "${nameMatch.name}" (${nameMatch.id}) hi he Bawm chhungah hian a awm sa tawh a ni.`);
+        setExistingDuplicateMatch(nameMatch);
+        return nameMatch;
+      }
+    }
+
+    setDuplicateWarning(null);
+    setExistingDuplicateMatch(null);
+    return null;
+  };
+
   // Handle Full Phone Input in Registration (Max 10 digits, auto-fills last 4 digits)
   const handleFullPhoneChange = (val: string) => {
     const cleaned = val.replace(/\D/g, '').slice(0, 10);
     setNewFullPhone(cleaned);
+    const p4 = cleaned.length >= 4 ? cleaned.slice(-4) : newPhone4;
     if (cleaned.length >= 4) {
-      const p4 = cleaned.slice(-4);
       setNewPhone4(p4);
-      handlePhoneChange(p4);
     }
+    const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
+    checkDuplicate(newOrgCode, p4, cleaned, newHming, targetCamp?.id || '');
   };
 
-  // Check duplicate when typing in Registration
   const handlePhoneChange = (val: string) => {
     const cleaned = val.replace(/[^0-9]/g, '').slice(0, 4);
     setNewPhone4(cleaned);
-    if (cleaned.length >= 4) {
-      const p4 = cleaned.slice(-4);
-      const allList = getMembers('all');
-      const exists = allList.find(m => m.orgCode === newOrgCode.toUpperCase() && m.phoneLast4 === p4);
-      if (exists) {
-        setDuplicateWarning(`Hriattirna: ${newOrgCode}-${p4} (${exists.name}) hi a awm sa tawh a, duplicate awm lohnan enchiang rawh.`);
-      } else {
-        setDuplicateWarning(null);
-      }
-    } else {
-      setDuplicateWarning(null);
+    const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
+    checkDuplicate(newOrgCode, cleaned, newFullPhone, newHming, targetCamp?.id || '');
+  };
+
+  const executeSaveMember = (memberToSave: MemberRecord) => {
+    addOrUpdateMember(memberToSave);
+    
+    // Explicitly reload members scoped to the current dropdown filter
+    const updated = getMembers(selectedCampaignId);
+    setMembers(updated);
+
+    const depCount = memberToSave.dependents?.length || 0;
+    setRegSuccess(`Member [${memberToSave.id}] ${memberToSave.name} ${depCount > 0 ? `leh dependent ${depCount}` : ''} chu vawn fel a ni ta!`);
+    setSelectedMember(memberToSave);
+    setSelectedPayerType('primary');
+    setQuickPhone4(memberToSave.phoneLast4);
+    if (memberToSave.campaignId) {
+      setQuickEntryCampaignId(memberToSave.campaignId);
     }
+    
+    // Reset form so user can immediately register the next member
+    setNewHming('');
+    setNewPhone4('');
+    setNewFullPhone('');
+    setNewSection('');
+    setNewAvatarUrl('');
+    setNewDependents([]);
+    setDuplicateWarning(null);
+    setExistingDuplicateMatch(null);
+    setDuplicateModalTarget(null);
+    onDataUpdated();
+
+    setTimeout(() => {
+      setRegSuccess(null);
+    }, 5000);
   };
 
   const handleRegisterMember = (e: React.FormEvent) => {
@@ -619,6 +696,17 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const org = (newOrgCode.trim().toUpperCase() || targetCamp?.orgCode || 'EBE');
     const p4 = newPhone4.slice(-4);
     const generatedId = `${org}-${p4}`;
+    const cleanFull = newFullPhone.replace(/\D/g, '');
+
+    // Check duplicate
+    const allList = getMembers('all');
+    const existingById = allList.find(m => m.id.toUpperCase() === generatedId.toUpperCase());
+    const existingByPhone = cleanFull.length === 10
+      ? allList.find(m => m.fullPhone === cleanFull && m.campaignId === targetCamp?.id)
+      : null;
+    const existingByName = allList.find(m => m.campaignId === targetCamp?.id && m.name.toLowerCase().trim() === newHming.toLowerCase().trim());
+
+    const duplicate = existingById || existingByPhone || existingByName;
 
     // Convert draft dependents into MemberDependent objects with subIds
     const formattedDependents: MemberDependent[] = newDependents.map((dep, idx) => ({
@@ -633,7 +721,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       name: newHming.trim(),
       orgCode: org,
       phoneLast4: p4,
-      fullPhone: newFullPhone.trim() || undefined,
+      fullPhone: cleanFull || undefined,
       section: newSection.trim() || undefined,
       avatarUrl: newAvatarUrl || undefined,
       isFamilyHead: true,
@@ -641,34 +729,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       createdAt: new Date().toISOString()
     };
 
-    addOrUpdateMember(newM);
-    
-    // Explicitly reload members scoped to the current dropdown filter
-    const updated = getMembers(selectedCampaignId);
-    setMembers(updated);
+    if (duplicate) {
+      let reason = `Member ID [${generatedId}] hi ${duplicate.name} pualin a awm sa tawh a ni.`;
+      if (duplicate.id !== generatedId && existingByPhone) {
+        reason = `Phone number [${cleanFull}] hi ${duplicate.name} (${duplicate.id}) hian a hmang tawh a ni.`;
+      } else if (duplicate.id !== generatedId && existingByName) {
+        reason = `Hming "${newHming}" hi ID [${duplicate.id}] nen he Bawm-ah hian a awm sa tawh a ni.`;
+      }
 
-    setRegSuccess(`Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
-    setSelectedMember(newM);
-    setSelectedPayerType('primary');
-    setQuickPhone4(newM.phoneLast4);
-    if (targetCamp?.id) {
-      setQuickEntryCampaignId(targetCamp.id);
+      setDuplicateModalTarget({
+        existingMember: duplicate,
+        newDraft: newM,
+        reason
+      });
+      return;
     }
-    
-    // Reset form so user can immediately register the next member
-    setNewHming('');
-    setNewPhone4('');
-    setNewFullPhone('');
-    setNewSection('');
-    setNewAvatarUrl('');
-    setNewDependents([]);
-    setDuplicateWarning(null);
-    onDataUpdated();
-    
-    // Do not automatically switch tabs away so creator can add multiple members continuously
-    setTimeout(() => {
-      setRegSuccess(null);
-    }, 6000);
+
+    executeSaveMember(newM);
   };
 
   // Open Edit Member Modal
@@ -750,15 +827,77 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     alert(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
   };
 
-  // Delete Member
+  // Delete Member state and dialog handlers
+  const [deletingMemberTarget, setDeletingMemberTarget] = useState<{
+    member: MemberRecord;
+    txCount: number;
+    totalAmount: number;
+  } | null>(null);
+  const [deleteSuccessNotice, setDeleteSuccessNotice] = useState<string | null>(null);
+
+  const handlePromptDeleteMember = (targetMember: MemberRecord) => {
+    const allTxs = getStoredTransactions();
+    const cleanId = (targetMember.id || '').trim().toLowerCase();
+    const matching = allTxs.filter(t => {
+      if (!t) return false;
+      const tMemberId = (t.memberId || '').trim().toLowerCase();
+      const tRemark = (t.remark || '').trim().toLowerCase();
+      const tRef = (t.referenceNo || '').trim().toLowerCase();
+      const tHash = (t.txHash || '').trim().toLowerCase();
+      if (tMemberId && tMemberId === cleanId) return true;
+      if (tRemark && tRemark.includes(cleanId)) return true;
+      if (tRef && tRef.includes(cleanId)) return true;
+      if (tHash && tHash.includes(cleanId)) return true;
+      return false;
+    });
+    const validTxns = matching.filter(t => t.status !== 'failed' && t.status !== 'rejected');
+    const sumAmount = validTxns.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+
+    setDeletingMemberTarget({
+      member: targetMember,
+      txCount: matching.length,
+      totalAmount: sumAmount
+    });
+  };
+
+  const handleExecuteDeleteMember = (deleteRecords: boolean) => {
+    if (!deletingMemberTarget) return;
+    const { member } = deletingMemberTarget;
+    const campId = member.campaignId || (selectedCampaignId !== 'all' ? selectedCampaignId : undefined);
+    
+    if (deleteRecords) {
+      const res = deleteMemberWithTransactions(member.id, campId);
+      setDeleteSuccessNotice(`Member "${member.name}" (${member.id}) leh a chhunga transaction ${res.deletedTxCount} chu hlawhtling takin paih bo (deleted) a ni!`);
+    } else {
+      deleteMember(member.id, campId);
+      setDeleteSuccessNotice(`Member "${member.name}" (${member.id}) chu hlawhtling takin paih bo (deleted) a ni!`);
+    }
+
+    const updated = getMembers(selectedCampaignId);
+    setMembers(updated);
+    setLocalTxList(getStoredTransactions());
+    if (selectedMember?.id === member.id) {
+      setSelectedMember(null);
+    }
+    if (editingMember?.id === member.id) {
+      setEditingMember(null);
+    }
+    setDeletingMemberTarget(null);
+    onDataUpdated();
+    
+    setTimeout(() => {
+      setDeleteSuccessNotice(null);
+    }, 6000);
+  };
+
   const handleDeleteMember = (memberId: string, memberName: string) => {
-    if (window.confirm(`Member "${memberName}" (${memberId}) hi paih (delete) i chiang em?`)) {
+    const mem = members.find(m => (m.id || '').trim().toLowerCase() === (memberId || '').trim().toLowerCase()) 
+      || getMembers('all').find(m => (m.id || '').trim().toLowerCase() === (memberId || '').trim().toLowerCase());
+    if (mem) {
+      handlePromptDeleteMember(mem);
+    } else {
       deleteMember(memberId, selectedCampaignId);
-      const updated = getMembers(selectedCampaignId);
-      setMembers(updated);
-      if (selectedMember?.id === memberId) {
-        setSelectedMember(null);
-      }
+      setMembers(getMembers(selectedCampaignId));
       onDataUpdated();
     }
   };
@@ -1105,6 +1244,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
         <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 bg-white space-y-4">
+          {deleteSuccessNotice && (
+            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{deleteSuccessNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteSuccessNotice(null)}
+                className="text-emerald-700 hover:text-emerald-900 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* ACTIVE BAWM PUI SUMMARY CARD */}
           {activeScopedCampaign && (
             <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
@@ -1253,7 +1408,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                                 )}
                               </div>
                               <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-indigo-100' : 'text-slate-500'}`}>
-                                Phone: ****{m.phoneLast4} • {m.section || 'General'}
+                                Phone: ****{m.phoneLast4}{hasCampaignSections && m.section ? ` • ${m.section}` : ''}
                               </div>
                             </div>
                           </div>
@@ -1742,9 +1897,37 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               )}
 
               {duplicateWarning && (
-                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-2 text-xs font-bold text-amber-900 animate-fadeIn">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{duplicateWarning}</span>
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-2 animate-fadeIn shadow-xs">
+                  <div className="flex items-start gap-2.5 text-xs font-bold text-amber-900">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="font-black text-amber-950 uppercase tracking-wide">Duplicate Record Hriattirna</div>
+                      <p className="mt-0.5">{duplicateWarning}</p>
+                      {existingDuplicateMatch && (
+                        <div className="mt-2 p-2.5 bg-white rounded-xl border border-amber-200 text-[11px] space-y-1 shadow-2xs">
+                          <div className="font-bold text-slate-800">
+                            Awm sa: <span className="text-indigo-900 font-mono font-black">{existingDuplicateMatch.id}</span> - {existingDuplicateMatch.name}
+                            {existingDuplicateMatch.section ? ` (${existingDuplicateMatch.section})` : ''}
+                          </div>
+                          <div className="text-slate-600 font-mono text-[10.5px]">
+                            Phone: {existingDuplicateMatch.fullPhone || `****${existingDuplicateMatch.phoneLast4}`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {existingDuplicateMatch && (
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200/80">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(existingDuplicateMatch)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Awmsa Siamtha Rawh (Edit Member)</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1766,7 +1949,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </label>
                   <select
                     value={regTargetCampaignId}
-                    onChange={(e) => setRegTargetCampaignId(e.target.value)}
+                    onChange={(e) => {
+                      const newCampId = e.target.value;
+                      setRegTargetCampaignId(newCampId);
+                      checkDuplicate(newOrgCode, newPhone4, newFullPhone, newHming, newCampId);
+                    }}
                     className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     required
                   >
@@ -1785,7 +1972,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <input
                     type="text"
                     value={newHming}
-                    onChange={(e) => setNewHming(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewHming(val);
+                      const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
+                      checkDuplicate(newOrgCode, newPhone4, newFullPhone, val, targetCamp?.id || '');
+                    }}
                     placeholder="e.g. Rammuanpuia Ralte"
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     required
@@ -1820,7 +2012,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       type="text"
                       maxLength={5}
                       value={newOrgCode}
-                      onChange={(e) => setNewOrgCode(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setNewOrgCode(val);
+                        const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
+                        checkDuplicate(val, newPhone4, newFullPhone, newHming, targetCamp?.id || '');
+                      }}
                       placeholder="e.g. EBE / BCM / YMA"
                       className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
                       required
@@ -1851,40 +2048,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </span>
                 </div>
 
-                <div>
-                  {activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0 ? (
-                    <>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
-                        {activeRegisterCampaign.sectionLabel || 'Section / Bial / Veng'}
-                      </label>
-                      <select
-                        value={newSection}
-                        onChange={(e) => setNewSection(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      >
-                        <option value="">-- Thlang Rawh ({activeRegisterCampaign.sectionLabel || 'Bial / Section'}) --</option>
-                        {activeRegisterCampaign.definedSections.map((sec, idx) => (
-                          <option key={idx} value={sec}>
-                            {sec}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
-                        Section / Bial / Veng (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={newSection}
-                        onChange={(e) => setNewSection(e.target.value)}
-                        placeholder="Optional: Veng / Bial / Area chhu lut rawh (Dah loh theih)..."
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      />
-                    </>
-                  )}
-                </div>
+                {activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0 && (
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      {activeRegisterCampaign.sectionLabel || 'Section / Bial / Veng'}
+                    </label>
+                    <select
+                      value={newSection}
+                      onChange={(e) => setNewSection(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="">-- Thlang Rawh ({activeRegisterCampaign.sectionLabel || 'Bial / Section'}) --</option>
+                      {activeRegisterCampaign.definedSections.map((sec, idx) => (
+                        <option key={idx} value={sec}>
+                          {sec}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Member Profile Photo Upload */}
                 <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2">
@@ -2106,7 +2288,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     >
                       <option value="">-- Member Thlang Rawh ({printTargetMembers.length} Available) --</option>
                       {printTargetMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
+                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {hasCampaignSections && m.section ? `• ${m.section}` : ''}</option>
                       ))}
                     </select>
                   </div>
@@ -2141,6 +2323,68 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         <span>Include Monthly Trend Visual Chart</span>
                       </label>
                     </div>
+
+                    {includeMonthlyChart && (
+                      <div className="pt-2 border-t border-indigo-200/70 space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <label className="text-[10.5px] font-black text-indigo-950 block">
+                            Monthly Trend Chart Range (From – Upto):
+                          </label>
+                          {/* Quick 1-Click Range Presets */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
+                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                                chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                              }`}
+                            >
+                              Jan–Dec (Default)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
+                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                                chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                              }`}
+                            >
+                              Apr–Mar (Fin Year)
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 bg-white p-2.5 rounded-xl border border-indigo-200">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">From (Start Month)</label>
+                            <select
+                              value={chartStartMonth}
+                              onChange={(e) => setChartStartMonth(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                            >
+                              {ALL_MONTH_NAMES_SHORT.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">Upto (End Month)</label>
+                            <select
+                              value={chartEndMonth}
+                              onChange={(e) => setChartEndMonth(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                            >
+                              {ALL_MONTH_NAMES_SHORT.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2180,6 +2424,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         },
                         {
                           includeMonthlyChart,
+                          monthRangeConfig: {
+                            startMonth: chartStartMonth,
+                            endMonth: chartEndMonth
+                          },
                           includeSignatures,
                           preparedByTitle: 'Prepared by (Treasurer / Recorder)',
                           verifiedByTitle: 'Verified by (Auditor / Finance)',
@@ -2308,7 +2556,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       id="member-roll-filter-search-input"
                       value={dirSearch}
                       onChange={(e) => setDirSearch(e.target.value)}
-                      placeholder="Hming, ID, Phone, Section zawnna..."
+                      placeholder={hasCampaignSections ? "Hming, ID, Phone, Section zawnna..." : "Hming, ID, Phone zawnna..."}
                       className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     {dirSearch && (
@@ -2360,7 +2608,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
                                 {m.id}
                               </span>
-                              {m.section && (
+                              {hasCampaignSections && m.section && (
                                 <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
                                   {m.section}
                                 </span>
@@ -2441,7 +2689,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         )}
                         <th className="p-3">Chhungkaw Hotu & Dependents</th>
                         <th className="p-3">Phone (Last 4)</th>
-                        <th className="p-3">Section / Bial</th>
+                        {hasCampaignSections && (
+                          <th className="p-3">
+                            {activeScopedCampaign?.sectionLabel || 'Section / Bial'}
+                          </th>
+                        )}
                         <th className="p-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -2492,13 +2744,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
                             </td>
 
-                            <td className="p-3 text-slate-600 font-medium">
-                              {m.section ? (
-                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
-                                  {m.section}
-                                </span>
-                              ) : '-'}
-                            </td>
+                            {hasCampaignSections && (
+                              <td className="p-3 text-slate-600 font-medium">
+                                {m.section ? (
+                                  <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
+                                    {m.section}
+                                  </span>
+                                ) : '-'}
+                              </td>
+                            )}
 
                             <td className="p-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -2734,31 +2988,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       )}
                     </select>
                   </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10.5px] font-bold text-slate-700">
-                        Section / Bial (Optional)
-                      </label>
-                      {editSection && (
-                        <button
-                          type="button"
-                          onClick={() => setEditSection('')}
-                          className="text-[10px] text-rose-600 font-extrabold hover:underline cursor-pointer"
-                        >
-                          Paih / Clear
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={editSection}
-                      onChange={(e) => setEditSection(e.target.value)}
-                      placeholder="Optional: Veng / Bial / Area..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                    />
-                  </>
-                )}
+                ) : editSection ? (
+                  <div className="flex items-center justify-between p-2 bg-slate-100 rounded-xl border border-slate-200">
+                    <span className="text-[11px] font-medium text-slate-700">Section Awmsa: <b className="text-slate-900">{editSection}</b></span>
+                    <button
+                      type="button"
+                      onClick={() => setEditSection('')}
+                      className="text-[10.5px] text-rose-600 font-extrabold hover:underline cursor-pointer"
+                    >
+                      Paih / Clear Section
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {/* Photo Upload in Edit Modal */}
@@ -2865,22 +3106,115 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 )}
               </div>
 
-              <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingMember(null)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+                  onClick={() => {
+                    const mToDel = editingMember;
+                    setEditingMember(null);
+                    handlePromptDeleteMember(mToDel);
+                  }}
+                  className="px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl transition cursor-pointer text-xs flex items-center gap-1.5 border border-rose-200 shadow-2xs"
+                  title="Delete this member completely"
                 >
-                  Cancel
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Member Paih</span>
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" /> Vawng / Save Changes
-                </button>
+                <div className="flex gap-2 flex-1 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingMember(null)}
+                    className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 max-w-[200px] bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" /> Vawng / Save
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE MEMBER MODAL */}
+      {deletingMemberTarget && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
+          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative my-auto space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shrink-0 shadow-xs">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-0.5 flex-1">
+                <h3 className="text-base font-black text-slate-900">Member Paih (Delete) I Chiang Em?</h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Duplicate / Mistake record paih bo na
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingMemberTarget(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-3.5 space-y-1.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Member ID:</span>
+                <span className="font-mono font-black text-rose-900 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-300">
+                  {deletingMemberTarget.member.id}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Hming:</span>
+                <span className="font-black text-slate-900">{deletingMemberTarget.member.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Phone:</span>
+                <span className="font-mono font-bold text-slate-700">
+                  {deletingMemberTarget.member.fullPhone || `****${deletingMemberTarget.member.phoneLast4}`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-rose-200/80">
+                <span className="text-slate-600 font-medium">Chhung lama records awm zat:</span>
+                <span className="font-bold text-rose-950">
+                  {deletingMemberTarget.txCount} txns (₹{deletingMemberTarget.totalAmount.toLocaleString('en-IN')})
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleExecuteDeleteMember(true)}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs transition shadow-md shadow-rose-200 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Member Leh A Chhunga Records ({deletingMemberTarget.txCount} txns) Paih Veк Rawh</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExecuteDeleteMember(false)}
+                className="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs transition border border-slate-300 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>Member Chauh Paih (Ledger Record Dah Tha Rawh)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeletingMemberTarget(null)}
+                className="w-full py-2 text-slate-500 hover:text-slate-800 font-bold text-xs transition cursor-pointer"
+              >
+                Kansel / Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3086,6 +3420,88 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Paih Bo Rawh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DUPLICATE MEMBER MODAL */}
+      {duplicateModalTarget && (
+        <div className="fixed inset-0 z-70 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-amber-300 shadow-2xl space-y-4 animate-scaleUp text-slate-800">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-6 h-6 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Member Duplicate A Awm Sa!</h3>
+                <p className="text-xs text-amber-800 font-semibold mt-0.5">
+                  {duplicateModalTarget.reason}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3.5 space-y-2 text-xs">
+              <div className="font-black text-slate-700 uppercase tracking-wider text-[10px]">
+                Member Awm Sa (Existing Record):
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">ID & Hming:</span>
+                <span className="font-bold text-slate-900">
+                  <span className="font-mono text-indigo-700 font-black">{duplicateModalTarget.existingMember.id}</span> - {duplicateModalTarget.existingMember.name}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Phone:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  {duplicateModalTarget.existingMember.fullPhone || `****${duplicateModalTarget.existingMember.phoneLast4}`}
+                </span>
+              </div>
+              {duplicateModalTarget.existingMember.section && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Section / Bial:</span>
+                  <span className="font-bold text-slate-800">{duplicateModalTarget.existingMember.section}</span>
+                </div>
+              )}
+              {duplicateModalTarget.existingMember.dependents && duplicateModalTarget.existingMember.dependents.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Dependents:</span>
+                  <span className="font-bold text-slate-800">{duplicateModalTarget.existingMember.dependents.length} members</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const existing = duplicateModalTarget.existingMember;
+                  setDuplicateModalTarget(null);
+                  handleOpenEdit(existing);
+                }}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Awmsa Siamtha Rawh (Open in Edit)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  executeSaveMember(duplicateModalTarget.newDraft);
+                }}
+                className="w-full py-2.5 px-4 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-amber-300"
+              >
+                <span>Record Thar Hian Update / Overwrite Rawh</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDuplicateModalTarget(null)}
+                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Kansel / Phone Dang Hmang Rawh
               </button>
             </div>
           </div>

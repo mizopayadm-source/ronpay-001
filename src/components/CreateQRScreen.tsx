@@ -154,15 +154,11 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [kumtluangVeng, setKumtluangVeng] = useState<string>('');
   const [prefixCode, setPrefixCode] = useState<string>('');
   const [prefixUserEdited, setPrefixUserEdited] = useState<boolean>(false);
-  const [kumtluangSubcats, setKumtluangSubcats] = useState<string[]>([
-    'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'
-  ]);
+  const [kumtluangSubcats, setKumtluangSubcats] = useState<string[]>([]);
   const [newSubcatName, setNewSubcatName] = useState<string>('');
   const [enableKumtluangSections, setEnableKumtluangSections] = useState<boolean>(false);
   const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>('Bial / Unit');
-  const [kumtluangSections, setKumtluangSections] = useState<string[]>([
-    'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung'
-  ]);
+  const [kumtluangSections, setKumtluangSections] = useState<string[]>([]);
   const [newSectionName, setNewSectionName] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
@@ -459,8 +455,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       urgencyDeadline: selectedCategory === 'rikrum' ? rikrumDeadline : undefined,
 
       orgName: selectedCategory === 'kumtluang' ? kumtluangOrg : undefined,
-      subCategories: selectedCategory === 'kumtluang' 
-        ? (kumtluangSubcats.length > 0 ? kumtluangSubcats : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']) 
+      subCategories: selectedCategory === 'kumtluang' && kumtluangSubcats.length > 0 
+        ? kumtluangSubcats 
         : undefined,
       trxnFeeBearer: selectedCategory === 'kumtluang' ? kumtluangFeeBearer : undefined,
       sectionLabel: selectedCategory === 'kumtluang' && enableKumtluangSections ? (kumtluangSectionLabel.trim() || 'Bial / Unit') : undefined,
@@ -2350,21 +2346,21 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
     campaign.orgCode || derivePrefixFromText(campaign.orgName || campaign.title || 'BAW')
   );
   const [subCategories, setSubCategories] = useState<string[]>(
-    campaign.subCategories && campaign.subCategories.length > 0 
+    campaign.subCategories && Array.isArray(campaign.subCategories) 
       ? campaign.subCategories 
-      : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']
+      : []
   );
   const [newSubCatInput, setNewSubCatInput] = useState<string>('');
   
   // Kumtluang Bial / Section Management
   const [hasSections, setHasSections] = useState<boolean>(
-    Boolean(campaign.definedSections && campaign.definedSections.length > 0)
+    Boolean(campaign.definedSections && Array.isArray(campaign.definedSections) && campaign.definedSections.length > 0)
   );
   const [sectionLabel, setSectionLabel] = useState<string>(campaign.sectionLabel || 'Bial / Unit');
   const [definedSections, setDefinedSections] = useState<string[]>(
-    campaign.definedSections && campaign.definedSections.length > 0
+    campaign.definedSections && Array.isArray(campaign.definedSections) && campaign.definedSections.length > 0
       ? campaign.definedSections
-      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+      : []
   );
   const [newSectionInput, setNewSectionInput] = useState<string>('');
 
@@ -2460,7 +2456,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       urgencyLevel: campaign.category === 'rikrum' ? urgencyLevel : undefined,
       
       orgName: campaign.category === 'kumtluang' ? (orgName.trim() || undefined) : campaign.orgName,
-      subCategories: campaign.category === 'kumtluang' ? subCategories : campaign.subCategories,
+      subCategories: campaign.category === 'kumtluang' ? (subCategories.length > 0 ? subCategories : undefined) : campaign.subCategories,
       sectionLabel: campaign.category === 'kumtluang' && hasSections ? (sectionLabel.trim() || 'Bial / Unit') : undefined,
       definedSections: campaign.category === 'kumtluang' && hasSections && definedSections.length > 0 ? definedSections : undefined,
       kumtluangFeeBearer: campaign.category === 'kumtluang' ? kumtluangFeeBearer : undefined,

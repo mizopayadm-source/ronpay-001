@@ -1092,7 +1092,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     >
                       <RefreshCw className="w-3 h-3" /> Re-check / Allow Dil Nawn Rawh
                     </button>
-                    {typeof window !== 'undefined' && window.location.hostname.includes('ronpay.app') && (
+                    {typeof window !== 'undefined' && (window.location.hostname.includes('ronpay.app') || window.location.hostname.includes('ronpay.com')) && (
                       <button
                         type="button"
                         onClick={() => {

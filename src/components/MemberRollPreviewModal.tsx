@@ -181,8 +181,20 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
     if (activeCampaign?.subCategories && activeCampaign.subCategories.length > 0) {
       return activeCampaign.subCategories;
     }
-    return ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+    return [];
   }, [activeCampaign]);
+
+  const displayCategories = useMemo(() => {
+    if (categories.length > 0) return categories;
+    const txSubcats = Array.from(new Set(
+      scopedTransactions
+        .filter(t => (t.donorName && t.donorName.toLowerCase().trim() === activeMember?.name?.toLowerCase()?.trim()) || (t.remark && activeMember && t.remark.includes(activeMember.id)))
+        .map(t => t.subCategory)
+        .filter((s): s is string => Boolean(s && s.trim()))
+    ));
+    if (txSubcats.length > 0) return txSubcats;
+    return [activeCampaign?.title || 'Thawhlawm / Collection'];
+  }, [categories, scopedTransactions, activeMember, activeCampaign]);
 
   // Master Ledger Data calculations
   const ledgerData = useMemo(() => {
@@ -856,7 +868,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {categories.map((cat, idx) => {
+                    {displayCategories.map((cat, idx) => {
                       const memberTxns = scopedTransactions.filter(t => 
                         ((t.donorName && t.donorName.toLowerCase().trim() === activeMember.name.toLowerCase().trim()) ||
                          (t.remark && t.remark.includes(activeMember.id))) &&

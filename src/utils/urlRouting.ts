@@ -44,9 +44,15 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       }
     }
 
-    // Also check pathname for /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
-    const pathname = window.location.pathname;
-    const campPathMatch = pathname.match(/\/(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
+    // Also check pathname for /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id, /website, /landing, /app, /home
+    const pathname = window.location.pathname.toLowerCase();
+    if (pathname.includes('/website') || pathname.includes('/landing')) {
+      if (!searchParams.has('screen')) searchParams.set('screen', 'website');
+    } else if (pathname.includes('/app') || pathname.includes('/home')) {
+      if (!searchParams.has('screen')) searchParams.set('screen', 'home');
+    }
+
+    const campPathMatch = window.location.pathname.match(/\/(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
     if (campPathMatch && campPathMatch[1] && !searchParams.has('campaign')) {
       searchParams.set('campaign', campPathMatch[1]);
     }
@@ -59,10 +65,19 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
                        searchParams.get('post') ||
                        searchParams.get('p');
 
-    const receiptId = searchParams.get('receipt') || 
-                      searchParams.get('tx') || 
-                      searchParams.get('txn') || 
-                      searchParams.get('receiptId');
+    const statusParam = searchParams.get('status') || searchParams.get('txnStatus') || searchParams.get('payment_status') || searchParams.get('rpay_callback');
+    const isSuccessCallback = statusParam?.toUpperCase() === 'SUCCESS' || statusParam?.toLowerCase() === 'completed' || searchParams.get('responseCode') === '00';
+
+    const callbackTxRef = searchParams.get('tr') || 
+                          searchParams.get('txRef') || 
+                          searchParams.get('txnId') || 
+                          searchParams.get('receipt') || 
+                          searchParams.get('tx') || 
+                          searchParams.get('txn') || 
+                          searchParams.get('receiptId');
+
+    const receiptId = (isSuccessCallback && callbackTxRef) ? callbackTxRef : 
+                      (searchParams.get('receipt') || searchParams.get('tx') || searchParams.get('txn') || searchParams.get('receiptId') || (callbackTxRef && (callbackTxRef.startsWith('RPAY-') || callbackTxRef.startsWith('TXN-')) ? callbackTxRef : null));
 
     const rollId = searchParams.get('roll') || 
                    searchParams.get('member_roll') || 
@@ -168,8 +183,13 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     // 5. If specific screen or category requested
     const modeParam = searchParams.get('mode');
+    const appParam = searchParams.get('app');
     if (modeParam === 'website' || window.location.hash.toLowerCase().includes('website')) {
       return { screen: 'website' };
+    }
+
+    if (appParam === 'true' || appParam === '1' || screenParam === 'app') {
+      return { screen: 'home' };
     }
 
     if (screenParam) {
@@ -202,10 +222,11 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
     }
 
-    return null;
+    // Default: Return website screen on main domain / root access
+    return { screen: 'website' };
   } catch (err) {
     console.error('Error parsing route URL:', err);
-    return null;
+    return { screen: 'website' };
   }
 }
 
@@ -232,6 +253,8 @@ export function updateBrowserUrl(
     url.searchParams.delete('post');
     url.searchParams.delete('p');
     url.searchParams.delete('screen');
+    url.searchParams.delete('app');
+    url.searchParams.delete('mode');
     url.searchParams.delete('cat');
     url.searchParams.delete('title');
     url.searchParams.delete('upi');
@@ -251,7 +274,10 @@ export function updateBrowserUrl(
     } else if (screen === 'explorer') {
       url.searchParams.set('screen', 'explorer');
       if (category) url.searchParams.set('cat', category);
-    } else if (screen !== 'home') {
+    } else if (screen === 'website') {
+      // Clean root for website
+      url.searchParams.delete('screen');
+    } else {
       url.searchParams.set('screen', screen);
     }
 

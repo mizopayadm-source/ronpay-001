@@ -19,6 +19,7 @@ import { Campaign, Transaction, CreatorProfile } from '../types';
 import { 
   getCampaignFinancialStats, 
   deleteZeroBalanceCampaign, 
+  forceDeleteCampaignAndRecords,
   voidAndCancelCampaign 
 } from '../utils/campaignSafety';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
@@ -125,6 +126,25 @@ export const CampaignSafetyModal: React.FC<CampaignSafetyModalProps> = ({
       onClose();
     } catch (err: any) {
       setErrorMessage(err?.message || 'Void hlawhtling lo. Khawngaihin try nawn rawh.');
+      setIsProcessing(false);
+    }
+  };
+
+  // Rule 3: Force Purge Campaign & All Its Records (For duplicate or erroneous entries)
+  const [showForcePurgeConfirm, setShowForcePurgeConfirm] = useState<boolean>(false);
+  const [forcePurgeText, setForcePurgeText] = useState<string>('');
+
+  const handleConfirmForcePurge = async () => {
+    const finalReason = reason.trim() || selectedPreset || 'Duplicate / Test Bawm leh a chhunga records paih bo';
+    setIsProcessing(true);
+    setErrorMessage(null);
+
+    try {
+      await forceDeleteCampaignAndRecords(campaign, finalReason, performerName, roleName, transactions);
+      onDeleted(campaign.id);
+      onClose();
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Purge hlawhtling lo. Khawngaihin try nawn rawh.');
       setIsProcessing(false);
     }
   };
@@ -398,6 +418,69 @@ export const CampaignSafetyModal: React.FC<CampaignSafetyModalProps> = ({
                     </button>
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* Option C: Force Purge Duplicate / Error Campaign & Records */}
+            <div className="bg-rose-100/60 p-3.5 rounded-2xl border border-rose-300 space-y-3">
+              <div>
+                <p className="font-black text-rose-950 text-xs flex items-center gap-1.5">
+                  <Trash2 className="w-3.5 h-3.5 text-rose-700" />
+                  Option C: Duplicate / Test Bawm & A Chhunga Records Zawng Zawng Paih Bo (Force Purge)
+                </p>
+                <p className="text-[10.5px] text-rose-800 mt-0.5">
+                  Duplicate siam sual emaw test data a nih avanga he Bawm leh a chhunga transaction <b>({stats.txnCount} txns, ₹{stats.totalCollected.toLocaleString('en-IN')})</b> leh members records zawng zawng paih hlen vek duh tan.
+                </p>
+              </div>
+
+              {!showForcePurgeConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowForcePurgeConfirm(true)}
+                  className="w-full py-2 bg-white hover:bg-rose-50 text-rose-700 font-bold rounded-xl text-xs border border-rose-300 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Duplicate / Records Paih Bo Rawh (Purge Records)
+                </button>
+              ) : (
+                <div className="bg-white p-3 rounded-xl border border-rose-400 space-y-2.5 animate-fadeIn">
+                  <p className="text-[11px] font-bold text-rose-900 leading-tight">
+                    ⚠️ Duplicate / Test data a ni tih i chiang em? Records {stats.txnCount} leh he Bawm hi database atangin a bo hlen dawn e.
+                  </p>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Ziak rawh: <span className="text-rose-700 font-mono font-black">PAIH</span> tih hi type rawh:
+                    </label>
+                    <input
+                      type="text"
+                      value={forcePurgeText}
+                      onChange={(e) => setForcePurgeText(e.target.value)}
+                      placeholder="Type PAIH to confirm..."
+                      className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-rose-600"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForcePurgeConfirm(false);
+                        setForcePurgeText('');
+                      }}
+                      className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition"
+                    >
+                      Kansel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmForcePurge}
+                      disabled={forcePurgeText.trim().toUpperCase() !== 'PAIH' || isProcessing}
+                      className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black rounded-lg text-xs transition shadow-md shadow-rose-200 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {isProcessing ? 'Paih mek...' : 'Paih Bo Hlen Rawh'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

@@ -23,6 +23,7 @@ import {
   isMobileDevice
 } from '../utils/upi';
 import { generateQRCodeDataUrl } from '../utils/qr';
+import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
 
 interface UPIIntentModalProps {
   isOpen: boolean;
@@ -164,7 +165,37 @@ export function UPIIntentModal({
     setSelectedApp(app);
     setStep('waiting');
 
-    // 2. Build direct custom deep link intent URL
+    // 2. Pre-record pending transaction in RonPay database so it can be tracked and updated
+    const pendingTx: Transaction = {
+      id: txRef,
+      campaignId: campaign.id,
+      campaignTitle: campaign.title,
+      category: campaign.category,
+      donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
+      donorPhone: isAnonymous ? undefined : (donorPhone?.trim() || undefined),
+      donorVeng: isAnonymous ? undefined : (donorVeng?.trim() || undefined),
+      memberId: isAnonymous ? undefined : memberId,
+      subId: isAnonymous ? undefined : subId,
+      isDependent: isAnonymous ? false : isDependent,
+      isAnonymous: isAnonymous,
+      amount: amount,
+      platformFee: platformFee,
+      totalAmount: totalPayable,
+      paymentMethod: 'online',
+      status: 'pending',
+      remark: remark?.trim() || undefined,
+      subCategoryBreakdown: campaign.category === 'kumtluang' ? subcatAmounts : undefined,
+      periodType: campaign.category === 'kumtluang' ? periodType : undefined,
+      periodMonth: campaign.category === 'kumtluang' ? periodMonth : undefined,
+      periodYear: campaign.category === 'kumtluang' ? periodYear : undefined,
+      periodLabel: campaign.category === 'kumtluang' ? periodLabel : undefined,
+      timestamp: new Date().toISOString(),
+      txHash: 'UPI' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+      payerUPI: app.name,
+    };
+    saveTransaction(pendingTx);
+
+    // 3. Build direct custom deep link intent URL
     const intentUrl = buildUpiIntentUrl(
       {
         upiId: targetUpi,
@@ -179,7 +210,7 @@ export function UPIIntentModal({
       app.scheme
     );
 
-    // 3. Launch UPI intent deep link
+    // 4. Launch UPI intent deep link
     try {
       window.location.href = intentUrl;
     } catch (err) {
@@ -230,6 +261,10 @@ export function UPIIntentModal({
         utrRef: utrInput.trim() || undefined,
         payerUPI: selectedApp?.name || 'UPI Intent',
       };
+
+      // Record in RonPay database as completed
+      saveTransaction(transaction);
+      recordUserPaidTxId(transaction.id);
 
       setIsConfirming(false);
       onPaymentSuccess(transaction);

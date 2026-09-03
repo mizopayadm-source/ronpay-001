@@ -78,6 +78,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [upiValidationError, setUpiValidationError] = useState<string | null>(null);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
   const [isUPIIntentModalOpen, setIsUPIIntentModalOpen] = useState<boolean>(false);
   const [onlineDonorPayload, setOnlineDonorPayload] = useState<{
@@ -140,10 +141,30 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const config = BAWM_CONFIG[category];
-  const isVoided = campaign?.status === 'voided' || !!campaign?.isVoided;
-  const isExpired = !isVoided && isCampaignExpired(campaign?.validityDate, campaign?.status);
-  const isPendingApproval = campaign?.status === 'pending_approval';
-  const isRejected = campaign?.status === 'rejected';
+
+  // Fallback campaign if not explicitly provided
+  const effectiveCampaign: Campaign = campaign || {
+    id: `cmp-${category}-default`,
+    category,
+    title: category === 'ralna' ? 'Pi Lalhmingliani Ralna' :
+           category === 'kumtluang' ? 'BCM Ebenezer, Zobawk' :
+           category === 'rikrum' ? 'Emergency Relief Support' :
+           category === 'khawlsak' ? 'Hnuchham Pual Donation' : 'RonPay Digital Bawm',
+    location: 'Aizawl, Mizoram',
+    upiId: category === 'ralna' ? 'bungkawn.yma@okaxis' :
+           category === 'kumtluang' ? 'bcm.ebenezer.zobawk@sbi' :
+           category === 'rikrum' ? 'kanan.disaster@ybl' :
+           category === 'khawlsak' ? 'dawrpui.charity@ibl' : 'ronpay.mizoram@okhdfcbank',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    createdBy: '9862311223'
+  };
+
+  const activeCampaign = campaign || effectiveCampaign;
+  const isVoided = activeCampaign.status === 'voided' || !!activeCampaign.isVoided;
+  const isExpired = !isVoided && isCampaignExpired(activeCampaign.validityDate, activeCampaign.status);
+  const isPendingApproval = activeCampaign.status === 'pending_approval';
+  const isRejected = activeCampaign.status === 'rejected';
 
   // Derive human-readable period label
   const periodLabel = periodType === 'monthly'
@@ -508,14 +529,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     if (paymentMethod === 'online') {
       // 1. Strict recipient UPI ID validation
-      const targetUpi = campaign?.targetUpiId || campaign?.upiId || '';
+      const targetUpi = (activeCampaign.targetUpiId || activeCampaign.upiId || '').trim();
       const upiValidation = validateUpiId(targetUpi);
       
       if (!upiValidation.isValid) {
         setIsProcessing(false);
-        alert(`⛔ UPI ID A DIK LO EMAW A AWM LO:\n"${targetUpi || 'A ruak'}"\n\n${upiValidation.error || 'Campaign siamtu / Creator hian UPI ID dik a dah leh dah loh check a ni e.'}\n\nUPI ID dik lo a nih avangin sum pek luh theih a ni lo.`);
+        const errMsg = upiValidation.error || 'Campaign siamtu / Creator hian UPI ID dik a dah leh dah loh check a ni e.';
+        setUpiValidationError(errMsg);
+        alert(`⛔ UPI ID A DIK LO EMAW A AWM LO:\n"${targetUpi || 'A ruak'}"\n\n${errMsg}\n\nUPI ID dik lo a nih avangin sum pek luh theih a ni lo.`);
         return;
       }
+
+      setUpiValidationError(null);
 
       // 2. Set online donor payload and trigger UPI Intent Modal
       setOnlineDonorPayload({
@@ -1803,6 +1828,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </div>
 
+        {/* Inline UPI Error Alert */}
+        {upiValidationError && paymentMethod === 'online' && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-rose-800">⛔ UPI ID A DIK LO / A DIK LO HLE:</p>
+              <p className="text-[11px] leading-relaxed">{upiValidationError}</p>
+              <p className="text-[10px] text-rose-600 italic">UPI ID a dik loh chuan sum pek luh theih a ni lo.</p>
+            </div>
+          </div>
+        )}
+
         {/* Pay Button */}
         <button
           type="submit"
@@ -1835,11 +1872,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       </form>
 
       {/* UPI Intent & App Launcher Modal */}
-      {isUPIIntentModalOpen && campaign && (
+      {isUPIIntentModalOpen && (
         <UPIIntentModal
           isOpen={isUPIIntentModalOpen}
           onClose={() => setIsUPIIntentModalOpen(false)}
-          campaign={campaign}
+          campaign={activeCampaign}
           amount={subtotal}
           platformFee={platformFee}
           donorName={onlineDonorPayload.donorName}

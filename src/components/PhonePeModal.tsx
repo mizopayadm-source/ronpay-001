@@ -43,7 +43,9 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState<boolean>(false);
 
-  const primaryDomain = 'https://ronpay.app';
+  const primaryDomain = typeof window !== 'undefined' && (window.location.hostname.includes('ronpay.com') || window.location.hostname.includes('ronpay.app'))
+    ? window.location.origin
+    : 'https://ronpay.com';
   const vercelDomain = 'https://ronpay-001-pi.vercel.app';
 
   const credentials = {

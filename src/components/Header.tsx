@@ -408,10 +408,11 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 relative z-10">
         {/* Main Row: Brand & Quick Action Controls */}
         <div className="flex items-center justify-between gap-2 w-full">
-          {/* Brand Logo & Title */}
+          {/* Brand Logo & Title - Navigates to Website / Home */}
           <button 
             type="button"
-            onClick={() => onNavigate('home')}
+            onClick={() => onNavigate('website')}
+            title="RonPay Home / Landing Page (Website)"
             className="flex items-center gap-2 group transition cursor-pointer shrink-0 focus:outline-none text-left"
           >
             {/* Logo Squircle */}
@@ -489,16 +490,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               id="header-website-btn"
-              onClick={() => onNavigate(currentScreen === 'website' ? 'home' : 'website')}
-              title={currentScreen === 'website' ? "RonPay Web App-ah Kir Rawh" : "RonPay Official Website En Rawh"}
-              className={`h-7 sm:h-8 px-1.5 sm:px-2 rounded-lg border flex items-center justify-center gap-1 text-[9.5px] sm:text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
-                currentScreen === 'website'
-                  ? 'bg-purple-600 border-purple-400 text-white shadow-purple-600/30 ring-1 ring-purple-400'
-                  : 'bg-slate-900 border-slate-800 hover:border-purple-500/70 text-slate-200 hover:text-white'
-              }`}
+              onClick={() => onNavigate('website')}
+              title="RonPay Official Website / Landing Page-ah Kir Rawh"
+              className="h-7 sm:h-8 px-2 rounded-lg border flex items-center justify-center gap-1 text-[9.5px] sm:text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs bg-slate-900 border-purple-500/40 hover:border-purple-400 text-purple-200 hover:text-white"
             >
               <Globe className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Website</span>
+              <span>Website</span>
             </button>
 
             {/* Viewport Toggle (Desktop / Mobile Frame - Hidden on small mobile screens to save space) */}

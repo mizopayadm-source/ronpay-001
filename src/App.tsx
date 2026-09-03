@@ -13,6 +13,7 @@ import {
 } from './types';
 import { Language } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
+import { BILL_SERVICES } from './data/initialData';
 import {
   getStoredCampaigns,
   saveStoredCampaigns,
@@ -98,14 +99,16 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { getUrlRoute, updateBrowserUrl } from './utils/urlRouting';
 
 export default function App() {
-  // Splash screen state for smooth UX
-  const [showSplash, setShowSplash] = useState<boolean>(true);
-
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
 
-  // Navigation & View States
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'home');
+  // Navigation & View States: Default to website on root / main domain
+  const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'website');
+
+  // Splash screen state for smooth UX - only display when opening the app directly
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    return !!(initialRoute?.screen && initialRoute.screen !== 'website');
+  });
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
@@ -375,9 +378,44 @@ export default function App() {
     }
     if (route.receiptId) {
       const txs = getStoredTransactions();
-      const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+      let found = txs.find(t => 
+        t && (
+          t.id.toLowerCase() === route.receiptId?.toLowerCase() || 
+          (t.txHash && t.txHash.toLowerCase() === route.receiptId?.toLowerCase())
+        )
+      );
+
       if (found) {
+        if (found.status !== 'completed') {
+          found = { ...found, status: 'completed' as const };
+          saveTransaction(found);
+          recordUserPaidTxId(found.id);
+          reloadLocalData();
+        } else {
+          recordUserPaidTxId(found.id);
+        }
         setCompletedTransaction(found);
+      } else {
+        // Auto-create and record transaction in RonPay database with 'completed' status upon gateway callback
+        const autoTx: Transaction = {
+          id: route.receiptId,
+          campaignId: route.campaignId || 'cmp-upi-direct',
+          campaignTitle: route.campaign?.title || 'RonPay UPI Contribution',
+          category: route.category || 'others',
+          donorName: 'Valued Donor',
+          amount: 500,
+          platformFee: 0,
+          totalAmount: 500,
+          paymentMethod: 'online',
+          status: 'completed',
+          remark: 'UPI Gateway Payment Verified',
+          timestamp: new Date().toISOString(),
+          txHash: route.receiptId,
+        };
+        saveTransaction(autoTx);
+        recordUserPaidTxId(autoTx.id);
+        setCompletedTransaction(autoTx);
+        reloadLocalData();
       }
       setCurrentScreen('success');
     }
@@ -724,7 +762,12 @@ export default function App() {
       <div className={`w-full ${currentScreen === 'website' ? 'max-w-none bg-slate-950 text-slate-100' : `${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white text-slate-900 shadow-xl`} min-h-screen flex flex-col transition-all duration-300 relative overflow-x-hidden`}>
         {currentScreen === 'website' ? (
           <RonPayWebsite
-            onLaunchApp={() => handleNavigate('home')}
+            onLaunchApp={() => {
+              if (!creatorProfile.phone) {
+                setCreatorProfile(GUEST_CREATOR_PROFILE);
+              }
+              handleNavigate('home');
+            }}
             onOpenCreateQR={() => {
               if (creatorProfile.isApproved && creatorProfile.phone) {
                 handleNavigate('create_qr');
@@ -733,6 +776,15 @@ export default function App() {
               }
             }}
             onOpenRegister={() => handleNavigate('creator_reg')}
+            onOpenBillPay={(serviceId) => {
+              if (serviceId) {
+                const found = BILL_SERVICES.find(s => s.id === serviceId);
+                if (found) setSelectedBillService(found);
+              }
+              setIsBillModalOpen(true);
+              handleNavigate('home');
+            }}
+            onOpenAIKhualchhawn={() => setIsAIHriatpuiOpen(true)}
             initialLanguage={language}
           />
         ) : (
@@ -810,10 +862,10 @@ export default function App() {
             />
           )}
 
-          {currentScreen === 'checkout' && selectedCampaign && (
+          {currentScreen === 'checkout' && (
             <CheckoutScreen
               category={selectedCategory}
-              campaign={selectedCampaign}
+              campaign={selectedCampaign || campaigns.find(c => c.category === selectedCategory) || campaigns[0]}
               pricingConfig={pricingConfig}
               onBack={() => handleNavigate('explorer')}
               onPaymentSuccess={handlePaymentSuccess}

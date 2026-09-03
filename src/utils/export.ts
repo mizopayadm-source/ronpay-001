@@ -47,11 +47,11 @@ export interface PDFExportOptions {
   includeSignatures?: boolean;
   groupByDonor?: boolean;
   showDateTime?: boolean;
+  members?: MemberRecord[];
   preparedByTitle?: string;
   verifiedByTitle?: string;
   approvedByTitle?: string;
   targetInfo?: TargetExportInfo;
-  members?: MemberRecord[];
 }
 
 export interface GroupedDonorRecord {
@@ -157,14 +157,14 @@ export const downloadFileUniversal = async (
  * Returns the ordered array of month abbreviations for a given From - Upto month configuration.
  */
 export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
-  const start = config?.startMonth || 'Apr';
-  const end = config?.endMonth || 'Mar';
+  const start = config?.startMonth || 'Jan';
+  const end = config?.endMonth || 'Dec';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   const sIdx = months.indexOf(start);
   const eIdx = months.indexOf(end);
   if (sIdx === -1 || eIdx === -1) {
-    return ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+    return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   }
   
   if (sIdx === eIdx) {

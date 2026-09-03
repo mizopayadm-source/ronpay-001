@@ -517,9 +517,9 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
 };
 
 export const GUEST_CREATOR_PROFILE: CreatorProfile = {
-  name: 'RonPay User',
+  name: 'Khualmi (Guest User)',
   orgName: 'RonPay Community',
-  designation: 'Standard User',
+  designation: 'Khualmi / User',
   phone: '',
   isPhoneVerified: false,
   isApproved: false,
@@ -558,9 +558,8 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  // First time app launch: initialize default creator
-  saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
-  return DEFAULT_INITIAL_CREATOR;
+  // Default when entering app: Khualmi (Guest User)
+  return GUEST_CREATOR_PROFILE;
 };
 
 export const logoutCreator = (): CreatorProfile => {
@@ -1775,6 +1774,41 @@ export const deleteStoredTransaction = (transactionId: string): void => {
       body: JSON.stringify({ reason: 'Deleted by user / admin' })
     }).catch(() => {});
   }
+};
+
+export const deleteMemberWithTransactions = (
+  memberId: string,
+  campaignId?: string
+): { deletedTxCount: number; deletedMemberId: string } => {
+  if (!memberId) return { deletedTxCount: 0, deletedMemberId: '' };
+
+  const cleanMemberId = (memberId || '').trim().toLowerCase();
+  const allTxs = getStoredTransactions();
+  const matchingTxs = allTxs.filter(t => {
+    if (!t) return false;
+    if (campaignId && t.campaignId && t.campaignId !== campaignId) return false;
+    const tMemberId = (t.memberId || '').trim().toLowerCase();
+    const tRemark = (t.remark || '').trim().toLowerCase();
+    const tRef = (t.referenceNo || '').trim().toLowerCase();
+    const tHash = (t.txHash || '').trim().toLowerCase();
+    return (
+      (tMemberId && tMemberId === cleanMemberId) ||
+      (tRemark && tRemark.includes(cleanMemberId)) ||
+      (tRef && tRef.includes(cleanMemberId)) ||
+      (tHash && tHash.includes(cleanMemberId))
+    );
+  });
+
+  matchingTxs.forEach(t => {
+    deleteStoredTransaction(t.id);
+  });
+
+  deleteMember(memberId, campaignId);
+
+  return {
+    deletedTxCount: matchingTxs.length,
+    deletedMemberId: memberId
+  };
 };
 
 const WALLET_KEY = 'ronpay_wallet_v1';

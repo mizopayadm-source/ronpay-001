@@ -4,6 +4,8 @@ import {
   getStoredCampaigns, 
   saveCampaign, 
   deleteStoredCampaign, 
+  deleteMultipleTransactions,
+  deleteMembersOfCampaign,
   recordAuditLog,
   getStoredAuditLogs 
 } from './storage';
@@ -37,10 +39,19 @@ export function getCampaignFinancialStats(
     };
   }
 
-  const matching = txList.filter(t => 
-    t.campaignId === campaign.id || 
-    (campaign.title && t.campaignTitle === campaign.title)
-  );
+  const cleanCampId = String(campaign.id).trim().toLowerCase();
+  const cleanCampTitle = campaign.title ? String(campaign.title).trim().toLowerCase() : '';
+
+  const matching = txList.filter(t => {
+    if (!t) return false;
+    const tCampId = t.campaignId ? String(t.campaignId).trim().toLowerCase() : '';
+    if (tCampId && tCampId === cleanCampId) return true;
+    // Only fall back to title match if the transaction has no campaignId attached at all
+    if (!tCampId && cleanCampTitle && t.campaignTitle && String(t.campaignTitle).trim().toLowerCase() === cleanCampTitle) {
+      return true;
+    }
+    return false;
+  });
 
   // Count valid non-rejected/non-failed transactions
   const validTxns = matching.filter(t => t.status !== 'failed' && t.status !== 'rejected');
@@ -88,11 +99,11 @@ export async function deleteZeroBalanceCampaign(
 
   if (!stats.canHardDelete) {
     throw new Error(
-      `Financial Safety Lock: He Bawm ah hian pawisa ₹${stats.totalCollected.toLocaleString('en-IN')} (${stats.txnCount} txns) a luh tawh avangin hard delete theih a ni lo. 'Cancel & Void' option hmang rawh.`
+      `Financial Safety Lock: He Bawm ah hian pawisa ₹${stats.totalCollected.toLocaleString('en-IN')} (${stats.txnCount} txns) a luh tawh avangin zero-balance delete hmang lovin 'Force Purge' emaw 'Cancel & Void' option hmang rawh.`
     );
   }
 
-  const sanitizedReason = reason?.trim() || 'Zero-balance Bawm siam sual / tul loh vanga paih bo';
+  const sanitizedReason = reason?.trim() || 'Zero-balance Bawm siam sual / duplicate / tul loh vanga paih bo';
 
   // 1. Delete locally and sync
   deleteStoredCampaign(campaign.id);
@@ -125,6 +136,64 @@ export async function deleteZeroBalanceCampaign(
   return {
     success: true,
     message: `"${campaign.title}" (Zero-Balance) chu hlawhtling takin paih bo (deleted) a ni e. Audit log vawn fel a ni.`,
+    auditLog: log
+  };
+}
+
+/**
+ * Force Delete / Purge Campaign and All its Transactions & Members (Duplicate or test data cleanup)
+ */
+export async function forceDeleteCampaignAndRecords(
+  campaign: Campaign,
+  reason: string,
+  performedBy: string = 'Admin',
+  roleName: string = 'ADMIN',
+  allTransactions?: Transaction[]
+): Promise<{ success: boolean; message: string; deletedTxCount: number; auditLog?: AuditLog }> {
+  const stats = getCampaignFinancialStats(campaign, allTransactions);
+  const sanitizedReason = reason?.trim() || 'Duplicate / Test Bawm leh a chhunga records zawng zawng paih bo (Force Purged)';
+  
+  // 1. Delete all transactions of this campaign
+  const txIdsToDelete = stats.matchingTransactions.map(t => t.id);
+  if (txIdsToDelete.length > 0) {
+    deleteMultipleTransactions(txIdsToDelete);
+  }
+  
+  // 2. Delete all member records of this campaign
+  deleteMembersOfCampaign(campaign.id);
+  
+  // 3. Delete the campaign
+  deleteStoredCampaign(campaign.id);
+
+  // 4. Firestore sync
+  try {
+    await deleteCampaignFromFirestore(campaign.id);
+  } catch (err) {
+    console.warn('[SafetyNet] Firestore delete note:', err);
+  }
+
+  // 5. Backend sync
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/campaigns/${campaign.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: sanitizedReason, performedBy })
+    }).catch(() => {});
+  }
+  
+  // 6. Record Audit Log
+  const log = recordAuditLog(
+    'CAMPAIGN_FORCE_PURGED',
+    `Paih bo (Force Purged) Bawm '${campaign.title}' (${campaign.id}) leh a chhunga records (${txIdsToDelete.length} txns, ₹${stats.totalCollected.toLocaleString('en-IN')}). Reason: "${sanitizedReason}". Performer: ${performedBy} (${roleName}).`,
+    'campaign',
+    campaign.id,
+    performedBy
+  );
+  
+  return {
+    success: true,
+    message: `Bawm "${campaign.title}" (${campaign.id}) leh a chhunga transaction ${txIdsToDelete.length} chu hlawhtling takin paih bo (deleted) a ni ta!`,
+    deletedTxCount: txIdsToDelete.length,
     auditLog: log
   };
 }
