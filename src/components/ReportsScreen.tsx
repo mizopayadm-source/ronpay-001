@@ -42,7 +42,8 @@ import {
   MessageSquare,
   Target,
   Printer,
-  QrCode
+  QrCode,
+  Clock
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
 import { Language } from '../utils/translations';
@@ -118,6 +119,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const [endDate, setEndDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'>('date-desc');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'verified' | 'pending'>('all');
   
   // Transaction Editing State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -269,9 +271,74 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (!matchesTitle && !matchesDonor && !matchesId && !matchesPeriod) return false;
       }
 
+      // 7. Status filter (All vs Verified vs Pending)
+      if (selectedStatusFilter === 'verified') {
+        if (t.status !== 'completed') return false;
+      } else if (selectedStatusFilter === 'pending') {
+        if (t.status !== 'pending_verification' && t.status !== 'pending') return false;
+      }
+
       return true;
     });
-  }, [transactions, isCreator, creatorProfile, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorProfile, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery, selectedStatusFilter]);
+
+  // Total pending cash transactions in creator's scope
+  const pendingCashCount = useMemo(() => {
+    if (!isCreator) return 0;
+    return transactions.filter(t => {
+      if (!t || (t.status !== 'pending_verification' && t.status !== 'pending')) return false;
+      if (creatorProfile.isAdmin) return true;
+      return creatorCampaignIds.has(t.campaignId);
+    }).length;
+  }, [transactions, isCreator, creatorProfile, creatorCampaignIds]);
+
+  const handleApproveCashTransaction = (tx: Transaction) => {
+    const updated: Transaction = {
+      ...tx,
+      status: 'completed',
+      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
+      verifiedAt: new Date().toISOString(),
+    };
+    saveTransaction(updated);
+    if (onUpdateTransaction) {
+      onUpdateTransaction(updated);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
+      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+    }
+    setExportFeedback({
+      message: `₹${tx.amount.toLocaleString('en-IN')} (Petu: ${tx.isAnonymous ? 'Anonymous' : tx.donorName}) cash dawn hi i hmuhpui (approved) fel ta!`,
+      count: 1,
+    });
+    setTimeout(() => setExportFeedback(null), 3500);
+  };
+
+  const handleApproveAllPendingCash = () => {
+    const pendingList = transactions.filter(t => {
+      if (!t || (t.status !== 'pending_verification' && t.status !== 'pending')) return false;
+      if (creatorProfile.isAdmin) return true;
+      return creatorCampaignIds.has(t.campaignId);
+    });
+    if (pendingList.length === 0) return;
+    const updatedList = pendingList.map(t => ({
+      ...t,
+      status: 'completed' as const,
+      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
+      verifiedAt: new Date().toISOString(),
+    }));
+    saveMultipleTransactions(updatedList);
+    updatedList.forEach(u => onUpdateTransaction && onUpdateTransaction(u));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
+      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+    }
+    setExportFeedback({
+      message: `Cash dawn ${pendingList.length} zawng zawng i hmuhpui (approved) fel ta!`,
+      count: pendingList.length,
+    });
+    setTimeout(() => setExportFeedback(null), 3500);
+  };
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -795,7 +862,106 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             </span>
           </div>
 
+          {/* Pending Cash Verification Alert Banner if any pending transactions exist */}
+          {pendingCashCount > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs animate-bounce">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-amber-950 flex items-center gap-2">
+                    <span>Cash Dawn Finfiah Tur ({pendingCashCount}) A Awm E!</span>
+                    <span className="text-[9px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded-full border border-amber-300">
+                      Action Required
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-snug font-medium mt-0.5">
+                    User-te'n Bawm-ah Cash an thehlut a, Creator/Admin hmuhpui (Approve) an nghak. Pawisa i dawng ngei a nih chuan lo hmuhpui (Approve) rawh le.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('pending')}
+                  className={`text-[11px] font-black px-3 py-1.5 rounded-xl cursor-pointer transition shadow-2xs ${
+                    selectedStatusFilter === 'pending'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-amber-200/90 hover:bg-amber-300 text-amber-950'
+                  }`}
+                >
+                  Pending En Rawh ({pendingCashCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApproveAllPendingCash}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black px-3 py-1.5 rounded-xl cursor-pointer transition shadow-xs flex items-center gap-1 active:scale-95"
+                  title="Approve all pending cash donations at once"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Hmuhpui Vek Rawh</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-3.5 shadow-xs text-xs">
+            {/* Status Filter (All vs Verified vs Pending) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10.5px] font-bold text-slate-700">
+                  Status / Verification Filter
+                </label>
+                {selectedStatusFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatusFilter('all')}
+                    className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Reset to All Status
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('all')}
+                  className={`py-1.5 rounded-lg transition text-[11px] font-bold cursor-pointer ${
+                    selectedStatusFilter === 'all'
+                      ? 'bg-white text-indigo-950 shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  All Status
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('verified')}
+                  className={`py-1.5 rounded-lg transition text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                    selectedStatusFilter === 'verified'
+                      ? 'bg-emerald-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  <span>Verified</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('pending')}
+                  className={`py-1.5 rounded-lg transition text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                    selectedStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-white shadow-xs font-black'
+                      : pendingCashCount > 0 ? 'text-amber-900 bg-amber-200/90 hover:bg-amber-300 font-black animate-pulse' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>Pending ({pendingCashCount})</span>
+                </button>
+              </div>
+            </div>
+
             {/* Main Category Filter */}
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1917,6 +2083,21 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               ) : (
                                 <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded">⚡+💵 Mix ({row.txCount || row.transactionsCount || 1})</span>
                               )}
+                              {/* Quick Cash Approve Button if donor has pending cash */}
+                              {row.transactions && row.transactions.some(t => t.status === 'pending_verification' || t.status === 'pending') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const pendingTxs = row.transactions.filter(t => t.status === 'pending_verification' || t.status === 'pending');
+                                    pendingTxs.forEach(pt => handleApproveCashTransaction(pt));
+                                  }}
+                                  className="mt-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] py-0.5 px-1 rounded-md flex items-center justify-center gap-0.5 shadow-2xs cursor-pointer active:scale-95 transition"
+                                  title="Approve all pending cash donations for this donor"
+                                >
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  <span>Approve Cash</span>
+                                </button>
+                              )}
                             </td>
                             {showDateTime && (
                               <td className="py-2.5 px-3 border-r border-slate-200 text-[11px] text-slate-600">
@@ -2071,7 +2252,30 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               <Banknote className="w-2 h-2 text-emerald-600" />Cash
                             </span>
                           )}
-                          <span className="text-slate-400 font-bold">• {tx.status}</span>
+                          {tx.status === 'completed' ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>Verified {tx.verifiedBy ? `(${tx.verifiedBy})` : ''}</span>
+                            </span>
+                          ) : (tx.status === 'pending_verification' || tx.status === 'pending') ? (
+                            <div className="flex items-center gap-1">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                                <Clock className="w-2.5 h-2.5 text-amber-600" />
+                                <span>Cash Pending</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveCashTransaction(tx)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] px-2 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs cursor-pointer active:scale-95 transition"
+                                title="Pawisa ka dawng ngei e tiin hmuhpui rawh"
+                              >
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                <span>Approve</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 font-bold">• {tx.status}</span>
+                          )}
                         </div>
                       </div>
                     </div>
