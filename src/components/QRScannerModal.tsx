@@ -1041,21 +1041,42 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <Camera className="w-8 h-8 mx-auto text-amber-400/90 animate-pulse" />
               
               {cameraError?.includes('Permission Denied') ? (
-                <div className="bg-rose-950/70 border border-rose-500/50 p-2 rounded-xl text-left space-y-1">
+                <div className="bg-rose-950/80 border border-rose-500/60 p-2.5 rounded-xl text-left space-y-1.5">
                   <div className="flex items-center gap-1.5 text-rose-300 font-bold text-[11px]">
                     <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
                     <span>Browser-in Camera a Block mek:</span>
                   </div>
-                  <p className="text-[10px] text-rose-200 leading-tight">
-                    Chrome address bar (URL) bul ami <strong>Tune icon 🎚️ / Lock 🔒</strong> kha click la, <strong>Camera</strong> kha <strong>&quot;Allow / On&quot;</strong> rawh le.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    className="w-full mt-1 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Refresh Page
-                  </button>
+                  <div className="text-[10px] text-rose-100 space-y-1 leading-tight">
+                    <p>
+                      <strong>💻 Laptop-ah:</strong> Chrome URL bula <strong>Tune icon 🎚️</strong> / Lock 🔒 hmet la, <strong>Camera</strong> kha <strong>&quot;Allow / On&quot;</strong> rawh le.
+                    </p>
+                    <p>
+                      <strong>📱 Phone-ah:</strong> URL bula <strong>Lock icon 🔒</strong> hmet la ➔ <em>Permissions</em> ➔ <em>Camera</em> kha <strong>Allow</strong> rawh le.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCameraError(null);
+                        startCamera(facingMode);
+                      }}
+                      className="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Re-check / Allow Dil Nawn Rawh
+                    </button>
+                    {typeof window !== 'undefined' && window.location.hostname.includes('ronpay.app') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.location.href = 'https://ronpay-001-pi.vercel.app';
+                        }}
+                        className="w-full py-1 bg-sky-600 hover:bg-sky-500 text-white font-bold text-[10px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
+                      >
+                        Vercel Domain-ah Hawng Rawh (ronpay-001-pi...)
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-[11.5px] font-bold text-slate-200 leading-tight">
