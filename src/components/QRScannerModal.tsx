@@ -609,16 +609,51 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let stream: MediaStream | null = null;
     let lastErr: any = null;
 
-    for (const constraints of constraintList) {
-      try {
-        stream = await getMedia(constraints);
-        if (stream) break;
-      } catch (err: any) {
-        lastErr = err;
-        console.warn('Camera constraint attempt failed:', constraints, err);
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          break;
+    const getMediaWithTimeout = (constraints: MediaStreamConstraints, timeoutMs = 4500): Promise<MediaStream | null> => {
+      return new Promise((resolve) => {
+        let finished = false;
+        const timer = setTimeout(() => {
+          if (!finished) {
+            finished = true;
+            console.warn('Camera request timed out after', timeoutMs, 'ms');
+            resolve(null);
+          }
+        }, timeoutMs);
+
+        try {
+          getMedia(constraints)
+            .then((s: MediaStream) => {
+              if (!finished) {
+                finished = true;
+                clearTimeout(timer);
+                resolve(s);
+              }
+            })
+            .catch((err: any) => {
+              if (!finished) {
+                finished = true;
+                clearTimeout(timer);
+                lastErr = err;
+                console.warn('Camera constraint attempt failed:', constraints, err);
+                resolve(null);
+              }
+            });
+        } catch (syncErr: any) {
+          if (!finished) {
+            finished = true;
+            clearTimeout(timer);
+            lastErr = syncErr;
+            resolve(null);
+          }
         }
+      });
+    };
+
+    for (const constraints of constraintList) {
+      stream = await getMediaWithTimeout(constraints, 4000);
+      if (stream) break;
+      if (lastErr?.name === 'NotAllowedError' || lastErr?.name === 'PermissionDeniedError') {
+        break;
       }
     }
 
@@ -698,6 +733,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           activatePlayback();
         }
       }, 350);
+      setTimeout(() => {
+        if (!isScanningRef.current) {
+          setIsStartingCamera(false);
+        }
+      }, 3000);
     }
   }, [tickScan]);
 
