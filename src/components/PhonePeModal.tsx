@@ -43,12 +43,15 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState<boolean>(false);
 
+  const primaryDomain = 'https://ronpay.app';
+  const vercelDomain = 'https://ronpay-001-pi.vercel.app';
+
   const credentials = {
     merchantId: 'TSPMIZOPAYUAT',
     clientId: 'TSPMIZOPAYUAT_2608171706',
     clientVersion: '1',
     clientSecret: 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4',
-    webhookUrl: window.location.origin + '/api/phonepe/webhook',
+    webhookUrl: `${primaryDomain}/api/phonepe/webhook`,
     env: 'UAT Sandbox (PG V2 Standard Checkout)',
   };
 
@@ -410,7 +413,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                 </h4>
                 <ol className="list-decimal list-inside space-y-1.5 text-amber-900/90 leading-relaxed font-medium">
                   <li>
-                    <b>Tech Team Mail Thread-a chhan dan:</b> PhonePe tech team mail thread-ah khan i app URL (hei hi: <span className="font-mono text-[9px] bg-white px-1 py-0.5 rounded border border-amber-300">{window.location.origin}</span>) leh webhook URL <span className="font-mono text-[9px] bg-white px-1 py-0.5 rounded border border-amber-300">/api/phonepe/webhook</span> kha thawn let tur a ni.
+                    <b>Tech Team Mail Thread-a chhan dan:</b> PhonePe tech team mail thread-ah khan i app official URL <span className="font-mono text-[9px] bg-white px-1.5 py-0.5 rounded border border-amber-300 font-bold text-indigo-700">{primaryDomain}</span> leh webhook URL <span className="font-mono text-[9px] bg-white px-1.5 py-0.5 rounded border border-amber-300 font-bold text-indigo-700">{primaryDomain}/api/phonepe/webhook</span> kha thawn let tur a ni.
                   </li>
                   <li>
                     <b>UAT Sandbox Test:</b> PG V2 Standard Checkout API leh Status API kan code tawh a, UAT-ah test transaction hlawhtling 3–5 tal kan execute ang.
@@ -426,17 +429,18 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-[10px] text-slate-700 font-mono space-y-1">
                   <p>Hi PhonePe Team,</p>
                   <p className="mt-1">Thank you for sharing the UAT TSP credentials. We have integrated the PG V2 Standard Checkout and Authorization headers (X-MERCHANT-ID: TSPMIZOPAYUAT) in our RonPay app.</p>
-                  <p className="mt-1"><b>App Base URL:</b> {window.location.origin}</p>
-                  <p><b>Webhook URL:</b> {window.location.origin}/api/phonepe/webhook</p>
+                  <p className="mt-1"><b>App Base URL:</b> {primaryDomain}</p>
+                  <p><b>Webhook URL:</b> {primaryDomain}/api/phonepe/webhook</p>
+                  <p className="text-[9px] text-slate-500">Alternative Staging URL: {vercelDomain}</p>
                   <p className="mt-1">We are verifying test transactions in sandbox and look forward to production cutover.</p>
                   <p className="mt-1">Best regards,<br/>RonPay Tech Team</p>
                 </div>
                 <button
-                  onClick={() => copyToClipboard(`Hi PhonePe Team,\n\nThank you for sharing the UAT TSP credentials. We have integrated the PG V2 Standard Checkout and Authorization headers (X-MERCHANT-ID: TSPMIZOPAYUAT) in our RonPay app.\n\nApp Base URL: ${window.location.origin}\nWebhook URL: ${window.location.origin}/api/phonepe/webhook\n\nWe are verifying test transactions in sandbox and look forward to production cutover.\n\nBest regards,\nRonPay Tech Team`, 'mailReply')}
-                  className="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1.5 rounded-lg text-[10px] transition flex items-center justify-center gap-1 cursor-pointer"
+                  onClick={() => copyToClipboard(`Hi PhonePe Team,\n\nThank you for sharing the UAT TSP credentials. We have integrated the PG V2 Standard Checkout and Authorization headers (X-MERCHANT-ID: TSPMIZOPAYUAT) in our RonPay app.\n\nApp Base URL: ${primaryDomain}\nWebhook URL: ${primaryDomain}/api/phonepe/webhook\nAlternative Staging URL: ${vercelDomain}\n\nWe are verifying test transactions in sandbox and look forward to production cutover.\n\nBest regards,\nRonPay Tech Team`, 'mailReply')}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                 >
-                  {copiedKey === 'mailReply' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  Copy Sample Reply Text
+                  {copiedKey === 'mailReply' ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  Copy Official Reply Text ({primaryDomain})
                 </button>
               </div>
             </div>
