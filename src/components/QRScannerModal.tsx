@@ -927,8 +927,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const targetTitle = targetCategory === 'any' 
-    ? 'Scanning Any UPI / RonPay QR' 
+  const targetTitle = !targetCategory || targetCategory === 'any' 
+    ? 'Scan Any UPI / RonPay QR' 
     : `Scanning for ${BAWM_CONFIG[targetCategory]?.name || targetCategory}`;
 
   return (
@@ -1037,11 +1037,31 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
           {/* Loading / Fallback Overlay */}
           {!cameraActive && (
-            <div className="text-center p-3 sm:p-4 space-y-2 z-10 w-full max-w-[240px]">
-              <Camera className="w-9 h-9 mx-auto text-amber-400/90 animate-pulse" />
-              <p className="text-[11.5px] font-bold text-slate-200 leading-tight">
-                {cameraError || (isStartingCamera ? 'Camera stream in hawng mek a ni...' : 'Camera stream nghah mek a ni')}
-              </p>
+            <div className="text-center p-2.5 sm:p-3 space-y-1.5 z-10 w-full max-w-[250px]">
+              <Camera className="w-8 h-8 mx-auto text-amber-400/90 animate-pulse" />
+              
+              {cameraError?.includes('Permission Denied') ? (
+                <div className="bg-rose-950/70 border border-rose-500/50 p-2 rounded-xl text-left space-y-1">
+                  <div className="flex items-center gap-1.5 text-rose-300 font-bold text-[11px]">
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span>Browser-in Camera a Block mek:</span>
+                  </div>
+                  <p className="text-[10px] text-rose-200 leading-tight">
+                    Chrome address bar (URL) bul ami <strong>Tune icon 🎚️ / Lock 🔒</strong> kha click la, <strong>Camera</strong> kha <strong>&quot;Allow / On&quot;</strong> rawh le.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="w-full mt-1 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Refresh Page
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11.5px] font-bold text-slate-200 leading-tight">
+                  {cameraError || (isStartingCamera ? 'Camera stream in hawng mek a ni...' : 'Camera stream nghah mek a ni')}
+                </p>
+              )}
               
               <div className="flex flex-col gap-1.5 pt-1">
                 {hasNativeScannerBridge && (
@@ -1057,16 +1077,18 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleUserTapToPlay();
-                  }}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs py-1.5 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Start / Re-start Camera
-                </button>
+                {!cameraError?.includes('Permission Denied') && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUserTapToPlay();
+                    }}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs py-1.5 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Start / Re-start Camera
+                  </button>
+                )}
                 
                 <button
                   type="button"
@@ -1085,7 +1107,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     e.stopPropagation();
                     setIsAndroidHelpOpen(true);
                   }}
-                  className="text-[10px] text-amber-300 underline hover:text-amber-200 mt-1 cursor-pointer font-medium"
+                  className="text-[10px] text-amber-300 underline hover:text-amber-200 mt-0.5 cursor-pointer font-medium"
                 >
                   Android App-ah Camera a in-on thei lo em?
                 </button>
