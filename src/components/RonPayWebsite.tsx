@@ -584,30 +584,30 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
       {/* 2. MAIN STICKY NAVIGATION HEADER */}
       <header className={`sticky top-0 z-50 w-full ${eyeComfortMode ? 'bg-white/95 border-b border-slate-200/90 text-slate-800 shadow-xs' : 'bg-slate-950/95 border-b border-slate-800/80 text-white'} backdrop-blur-md transition-all`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-4">
           
           {/* Brand Logo with FinTech Tag */}
           <div 
-            className="flex items-center gap-2.5 cursor-pointer" 
+            className="flex items-center gap-1.5 sm:gap-2.5 cursor-pointer shrink-0" 
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-sm flex items-center justify-center">
-              <div className={`w-full h-full ${eyeComfortMode ? 'bg-white' : 'bg-slate-950'} rounded-[10px] flex items-center justify-center transition-colors`}>
-                <span className="font-black text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-sm flex items-center justify-center shrink-0">
+              <div className={`w-full h-full ${eyeComfortMode ? 'bg-white' : 'bg-slate-950'} rounded-[9px] sm:rounded-[10px] flex items-center justify-center transition-colors`}>
+                <span className="font-black text-base sm:text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500">
                   R
                 </span>
               </div>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5 leading-none">
-                <span className={`font-black text-lg sm:text-xl tracking-tight ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+            <div className="shrink-0">
+              <div className="flex items-center gap-1 leading-none">
+                <span className={`font-black text-base sm:text-xl tracking-tight ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
                   Ron<span className="text-orange-500">Pay</span>
                 </span>
-                <span className={`${eyeComfortMode ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-purple-600/30 text-purple-300 border-purple-400/40'} text-[8px] font-black px-1.5 py-0.5 rounded-full border uppercase tracking-wider`}>
+                <span className={`hidden sm:inline-block ${eyeComfortMode ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-purple-600/30 text-purple-300 border-purple-400/40'} text-[8px] font-black px-1.5 py-0.5 rounded-full border uppercase tracking-wider`}>
                   PhonePe TSP
                 </span>
               </div>
-              <p className={`text-[9.5px] ${eyeComfortMode ? 'text-slate-500 font-medium' : 'text-slate-400 font-semibold'} tracking-tight`}>
+              <p className={`hidden md:block text-[9.5px] ${eyeComfortMode ? 'text-slate-500 font-medium' : 'text-slate-400 font-semibold'} tracking-tight`}>
                 Mizo FinTech & BBPS Platform
               </p>
             </div>
@@ -650,12 +650,12 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Eye-Comfort Theme Toggle Button (Mit Tihahdam Theme) */}
             <button
               type="button"
               onClick={() => setEyeComfortMode(!eyeComfortMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+              className={`w-7 h-7 sm:w-auto sm:h-auto p-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 flex items-center justify-center ${
                 eyeComfortMode 
                   ? 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 shadow-xs' 
                   : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
@@ -664,23 +664,23 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             >
               {eyeComfortMode ? (
                 <>
-                  <Sun className="w-3.5 h-3.5 text-amber-600" />
-                  <span className="hidden xl:inline text-[10.5px]">Mit Tihahdam</span>
+                  <Sun className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="hidden xl:inline text-[10.5px] ml-1">Mit Tihahdam</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-slate-300" />
-                  <span className="hidden xl:inline text-[10.5px]">Thim Chhum</span>
+                  <Moon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                  <span className="hidden xl:inline text-[10.5px] ml-1">Thim Chhum</span>
                 </>
               )}
             </button>
 
             {/* Language Switcher Pill */}
-            <div className={`flex items-center ${eyeComfortMode ? 'bg-slate-100 border-slate-200' : 'bg-slate-900 border-slate-800'} border rounded-lg p-0.5 text-xs font-bold`}>
+            <div className={`flex items-center ${eyeComfortMode ? 'bg-slate-100 border-slate-200' : 'bg-slate-900 border-slate-800'} border rounded-lg p-0.5 text-[9.5px] sm:text-xs font-bold shrink-0`}>
               <button
                 type="button"
                 onClick={() => setLang('mizo')}
-                className={`px-2 py-0.5 rounded-md transition cursor-pointer text-[10px] ${
+                className={`px-1.5 sm:px-2 py-0.5 rounded-md transition cursor-pointer ${
                   lang === 'mizo' 
                     ? 'bg-amber-400 text-slate-950 font-black' 
                     : (eyeComfortMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200')
@@ -691,7 +691,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <button
                 type="button"
                 onClick={() => setLang('english')}
-                className={`px-2 py-0.5 rounded-md transition cursor-pointer text-[10px] ${
+                className={`px-1.5 sm:px-2 py-0.5 rounded-md transition cursor-pointer ${
                   lang === 'english' 
                     ? 'bg-amber-400 text-slate-950 font-black' 
                     : (eyeComfortMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200')
@@ -701,66 +701,116 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </button>
             </div>
 
-            {/* AI Khual Chhawn Trigger Button */}
+            {/* AI Khual Chhawn Trigger Button (Desktop / Tablet) */}
             <button
               type="button"
               onClick={() => setIsAIChatOpen(true)}
-              className={`hidden sm:flex items-center gap-1.5 ${
+              className={`hidden md:flex items-center gap-1.5 ${
                 eyeComfortMode 
                   ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200' 
                   : 'bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 text-indigo-300 hover:text-white border-indigo-700/60'
-              } border px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer`}
+              } border px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer shrink-0`}
             >
-              <Bot className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="truncate">AIChat (Khual Chhawn)</span>
+              <Bot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span className="truncate">AIChat</span>
             </button>
 
-            {/* Launch App Main CTA (Defaults to Guest User) */}
+            {/* Launch App Main CTA ("App Lut Rawh") - Always 100% visible and unclipped */}
             <button
               type="button"
               onClick={() => onLaunchApp('home')}
-              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition cursor-pointer border border-amber-300"
+              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-[11px] sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-xs transition cursor-pointer border border-amber-300 shrink-0 whitespace-nowrap"
               title="Launch www.ronpay.app/app as Guest User"
             >
-              <Smartphone className="w-4 h-4 text-slate-950" />
+              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 shrink-0" />
               <span>{isMizo ? 'App Lut Rawh' : 'Launch App'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 hidden xs:inline" />
             </button>
 
-            {/* Mobile Hamburger Menu Toggle */}
+            {/* Mobile Hamburger Menu Toggle ("Page luhna thlanna") - 100% visible & high contrast */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`lg:hidden p-2 rounded-xl ${eyeComfortMode ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'} border transition`}
-              aria-label="Toggle Navigation Menu"
+              className={`lg:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl shrink-0 flex items-center justify-center transition border cursor-pointer active:scale-95 ${
+                eyeComfortMode 
+                  ? mobileMenuOpen 
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs' 
+                    : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200' 
+                  : mobileMenuOpen 
+                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs' 
+                    : 'bg-slate-900 border-slate-700 text-slate-200 hover:text-white hover:bg-slate-800'
+              }`}
+              title={isMizo ? 'Page luhna thlanna (Menu)' : 'Navigation Menu'}
+              aria-label={isMizo ? 'Page luhna thlanna (Menu)' : 'Navigation Menu'}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5 text-current" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-current" />}
             </button>
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu */}
+        {/* Mobile Dropdown Menu ("Page Luhna Thlanna") */}
         {mobileMenuOpen && (
-          <div className="lg:hidden bg-slate-950/98 border-b border-slate-800 px-4 py-4 space-y-3 animate-fadeIn">
+          <div className={`lg:hidden ${
+            eyeComfortMode 
+              ? 'bg-white/98 border-b border-slate-200 text-slate-850 shadow-xl' 
+              : 'bg-slate-950/98 border-b border-slate-800 text-white'
+          } px-3 sm:px-4 py-3.5 space-y-3 animate-fadeIn`}>
+            {/* Menu Header with clear title */}
+            <div className={`flex items-center justify-between pb-2 border-b ${
+              eyeComfortMode ? 'border-slate-200' : 'border-slate-800'
+            }`}>
+              <div className="flex items-center gap-1.5">
+                <Menu className="w-3.5 h-3.5 text-amber-500" />
+                <span className={`text-[11px] font-black uppercase tracking-wider ${
+                  eyeComfortMode ? 'text-slate-700' : 'text-slate-300'
+                }`}>
+                  {isMizo ? 'Page Luhna Thlanna' : 'Page Navigation'}
+                </span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border transition ${
+                  eyeComfortMode 
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300' 
+                    : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-700'
+                }`}
+              >
+                ✕ {isMizo ? 'Khar' : 'Close'}
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 text-xs font-bold">
               <a 
                 href="#hero" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-200'
+                }`}
               >
                 🏠 {isMizo ? 'Kawtchhuah' : 'Home'}
               </a>
               <a 
                 href="#phonepe" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/50 text-purple-300"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-900' 
+                    : 'bg-purple-950/40 hover:bg-purple-950/60 border-purple-800/50 text-purple-300'
+                }`}
               >
                 ⚡ PhonePe Thawhdun
               </a>
               <a 
                 href="#services" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-200'
+                }`}
               >
                 📦 {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
               </a>
@@ -770,34 +820,61 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   setMobileMenuOpen(false);
                   setManualModalOpen(true);
                 }}
-                className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-indigo-300 text-left flex items-center gap-1 cursor-pointer"
+                className={`p-2.5 rounded-xl border transition text-left flex items-center gap-1 cursor-pointer ${
+                  eyeComfortMode 
+                    ? 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-900' 
+                    : 'bg-indigo-950/40 hover:bg-indigo-950/60 border-indigo-800/50 text-indigo-300'
+                }`}
               >
                 📖 <span>{isMizo ? 'User Manual' : 'User Manual'}</span>
               </button>
               <a 
                 href="#bbps" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-300"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-amber-300'
+                }`}
               >
                 💡 BBPS Bills & Topup
               </a>
               <a 
                 href="#security" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-200'
+                }`}
               >
                 🛡️ {isMizo ? 'Rinngamna' : 'Security'}
               </a>
               <a 
                 href="#contact" 
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-300"
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-900' 
+                    : 'bg-emerald-950/40 hover:bg-emerald-950/60 border-emerald-800/50 text-emerald-300'
+                }`}
               >
                 📞 {isMizo ? 'Biakpawhna' : 'Contact'}
               </a>
+              <a 
+                href="#faq" 
+                onClick={() => setMobileMenuOpen(false)}
+                className={`p-2.5 rounded-xl border transition ${
+                  eyeComfortMode 
+                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800' 
+                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-200'
+                }`}
+              >
+                ❓ FAQ
+              </a>
             </div>
 
-            <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+            <div className={`pt-2 border-t ${eyeComfortMode ? 'border-slate-200' : 'border-slate-800/80'} flex flex-col gap-2`}>
               <button
                 type="button"
                 onClick={() => {
@@ -816,7 +893,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   setMobileMenuOpen(false);
                   onLaunchApp('home');
                 }}
-                className="w-full bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs"
               >
                 <Smartphone className="w-4 h-4" />
                 <span>{isMizo ? 'RonPay App Lut Rawh (Khualmi)' : 'Launch App as Guest User'}</span>

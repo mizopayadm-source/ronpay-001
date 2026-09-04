@@ -5,16 +5,13 @@ import {
   Camera, 
   Sparkles, 
   AlertTriangle, 
-  ShieldAlert, 
   Upload, 
-  Smartphone, 
   CheckCircle2, 
   RefreshCw, 
   Zap, 
   Image as ImageIcon, 
   Check,
-  RotateCcw,
-  Info
+  RotateCcw
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BawmCategory, Campaign } from '../types';
@@ -903,96 +900,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             title="Reset Scanner"
           >
             <RotateCcw className="w-3 h-3 text-slate-400" /> Clear / Reset
-          </button>
-        </div>
-      </div>
-
-      {/* Interactive Scan Simulator & Admin Approval Trigger Section */}
-      <div className="space-y-2 z-10 bg-slate-900/95 p-3 rounded-2xl border border-slate-800 shadow-2xl max-w-sm mx-auto w-full">
-        <p className="text-[9.5px] text-slate-400 font-extrabold uppercase text-center tracking-wider flex items-center justify-center gap-1">
-          <Info className="w-3 h-3 text-indigo-400" /> Quick Test & Bawm Simulators:
-        </p>
-
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            type="button"
-            onClick={() => handleRawDecodedData('upi://pay?pa=mizopay@axl&pn=Mizo%20Merchant&am=100')}
-            className="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] py-1.5 px-2 rounded-xl font-bold border border-indigo-500 flex items-center justify-center gap-1.5 cursor-pointer transition"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-amber-300" />
-            Scan Any External UPI QR (GPay / PhonePe / Paytm)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const c = campaigns.find(i => i.category === 'ralna' && i.status === 'active');
-              if (c) handleRawDecodedData(c.id);
-              else onScanResult({ type: 'ralna', campaign: c });
-            }}
-            className="bg-purple-950 hover:bg-purple-900 text-purple-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-purple-700/60 transition cursor-pointer text-center"
-          >
-            Scan Ralna QR
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const c = campaigns.find(i => i.category === 'khawlsak' && i.status === 'active');
-              if (c) handleRawDecodedData(c.id);
-              else onScanResult({ type: 'khawlsak', campaign: c });
-            }}
-            className="bg-emerald-950 hover:bg-emerald-900 text-emerald-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-emerald-700/60 transition cursor-pointer text-center"
-          >
-            Scan Khawlsak QR
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const c = campaigns.find(i => i.category === 'rikrum' && i.status === 'active');
-              if (c) handleRawDecodedData(c.id);
-              else onScanResult({ type: 'rikrum', campaign: c });
-            }}
-            className="bg-rose-950 hover:bg-rose-900 text-rose-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-rose-700/60 transition cursor-pointer text-center"
-          >
-            Scan Rikrum QR
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              const c = campaigns.find(i => i.category === 'kumtluang' && i.status === 'active');
-              if (c) handleRawDecodedData(c.id);
-              else onScanResult({ type: 'kumtluang', campaign: c });
-            }}
-            className="bg-blue-950 hover:bg-blue-900 text-blue-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-blue-700/60 transition cursor-pointer text-center"
-          >
-            Scan Kumtluang QR
-          </button>
-
-          {/* Pending Approval Test Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const pendingC = campaigns.find(i => i.status === 'pending_approval') || {
-                id: 'cmp-pending-demo',
-                category: 'ralna',
-                title: 'Pi Liani Ralna (Demo Pending)',
-                location: 'Dawrpui, Aizawl',
-                gpsCoords: '23.7271, 92.7176',
-                upiId: 'liani@axl',
-                validityDate: '2026-12-31',
-                status: 'pending_approval',
-                createdAt: new Date().toISOString(),
-              } as Campaign;
-
-              onScanResult({ type: 'pending', campaign: pendingC, rawText: pendingC.id });
-            }}
-            className="col-span-2 bg-amber-950 hover:bg-amber-900 text-amber-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-amber-700/60 transition cursor-pointer flex items-center justify-center gap-1"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-            Scan Creator QR (Waiting for Admin Approval)
           </button>
         </div>
       </div>
