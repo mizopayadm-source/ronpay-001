@@ -102,38 +102,40 @@ export const downloadFileUniversal = async (
   content: string | Blob,
   fileName: string,
   mimeType: string,
-  _title: string = 'RonPay Report'
+  title: string = 'RonPay Report'
 ): Promise<boolean> => {
   try {
     const blob = content instanceof Blob 
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
 
-    // Step 0: Check if Android Native WebView Bridge is available (Single clean trigger)
-    const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
-    if (androidBridge && typeof androidBridge.getBase64FromBlobData === 'function') {
+    // Step 1: Check Web Share API with files (Android / iOS / Mobile WebViews)
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64data = reader.result as string;
-          try {
-            androidBridge.getBase64FromBlobData(base64data, mimeType, fileName);
-          } catch (e) {
-            console.warn('Android bridge error', e);
-          }
-        };
-        reader.readAsDataURL(blob);
-        return true;
-      } catch (bridgeErr) {
-        console.warn('Error passing file to Android bridge:', bridgeErr);
+        const file = new File([blob], fileName, { type: mimeType.split(';')[0] });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: title || fileName,
+            text: `${title} - RonPay Report`,
+            files: [file],
+          });
+          return true;
+        }
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') {
+          return true; // User intentionally dismissed the share sheet
+        }
+        console.warn('Web Share API error, falling back to download link', shareErr);
       }
     }
 
-    // Step 1: Standard Single Blob Object URL
+    // Step 2: Standard Blob Object URL
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
     a.click();
 
@@ -144,7 +146,27 @@ export const downloadFileUniversal = async (
       } catch (e) {
         // ignore cleanup error
       }
-    }, 1000);
+    }, 1500);
+
+    // Step 3: Additional fallback for Android WebView which ignores blob URLs
+    if (typeof content === 'string') {
+      try {
+        const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
+        const fallbackA = document.createElement('a');
+        fallbackA.href = dataUri;
+        fallbackA.download = fileName;
+        fallbackA.target = '_blank';
+        document.body.appendChild(fallbackA);
+        fallbackA.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(fallbackA);
+          } catch (e) {}
+        }, 1000);
+      } catch (e) {
+        // ignore
+      }
+    }
 
     return true;
   } catch (err) {
@@ -315,8 +337,7 @@ export const buildKumtluangMatrix = (
  */
 export const buildGroupedDonorRecords = (
   transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc',
-  members?: MemberRecord[]
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
 ): GroupedDonorRecord[] => {
   const donorMap = new Map<string, {
     donorName: string;
@@ -429,28 +450,15 @@ export const buildGroupedDonorRecords = (
       new Set(d.datesList.map(dt => formatDateDDMMYYYY(dt)))
     );
 
-    // If member info is missing on transaction, attempt lookup from members directory
-    let memberId = d.memberId;
-    let section = d.section;
-    let phone = d.phone;
-    if (members && members.length > 0 && !d.isAnonymous) {
-      const match = members.find(m => m.name.toLowerCase().trim() === d.donorName.toLowerCase().trim());
-      if (match) {
-        if (!memberId) memberId = match.id;
-        if (!section) section = match.section;
-        if (!phone) phone = match.phoneLast4 || match.fullPhone;
-      }
-    }
-
     records.push({
       donorName: d.donorName,
       isAnonymous: d.isAnonymous,
-      memberId,
-      section,
-      phone,
-      donorMemberId: memberId,
-      donorSection: section,
-      donorPhone: phone,
+      memberId: d.memberId,
+      section: d.section,
+      phone: d.phone,
+      donorMemberId: d.memberId,
+      donorSection: d.section,
+      donorPhone: d.phone,
       paymentMethods: methodsArr,
       paymentMethodLabel: methodLabel,
       totalAmount: d.totalAmount,
@@ -1525,7 +1533,7 @@ export const generateTransactionsPDFHtml = (
   let tableFooterColspan = 4;
 
   if (shouldGroupByDonor) {
-    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder, options.members);
+    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder);
     tableFooterColspan = showDateTime ? 5 : 4;
 
     tableHeaderHtml = `

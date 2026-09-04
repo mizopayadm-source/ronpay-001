@@ -17,15 +17,12 @@ import {
   Send,
   Building2,
   Calendar,
-  RefreshCw,
-  Check,
-  CheckCircle2,
-  Clock
+  RefreshCw
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
-import { isCampaignCreator, saveTransaction, saveMultipleTransactions } from '../utils/storage';
+import { isCampaignCreator } from '../utils/storage';
 
 interface PeknaSulhnuModalProps {
   isOpen: boolean;
@@ -38,8 +35,6 @@ interface PeknaSulhnuModalProps {
   onNavigateToDonate?: () => void;
   onOpenScanner?: () => void;
   onRefreshData?: () => void;
-  onApproveTransaction?: (transaction: Transaction) => void;
-  onRejectTransaction?: (transaction: Transaction) => void;
 }
 
 // Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
@@ -73,14 +68,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onNavigateToDonate,
   onOpenScanner,
   onRefreshData,
-  onApproveTransaction,
-  onRejectTransaction,
 }) => {
-  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent' | 'pending'>('all');
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
@@ -158,82 +150,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return 'sent';
   };
 
-  // Pending cash verification transactions for this creator / admin
-  const pendingCashList = useMemo(() => {
-    return safeTransactions.filter(t => {
-      if (!t || (t.status !== 'pending_verification' && t.status !== 'pending')) return false;
-      if (creatorProfile?.isAdmin) return true;
-      const campId = t.campaignId ? String(t.campaignId) : '';
-      const campTitle = t.campaignTitle ? String(t.campaignTitle).toLowerCase().trim() : '';
-      return (campId && ownedCampaignIds.has(campId)) || (campTitle && ownedCampaignTitles.has(campTitle));
-    });
-  }, [safeTransactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile]);
-
-  const handleApproveInternal = (tx: Transaction) => {
-    const updated: Transaction = {
-      ...tx,
-      status: 'completed',
-      verifiedBy: creatorProfile?.name || (creatorProfile?.isAdmin ? 'Admin' : 'Creator'),
-      verifiedAt: new Date().toISOString(),
-    };
-    saveTransaction(updated);
-    if (onApproveTransaction) {
-      onApproveTransaction(updated);
-    }
-    if (onRefreshData) {
-      onRefreshData();
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
-      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
-    }
-    setActionFeedback(`✅ ₹${Number(tx.amount || 0).toLocaleString('en-IN')} (${tx.isAnonymous ? 'Anonymous' : tx.donorName || 'User'}) cash dawn hi i hmuhpui (Approved & Verified) fel ta!`);
-    setTimeout(() => setActionFeedback(null), 4500);
-  };
-
-  const handleRejectInternal = (tx: Transaction) => {
-    const updated: Transaction = {
-      ...tx,
-      status: 'rejected',
-      verifiedBy: creatorProfile?.name || (creatorProfile?.isAdmin ? 'Admin' : 'Creator'),
-      verifiedAt: new Date().toISOString(),
-    };
-    saveTransaction(updated);
-    if (onRejectTransaction) {
-      onRejectTransaction(updated);
-    }
-    if (onRefreshData) {
-      onRefreshData();
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
-      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
-    }
-    setActionFeedback(`❌ ₹${Number(tx.amount || 0).toLocaleString('en-IN')} cash donation hi hnawl (Rejected) a ni.`);
-    setTimeout(() => setActionFeedback(null), 4500);
-  };
-
-  const handleApproveAllPending = () => {
-    if (pendingCashList.length === 0) return;
-    const updatedList = pendingCashList.map(t => ({
-      ...t,
-      status: 'completed' as const,
-      verifiedBy: creatorProfile?.name || (creatorProfile?.isAdmin ? 'Admin' : 'Creator'),
-      verifiedAt: new Date().toISOString(),
-    }));
-    saveMultipleTransactions(updatedList);
-    updatedList.forEach(u => onApproveTransaction && onApproveTransaction(u));
-    if (onRefreshData) {
-      onRefreshData();
-    }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
-      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
-    }
-    setActionFeedback(`✅ Cash dawn zawng zawng (${pendingCashList.length}) i hmuhpui (Approved & Verified) fel vek ta!`);
-    setTimeout(() => setActionFeedback(null), 5000);
-  };
-
   const receivedCount = useMemo(() => {
     return safeTransactions.filter(t => getTxDirection(t) === 'received').length;
   }, [safeTransactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
@@ -246,9 +162,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const directionFiltered = useMemo(() => {
     return safeTransactions.filter(t => {
       if (!t) return false;
-      if (directionFilter === 'pending') {
-        return t.status === 'pending_verification' || t.status === 'pending';
-      }
       const dir = getTxDirection(t);
       if (directionFilter === 'received' && dir !== 'received') return false;
       if (directionFilter === 'sent' && dir !== 'sent') return false;
@@ -259,14 +172,10 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const filtered = useMemo(() => {
     return safeTransactions.filter(t => {
       if (!t) return false;
-      // 1. Direction / Status Filter
-      if (directionFilter === 'pending') {
-        if (t.status !== 'pending_verification' && t.status !== 'pending') return false;
-      } else {
-        const dir = getTxDirection(t);
-        if (directionFilter === 'received' && dir !== 'received') return false;
-        if (directionFilter === 'sent' && dir !== 'sent') return false;
-      }
+      // 1. Direction Filter (Received vs Sent)
+      const dir = getTxDirection(t);
+      if (directionFilter === 'received' && dir !== 'received') return false;
+      if (directionFilter === 'sent' && dir !== 'sent') return false;
 
       // 2. Category Filter
       const effectiveCategory = getEffectiveCategory(t);
@@ -420,28 +329,28 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       <div 
         id="pekna-sulhnu-card"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-2xl border border-slate-200 relative flex flex-col h-[94vh] sm:h-[90vh] max-h-[94vh] shrink-0 overflow-hidden"
+        className="bg-white w-full max-w-lg rounded-3xl p-4 sm:p-5 shadow-2xl border border-slate-200 relative flex flex-col h-full sm:h-[90vh] max-h-[90vh] shrink-0 overflow-hidden"
       >
-        {/* Header - Compact & Sticky */}
-        <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
-              <History className="w-4 h-4" />
+        {/* Header */}
+        <div className="flex justify-between items-center pb-3 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
+              <History className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm sm:text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
-                <span className="text-[8.5px] bg-indigo-100 text-indigo-800 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
+                <span className="text-[9px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
                   {creatorProfile?.isAdmin ? 'ADMIN CONSOLE' : isCreatorAccount ? 'CREATOR SULHNU' : 'KA SULHNU'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 font-medium truncate">
+              <p className="text-[10.5px] text-slate-500 font-medium truncate">
                 {currentUserName} {currentUserPhone ? `(${currentUserPhone})` : ''}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 ml-1">
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
             <button
               id="sulhnu-modal-refresh-btn"
               type="button"
@@ -451,7 +360,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 e.stopPropagation();
                 handleManualRefresh();
               }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition cursor-pointer"
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
@@ -464,16 +373,29 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 e.stopPropagation();
                 onClose();
               }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer"
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Creator Scope Switcher (Dawnte vs Thawhte vs Pending) - Sticky */}
-        {isCreatorAccount && (receivedCount > 0 || sentCount > 0 || pendingCashList.length > 0) && (
-          <div className={`grid ${pendingCashList.length > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-1 p-1 bg-slate-100 rounded-xl my-2 shrink-0 text-xs font-bold`}>
+        {/* User Identity / Privacy Badge */}
+        <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80 my-2 text-[10.5px] shrink-0">
+          <div className="flex items-center gap-1.5 text-slate-600 truncate">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="font-bold text-slate-800 truncate">{currentUserName}</span>
+            <span className="text-slate-400">•</span>
+            <span className="text-slate-500 truncate">{currentUserPhone || 'Active Account'}</span>
+          </div>
+          <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
+            SECURE & ISOLATED
+          </span>
+        </div>
+
+        {/* Creator Scope Switcher (Dawnte vs Thawhte) */}
+        {isCreatorAccount && (receivedCount > 0 || sentCount > 0) && (
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
             <button
               id="sulhnu-dir-all-btn"
               type="button"
@@ -482,14 +404,14 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 e.stopPropagation();
                 setDirectionFilter('all');
               }}
-              className={`py-1.5 rounded-lg transition text-[10.5px] sm:text-xs flex items-center justify-center gap-1 cursor-pointer ${
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'all'
                   ? 'bg-white text-indigo-950 font-black shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <span>Zawng zawng</span>
-              <span className="text-[9px] bg-slate-200 text-slate-700 px-1 py-0.2 rounded-full font-black">
+              <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full font-black">
                 {transactions.length}
               </span>
             </button>
@@ -502,7 +424,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 e.stopPropagation();
                 setDirectionFilter('received');
               }}
-              className={`py-1.5 rounded-lg transition text-[10.5px] sm:text-xs flex items-center justify-center gap-1 cursor-pointer ${
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'received'
                   ? 'bg-emerald-600 text-white font-black shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -510,7 +432,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             >
               <Inbox className="w-3 h-3" />
               <span>Bawm Dawnte</span>
-              <span className={`text-[9px] px-1 py-0.2 rounded-full font-black ${
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
                 directionFilter === 'received' ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
               }`}>
                 {receivedCount}
@@ -525,7 +447,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 e.stopPropagation();
                 setDirectionFilter('sent');
               }}
-              className={`py-1.5 rounded-lg transition text-[10.5px] sm:text-xs flex items-center justify-center gap-1 cursor-pointer ${
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
                 directionFilter === 'sent'
                   ? 'bg-indigo-600 text-white font-black shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -533,225 +455,93 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             >
               <Send className="w-3 h-3" />
               <span>Ka Thawhte</span>
-              <span className={`text-[9px] px-1 py-0.2 rounded-full font-black ${
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
                 directionFilter === 'sent' ? 'bg-indigo-800 text-white' : 'bg-slate-200 text-slate-700'
               }`}>
                 {sentCount}
               </span>
             </button>
-
-            {pendingCashList.length > 0 && (
-              <button
-                id="sulhnu-dir-pending-btn"
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDirectionFilter('pending');
-                  setFilterCategory('all');
-                }}
-                className={`py-1.5 rounded-lg transition text-[10.5px] sm:text-xs flex items-center justify-center gap-1 cursor-pointer ${
-                  directionFilter === 'pending'
-                    ? 'bg-amber-500 text-white font-black shadow-xs ring-2 ring-amber-300'
-                    : 'text-amber-950 bg-amber-200 hover:bg-amber-300 border border-amber-300 font-extrabold'
-                }`}
-              >
-                <Clock className="w-3 h-3" />
-                <span>Pending</span>
-                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
-                  directionFilter === 'pending' ? 'bg-amber-700 text-white' : 'bg-amber-600 text-white animate-pulse'
-                }`}>
-                  {pendingCashList.length}
-                </span>
-              </button>
-            )}
           </div>
         )}
 
-        {/* Action Feedback Toast */}
-        {actionFeedback && (
-          <div className="bg-emerald-700 text-white p-2.5 rounded-xl mb-2 text-xs font-black flex items-center justify-between gap-2 shadow-lg animate-fadeIn border border-emerald-500 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
-              <span className="truncate">{actionFeedback}</span>
+        {/* Summary Card */}
+        <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3.5 text-white mb-2.5 shrink-0 shadow-md border border-indigo-800 flex justify-between items-center">
+          <div>
+            <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">
+              {directionFilter === 'received' ? 'Bawm Sum Dawn Zat (Received Total)' :
+               directionFilter === 'sent' ? 'I Pek/Thawh Zat (Your Giving Total)' :
+               'Sulhnu Sum Zat Zawng Zawng'}
+            </span>
+            <div className="text-2xl font-black text-amber-400">
+              ₹{totalAmount.toLocaleString('en-IN')}
             </div>
-            <button
-              type="button"
-              onClick={() => setActionFeedback(null)}
-              className="p-1 hover:bg-emerald-800 rounded-lg text-emerald-100 cursor-pointer shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
           </div>
-        )}
+          <div className="text-right">
+            <span className="text-[10px] text-indigo-200 font-bold">Thawh Zat (Entries)</span>
+            <div className="text-lg font-black text-white">{filtered.length} entries</div>
+          </div>
+        </div>
 
-        {/* Scrollable Container for all content */}
-        <div className="overflow-y-auto flex-1 min-h-0 space-y-2.5 pr-0.5 sm:pr-1 text-xs">
-          {directionFilter === 'pending' ? (
-            /* Dedicated Cash Verification View */
-            <div className="space-y-2.5">
-              <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center font-black shrink-0">
-                    <Clock className="w-4 h-4 text-white animate-spin" />
-                  </div>
-                  <div>
-                    <div className="text-xs sm:text-sm font-black tracking-wide flex items-center gap-1.5">
-                      <span>Pawisa Fai (Cash) Hmuhpui Tur ({pendingCashList.length})</span>
-                    </div>
-                    <div className="text-[10px] sm:text-[10.5px] text-amber-100 font-medium">
-                      Belhkhawm: ₹{totalAmount.toLocaleString('en-IN')} • Bawm dawngtuin a pawisa dawn ngei hmuhpui turte
-                    </div>
-                  </div>
-                </div>
-                {pendingCashList.length > 0 && (
+        {/* Search & Filter Bar */}
+        <div className="space-y-2 mb-3 shrink-0">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              id="sulhnu-search-input"
+              type="text"
+              placeholder="Search by Bawm, Donor name, Phone or Period..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none transition"
+            />
+          </div>
+
+          {/* Category Tabs with Smooth Scroll */}
+          <div className="relative group">
+            <div className="flex gap-1.5 overflow-x-auto pb-2 pt-0.5 text-xs scroll-smooth scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-slate-100">
+              {[
+                { key: 'all', label: 'All Categories', count: directionFiltered.length },
+                { key: 'ralna', label: 'Ralna Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'ralna').length },
+                { key: 'khawlsak', label: 'Khawlsak Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'khawlsak').length },
+                { key: 'rikrum', label: 'Rikrum Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'rikrum').length },
+                { key: 'kumtluang', label: 'Kumtluang Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'kumtluang').length },
+                { key: 'others', label: 'Others (Bills/Recharge)', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'others').length },
+              ].map(tab => {
+                const isActive = filterCategory === tab.key;
+                return (
                   <button
+                    key={tab.key}
+                    id={`sulhnu-tab-${tab.key}`}
                     type="button"
-                    onClick={handleApproveAllPending}
-                    className="bg-white hover:bg-emerald-50 text-emerald-900 font-black text-xs px-3.5 py-2 rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition cursor-pointer self-stretch sm:self-auto"
-                    title="Approve all pending cash donations at once"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setFilterCategory(tab.key);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold text-[11px] whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                    isActive
+                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 border border-slate-200/80'
+                    }`}
                   >
-                    <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
-                    <span>Hmuhpui Vek Rawh ({pendingCashList.length})</span>
+                    <span>{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-black ${
+                        isActive ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
                   </button>
-                )}
-              </div>
-
-              {pendingCashList.length > 3 && (
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    id="sulhnu-pending-search-input"
-                    type="text"
-                    placeholder="Search pending by Donor name, Phone or Amount..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-              )}
+                );
+              })}
             </div>
-          ) : (
-            /* Regular History View */
-            <div className="space-y-2.5">
-              {/* Reminder Banner if cash is pending */}
-              {pendingCashList.length > 0 && (
-                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Clock className="w-4 h-4 text-amber-600 shrink-0 animate-spin" />
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-black text-amber-950 truncate">
-                        Cash Dawn Finfiah Tur ({pendingCashList.length}) A Awm E!
-                      </div>
-                      <div className="text-[9.5px] text-amber-800 truncate">
-                        Bawm-ah pawisa fai thehluh a ni a, lo hmuhpui (approve) rawh le.
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDirectionFilter('pending');
-                        setFilterCategory('all');
-                      }}
-                      className="bg-amber-500 hover:bg-amber-600 text-white font-black text-[10.5px] px-2.5 py-1.5 rounded-xl cursor-pointer transition shadow-2xs flex items-center gap-1 active:scale-95"
-                    >
-                      <span>Pending En Rawh</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleApproveAllPending}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10.5px] px-2.5 py-1.5 rounded-xl cursor-pointer transition shadow-2xs flex items-center gap-1 active:scale-95"
-                    >
-                      <Check className="w-3 h-3 stroke-[3]" />
-                      <span>Hmuhpui Vek</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+          </div>
+        </div>
 
-              {/* Summary Card */}
-              <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3 text-white shadow-md border border-indigo-800 flex justify-between items-center">
-                <div>
-                  <span className="text-[9.5px] text-indigo-300 font-bold uppercase tracking-wider">
-                    {directionFilter === 'received' ? 'Bawm Sum Dawn Zat (Received Total)' :
-                     directionFilter === 'sent' ? 'I Pek/Thawh Zat (Your Giving Total)' :
-                     'Sulhnu Sum Zat Zawng'}
-                  </span>
-                  <div className="text-xl font-black text-amber-400">
-                    ₹{totalAmount.toLocaleString('en-IN')}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[9.5px] text-indigo-200 font-bold">Thawh Zat (Entries)</span>
-                  <div className="text-base font-black text-white">{filtered.length} entries</div>
-                </div>
-              </div>
-
-              {/* Search & Filter Bar */}
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    id="sulhnu-search-input"
-                    type="text"
-                    placeholder="Search by Bawm, Donor name, Phone or Period..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none transition"
-                  />
-                </div>
-
-                {/* Category Tabs with Smooth Scroll */}
-                <div className="relative group">
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 pt-0.5 text-xs scroll-smooth scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-slate-100">
-                    {[
-                      { key: 'all', label: 'All Categories', count: directionFiltered.length },
-                      { key: 'ralna', label: 'Ralna Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'ralna').length },
-                      { key: 'khawlsak', label: 'Khawlsak Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'khawlsak').length },
-                      { key: 'rikrum', label: 'Rikrum Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'rikrum').length },
-                      { key: 'kumtluang', label: 'Kumtluang Bawm', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'kumtluang').length },
-                      { key: 'others', label: 'Others (Bills/Recharge)', count: directionFiltered.filter(t => getEffectiveCategory(t) === 'others').length },
-                    ].map(tab => {
-                      const isActive = filterCategory === tab.key;
-                      return (
-                        <button
-                          key={tab.key}
-                          id={`sulhnu-tab-${tab.key}`}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setFilterCategory(tab.key);
-                          }}
-                          className={`px-2.5 py-1 rounded-xl font-extrabold text-[10.5px] whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
-                          isActive
-                              ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 border border-slate-200/80'
-                          }`}
-                        >
-                          <span>{tab.label}</span>
-                          {tab.count > 0 && (
-                            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
-                              isActive ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200 text-slate-600'
-                            }`}>
-                              {tab.count}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* List of Donations */}
-          <div className="space-y-2.5 pt-1">
+        {/* List of Donations */}
+        <div className="overflow-y-auto flex-1 min-h-0 space-y-2.5 pr-1 text-xs">
           {filtered.length === 0 ? (
             <div className="text-center py-8 px-4 space-y-3 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl my-auto">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto border border-indigo-100 shadow-xs">
@@ -831,18 +621,15 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               const isOthers = effectiveCat === 'others';
               const direction = getTxDirection(tx);
               const isReceived = direction === 'received';
-              const isPendingTx = tx.status === 'pending_verification' || tx.status === 'pending';
 
               return (
                 <div
                   key={tx.id}
                   id={`sulhnu-item-${tx.id}`}
-                  className={`p-3 rounded-2xl border-2 transition space-y-2 ${
-                    isPendingTx
-                      ? 'bg-amber-50/90 border-amber-400 shadow-md ring-1 ring-amber-300'
-                      : isReceived 
-                        ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-emerald-200' 
-                        : 'bg-slate-50 hover:bg-indigo-50/40 border-slate-200 hover:border-indigo-300'
+                  className={`p-3 rounded-2xl border transition space-y-2 ${
+                    isReceived 
+                      ? 'bg-emerald-50/40 hover:bg-emerald-50/70 border-emerald-200' 
+                      : 'bg-slate-50 hover:bg-indigo-50/40 border-slate-200 hover:border-indigo-300'
                   }`}
                 >
                   <div className="flex justify-between items-start">
@@ -949,24 +736,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                           <span>Cash</span>
                         </span>
                       )}
-                      {tx.status === 'completed' ? (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                          <span>Verified</span>
-                        </span>
-                      ) : (tx.status === 'pending_verification' || tx.status === 'pending') ? (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
-                          <Clock className="w-2.5 h-2.5 text-amber-600" />
-                          <span>Cash Pending</span>
-                        </span>
-                      ) : tx.status === 'rejected' ? (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-200">
-                          <X className="w-2.5 h-2.5 text-rose-600" />
-                          <span>Rejected</span>
-                        </span>
-                      ) : (
-                        <span className="text-[9px] font-bold text-slate-400">• {tx.status}</span>
-                      )}
+                      <span className="text-[9px] font-bold text-slate-400">
+                        {tx.status === 'completed' ? '• Verified' : '• Pending'}
+                      </span>
                     </div>
 
                     <button
@@ -983,65 +755,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                       Print Receipt
                     </button>
                   </div>
-
-                  {/* Cash Pending Approval Action Block */}
-                  {isPendingTx && (
-                    <>
-                      {/* If viewer is Creator or Admin of this campaign, show instant Approve button */}
-                      {(creatorProfile?.isAdmin || isCreatorAccount || (tx.campaignId && ownedCampaignIds.has(tx.campaignId)) || (tx.campaignTitle && ownedCampaignTitles.has(String(tx.campaignTitle).toLowerCase().trim()))) ? (
-                        <div className="bg-gradient-to-r from-amber-100 to-orange-100 border-2 border-amber-400 p-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mt-2 shadow-sm">
-                          <div>
-                            <div className="text-xs text-amber-950 font-black flex items-center gap-1.5">
-                              <Banknote className="w-4 h-4 text-emerald-700" />
-                              <span>💵 Cash i dawng ngei em? Hmuhpui (Approve) rawh le:</span>
-                            </div>
-                            <div className="text-[10.5px] text-amber-900 font-medium mt-0.5">
-                              Pawisa fai i kutah a lut ngei a nih chuan Hmuhpui (Approve) hmet rawh.
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 self-stretch sm:self-auto">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleApproveInternal(tx);
-                              }}
-                              className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs sm:text-sm px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer transition border border-emerald-500"
-                            >
-                              <Check className="w-4 h-4 stroke-[3]" />
-                              <span>✓ Hmuhpui (Approve)</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleRejectInternal(tx);
-                              }}
-                              className="bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 font-extrabold text-xs px-3 py-2.5 rounded-xl flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              <span>Hnar</span>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-[10.5px] text-amber-900 flex items-center gap-2 mt-1.5 font-medium">
-                          <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>He Cash pek luh hi Creator hmuhpui (verification) a la nghak mek a ni.</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Verified Information */}
-                  {tx.status === 'completed' && (
-                    <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1 mt-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Verified: Creator / Admin-in pawisa dawn hi a lo hmuhpui (verified) fel tawh e {tx.verifiedBy ? `(${tx.verifiedBy})` : ''}</span>
-                    </div>
-                  )}
                 </div>
               );
             })
@@ -1049,6 +762,5 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         </div>
       </div>
     </div>
-  </div>
   );
 };

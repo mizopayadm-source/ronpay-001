@@ -189,13 +189,29 @@ export const getStoredCampaigns = (): Campaign[] => {
           camp && camp.id && !deletedIds.has(String(camp.id).toLowerCase().trim())
         );
 
+        let cleanedLegacy = false;
         const mapped = validParsed.map((camp: Campaign) => {
-          if (!camp.orgCode) {
+          let updatedCamp = { ...camp };
+          if (!updatedCamp.orgCode) {
             const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
             const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-            return { ...camp, orgCode: derived };
+            updatedCamp.orgCode = derived;
           }
-          return camp;
+          // Clean up legacy hardcoded demo sections if present from old app state
+          const secs = updatedCamp.definedSections;
+          if (Array.isArray(secs)) {
+            const str = JSON.stringify(secs);
+            if (
+              str === JSON.stringify(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']) ||
+              str === JSON.stringify(['Bial I (Khatla South)', 'Bial II (Khatla North)', 'Bial III (Khatla East)', 'Bial IV (Khatla West)', 'General / Khawchhung']) ||
+              str === JSON.stringify(['Section A (Vengthar)', 'Section B (Vengthar)', 'Section C (Vengthar)', 'Section D (Vengthar)', 'General'])
+            ) {
+              delete updatedCamp.definedSections;
+              delete updatedCamp.sectionLabel;
+              cleanedLegacy = true;
+            }
+          }
+          return updatedCamp;
         });
 
         // Smart merge: ensure default initial campaigns exist unless explicitly deleted
@@ -216,7 +232,7 @@ export const getStoredCampaigns = (): Campaign[] => {
           return timeB - timeA;
         });
 
-        if (hasNew || mapped.length !== parsed.length) {
+        if (hasNew || mapped.length !== parsed.length || cleanedLegacy) {
           localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sorted));
         }
 
@@ -517,9 +533,9 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
 };
 
 export const GUEST_CREATOR_PROFILE: CreatorProfile = {
-  name: 'Khualmi (Guest User)',
+  name: 'RonPay User',
   orgName: 'RonPay Community',
-  designation: 'Khualmi / User',
+  designation: 'Standard User',
   phone: '',
   isPhoneVerified: false,
   isApproved: false,
@@ -558,8 +574,9 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  // Default when entering app: Khualmi (Guest User)
-  return GUEST_CREATOR_PROFILE;
+  // First time app launch: initialize default creator
+  saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
+  return DEFAULT_INITIAL_CREATOR;
 };
 
 export const logoutCreator = (): CreatorProfile => {
@@ -1642,6 +1659,52 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   }
 };
 
+export const deleteMemberWithTransactions = (
+  memberId: string, 
+  campaignId?: string
+): { deletedMember: boolean; deletedTxCount: number } => {
+  if (!memberId) return { deletedMember: false, deletedTxCount: 0 };
+  const cleanMemberId = memberId.trim().toLowerCase();
+  
+  // 1. Delete the member record
+  deleteMember(memberId, campaignId);
+  
+  // 2. Find and delete all matching transactions for this member
+  const allTxs = getStoredTransactions();
+  const txsToDelete = allTxs.filter(t => {
+    if (!t) return false;
+    const tMemberId = (t.memberId || '').trim().toLowerCase();
+    const tRemark = (t.remark || '').trim().toLowerCase();
+    const tRef = (t.referenceNo || '').trim().toLowerCase();
+    const tHash = (t.txHash || '').trim().toLowerCase();
+    
+    // Check exact member ID
+    if (tMemberId && tMemberId === cleanMemberId) return true;
+    // Check remark, ref, hash containing member ID
+    if (tRemark && tRemark.includes(cleanMemberId)) return true;
+    if (tRef && tRef.includes(cleanMemberId)) return true;
+    if (tHash && tHash.includes(cleanMemberId)) return true;
+    
+    return false;
+  });
+  
+  if (txsToDelete.length > 0) {
+    deleteMultipleTransactions(txsToDelete.map(t => t.id));
+  }
+  
+  return { deletedMember: true, deletedTxCount: txsToDelete.length };
+};
+
+export const deleteMembersOfCampaign = (campaignId: string): void => {
+  if (!campaignId) return;
+  const cleanId = String(campaignId).trim().toLowerCase();
+  const allMembers = getMembers('all');
+  const membersToDelete = allMembers.filter(m => String(m.campaignId || '').trim().toLowerCase() === cleanId);
+  membersToDelete.forEach(m => {
+    deleteMember(m.id, campaignId);
+  });
+};
+
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
   if (!campaignId || !newPrefix) return 0;
   const cleanOld = (oldPrefix || '').trim().toUpperCase();
@@ -1774,41 +1837,6 @@ export const deleteStoredTransaction = (transactionId: string): void => {
       body: JSON.stringify({ reason: 'Deleted by user / admin' })
     }).catch(() => {});
   }
-};
-
-export const deleteMemberWithTransactions = (
-  memberId: string,
-  campaignId?: string
-): { deletedTxCount: number; deletedMemberId: string } => {
-  if (!memberId) return { deletedTxCount: 0, deletedMemberId: '' };
-
-  const cleanMemberId = (memberId || '').trim().toLowerCase();
-  const allTxs = getStoredTransactions();
-  const matchingTxs = allTxs.filter(t => {
-    if (!t) return false;
-    if (campaignId && t.campaignId && t.campaignId !== campaignId) return false;
-    const tMemberId = (t.memberId || '').trim().toLowerCase();
-    const tRemark = (t.remark || '').trim().toLowerCase();
-    const tRef = (t.referenceNo || '').trim().toLowerCase();
-    const tHash = (t.txHash || '').trim().toLowerCase();
-    return (
-      (tMemberId && tMemberId === cleanMemberId) ||
-      (tRemark && tRemark.includes(cleanMemberId)) ||
-      (tRef && tRef.includes(cleanMemberId)) ||
-      (tHash && tHash.includes(cleanMemberId))
-    );
-  });
-
-  matchingTxs.forEach(t => {
-    deleteStoredTransaction(t.id);
-  });
-
-  deleteMember(memberId, campaignId);
-
-  return {
-    deletedTxCount: matchingTxs.length,
-    deletedMemberId: memberId
-  };
 };
 
 const WALLET_KEY = 'ronpay_wallet_v1';

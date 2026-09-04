@@ -20,8 +20,7 @@ import {
   AlertCircle,
   User,
   LogIn,
-  KeyRound,
-  Globe
+  KeyRound
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
@@ -144,7 +143,6 @@ function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  currentScreen,
   onNavigate,
   onOpenScanner,
   onOpenReports,
@@ -346,26 +344,11 @@ export const Header: React.FC<HeaderProps> = ({
       }
     };
 
-    const runGeolocation = (highAccuracy: boolean) => {
-      navigator.geolocation.getCurrentPosition(
-        handleSuccess,
-        (err) => {
-          if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
-            // Fast automatic retry with low accuracy (cell tower / Wi-Fi)
-            runGeolocation(false);
-          } else {
-            handleError(err);
-          }
-        },
-        { 
-          enableHighAccuracy: highAccuracy, 
-          timeout: highAccuracy ? 10000 : 8000, 
-          maximumAge: 30000 
-        }
-      );
-    };
-
-    runGeolocation(true);
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      handleError,
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
+    );
   }, []);
 
   // Quick select explicit location
@@ -408,11 +391,10 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 relative z-10">
         {/* Main Row: Brand & Quick Action Controls */}
         <div className="flex items-center justify-between gap-2 w-full">
-          {/* Brand Logo & Title - Navigates to Website / Home */}
+          {/* Brand Logo & Title */}
           <button 
             type="button"
-            onClick={() => onNavigate('website')}
-            title="RonPay Home / Landing Page (Website)"
+            onClick={() => onNavigate('home')}
             className="flex items-center gap-2 group transition cursor-pointer shrink-0 focus:outline-none text-left"
           >
             {/* Logo Squircle */}
@@ -485,18 +467,6 @@ export const Header: React.FC<HeaderProps> = ({
                 EN
               </button>
             </div>
-
-            {/* Official Website / Landing Page Switcher */}
-            <button
-              type="button"
-              id="header-website-btn"
-              onClick={() => onNavigate('website')}
-              title="RonPay Official Website / Landing Page-ah Kir Rawh"
-              className="h-7 sm:h-8 px-2 rounded-lg border flex items-center justify-center gap-1 text-[9.5px] sm:text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs bg-slate-900 border-purple-500/40 hover:border-purple-400 text-purple-200 hover:text-white"
-            >
-              <Globe className="w-3.5 h-3.5 text-purple-400" />
-              <span>Website</span>
-            </button>
 
             {/* Viewport Toggle (Desktop / Mobile Frame - Hidden on small mobile screens to save space) */}
             <button

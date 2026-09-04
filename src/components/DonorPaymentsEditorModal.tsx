@@ -49,16 +49,7 @@ interface DonorPaymentsEditorModalProps {
   isKumtluang?: boolean;
   memberRecord?: MemberRecord | null;
   onClose: () => void;
-  onSaveAll: (
-    updatedTransactions: Transaction[], 
-    deletedTransactionIds: string[],
-    donorProfile?: {
-      name: string;
-      memberId?: string;
-      phone?: string;
-      section?: string;
-    }
-  ) => void;
+  onSaveAll: (updatedTransactions: Transaction[], deletedTransactionIds: string[]) => void;
   onDeleteAll?: () => void;
 }
 
@@ -340,12 +331,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       };
     });
 
-    onSaveAll(finalTransactions, deletedIds, {
-      name: currentDonorName.trim(),
-      memberId: currentMemberId.trim() || undefined,
-      phone: currentPhone.trim() || undefined,
-      section: currentSection.trim() || undefined,
-    });
+    onSaveAll(finalTransactions, deletedIds);
     onClose();
   };
 

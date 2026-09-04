@@ -23,7 +23,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { downloadFileUniversal } from '../utils/export';
-import { exportElementToPDF, executePrintSafely, triggerFileDownload, PDFExportResult } from '../utils/pdfGenerator';
+import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
 
 export interface PrintModalData {
   html: string;
@@ -194,16 +194,13 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     }
   }, [modalData]);
 
-  // Helper to ensure real PDF is generated before sharing or saving
-  const ensurePdfReady = async (customStatus?: string): Promise<PDFExportResult | null> => {
-    if (pdfSuccessResult && pdfSuccessResult.blob && pdfSuccessResult.file) {
-      return pdfSuccessResult;
-    }
+  // Direct Client-Side Real PDF (.pdf) Generator & Downloader
+  const handleSaveAsPDF = async () => {
     const rootElement = printableRootRef.current || document.getElementById('ronpay-printable-preview-root');
-    if (!rootElement || !modalData) return null;
+    if (!rootElement || !modalData) return;
 
     setIsGeneratingPdf(true);
-    setPdfStatusText(customStatus || 'PDF buatsaih mek a ni...');
+    setPdfSuccessResult(null);
 
     const cleanTitle = (modalData.docTitle || 'RonPay_Statement')
       .replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -218,122 +215,72 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
       if (result.success) {
         setPdfSuccessResult(result);
-        return result;
+      } else {
+        // Fallback to HTML document download
+        handleDownloadHTML();
       }
-      return null;
     } catch (err) {
-      console.error('ensurePdfReady error', err);
-      return null;
+      console.error('PDF export error', err);
+      handleDownloadHTML();
     } finally {
       setIsGeneratingPdf(false);
       setPdfStatusText('');
     }
   };
 
-  // Direct Client-Side Real PDF (.pdf) Generator & Downloader
-  const handleSaveAsPDF = async () => {
-    setIsGeneratingPdf(true);
-    setPdfSuccessResult(null);
-
-    const result = await ensurePdfReady('PDF buatsaih & save mek a ni...');
-    if (!result || !result.success) {
-      handleDownloadHTML();
-      return;
-    }
-
-    // Direct single download execution (Android bridge or Browser download)
-    if (result.blob) {
-      await triggerFileDownload(result.blob, result.fileName, result.dataUri);
-      setWaToast('PDF Download mek a ni...');
-      setTimeout(() => setWaToast(''), 3000);
-    }
-  };
-
-  // Re-download or open generated PDF on mobile
-  const handleDownloadAgain = async () => {
-    if (pdfSuccessResult?.blob) {
-      await triggerFileDownload(pdfSuccessResult.blob, pdfSuccessResult.fileName, pdfSuccessResult.dataUri);
-      setWaToast('PDF download nawn a ni e!');
-      setTimeout(() => setWaToast(''), 2500);
-    }
-  };
-
-  const handleOpenPdfPreview = () => {
+  // Open generated PDF or re-download on mobile
+  const handleOpenPdfBlob = () => {
     if (pdfSuccessResult?.blobUrl) {
-      window.open(pdfSuccessResult.blobUrl, '_blank');
+      const a = document.createElement('a');
+      a.href = pdfSuccessResult.blobUrl;
+      a.download = pdfSuccessResult.fileName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+        } catch {}
+      }, 1000);
     }
   };
 
-  // Universal WhatsApp Share Trigger - Shares ACTUAL PDF FILE into WhatsApp + rich summary
+  // Universal WhatsApp Share Trigger (Always available)
   const handleShareToWhatsApp = async () => {
-    const title = documentSummary.title || modalData?.docTitle || 'RonPay Financial Statement';
+    const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement PDF';
     const cleanDate = new Date().toLocaleDateString('en-GB');
-    const totalText = documentSummary.total ? `\n💰 Pek Tlingkhawm Total: *${documentSummary.total}*` : '';
+    const totalText = documentSummary.total ? `\n💰 Total: *${documentSummary.total}*` : '';
     
     const summaryText = `*RonPay Financial Report*\n📄 Document: *${title}*${totalText}\n📅 Ni thla: ${cleanDate}\n\n_RonPay Community & Church Portal atanga generate a ni e._`;
 
-    // Ensure real PDF file is generated
-    const result = await ensurePdfReady('WhatsApp-a thawn tur PDF buatsaih mek a ni...');
-    if (!result) return;
-
-    // 0. Android Native APK WhatsApp PDF File Share Bridge
-    const androidBridge = (window as any).AndroidBlobDownloader || (window as any).RonPayBridge || (window as any).AndroidDownloader;
-    if (androidBridge && typeof androidBridge.shareFileToWhatsApp === 'function') {
-      try {
-        if (result.dataUri) {
-          androidBridge.shareFileToWhatsApp(result.dataUri, 'application/pdf', result.fileName, summaryText);
-          setWaToast('WhatsApp PDF share a in hawng mek e...');
-          setTimeout(() => setWaToast(''), 3000);
-          return;
-        } else if (result.blob) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64data = reader.result as string;
-            androidBridge.shareFileToWhatsApp(base64data, 'application/pdf', result.fileName, summaryText);
-          };
-          reader.readAsDataURL(result.blob);
-          setWaToast('WhatsApp PDF share a in hawng mek e...');
-          setTimeout(() => setWaToast(''), 3000);
-          return;
-        }
-      } catch (bridgeShareErr) {
-        console.warn('Android bridge WhatsApp share error:', bridgeShareErr);
+    // 1. Copy summary text to clipboard
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(summaryText);
+        setWaToast('Summary text copy a ni e! WhatsApp a in hawng mek...');
+        setTimeout(() => setWaToast(''), 3000);
       }
-    }
+    } catch {}
 
-    // 1. Native Web Share with PDF File (Standard on iOS & Chrome Mobile)
-    if (result?.file && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    // 2. Try Native Web Share with file if PDF is ready
+    if (pdfSuccessResult?.blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        if (navigator.canShare({ files: [result.file] })) {
+        const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: `${title} (PDF)`,
+            title,
             text: summaryText,
-            files: [result.file],
+            files: [file],
           });
-          setWaToast('PDF File WhatsApp-ah thawn fel a ni e!');
-          setTimeout(() => setWaToast(''), 3000);
           return;
         }
       } catch (err: any) {
         if (err?.name === 'AbortError') return;
-        console.warn('Native file share failed, falling back to web link', err);
       }
     }
 
-    // 2. Fallback for Desktop WhatsApp Web:
-    // Download the PDF file once so the user has it ready
-    if (result?.blob) {
-      triggerFileDownload(result.blob, result.fileName, result.dataUri);
-    }
-
-    // Copy summary text to clipboard
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(summaryText);
-      }
-    } catch {}
-
-    // Open WhatsApp Web with summary text
+    // 3. Direct WhatsApp URI (works across Android WhatsApp app, iOS, and WhatsApp Web)
     try {
       const encoded = encodeURIComponent(summaryText);
       const waUrl = `https://wa.me/?text=${encoded}`;
@@ -348,8 +295,6 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           document.body.removeChild(waLink);
         } catch {}
       }, 1000);
-      setWaToast('WhatsApp a in hawng mek e!');
-      setTimeout(() => setWaToast(''), 3500);
     } catch (e) {
       console.warn('WhatsApp launch error', e);
     }
@@ -361,15 +306,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     const cleanDate = new Date().toLocaleDateString('en-GB');
     const summaryText = `*${title}*\n📅 Date: ${cleanDate}\n${documentSummary.total ? `💰 Total: ${documentSummary.total}` : ''}`;
 
-    const result = await ensurePdfReady('Report buatsaih mek a ni...');
-
-    if (result?.file && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    if (pdfSuccessResult?.blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        if (navigator.canShare({ files: [result.file] })) {
+        const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             title,
             text: summaryText,
-            files: [result.file],
+            files: [file],
           });
           return;
         }
@@ -390,7 +334,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       }
     }
 
-    // Fallback: trigger WhatsApp share
+    // Fallback: trigger PDF generate & WhatsApp share
     handleShareToWhatsApp();
   };
 
@@ -786,36 +730,25 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            {pdfSuccessResult.blob && (
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {pdfSuccessResult.blobUrl && (
               <button
-                onClick={handleDownloadAgain}
+                onClick={handleOpenPdfBlob}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
                 title="Download another copy"
               >
                 <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Save / Download</span>
-              </button>
-            )}
-
-            {pdfSuccessResult.blobUrl && (
-              <button
-                onClick={handleOpenPdfPreview}
-                className="hidden xs:flex items-center justify-center gap-1 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 font-bold px-2.5 py-1.5 rounded-xl text-xs border border-emerald-600/60 transition cursor-pointer"
-                title="Open and preview PDF in browser"
-              >
-                <FileText className="w-3.5 h-3.5 text-emerald-300" />
-                <span>Preview</span>
+                <span>Download Nawn</span>
               </button>
             )}
 
             <button
               onClick={handleShareToWhatsApp}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-emerald-900/50 transition cursor-pointer"
-              title="Share PDF file directly to WhatsApp"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-emerald-900/50 transition cursor-pointer"
+              title="Share report summary and status to WhatsApp"
             >
-              <MessageCircle className="w-3.5 h-3.5 text-slate-950 fill-slate-950" />
-              <span>WhatsApp PDF Thawn</span>
+              <MessageCircle className="w-3.5 h-3.5 text-white" />
+              <span>WhatsApp Share</span>
             </button>
 
             <button

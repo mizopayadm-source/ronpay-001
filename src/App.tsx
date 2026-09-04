@@ -13,7 +13,6 @@ import {
 } from './types';
 import { Language } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
-import { BILL_SERVICES } from './data/initialData';
 import {
   getStoredCampaigns,
   saveStoredCampaigns,
@@ -69,7 +68,6 @@ import { SuccessScreen } from './components/SuccessScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BottomNav } from './components/BottomNav';
-import { RonPayWebsite } from './components/RonPayWebsite';
 
 // Modals
 import { QRScannerModal } from './components/QRScannerModal';
@@ -77,7 +75,6 @@ import { QRShareModal } from './components/QRShareModal';
 import { GeneratedQRModal } from './components/GeneratedQRModal';
 import { ProfileModal } from './components/ProfileModal';
 import { PeknaSulhnuModal } from './components/PeknaSulhnuModal';
-import { NotificationsModal } from './components/NotificationsModal';
 import { PhonePeModal } from './components/PhonePeModal';
 import { BillPaymentModal } from './components/BillPaymentModal';
 import { AdminDashboardModal } from './components/AdminDashboardModal';
@@ -99,16 +96,14 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { getUrlRoute, updateBrowserUrl } from './utils/urlRouting';
 
 export default function App() {
+  // Splash screen state for smooth UX
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
 
-  // Navigation & View States: Default to website on root / main domain
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'website');
-
-  // Splash screen state for smooth UX - only display when opening the app directly
-  const [showSplash, setShowSplash] = useState<boolean>(() => {
-    return !!(initialRoute?.screen && initialRoute.screen !== 'website');
-  });
+  // Navigation & View States
+  const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'home');
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
@@ -162,7 +157,6 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
@@ -378,44 +372,9 @@ export default function App() {
     }
     if (route.receiptId) {
       const txs = getStoredTransactions();
-      let found = txs.find(t => 
-        t && (
-          t.id.toLowerCase() === route.receiptId?.toLowerCase() || 
-          (t.txHash && t.txHash.toLowerCase() === route.receiptId?.toLowerCase())
-        )
-      );
-
+      const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
       if (found) {
-        if (found.status !== 'completed') {
-          found = { ...found, status: 'completed' as const };
-          saveTransaction(found);
-          recordUserPaidTxId(found.id);
-          reloadLocalData();
-        } else {
-          recordUserPaidTxId(found.id);
-        }
         setCompletedTransaction(found);
-      } else {
-        // Auto-create and record transaction in RonPay database with 'completed' status upon gateway callback
-        const autoTx: Transaction = {
-          id: route.receiptId,
-          campaignId: route.campaignId || 'cmp-upi-direct',
-          campaignTitle: route.campaign?.title || 'RonPay UPI Contribution',
-          category: route.category || 'others',
-          donorName: 'Valued Donor',
-          amount: 500,
-          platformFee: 0,
-          totalAmount: 500,
-          paymentMethod: 'online',
-          status: 'completed',
-          remark: 'UPI Gateway Payment Verified',
-          timestamp: new Date().toISOString(),
-          txHash: route.receiptId,
-        };
-        saveTransaction(autoTx);
-        recordUserPaidTxId(autoTx.id);
-        setCompletedTransaction(autoTx);
-        reloadLocalData();
       }
       setCurrentScreen('success');
     }
@@ -504,7 +463,8 @@ export default function App() {
   };
 
   const handleOpenNotifications = () => {
-    setIsNotificationsOpen(true);
+    setNotificationCount(0);
+    setIsHistoryOpen(true);
   };
 
   const handleOpenHistory = () => {
@@ -594,13 +554,9 @@ export default function App() {
 
   const handleDeleteCampaign = (campaignId: string) => {
     const cleanId = String(campaignId).toLowerCase().trim();
-    const camp = campaigns.find(c => String(c.id).toLowerCase().trim() === cleanId);
-    if (camp && !canHardDeleteCampaign(camp, transactions)) {
-      alert('⚠️ Harsatna: He Bawm (Campaign) hian transaction record a nei tawh a, delete theih a ni lo. Cancel & Void emaw Edit Details hmang rawh.');
-      return;
-    }
     deleteStoredCampaign(campaignId);
     setCampaigns(prev => prev.filter(c => String(c.id).toLowerCase().trim() !== cleanId));
+    setTransactions(getStoredTransactions());
     if (selectedCampaign && String(selectedCampaign.id).toLowerCase().trim() === cleanId) {
       setSelectedCampaign(null);
     }
@@ -622,36 +578,6 @@ export default function App() {
   const handleUpdateTransaction = (transaction: Transaction) => {
     saveTransaction(transaction);
     setTransactions(getStoredTransactions());
-  };
-
-  const handleApproveTransaction = (transaction: Transaction) => {
-    const updated: Transaction = {
-      ...transaction,
-      status: 'completed',
-      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
-      verifiedAt: new Date().toISOString(),
-    };
-    saveTransaction(updated);
-    setTransactions(getStoredTransactions());
-    if (completedTransaction && completedTransaction.id === transaction.id) {
-      setCompletedTransaction(updated);
-    }
-    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
-  };
-
-  const handleRejectTransaction = (transaction: Transaction) => {
-    const updated: Transaction = {
-      ...transaction,
-      status: 'rejected',
-      verifiedBy: creatorProfile.name || (creatorProfile.isAdmin ? 'Admin' : 'Creator'),
-      verifiedAt: new Date().toISOString(),
-    };
-    saveTransaction(updated);
-    setTransactions(getStoredTransactions());
-    if (completedTransaction && completedTransaction.id === transaction.id) {
-      setCompletedTransaction(updated);
-    }
-    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated'));
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
@@ -759,59 +685,30 @@ export default function App() {
       )}
 
       {/* Container with responsive boundary */}
-      <div className={`w-full ${currentScreen === 'website' ? 'max-w-none bg-slate-950 text-slate-100' : `${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white text-slate-900 shadow-xl`} min-h-screen flex flex-col transition-all duration-300 relative overflow-x-hidden`}>
-        {currentScreen === 'website' ? (
-          <RonPayWebsite
-            onLaunchApp={() => {
-              if (!creatorProfile.phone) {
-                setCreatorProfile(GUEST_CREATOR_PROFILE);
-              }
-              handleNavigate('home');
-            }}
-            onOpenCreateQR={() => {
-              if (creatorProfile.isApproved && creatorProfile.phone) {
-                handleNavigate('create_qr');
-              } else {
-                handleNavigate('creator_reg');
-              }
-            }}
-            onOpenRegister={() => handleNavigate('creator_reg')}
-            onOpenBillPay={(serviceId) => {
-              if (serviceId) {
-                const found = BILL_SERVICES.find(s => s.id === serviceId);
-                if (found) setSelectedBillService(found);
-              }
-              setIsBillModalOpen(true);
-              handleNavigate('home');
-            }}
-            onOpenAIKhualchhawn={() => setIsAIHriatpuiOpen(true)}
-            initialLanguage={language}
-          />
-        ) : (
-          <>
-            {/* Offline & Connection Status Banner */}
-            <OfflineStatusBanner onRefreshCache={reloadLocalData} />
+      <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
+        {/* Offline & Connection Status Banner */}
+        <OfflineStatusBanner onRefreshCache={reloadLocalData} />
 
-            {/* Global Header */}
-            <Header
-              currentScreen={currentScreen}
-              onNavigate={handleNavigate}
-              onOpenScanner={() => handleStartScanner('any')}
-              onOpenReports={handleOpenReports}
-              isDesktopView={isDesktopView}
-              onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
-              notificationCount={notificationCount}
-              onOpenNotifications={handleOpenNotifications}
-              language={language}
-              onToggleLanguage={setLanguage}
-              onOpenHistory={handleOpenHistory}
-              onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
-              onOpenLogin={() => setIsLoginModalOpen(true)}
-              creatorProfile={creatorProfile}
-            />
+        {/* Global Header */}
+        <Header
+          currentScreen={currentScreen}
+          onNavigate={handleNavigate}
+          onOpenScanner={() => handleStartScanner('any')}
+          onOpenReports={handleOpenReports}
+          isDesktopView={isDesktopView}
+          onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
+          notificationCount={notificationCount}
+          onOpenNotifications={handleOpenNotifications}
+          language={language}
+          onToggleLanguage={setLanguage}
+          onOpenHistory={handleOpenHistory}
+          onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
+          creatorProfile={creatorProfile}
+        />
 
-            {/* Main Body Screen Router */}
-            <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
+        {/* Main Body Screen Router */}
+        <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
           {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}
@@ -862,10 +759,10 @@ export default function App() {
             />
           )}
 
-          {currentScreen === 'checkout' && (
+          {currentScreen === 'checkout' && selectedCampaign && (
             <CheckoutScreen
               category={selectedCategory}
-              campaign={selectedCampaign || campaigns.find(c => c.category === selectedCategory) || campaigns[0]}
+              campaign={selectedCampaign}
               pricingConfig={pricingConfig}
               onBack={() => handleNavigate('explorer')}
               onPaymentSuccess={handlePaymentSuccess}
@@ -921,7 +818,6 @@ export default function App() {
               transactions={transactions}
               campaigns={campaigns}
               creatorProfile={creatorProfile}
-              language={language}
               onBack={() => handleNavigate('home')}
               onOpenLogin={() => handleNavigate('creator_reg')}
               onOpenCreateQR={() => handleNavigate('create_qr')}
@@ -944,14 +840,7 @@ export default function App() {
           {currentScreen === 'cash_pending' && (
             <CashPendingScreen
               transaction={completedTransaction}
-              campaigns={campaigns}
-              creatorProfile={creatorProfile}
               onGoHome={() => handleNavigate('home')}
-              onApproveCash={handleApproveTransaction}
-              onOpenSulhnu={() => {
-                setIsHistoryOpen(true);
-                handleNavigate('home');
-              }}
             />
           )}
         </main>
@@ -973,8 +862,6 @@ export default function App() {
             isKumtluangManagerOpen={isKumtluangManagerOpen}
             language={language}
           />
-        )}
-          </>
         )}
 
         {/* Global Floating Actions / Modals */}
@@ -1037,8 +924,6 @@ export default function App() {
             userPaidIds={userPaidIds}
             onClose={() => setIsHistoryOpen(false)}
             onRefreshData={reloadLocalData}
-            onApproveTransaction={handleApproveTransaction}
-            onRejectTransaction={handleRejectTransaction}
             onOpenReceipt={(tx) => {
               setCompletedTransaction(tx);
               setIsHistoryOpen(false);
@@ -1052,30 +937,6 @@ export default function App() {
               setIsHistoryOpen(false);
               handleStartScanner('any');
             }}
-          />
-        </ErrorBoundary>
-
-        <ErrorBoundary name="NotificationsModal">
-          <NotificationsModal
-            isOpen={isNotificationsOpen}
-            onClose={() => setIsNotificationsOpen(false)}
-            transactions={userVisibleTransactions}
-            campaigns={campaigns}
-            creatorProfile={creatorProfile}
-            onOpenReceipt={(tx) => {
-              setCompletedTransaction(tx);
-              setIsNotificationsOpen(false);
-              handleNavigate('success');
-            }}
-            onNavigateToCampaign={(camp) => {
-              setIsNotificationsOpen(false);
-              handleSelectCampaign(camp);
-            }}
-            onOpenMemberRoll={() => {
-              setIsNotificationsOpen(false);
-              setIsKumtluangManagerOpen(true);
-            }}
-            onUnreadCountChange={(count) => setNotificationCount(count)}
           />
         </ErrorBoundary>
 

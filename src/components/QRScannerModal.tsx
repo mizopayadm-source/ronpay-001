@@ -3,14 +3,18 @@ import {
   QrCode, 
   X, 
   Camera, 
+  Sparkles, 
   AlertTriangle, 
+  ShieldAlert, 
   Upload, 
+  Smartphone, 
+  CheckCircle2, 
   RefreshCw, 
   Zap, 
   Image as ImageIcon, 
+  Check,
   RotateCcw,
-  Smartphone,
-  ShieldAlert
+  Info
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BawmCategory, Campaign } from '../types';
@@ -281,29 +285,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onMismatchDetected,
   onApproveCampaign,
 }) => {
-  const propsRef = useRef({
-    campaigns,
-    targetCategory,
-    categoryFilter,
-    onClose,
-    onScanResult,
-    onSelectCampaign,
-    onOpenExternalLanding,
-    onMismatchDetected,
-    onApproveCampaign,
-  });
-  propsRef.current = {
-    campaigns,
-    targetCategory,
-    categoryFilter,
-    onClose,
-    onScanResult,
-    onSelectCampaign,
-    onOpenExternalLanding,
-    onMismatchDetected,
-    onApproveCampaign,
-  };
-
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
@@ -311,8 +292,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [torchOn, setTorchOn] = useState<boolean>(false);
   const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
   const [isStartingCamera, setIsStartingCamera] = useState<boolean>(false);
-  const [uploadToast, setUploadToast] = useState<string | null>(null);
-  const [, setLastScannedText] = useState<string | null>(null);
+  const [lastScannedText, setLastScannedText] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -321,47 +301,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const isScanningRef = useRef<boolean>(false);
-
-  // Check Android environment & bridge
-  const isAndroidApp = typeof window !== 'undefined' && (
-    !!(window as any).RonPayBridge ||
-    !!(window as any).AndroidBlobDownloader ||
-    !!(window as any).AndroidDownloader ||
-    /wv|Android.*Version\/[0-9.]+/i.test(navigator.userAgent)
-  );
-
-  const androidBridge = typeof window !== 'undefined' ? (
-    (window as any).RonPayBridge ||
-    (window as any).AndroidBlobDownloader ||
-    (window as any).AndroidDownloader
-  ) : null;
-
-  const hasNativeScannerBridge = !!(
-    androidBridge && (
-      typeof androidBridge.openQrScanner === 'function' ||
-      typeof androidBridge.scanQRCode === 'function' ||
-      typeof androidBridge.openCamera === 'function' ||
-      typeof androidBridge.scanQr === 'function'
-    )
-  );
-
-  // Trigger Native Android APK Scanner if available
-  const handleNativeAndroidScan = () => {
-    if (!androidBridge) return;
-    try {
-      if (typeof androidBridge.openQrScanner === 'function') {
-        androidBridge.openQrScanner();
-      } else if (typeof androidBridge.scanQRCode === 'function') {
-        androidBridge.scanQRCode();
-      } else if (typeof androidBridge.openCamera === 'function') {
-        androidBridge.openCamera();
-      } else if (typeof androidBridge.scanQr === 'function') {
-        androidBridge.scanQr();
-      }
-    } catch (e) {
-      console.warn('Android bridge scan error:', e);
-    }
-  };
 
   // Stop camera stream safely
   const stopCamera = useCallback(() => {
@@ -399,54 +338,43 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraCaptureInputRef.current) cameraCaptureInputRef.current.value = '';
 
-    const {
-      campaigns: curCampaigns,
-      onClose: curOnClose,
-      onScanResult: curOnScanResult,
-      onSelectCampaign: curOnSelectCampaign,
-      onOpenExternalLanding: curOnOpenExternalLanding,
-      onMismatchDetected: curOnMismatchDetected,
-      targetCategory: curTargetCategory,
-      categoryFilter: curCategoryFilter,
-    } = propsRef.current;
-
     // Parse payload
-    const result = parseScannedPayload(rawText, curCampaigns);
+    const result = parseScannedPayload(rawText, campaigns);
 
     // Close the scanner modal
-    curOnClose();
+    onClose();
 
     // 1. If explicit onScanResult callback is provided, invoke it
-    if (curOnScanResult) {
-      curOnScanResult(result);
+    if (onScanResult) {
+      onScanResult(result);
     }
 
     // 2. If standard App.tsx modal props are provided
     if (result.type === 'pending' && result.campaign) {
-      if (curOnSelectCampaign) {
-        curOnSelectCampaign(result.campaign);
+      if (onSelectCampaign) {
+        onSelectCampaign(result.campaign);
       }
     } else if (result.type === 'general-upi' && result.campaign) {
-      if (curOnOpenExternalLanding) {
-        curOnOpenExternalLanding(result.campaign);
-      } else if (curOnSelectCampaign) {
-        curOnSelectCampaign(result.campaign);
+      if (onOpenExternalLanding) {
+        onOpenExternalLanding(result.campaign);
+      } else if (onSelectCampaign) {
+        onSelectCampaign(result.campaign);
       }
     } else if (result.campaign) {
-      const activeFilter = curTargetCategory || curCategoryFilter || 'any';
+      const activeFilter = targetCategory || categoryFilter || 'any';
       if (activeFilter !== 'any' && activeFilter !== result.campaign.category) {
-        if (curOnMismatchDetected) {
-          curOnMismatchDetected(result.campaign.category);
-        } else if (curOnSelectCampaign) {
-          curOnSelectCampaign(result.campaign);
+        if (onMismatchDetected) {
+          onMismatchDetected(result.campaign.category);
+        } else if (onSelectCampaign) {
+          onSelectCampaign(result.campaign);
         }
       } else {
-        if (curOnSelectCampaign) {
-          curOnSelectCampaign(result.campaign);
+        if (onSelectCampaign) {
+          onSelectCampaign(result.campaign);
         }
       }
     }
-  }, [stopCamera]);
+  }, [campaigns, onClose, onScanResult, onSelectCampaign, onOpenExternalLanding, onMismatchDetected, targetCategory, categoryFilter, stopCamera]);
 
   // BarcodeDetector instance if available
   const barcodeDetectorRef = useRef<any>(null);
@@ -492,7 +420,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
-      // Optimal resolution for jsQR (around 640-800px width for fast decoding)
+      // Optimal resolution for jsQR (around 800px width)
       const scale = Math.min(1, 800 / video.videoWidth);
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
@@ -530,51 +458,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   }, [handleRawDecodedData]);
 
-  // Start Camera Stream with Progressive Fallbacks and robust playback triggers
+  // Start Camera Stream with Progressive Fallbacks
   const startCamera = useCallback(async (mode: 'environment' | 'user') => {
-    // 1. Teardown any prior stream before starting fresh
-    if (animFrameIdRef.current) {
-      cancelAnimationFrame(animFrameIdRef.current);
-      animFrameIdRef.current = null;
-    }
-    isScanningRef.current = false;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => {
-        try { t.stop(); } catch {}
-      });
-      streamRef.current = null;
-    }
-
+    stopCamera();
     setCameraError(null);
     setIsStartingCamera(true);
 
-    // 2. Security Check: Modern browsers and WebViews block getUserMedia on insecure HTTP
-    const isSecure = typeof window !== 'undefined' && (
-      window.isSecureContext ||
-      location.protocol === 'https:' ||
-      location.hostname === 'localhost' ||
-      location.hostname === '127.0.0.1'
-    );
-
-    if (!isSecure) {
-      setCameraError(
-        "Browser-in HTTP-ah live camera a block a ni. Website hi HTTPS (https://...) ah deploy rawh le, emaw 'Snap Photo' / 'Gallery Upload' hmang rawh le."
-      );
-      setCameraActive(false);
-      setIsStartingCamera(false);
-      return;
-    }
-
-    // Progressive browser media access helper
-    const getMedia = (
-      navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) ||
-      (navigator as any).getUserMedia?.bind(navigator) ||
-      (navigator as any).webkitGetUserMedia?.bind(navigator) ||
-      (navigator as any).mozGetUserMedia?.bind(navigator)
-    );
-
-    if (!getMedia) {
-      setCameraError('Browser / WebView-ah camera stream a in-block a ni. "Snap Photo" emaw "Gallery Upload" hmang rawh le.');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('Camera access is not supported in this browser/frame. Khawngaihin "Snap Photo" emaw "Gallery Upload" hmang rawh le.');
       setIsStartingCamera(false);
       return;
     }
@@ -609,65 +500,25 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let stream: MediaStream | null = null;
     let lastErr: any = null;
 
-    const getMediaWithTimeout = (constraints: MediaStreamConstraints, timeoutMs = 4500): Promise<MediaStream | null> => {
-      return new Promise((resolve) => {
-        let finished = false;
-        const timer = setTimeout(() => {
-          if (!finished) {
-            finished = true;
-            console.warn('Camera request timed out after', timeoutMs, 'ms');
-            resolve(null);
-          }
-        }, timeoutMs);
-
-        try {
-          getMedia(constraints)
-            .then((s: MediaStream) => {
-              if (!finished) {
-                finished = true;
-                clearTimeout(timer);
-                resolve(s);
-              }
-            })
-            .catch((err: any) => {
-              if (!finished) {
-                finished = true;
-                clearTimeout(timer);
-                lastErr = err;
-                console.warn('Camera constraint attempt failed:', constraints, err);
-                resolve(null);
-              }
-            });
-        } catch (syncErr: any) {
-          if (!finished) {
-            finished = true;
-            clearTimeout(timer);
-            lastErr = syncErr;
-            resolve(null);
-          }
-        }
-      });
-    };
-
     for (const constraints of constraintList) {
-      stream = await getMediaWithTimeout(constraints, 4000);
-      if (stream) break;
-      if (lastErr?.name === 'NotAllowedError' || lastErr?.name === 'PermissionDeniedError') {
-        break;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) break;
+      } catch (err: any) {
+        lastErr = err;
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          break;
+        }
       }
     }
 
     if (!stream) {
-      console.warn('Camera stream could not be acquired:', lastErr);
-      let errorMsg = 'Camera a in hawng thei lo. "Snap Photo" emaw "Gallery Upload" hmang rawh le.';
-      if (lastErr?.name === 'NotAllowedError' || lastErr?.name === 'PermissionDeniedError') {
-        errorMsg = 'Camera permission pe a ni lo (Permission Denied). Browser / Android app settings-ah camera phal la, emaw "Snap Photo" hmang rawh le.';
-      } else if (lastErr?.name === 'NotFoundError' || lastErr?.name === 'DevicesNotFoundError') {
-        errorMsg = 'Camera hardware hmuh a ni lo. "Snap Photo" emaw "Gallery Upload" hmang rawh le.';
-      } else if (lastErr?.name === 'NotReadableError' || lastErr?.name === 'TrackStartError') {
-        errorMsg = 'Camera hi app dangin an hmang mek a nih hmel. App dang khar la, ti nawn leh rawh le.';
-      }
-      setCameraError(errorMsg);
+      console.warn('Camera constraints failed:', lastErr);
+      setCameraError(
+        lastErr?.name === 'NotAllowedError' || lastErr?.name === 'PermissionDeniedError'
+          ? 'Camera permission pe a ni lo. Khawngaihin browser setting-ah camera phal la, emaw "Snap Photo" hmang rawh le.'
+          : 'Camera stream a in hawng thei lo. "Snap Photo" emaw "Gallery Upload" hmang rawh le.'
+      );
       setCameraActive(false);
       setIsStartingCamera(false);
       return;
@@ -675,89 +526,48 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     streamRef.current = stream;
 
-    // Check torch capability
-    try {
-      const track = stream.getVideoTracks()[0];
-      const capabilities = track?.getCapabilities?.() as any;
-      if (capabilities && 'torch' in capabilities) {
-        setHasTorch(true);
-      } else {
-        setHasTorch(false);
-      }
-    } catch {
-      setHasTorch(false);
-    }
+    if (videoRef.current) {
+      const video = videoRef.current;
+      video.srcObject = stream;
+      video.muted = true;
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
 
-    const video = videoRef.current;
-    if (!video) {
-      setIsStartingCamera(false);
-      return;
-    }
-
-    // Set DOM attributes and properties for mobile autoplay & inline playback
-    video.defaultMuted = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.setAttribute('muted', '');
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('webkit-playsinline', 'true');
-    video.setAttribute('autoplay', 'true');
-    video.srcObject = stream;
-
-    const activatePlayback = async () => {
       try {
         await video.play();
         setCameraActive(true);
         setIsStartingCamera(false);
-        setCameraError(null);
         isScanningRef.current = true;
-        if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+
+        // Check torch capability
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track?.getCapabilities?.() as any;
+        if (capabilities && 'torch' in capabilities) {
+          setHasTorch(true);
+        }
+
+        // Start scanning loop
         animFrameIdRef.current = requestAnimationFrame(tickScan);
       } catch (playErr) {
-        console.warn('Direct video.play() error (user interaction might be needed):', playErr);
-        // Autoplay policy waiting for user gesture
-        setCameraActive(false);
-        setIsStartingCamera(false);
-        setCameraError('Camera stream in peih e. Viewfinder-ah hmet la emaw "Start Stream" click rawh le.');
-      }
-    };
-
-    if (video.readyState >= 2) {
-      activatePlayback();
-    } else {
-      video.onloadedmetadata = () => {
-        activatePlayback();
-      };
-      setTimeout(() => {
-        if (!isScanningRef.current && videoRef.current?.srcObject) {
-          activatePlayback();
-        }
-      }, 350);
-      setTimeout(() => {
-        if (!isScanningRef.current) {
-          setIsStartingCamera(false);
-        }
-      }, 3000);
-    }
-  }, [tickScan]);
-
-  // Tap viewfinder or button to force play if mobile browser blocked initial autoplay
-  const handleUserTapToPlay = async () => {
-    if (videoRef.current && streamRef.current) {
-      try {
-        await videoRef.current.play();
-        setCameraActive(true);
-        setCameraError(null);
-        isScanningRef.current = true;
-        if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
-        animFrameIdRef.current = requestAnimationFrame(tickScan);
-        return;
-      } catch (e) {
-        console.warn('Tap play error, restarting camera:', e);
+        console.warn('Video play attempt error, retrying:', playErr);
+        setTimeout(async () => {
+          try {
+            if (videoRef.current && streamRef.current) {
+              await videoRef.current.play();
+              setCameraActive(true);
+              setIsStartingCamera(false);
+              isScanningRef.current = true;
+              animFrameIdRef.current = requestAnimationFrame(tickScan);
+            }
+          } catch (e) {
+            setCameraError('Camera playback failed. Khawngaihin "Snap Photo" emaw Gallery hmang rawh le.');
+            setCameraActive(false);
+            setIsStartingCamera(false);
+          }
+        }, 150);
       }
     }
-    startCamera(facingMode);
-  };
+  }, [stopCamera, tickScan]);
 
   // Toggle Torch
   const toggleTorch = async () => {
@@ -873,7 +683,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const inputElement = e.target;
     
     setIsProcessingFile(true);
-    setUploadToast(null);
     const reader = new FileReader();
     
     reader.onload = async (event) => {
@@ -887,22 +696,19 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           if (decodedText) {
             handleRawDecodedData(decodedText);
           } else {
-            setUploadToast('⚠️ QR Code hmuh a ni lo. Thlalak fiah zawk thlang leh chhin rawh le.');
-            setTimeout(() => setUploadToast(null), 4000);
+            alert('⚠️ QR Code hmuh a ni lo. Thlalak dang fiah zawk han thlang leh chhin rawh le.');
           }
         } catch (err) {
           console.error('QR decode error:', err);
           setIsProcessingFile(false);
           inputElement.value = '';
-          setUploadToast('⚠️ Thlalak chhiar theih a ni lo. A dang han thlang leh chhin rawh le.');
-          setTimeout(() => setUploadToast(null), 4000);
+          alert('⚠️ Thlalak chhiar theih a ni lo. A dang han thlang leh chhin rawh le.');
         }
       };
       img.onerror = () => {
         setIsProcessingFile(false);
         inputElement.value = '';
-        setUploadToast('⚠️ Thlalak load theih a ni lo.');
-        setTimeout(() => setUploadToast(null), 4000);
+        alert('⚠️ Thlalak load theih a ni lo.');
       };
       img.src = event.target?.result as string;
     };
@@ -910,8 +716,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     reader.onerror = () => {
       setIsProcessingFile(false);
       inputElement.value = '';
-      setUploadToast('⚠️ File chhiar theih a ni lo.');
-      setTimeout(() => setUploadToast(null), 4000);
+      alert('⚠️ File chhiar theih a ni lo.');
     };
 
     reader.readAsDataURL(file);
@@ -922,48 +727,33 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     stopCamera();
     setLastScannedText(null);
     setCameraError(null);
-    setUploadToast(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraCaptureInputRef.current) cameraCaptureInputRef.current.value = '';
     setTimeout(() => {
       startCamera(facingMode);
-    }, 120);
+    }, 100);
   };
 
-  // Lifecycle: only start camera when modal opens, stop cleanly when modal closes
+  // Lifecycle
   useEffect(() => {
     if (isOpen) {
       setLastScannedText(null);
-      setCameraError(null);
-      setUploadToast(null);
-
-      // Register global handler for Android Native Scanner Bridge (if APK calls back)
-      (window as any).onAndroidQrScanned = (scannedText: string) => {
-        if (scannedText && typeof scannedText === 'string') {
-          handleRawDecodedData(scannedText);
-        }
-      };
-
       const timer = setTimeout(() => {
         startCamera(facingMode);
-      }, 120);
-
+      }, 80);
       return () => {
         clearTimeout(timer);
         stopCamera();
-        try {
-          delete (window as any).onAndroidQrScanned;
-        } catch {}
       };
     } else {
       stopCamera();
     }
-  }, [isOpen, facingMode, startCamera, stopCamera, handleRawDecodedData]);
+  }, [isOpen, startCamera, stopCamera, facingMode]);
 
   if (!isOpen) return null;
 
-  const targetTitle = !targetCategory || targetCategory === 'any' 
-    ? 'Scan Any UPI / RonPay QR' 
+  const targetTitle = targetCategory === 'any' 
+    ? 'Scanning Any UPI / RonPay QR' 
     : `Scanning for ${BAWM_CONFIG[targetCategory]?.name || targetCategory}`;
 
   return (
@@ -1024,34 +814,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         </div>
       </div>
 
-      {/* Upload Toast Banner if file decode encounters issue */}
-      {uploadToast && (
-        <div className="z-30 mx-auto max-w-sm w-full bg-rose-950/90 border border-rose-500/50 text-rose-200 text-xs py-2 px-3 rounded-xl shadow-lg flex items-center justify-between gap-2 animate-bounce">
-          <span className="font-semibold">{uploadToast}</span>
-          <button onClick={() => setUploadToast(null)} className="text-rose-300 hover:text-white">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* Central Viewfinder Area */}
       <div className="relative my-auto flex flex-col items-center justify-center py-2 shrink-0">
-        <div 
-          onClick={!cameraActive ? handleUserTapToPlay : undefined}
-          className="relative w-64 h-64 sm:w-72 sm:h-72 border-2 border-amber-400/80 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(251,191,36,0.35)] bg-slate-900 flex items-center justify-center cursor-pointer"
-          title={!cameraActive ? "Click to start camera" : undefined}
-        >
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 border-2 border-amber-400/80 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(251,191,36,0.35)] bg-slate-900 flex items-center justify-center">
           {/* Live Camera Video (always mounted to prevent mobile autoplay blocks) */}
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            onPlaying={() => {
-              setCameraActive(true);
-              setIsStartingCamera(false);
-              setCameraError(null);
-            }}
             onLoadedMetadata={() => {
               if (videoRef.current) {
                 videoRef.current.play().catch(console.warn);
@@ -1064,89 +835,26 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
           {/* Loading / Fallback Overlay */}
           {!cameraActive && (
-            <div className="text-center p-2.5 sm:p-3 space-y-1.5 z-10 w-full max-w-[250px]">
-              <Camera className="w-8 h-8 mx-auto text-amber-400/90 animate-pulse" />
+            <div className="text-center p-4 space-y-2.5 z-10">
+              <Camera className="w-10 h-10 mx-auto text-amber-400/80 animate-pulse" />
+              <p className="text-xs font-bold text-slate-200 max-w-[210px] mx-auto leading-tight">
+                {cameraError || (isStartingCamera ? 'Camera stream in hawng mek a ni...' : 'Camera stream nghah mek a ni')}
+              </p>
               
-              {cameraError?.includes('Permission Denied') ? (
-                <div className="bg-rose-950/80 border border-rose-500/60 p-2.5 rounded-xl text-left space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-rose-300 font-bold text-[11px]">
-                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                    <span>Browser-in Camera a Block mek:</span>
-                  </div>
-                  <div className="text-[10px] text-rose-100 space-y-1 leading-tight">
-                    <p>
-                      <strong>💻 Laptop-ah:</strong> Chrome URL bula <strong>Tune icon 🎚️</strong> / Lock 🔒 hmet la, <strong>Camera</strong> kha <strong>&quot;Allow / On&quot;</strong> rawh le.
-                    </p>
-                    <p>
-                      <strong>📱 Phone-ah:</strong> URL bula <strong>Lock icon 🔒</strong> hmet la ➔ <em>Permissions</em> ➔ <em>Camera</em> kha <strong>Allow</strong> rawh le.
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-1 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCameraError(null);
-                        startCamera(facingMode);
-                      }}
-                      className="w-full py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
-                    >
-                      <RefreshCw className="w-3 h-3" /> Re-check / Allow Dil Nawn Rawh
-                    </button>
-                    {typeof window !== 'undefined' && (window.location.hostname.includes('ronpay.app') || window.location.hostname.includes('ronpay.com')) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          window.location.href = 'https://ronpay-001-pi.vercel.app';
-                        }}
-                        className="w-full py-1 bg-sky-600 hover:bg-sky-500 text-white font-bold text-[10px] rounded-lg flex items-center justify-center gap-1 cursor-pointer transition shadow"
-                      >
-                        Vercel Domain-ah Hawng Rawh (ronpay-001-pi...)
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-[11.5px] font-bold text-slate-200 leading-tight">
-                  {cameraError || (isStartingCamera ? 'Camera stream in hawng mek a ni...' : 'Camera stream nghah mek a ni')}
-                </p>
-              )}
-              
-              <div className="flex flex-col gap-1.5 pt-1">
-                {hasNativeScannerBridge && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleNativeAndroidScan();
-                    }}
-                    className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs py-2 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" /> Android APK Scanner
-                  </button>
-                )}
-
-                {!cameraError?.includes('Permission Denied') && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUserTapToPlay();
-                    }}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs py-1.5 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Start / Re-start Camera
-                  </button>
-                )}
-                
+              <div className="flex flex-col gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    cameraCaptureInputRef.current?.click();
-                  }}
+                  onClick={() => startCamera(facingMode)}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs py-1.5 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Re-start Camera
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraCaptureInputRef.current?.click()}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
                 >
-                  <Camera className="w-3.5 h-3.5" /> Snap Photo (Camera)
+                  <Camera className="w-3.5 h-3.5" /> Snap Photo (Camera pangaia la)
                 </button>
               </div>
             </div>
@@ -1172,8 +880,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-amber-300 rounded-br-lg pointer-events-none" />
         </div>
 
-        {/* Upload & Snapshot Action Pills under viewfinder */}
-        <div className="mt-3.5 flex items-center gap-2 flex-wrap justify-center">
+        {/* Upload Buttons under viewfinder */}
+        <div className="mt-3 flex items-center gap-2 flex-wrap justify-center">
           <button
             type="button"
             onClick={() => cameraCaptureInputRef.current?.click()}
@@ -1199,15 +907,94 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         </div>
       </div>
 
-      {/* Clean Scanner Guidance Card (Simulators completely removed as requested) */}
-      <div className="z-10 bg-slate-900/80 border border-slate-800/80 p-3 rounded-2xl max-w-sm mx-auto w-full text-center space-y-1 backdrop-blur-sm shadow-xl">
-        <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300">
-          <QrCode className="w-3.5 h-3.5" />
-          <span>Point Camera at Any QR Code</span>
-        </div>
-        <p className="text-[10.5px] text-slate-400 leading-relaxed font-medium">
-          RonPay Bawm QR, Google Pay, PhonePe, Paytm, leh UPI QR hrim hrim auto-scan theih a ni.
+      {/* Interactive Scan Simulator & Admin Approval Trigger Section */}
+      <div className="space-y-2 z-10 bg-slate-900/95 p-3 rounded-2xl border border-slate-800 shadow-2xl max-w-sm mx-auto w-full">
+        <p className="text-[9.5px] text-slate-400 font-extrabold uppercase text-center tracking-wider flex items-center justify-center gap-1">
+          <Info className="w-3 h-3 text-indigo-400" /> Quick Test & Bawm Simulators:
         </p>
+
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleRawDecodedData('upi://pay?pa=mizopay@axl&pn=Mizo%20Merchant&am=100')}
+            className="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] py-1.5 px-2 rounded-xl font-bold border border-indigo-500 flex items-center justify-center gap-1.5 cursor-pointer transition"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+            Scan Any External UPI QR (GPay / PhonePe / Paytm)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'ralna' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'ralna', campaign: c });
+            }}
+            className="bg-purple-950 hover:bg-purple-900 text-purple-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-purple-700/60 transition cursor-pointer text-center"
+          >
+            Scan Ralna QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'khawlsak' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'khawlsak', campaign: c });
+            }}
+            className="bg-emerald-950 hover:bg-emerald-900 text-emerald-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-emerald-700/60 transition cursor-pointer text-center"
+          >
+            Scan Khawlsak QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'rikrum' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'rikrum', campaign: c });
+            }}
+            className="bg-rose-950 hover:bg-rose-900 text-rose-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-rose-700/60 transition cursor-pointer text-center"
+          >
+            Scan Rikrum QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'kumtluang' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'kumtluang', campaign: c });
+            }}
+            className="bg-blue-950 hover:bg-blue-900 text-blue-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-blue-700/60 transition cursor-pointer text-center"
+          >
+            Scan Kumtluang QR
+          </button>
+
+          {/* Pending Approval Test Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const pendingC = campaigns.find(i => i.status === 'pending_approval') || {
+                id: 'cmp-pending-demo',
+                category: 'ralna',
+                title: 'Pi Liani Ralna (Demo Pending)',
+                location: 'Dawrpui, Aizawl',
+                gpsCoords: '23.7271, 92.7176',
+                upiId: 'liani@axl',
+                validityDate: '2026-12-31',
+                status: 'pending_approval',
+                createdAt: new Date().toISOString(),
+              } as Campaign;
+
+              onScanResult({ type: 'pending', campaign: pendingC, rawText: pendingC.id });
+            }}
+            className="col-span-2 bg-amber-950 hover:bg-amber-900 text-amber-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-amber-700/60 transition cursor-pointer flex items-center justify-center gap-1"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+            Scan Creator QR (Waiting for Admin Approval)
+          </button>
+        </div>
       </div>
     </div>
   );

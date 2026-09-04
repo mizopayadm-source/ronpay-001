@@ -10,43 +10,6 @@ export const ALL_MONTH_NAMES_SHORT = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ] as const;
 
-export const getCurrentMonthName = (): string => {
-  const m = new Date().getMonth();
-  return ALL_MONTH_NAMES_FULL[m] || 'January';
-};
-
-export const getCurrentYear = (): string => {
-  return String(new Date().getFullYear());
-};
-
-export const getCurrentQuarterName = (): string => {
-  const m = new Date().getMonth();
-  const qIdx = Math.floor(m / 3);
-  const qNames = ['Q1 (Jan - Mar)', 'Q2 (Apr - Jun)', 'Q3 (Jul - Sep)', 'Q4 (Oct - Dec)'];
-  return qNames[qIdx] || 'Q1 (Jan - Mar)';
-};
-
-export const getPreviousMonthName = (stepsBack: number = 1): { month: string; year: string } => {
-  const d = new Date();
-  d.setDate(1); // avoid end of month overflow
-  d.setMonth(d.getMonth() - stepsBack);
-  return {
-    month: ALL_MONTH_NAMES_FULL[d.getMonth()] || 'January',
-    year: String(d.getFullYear())
-  };
-};
-
-export const getYearOptions = (): string[] => {
-  const current = new Date().getFullYear();
-  return [
-    String(current - 2),
-    String(current - 1),
-    String(current),
-    String(current + 1),
-    String(current + 2)
-  ];
-};
-
 /**
  * Normalizes any month string (e.g. "March", "mar", "MAR", "03", "3") to index (0-11)
  */

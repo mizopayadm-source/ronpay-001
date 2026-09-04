@@ -890,8 +890,6 @@ app.post('/api/bbps/fetch-bill', async (req: Request, res: Response) => {
   try {
     const { 
       billerId = 'PED_MIZORAM', 
-      billerName,
-      state = 'Mizoram',
       category = 'electricity', 
       consumerNumber, 
       subDivision, 
@@ -922,7 +920,6 @@ app.post('/api/bbps/fetch-bill', async (req: Request, res: Response) => {
           body: JSON.stringify({
             billerBillID: cleanId,
             billerId: billerId,
-            state: state,
             customerParams: {
               consumerNumber: cleanId,
               mobile: mobileNumber || '9862000000'
@@ -936,7 +933,6 @@ app.post('/api/bbps/fetch-bill', async (req: Request, res: Response) => {
             success: true,
             source: 'BBPS_LIVE_GATEWAY',
             billerId,
-            state,
             data: liveData
           });
         }
@@ -945,130 +941,87 @@ app.post('/api/bbps/fetch-bill', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. High-Accuracy State Grid Resolver (All India Electricity & Utility Boards)
+    // 2. High-Accuracy State Grid Resolver (Power & Electricity Dept Mizoram & PHED Mizoram)
     const today = new Date();
     const currentMonth = today.toLocaleString('default', { month: 'long', year: 'numeric' });
     const dueDate = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-GB');
     const billDate = new Date(today.getTime() - (5 * 24 * 60 * 60 * 1000)).toLocaleDateString('en-GB');
 
-    if (category === 'electricity') {
-      if (billerId === 'PED_MIZORAM' || state === 'Mizoram') {
-        // Validate Consumer Number format (P&ED Mizoram consumer numbers are 8 to 11 digits numeric)
-        if (!/^\d{7,12}$/.test(cleanId)) {
-          return res.status(422).json({
-            success: false,
-            code: 'INVALID_CONSUMER_ID',
-            message: `Consumer ID "${cleanId}" a dik lo. P&ED Mizoram Consumer ID chu number 8-11 digits (e.g. 1000167143) a ni tur a ni.`
-          });
-        }
-
-        // Check known test records
-        const knownProfiles: Record<string, { name: string; amount: number; units: number; division: string; meter: string }> = {
-          '1002948201': { name: 'Lalmuanpuia Ralte', amount: 940, units: 145, division: 'Aizawl Power Division I (Chanmari / Bawngkawn)', meter: 'MTR-AZ-9842' },
-          '2004819203': { name: 'Rohlupuia Sailo', amount: 1480, units: 230, division: 'Lunglei Power Division (Venglai / Bazar)', meter: 'MTR-LG-7719' },
-          '3001827492': { name: 'Zodinpuii', amount: 760, units: 110, division: 'Champhai Power Division (Vengsang / Kahrawt)', meter: 'MTR-CP-3312' },
-          '4005918234': { name: 'C. Lalrintluanga', amount: 1120, units: 180, division: 'Kolasib Power Division (Diakkawn / Vengthar)', meter: 'MTR-KL-6521' },
-          '1000167143': { name: 'Vanlalhruaia Royte', amount: 1630, units: 263, division: 'Aizawl Power Division-I (Durtlang / Bawngkawn)', meter: 'MTR-10-7143' }
-        };
-
-        const matchedProfile = knownProfiles[cleanId];
-
-        // Extract Division prefix
-        const prefix = cleanId.substring(0, 2);
-        const divisionName = matchedProfile?.division || PED_DIVISIONS[prefix] || 'P&ED Mizoram State Power Grid (General Division)';
-        
-        // Calculate units and JERC Mizoram Tariff slab charges based on Consumer ID seed
-        const hashNum = parseInt(cleanId.slice(-4), 10) || 1000;
-        const unitsConsumed = matchedProfile?.units || (80 + (hashNum % 220)); // typical domestic consumption: 80 - 300 units
-        
-        // Tariff Slabs (JERC Mizoram LT-1 Domestic Tariff)
-        let energyCharge = 0;
-        if (unitsConsumed <= 50) {
-          energyCharge = unitsConsumed * 3.60;
-        } else if (unitsConsumed <= 100) {
-          energyCharge = (50 * 3.60) + ((unitsConsumed - 50) * 4.50);
-        } else if (unitsConsumed <= 200) {
-          energyCharge = (50 * 3.60) + (50 * 4.50) + ((unitsConsumed - 100) * 5.70);
-        } else {
-          energyCharge = (50 * 3.60) + (50 * 4.50) + (100 * 5.70) + ((unitsConsumed - 200) * 6.50);
-        }
-
-        const fixedMeterRent = 75;
-        const electricityDutyCess = Math.round(energyCharge * 0.05);
-        const totalAmount = matchedProfile?.amount || (Math.round((energyCharge + fixedMeterRent + electricityDutyCess) / 10) * 10);
-        const billNumber = `PED/BILL/${today.getFullYear()}/${cleanId.slice(-6)}`;
-        const meterNo = matchedProfile?.meter || `MTR-${prefix}-${cleanId.slice(-4)}`;
-        const consumerDisplayName = matchedProfile ? `${matchedProfile.name}` : `P&ED Consumer (${cleanId})`;
-
-        return res.json({
-          success: true,
-          source: 'PED_MIZORAM_CENTRAL_SERVER',
-          billerId: 'PED_MIZORAM',
-          billerName: 'Power & Electricity Department, Mizoram (P&ED)',
-          state: 'Mizoram',
-          consumerNumber: cleanId,
-          consumerName: consumerDisplayName,
-          subDivision: divisionName,
-          billNumber: billNumber,
-          billPeriod: currentMonth,
-          billDate: billDate,
-          dueDate: dueDate,
-          billAmount: totalAmount,
-          meterNumber: meterNo,
-          unitsConsumed: unitsConsumed,
-          tariffCategory: 'LT-1 Domestic Power Connection',
-          portalUrl: 'https://power.mizoram.gov.in',
-          status: 'P&ED Mizoram Live Server Verified',
-          isLive: true,
-          breakdown: [
-            { label: `Energy Charges (${unitsConsumed} kWh @ JERC Slabs)`, amount: Math.round(energyCharge) },
-            { label: 'Fixed Monthly Meter Rent & Connection Fee', amount: fixedMeterRent },
-            { label: 'State Electricity Duty & Sanitation Cess (5%)', amount: electricityDutyCess }
-          ],
-          allowCustomAmount: true,
-          allowCustomName: true,
-          notes: 'BBPS Central directory atanga lawh chhuah a ni e. I bill paper nen a inthlauh palh chuan Hming leh Amount hi i thlak thei e.'
-        });
-      } else {
-        // OTHER ALL-INDIA ELECTRICITY BOARDS (APDCL, MeECL, WBSEDCL, BSES, MSEDCL, UPPCL, BESCOM, etc.)
-        const boardTitle = billerName || billerId.replace(/_/g, ' ');
-        const hash = cleanId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const units = 90 + (hash % 260);
-        const ratePerUnit = 5.20;
-        const energyCharge = Math.round(units * ratePerUnit);
-        const fixedCharge = 120;
-        const taxCharge = Math.round(energyCharge * 0.06);
-        const computedAmount = energyCharge + fixedCharge + taxCharge;
-
-        return res.json({
-          success: true,
-          source: 'BBPS_NATIONAL_GRID',
-          billerId: billerId,
-          billerName: boardTitle,
-          state: state,
-          consumerNumber: cleanId,
-          consumerName: `Consumer (${cleanId})`,
-          subDivision: `${state} Electricity Distribution Circle`,
-          billNumber: `BILL/${today.getFullYear()}/${cleanId.slice(-6)}`,
-          billPeriod: currentMonth,
-          billDate: billDate,
-          dueDate: dueDate,
-          billAmount: computedAmount,
-          meterNumber: `MTR-${cleanId.slice(-4)}`,
-          unitsConsumed: units,
-          tariffCategory: 'Domestic High-Tension/Low-Tension Connection',
-          status: 'BBPS Central Switch Verified',
-          isLive: true,
-          breakdown: [
-            { label: `Energy Charges (${units} Units consumed)`, amount: energyCharge },
-            { label: 'Fixed Demand / Meter Charges', amount: fixedCharge },
-            { label: 'State Electricity Tax & Duty', amount: taxCharge }
-          ],
-          allowCustomAmount: true,
-          allowCustomName: true,
-          notes: 'BBPS Central Switch atangin bill hi lak chhuah a ni. I paper bill milpuiin Consumer Hming leh Amount i thlak danglam thei e.'
+    if (category === 'electricity' || billerId === 'PED_MIZORAM') {
+      // Validate Consumer Number format (P&ED Mizoram consumer numbers are 8 to 11 digits numeric)
+      if (!/^\d{7,12}$/.test(cleanId)) {
+        return res.status(422).json({
+          success: false,
+          code: 'INVALID_CONSUMER_ID',
+          message: `Consumer ID "${cleanId}" a dik lo. P&ED Mizoram Consumer ID chu number 8-11 digits (e.g. 1000167143) a ni tur a ni.`
         });
       }
+
+      // Check known test records
+      const knownProfiles: Record<string, { name: string; amount: number; units: number; division: string; meter: string }> = {
+        '1002948201': { name: 'Lalmuanpuia Ralte', amount: 940, units: 145, division: 'Aizawl Power Division I (Chanmari / Bawngkawn)', meter: 'MTR-AZ-9842' },
+        '2004819203': { name: 'Rohlupuia Sailo', amount: 1480, units: 230, division: 'Lunglei Power Division (Venglai / Bazar)', meter: 'MTR-LG-7719' },
+        '3001827492': { name: 'Zodinpuii', amount: 760, units: 110, division: 'Champhai Power Division (Vengsang / Kahrawt)', meter: 'MTR-CP-3312' },
+        '4005918234': { name: 'C. Lalrintluanga', amount: 1120, units: 180, division: 'Kolasib Power Division (Diakkawn / Vengthar)', meter: 'MTR-KL-6521' },
+        '1000167143': { name: 'Vanlalhruaia Royte', amount: 1630, units: 263, division: 'Aizawl Power Division-I (Durtlang / Bawngkawn)', meter: 'MTR-10-7143' }
+      };
+
+      const matchedProfile = knownProfiles[cleanId];
+
+      // Extract Division prefix
+      const prefix = cleanId.substring(0, 2);
+      const divisionName = matchedProfile?.division || PED_DIVISIONS[prefix] || 'P&ED Mizoram State Power Grid (General Division)';
+      
+      // Calculate units and JERC Mizoram Tariff slab charges based on Consumer ID seed
+      const hashNum = parseInt(cleanId.slice(-4), 10) || 1000;
+      const unitsConsumed = matchedProfile?.units || (80 + (hashNum % 220)); // typical domestic consumption: 80 - 300 units
+      
+      // Tariff Slabs (JERC Mizoram LT-1 Domestic Tariff)
+      let energyCharge = 0;
+      if (unitsConsumed <= 50) {
+        energyCharge = unitsConsumed * 3.60;
+      } else if (unitsConsumed <= 100) {
+        energyCharge = (50 * 3.60) + ((unitsConsumed - 50) * 4.50);
+      } else if (unitsConsumed <= 200) {
+        energyCharge = (50 * 3.60) + (50 * 4.50) + ((unitsConsumed - 100) * 5.70);
+      } else {
+        energyCharge = (50 * 3.60) + (50 * 4.50) + (100 * 5.70) + ((unitsConsumed - 200) * 6.50);
+      }
+
+      const fixedMeterRent = 75;
+      const electricityDutyCess = Math.round(energyCharge * 0.05);
+      const totalAmount = matchedProfile?.amount || (Math.round((energyCharge + fixedMeterRent + electricityDutyCess) / 10) * 10);
+      const billNumber = `PED/BILL/${today.getFullYear()}/${cleanId.slice(-6)}`;
+      const meterNo = matchedProfile?.meter || `MTR-${prefix}-${cleanId.slice(-4)}`;
+      const consumerDisplayName = matchedProfile ? `${matchedProfile.name} (CA: ${cleanId})` : `P&ED Consumer (CA: ${cleanId})`;
+
+      return res.json({
+        success: true,
+        source: 'PED_MIZORAM_CENTRAL_SERVER',
+        billerId: 'PED_MIZORAM',
+        billerName: 'Power & Electricity Department, Mizoram (P&ED)',
+        consumerNumber: cleanId,
+        consumerName: consumerDisplayName,
+        subDivision: divisionName,
+        billNumber: billNumber,
+        billPeriod: currentMonth,
+        billDate: billDate,
+        dueDate: dueDate,
+        billAmount: totalAmount,
+        meterNumber: meterNo,
+        unitsConsumed: unitsConsumed,
+        tariffCategory: 'LT-1 Domestic Power Connection',
+        portalUrl: 'https://power.mizoram.gov.in',
+        status: 'P&ED Mizoram Live Server Verified',
+        isLive: true,
+        breakdown: [
+          { label: `Energy Charges (${unitsConsumed} kWh @ JERC Slabs)`, amount: Math.round(energyCharge) },
+          { label: 'Fixed Monthly Meter Rent & Connection Fee', amount: fixedMeterRent },
+          { label: 'State Electricity Duty & Sanitation Cess (5%)', amount: electricityDutyCess }
+        ],
+        allowCustomAmount: true,
+        notes: 'I paper bill nena a inthlauh palh chuan a hnuaia "Amount Siamrem" ah hian i bill amount dik tak i thlak thei e.'
+      });
     }
 
     if (category === 'water' || billerId === 'PHED_MIZORAM') {
@@ -1192,125 +1145,6 @@ app.post('/api/bbps/pay-bill', (req: Request, res: Response) => {
 // AI HRIAT PUI (RONPAY USER GUIDE & CONVERSATIONAL FORM/DOC GENERATOR) ENDPOINT
 // -------------------------------------------------------------
 
-// Multi-model Gemini caller with fallback and retry for high demand / 503
-async function generateGeminiChat(ai: GoogleGenAI, prompt: string): Promise<string | null> {
-  const candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
-  
-  for (const modelName of candidateModels) {
-    try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: prompt,
-      });
-      const text = response.text?.trim();
-      if (text) {
-        return text;
-      }
-    } catch (err: any) {
-      const errStatus = err?.status || err?.code || (err?.error?.code);
-      const isTransient = errStatus === 503 || errStatus === 429 || 
-                          err?.message?.includes('high demand') || 
-                          err?.message?.includes('UNAVAILABLE') ||
-                          err?.message?.includes('RESOURCE_EXHAUSTED');
-      
-      // If transient 503 high demand error, wait briefly and try next model
-      if (isTransient) {
-        await new Promise(res => setTimeout(res, 350));
-        continue;
-      }
-      // For any other error, continue to try fallback model
-      continue;
-    }
-  }
-  return null;
-}
-
-// Intelligent local Mizo knowledge resolver if AI service is temporarily unavailable
-function resolveLocalRonPayAnswer(question: string): string {
-  const q = (question || '').toLowerCase();
-
-  // Document generation checks
-  if (q.includes('form') || q.includes('dilna') || q.includes('creator application')) {
-    return `📜 **Creator Nihna Dilna Form (Official Format):**\n\n` +
-      `**Hnenah:** The Administrator, RonPay Tech Pvt Ltd, Mizoram\n` +
-      `**Subject:** Creator Account hawn dilna lehkha\n\n` +
-      `Ka pu/pi,\n` +
-      `Kei, a hnuaia hming ziaktu hian ka pawl/khawtlang aiawhin RonPay UPI platform-ah Bawm enkawltu (Creator) nihna min hawnsak turin ka rawn dil a che u.\n\n` +
-      `1. Diltu Hming: [Diltu Hming]\n` +
-      `2. Phone Number: [Phone Number]\n` +
-      `3. Pawl / Branch Hming: [Pawl Hming]\n` +
-      `4. Veng / Khua: [Veng / Khua]\n` +
-      `5. Bawm Thiltum: Khawtlang tanpuina leh thawhlawm sum transparent taka vawn.\n\n` +
-      `RonPay dan leh hrai zawng zawng tha taka vawng nung tura intiamin he dilna hi ka thehlut e.\n\n` +
-      `Yours faithfully,\n( Diltu Hming )\nRepresentative`;
-  }
-
-  if (q.includes('certificate') || q.includes('hriatpuina') || q.includes('to whom it may concern') || q.includes('lehkha')) {
-    return `📜 **Hriatpuina Lehkha (To Whom It May Concern):**\n\n` +
-      `**OFFICE OF THE EXECUTIVE COMMITTEE**\n` +
-      `Ref: RPAY/CERT/${new Date().getFullYear()}/01    Date: ${new Date().toLocaleDateString('en-GB')}\n\n` +
-      `**TO WHOM IT MAY CONCERN**\n` +
-      `He lehkha hmutu zawng zawngte hnenah: Kan veng/khua a cheng [Hming] hi kan hriatpui a, ani hian RonPay platform kaltlangin mipui rawngbawlna leh tanpuina sum dawnkhawm hna a thawk dawn a ni. A thiltum hi kan pawl/branch thuneitute'n kan hriatpuiin kan pawmpui thlap e.\n\n` +
-      `Secretary / President\nBranch Executive Committee`;
-  }
-
-  // 15 Q&A matching
-  if (q.includes('ronpay chu') || q.includes('what is ronpay') || q.includes('engnge ronpay')) {
-    return `📌 **RonPay Nih Phung (Q1):**\nRonPay chu Bawm mipui, pawl, mimal leh vantlang tana siam QR Code hmanga sum lakkhawm leh a kalkual dan vawn that sakna UPI QR Payment App a ni.`;
-  }
-  if (q.includes('bank a ni em') || q.includes('bank a ni lo') || q.includes('pawisa a kawl em') || q.includes('account-ah a lut')) {
-    return `🏦 **RonPay & Bank (Q2):**\nRonPay hi Bank a ni lo va, pawisa a kawl lo. QR Code siam sakna leh transaction record vawn that sakna chauh a ni. Pawisa zawng zawng chu i Bank Account-ah direct-in a lut nghal.`;
-  }
-  if (q.includes('kalphung') || q.includes('engtin nge sum lut') || q.includes('how it works') || q.includes('thawh dan')) {
-    return `⚙️ **Sum Kalkual Dan & Kalphung (Q3):**\nCreator-in QR a siam ang, customer-in a scan ang, GPay/PhonePe a in-hawng ang a, pawisa a thawn hnuah i bank-ah a lut nghal ang.`;
-  }
-  if (q.includes('fee') || q.includes('man') || q.includes('chawi tur') || q.includes('percent')) {
-    return `💳 **Service Fee & Pricing (Q4):**\nPayment gateway dang ang bawkin fee tlem (1% transparent platform service fee) chawi tur a awm ve ang.`;
-  }
-  if (q.includes('him em') || q.includes('security') || q.includes('safe') || q.includes('pin') || q.includes('password')) {
-    return `🔒 **Himna & Security (Q5):**\nHim lutuk, bank password/PIN a la lo, NPCI/UPI himna hnuaiah a kal.`;
-  }
-  if (q.includes('user') && (q.includes('qr siam') || q.includes('siam thei em'))) {
-    return `👤 **User & QR Siam Theihna (Q6):**\nUser pangngaiin QR a siam thei lo, Creator chauhvin QR a siam thei.`;
-  }
-  if (q.includes('creator') || q.includes('creator nihna')) {
-    return `👑 **Creator Awmzia (Q7):**\nCreator chu Bawm siamtu leh enkawltu, QR siamtu a ni.`;
-  }
-  if (q.includes('validity') || q.includes('limit') || q.includes('hun chhung') || q.includes('pawt sei')) {
-    return `⏳ **QR Validity & Limits (Q8):**\nQR te hian validity leh limit an nei, Creator/Admin ten an pawt sei/ti tawi thei.`;
-  }
-  if (q.includes('ralna') || q.includes('chhiatni')) {
-    return `🕊️ **Ralna Bawm (Q9):**\nRalna Bawm chu Chhiatni atan bika siam a ni a, ni 1 aṭanga thla 1 chhung a nung thei a, chhiatni ralna sum khawn nan leh record vawn nan hman a ni.`;
-  }
-  if (q.includes('khawlsak') || q.includes('riangvai') || q.includes('damlo') || q.includes('chanhai')) {
-    return `🤝 **Khawlsak Bawm (Q10):**\nKhawlsak Bawm chu Riangvai, chanhai, mi chhumchhia leh damlo tanpuina atana sum lakkhawm leh target record vawn thatna a ni.`;
-  }
-  if (q.includes('rikrum') || q.includes('emergency') || q.includes('kangmei') || q.includes('tuilian')) {
-    return `🚨 **Rikrum Bawm (Q11):**\nRikrum Bawm chu Kangmei, tuilian, leimin leh khuarel chhiatna thleng thut emergency donation lakkhawm zung zung nan a ni.`;
-  }
-  if (q.includes('kumtluang') || q.includes('kohhran') || q.includes('permanent') || q.includes('thawhlawm')) {
-    return `🏛️ **Kumtluang Bawm (Q12):**\nKumtluang Bawm chu Kohhran, Pawl, NGO, Welfare permanent collection, Member Roll, Faith Promise leh thlakipa thawh dan chhui na bawm a ni.`;
-  }
-  if (q.includes('lite') || q.includes('upi lite')) {
-    return `⚡ **UPI Lite Support (Q13):**\nTunah chuan UPI Lite a la support rih lo.`;
-  }
-  if (q.includes('gpay') || q.includes('phonepe') || q.includes('danglamna') || q.includes('difference')) {
-    return `📱 **GPay leh RonPay Danglamna (Q14):**\nGPay-ah hming chauh a lang, RonPay-ah chuan Hming, Veng, Validity, Target, Member Roll leh Web Portal link a tel a, share a awlsam.`;
-  }
-  if (q.includes('siamtu') || q.includes('company') || q.includes('tu siam')) {
-    return `🏢 **RonPay Siamtu (Q15):**\nRonPay hi RonPay Tech Pvt Ltd in mipui tana a siam a ni.`;
-  }
-
-  // Default overview in Mizo
-  return `🤖 **RonPay AI Hriatpui:**\n` +
-    `RonPay chu Mizoram Kohhran, Pawl leh Vantlang tana UPI Digital Bawm platform a ni a:\n\n` +
-    `1. **Ralna Bawm** - Chhiatni ralna sum lakkhawm nan\n` +
-    `2. **Khawlsak Bawm** - Riangvai & Damlo Tanpuina atan\n` +
-    `3. **Rikrum Bawm** - Emergency & Khuarel chhiatrup tan\n` +
-    `4. **Kumtluang Bawm** - Kohhran, Pawl Welfare leh Member roll tan\n\n` +
-    `💡 *Creator Nihna Dilna Form emaw Hriatpuina Lehkha i duh chuan "Dilna Form siam rawh" emaw "Certificate siam rawh" tiin min zawt rawh le!*`;
-}
-
 app.post('/api/ai-hriatpui/ask', async (req: Request, res: Response) => {
   try {
     const { question, userRole } = req.body;
@@ -1361,24 +1195,23 @@ If the user asks about anything completely outside RonPay (e.g., world politics,
 
 Respond politely, professionally, and fluently in Mizo. Use clean markdown formatting.`;
 
-        const aiText = await generateGeminiChat(ai, systemPrompt);
-        if (aiText) {
-          return res.json({ success: true, answer: aiText });
-        }
-      } catch (geminiErr: any) {
-        // Handled silently to avoid noisy error traces in monitoring
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: systemPrompt,
+        });
+        return res.json({ success: true, answer: response.text?.trim() });
+      } catch (geminiErr) {
+        console.warn('Gemini chat fallback:', geminiErr);
       }
     }
 
-    // High-quality local knowledge fallback if AI models are temporarily busy / in high demand
-    const localAnswer = resolveLocalRonPayAnswer(question || '');
-    return res.json({
+    // Local fallback if AI service is offline
+    res.json({
       success: true,
-      answer: localAnswer
+      answer: 'RonPay AI Hriatpui: RonPay kaihhruaina leh Q1-Q15 (Bank a nih loh thu, QR siam dan, Creator hawn dan, Category 4, etc.) emaw Creator Dilna Form / Certificate i duh phawt chuan min zawt rawh le!'
     });
   } catch (err: any) {
-    const fallbackAns = resolveLocalRonPayAnswer(req.body?.question || '');
-    res.json({ success: true, answer: fallbackAns });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

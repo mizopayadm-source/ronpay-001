@@ -40,14 +40,6 @@ import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translati
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { UPIIntentModal } from './UPIIntentModal';
 import { validateUpiId } from '../utils/upi';
-import { 
-  ALL_MONTH_NAMES_FULL, 
-  getCurrentMonthName, 
-  getCurrentYear, 
-  getCurrentQuarterName, 
-  getPreviousMonthName, 
-  getYearOptions 
-} from '../utils/monthHelper';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -78,26 +70,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [upiValidationError, setUpiValidationError] = useState<string | null>(null);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
-  const [isUPIIntentModalOpen, setIsUPIIntentModalOpen] = useState<boolean>(false);
-  const [onlineDonorPayload, setOnlineDonorPayload] = useState<{
-    donorName: string;
-    donorPhone?: string;
-    donorVeng?: string;
-    memberId?: string;
-    subId?: string;
-    isDependent: boolean;
-    isAnonymous: boolean;
-  }>({
-    donorName: '',
-    donorPhone: undefined,
-    donorVeng: undefined,
-    memberId: undefined,
-    subId: undefined,
-    isDependent: false,
-    isAnonymous: false,
-  });
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
@@ -127,11 +100,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const t = TRANSLATIONS[language];
 
-  // Kumtluang period & frequency selection (defaults dynamically to current month & year)
+  // Kumtluang period & frequency selection
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentMonthName());
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => getCurrentQuarterName());
-  const [selectedYear, setSelectedYear] = useState<string>(() => getCurrentYear());
+  const [selectedMonth, setSelectedMonth] = useState<string>('August');
+  const [selectedQuarter, setSelectedQuarter] = useState<string>('Q3 (Jul - Sep)');
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
 
   // Kumtluang subcategory breakdown
   const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
@@ -141,30 +114,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const config = BAWM_CONFIG[category];
-
-  // Fallback campaign if not explicitly provided
-  const effectiveCampaign: Campaign = campaign || {
-    id: `cmp-${category}-default`,
-    category,
-    title: category === 'ralna' ? 'Pi Lalhmingliani Ralna' :
-           category === 'kumtluang' ? 'BCM Ebenezer, Zobawk' :
-           category === 'rikrum' ? 'Emergency Relief Support' :
-           category === 'khawlsak' ? 'Hnuchham Pual Donation' : 'RonPay Digital Bawm',
-    location: 'Aizawl, Mizoram',
-    upiId: category === 'ralna' ? 'bungkawn.yma@okaxis' :
-           category === 'kumtluang' ? 'bcm.ebenezer.zobawk@sbi' :
-           category === 'rikrum' ? 'kanan.disaster@ybl' :
-           category === 'khawlsak' ? 'dawrpui.charity@ibl' : 'ronpay.mizoram@okhdfcbank',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    createdBy: '9862311223'
-  };
-
-  const activeCampaign = campaign || effectiveCampaign;
-  const isVoided = activeCampaign.status === 'voided' || !!activeCampaign.isVoided;
-  const isExpired = !isVoided && isCampaignExpired(activeCampaign.validityDate, activeCampaign.status);
-  const isPendingApproval = activeCampaign.status === 'pending_approval';
-  const isRejected = activeCampaign.status === 'rejected';
+  const isVoided = campaign?.status === 'voided' || !!campaign?.isVoided;
+  const isExpired = !isVoided && isCampaignExpired(campaign?.validityDate, campaign?.status);
+  const isPendingApproval = campaign?.status === 'pending_approval';
+  const isRejected = campaign?.status === 'rejected';
 
   // Derive human-readable period label
   const periodLabel = periodType === 'monthly'
@@ -235,7 +188,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setSelectedMember(match);
       setDonorName(match.name);
       setDonorPhone(match.fullPhone || '');
-      setDonorSection(match.section || '');
+      setDonorSection(match.section || 'Section A');
       setSelectedPayerType('primary');
       setIsNewMemberMode(false);
     } else {
@@ -261,8 +214,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const newId = `${orgCode}-${phoneLast4}`;
 
     const sectionToUse = isCustomSection 
-      ? (customSectionText.trim() || undefined) 
-      : (newRegSection.trim() || undefined);
+      ? (customSectionText.trim() || 'General') 
+      : (newRegSection || 'General');
 
     const newMember: MemberRecord = {
       id: newId,
@@ -281,7 +234,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setSelectedMember(newMember);
     setDonorName(newMember.name);
     setDonorPhone(newMember.fullPhone || '');
-    setDonorSection(newMember.section || '');
+    setDonorSection(newMember.section || 'General');
     setPhoneSearchQuery(phoneLast4);
     setSelectedPayerType('primary');
     setIsNewMemberMode(false);
@@ -327,7 +280,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         setEditMemberSection('__custom__');
       } else {
         setIsEditCustomSection(false);
-        setEditMemberSection(currentSec || '');
+        setEditMemberSection(currentSec || campaign!.definedSections![0]);
       }
     } else {
       setIsEditCustomSection(false);
@@ -528,33 +481,43 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setIsProcessing(true);
 
     if (paymentMethod === 'online') {
-      // 1. Strict recipient UPI ID validation
-      const targetUpi = (activeCampaign.targetUpiId || activeCampaign.upiId || '').trim();
-      const upiValidation = validateUpiId(targetUpi);
-      
-      if (!upiValidation.isValid) {
-        setIsProcessing(false);
-        const errMsg = upiValidation.error || 'Campaign siamtu / Creator hian UPI ID dik a dah leh dah loh check a ni e.';
-        setUpiValidationError(errMsg);
-        alert(`⛔ UPI ID A DIK LO EMAW A AWM LO:\n"${targetUpi || 'A ruak'}"\n\n${errMsg}\n\nUPI ID dik lo a nih avangin sum pek luh theih a ni lo.`);
-        return;
-      }
+      setPhonePeStatus('CALLING_PG');
 
-      setUpiValidationError(null);
+      setTimeout(() => {
+        setPhonePeStatus('SUCCESS');
 
-      // 2. Set online donor payload and trigger UPI Intent Modal
-      setOnlineDonorPayload({
-        donorName: resolvedDonorName || 'Valued Donor',
-        donorPhone: resolvedDonorPhone || undefined,
-        donorVeng: resolvedDonorVeng || undefined,
-        memberId: resolvedMemberId,
-        subId: resolvedSubId,
-        isDependent: resolvedIsDependent,
-        isAnonymous: isAnonymous
-      });
+        setTimeout(() => {
+          const transaction: Transaction = {
+            id: 'RPAY-' + Math.floor(100000 + Math.random() * 900000),
+            campaignId: campaign?.id || `cmp-${category}-custom`,
+            campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
+            category: category,
+            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+            memberId: isAnonymous ? undefined : resolvedMemberId,
+            subId: isAnonymous ? undefined : resolvedSubId,
+            isDependent: isAnonymous ? false : resolvedIsDependent,
+            isAnonymous: isAnonymous,
+            amount: subtotal,
+            platformFee: platformFee,
+            totalAmount: totalPayable,
+            paymentMethod: 'online',
+            status: 'completed',
+            remark: remark.trim() || undefined,
+            subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
+            periodType: category === 'kumtluang' ? periodType : undefined,
+            periodMonth: category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined,
+            periodYear: category === 'kumtluang' ? selectedYear : undefined,
+            periodLabel: category === 'kumtluang' ? periodLabel : undefined,
+            timestamp: new Date().toISOString(),
+            txHash: 'UPI' + Math.random().toString(36).substring(2, 12).toUpperCase(),
+          };
 
-      setIsProcessing(false);
-      setIsUPIIntentModalOpen(true);
+          setIsProcessing(false);
+          onPaymentSuccess(transaction);
+        }, 900);
+      }, 1200);
     } else {
       // Cash payment
       const transaction: Transaction = {
@@ -787,11 +750,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
-                <span className="font-black text-slate-900">{campaign?.targetAmount && campaign.targetAmount > 0 ? `₹${campaign.targetAmount.toLocaleString('en-IN')}` : (language === 'english' ? 'No Target' : 'Target Set loh')}</span>
+                <span className="font-black text-slate-900">₹{(campaign?.targetAmount || 50000).toLocaleString('en-IN')}</span>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
-                <span className="font-black text-slate-900">{campaign?.maxLimit && campaign.maxLimit > 0 ? `₹${campaign.maxLimit.toLocaleString('en-IN')}` : (language === 'english' ? 'No Limit' : 'Limit awm lo')}</span>
+                <span className="font-black text-slate-900">₹{(campaign?.maxLimit || 100000).toLocaleString('en-IN')}</span>
               </div>
             </div>
           </div>
@@ -1454,35 +1417,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               )}
             </div>
           ) : (
-            /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum, etc.) */
+            /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum) */
             !isAnonymous && (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                    I Hming Pum (Donor Full Name) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={donorName}
-                    onChange={(e) => setDonorName(e.target.value)}
-                    placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                    Veng / Location (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={donorSection}
-                    onChange={(e) => setDonorSection(e.target.value)}
-                    placeholder="e.g. Chanmari / Ramhlun / Aizawl (a duh tan chauh)"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-                  />
-                </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                  I Hming Pum (Donor Full Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={donorName}
+                  onChange={(e) => setDonorName(e.target.value)}
+                  placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                />
               </div>
             )
           )}
@@ -1563,38 +1511,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 {periodType === 'monthly' && (
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-slate-600 font-bold block">Thla (Month)</label>
-                      {selectedMonth !== getCurrentMonthName() && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedMonth(getCurrentMonthName());
-                            setSelectedYear(getCurrentYear());
-                          }}
-                          className="text-[9.5px] font-black text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
-                        >
-                          Tun thla thlang rawh
-                        </button>
-                      )}
-                    </div>
+                    <label className="text-[10px] text-slate-500 font-bold block mb-1">Thla (Month)</label>
                     <select
                       value={selectedMonth}
                       onChange={(e) => setSelectedMonth(e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                     >
-                      {ALL_MONTH_NAMES_FULL.map((m, idx) => {
-                        const curM = getCurrentMonthName();
-                        const curY = getCurrentYear();
-                        const isCurrent = m === curM && selectedYear === curY;
-                        const isPast = (Number(selectedYear) < Number(curY)) || 
-                                       (selectedYear === curY && idx < new Date().getMonth());
-                        return (
-                          <option key={m} value={m}>
-                            {m} {isCurrent ? '⭐ (Tun thla / Current)' : isPast ? '(Thla liam ta / Past)' : ''}
-                          </option>
-                        );
-                      })}
+                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -1622,76 +1547,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     onChange={(e) => setSelectedYear(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                   >
-                    {getYearOptions().map(yr => (
-                      <option key={yr} value={yr}>
-                        {yr} {yr === getCurrentYear() ? '(Kum kal lai)' : Number(yr) < Number(getCurrentYear()) ? '(Kum hmasa)' : ''} {periodType === 'yearly' ? '(Kumtluan)' : ''}
-                      </option>
+                    {['2025', '2026', '2027', '2028'].map(yr => (
+                      <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
                     ))}
                   </select>
                 </div>
               </div>
-
-              {/* Quick shortcut pills for Current & Past Months */}
-              {periodType === 'monthly' && (() => {
-                const curM = getCurrentMonthName();
-                const curY = getCurrentYear();
-                const prev1 = getPreviousMonthName(1);
-                const prev2 = getPreviousMonthName(2);
-                return (
-                  <div className="pt-2 border-t border-blue-100/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
-                      <span>Thlan awlsamna (Quick Select):</span>
-                      <span className="text-[9.5px] text-indigo-600 font-normal">Thla liam ta pawh thlan theih reng e</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(curM);
-                          setSelectedYear(curY);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer flex items-center gap-1 ${
-                          selectedMonth === curM && selectedYear === curY
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>⚡</span> Tun thla ({curM})
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(prev1.month);
-                          setSelectedYear(prev1.year);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                          selectedMonth === prev1.month && selectedYear === prev1.year
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>⏮️</span> Thla hmasa ({prev1.month})
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(prev2.month);
-                          setSelectedYear(prev2.year);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                          selectedMonth === prev2.month && selectedYear === prev2.year
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>⏮️</span> {prev2.month}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           )}
 
@@ -1828,18 +1689,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </div>
 
-        {/* Inline UPI Error Alert */}
-        {upiValidationError && paymentMethod === 'online' && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <p className="font-bold text-rose-800">⛔ UPI ID A DIK LO / A DIK LO HLE:</p>
-              <p className="text-[11px] leading-relaxed">{upiValidationError}</p>
-              <p className="text-[10px] text-rose-600 italic">UPI ID a dik loh chuan sum pek luh theih a ni lo.</p>
-            </div>
-          </div>
-        )}
-
         {/* Pay Button */}
         <button
           type="submit"
@@ -1870,34 +1719,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </button>
       </form>
-
-      {/* UPI Intent & App Launcher Modal */}
-      {isUPIIntentModalOpen && (
-        <UPIIntentModal
-          isOpen={isUPIIntentModalOpen}
-          onClose={() => setIsUPIIntentModalOpen(false)}
-          campaign={activeCampaign}
-          amount={subtotal}
-          platformFee={platformFee}
-          donorName={onlineDonorPayload.donorName}
-          donorPhone={onlineDonorPayload.donorPhone}
-          donorVeng={onlineDonorPayload.donorVeng}
-          memberId={onlineDonorPayload.memberId}
-          subId={onlineDonorPayload.subId}
-          isDependent={onlineDonorPayload.isDependent}
-          isAnonymous={onlineDonorPayload.isAnonymous}
-          subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
-          periodType={category === 'kumtluang' ? periodType : undefined}
-          periodMonth={category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined}
-          periodYear={category === 'kumtluang' ? selectedYear : undefined}
-          periodLabel={category === 'kumtluang' ? periodLabel : undefined}
-          remark={remark.trim() || undefined}
-          onPaymentSuccess={(tx) => {
-            setIsUPIIntentModalOpen(false);
-            onPaymentSuccess(tx);
-          }}
-        />
-      )}
     </div>
   );
 };
