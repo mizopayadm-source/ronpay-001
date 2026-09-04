@@ -533,9 +533,9 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
 };
 
 export const GUEST_CREATOR_PROFILE: CreatorProfile = {
-  name: 'RonPay User',
-  orgName: 'RonPay Community',
-  designation: 'Standard User',
+  name: 'Khualmi (Guest User)',
+  orgName: 'Mizoram Mipui / Community',
+  designation: 'Khualmi / Guest User',
   phone: '',
   isPhoneVerified: false,
   isApproved: false,
@@ -574,9 +574,9 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  // First time app launch: initialize default creator
-  saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
-  return DEFAULT_INITIAL_CREATOR;
+  // Default entry in RonPay App: Guest User / (Khualmi)
+  saveStoredCreatorProfile(GUEST_CREATOR_PROFILE);
+  return GUEST_CREATOR_PROFILE;
 };
 
 export const logoutCreator = (): CreatorProfile => {

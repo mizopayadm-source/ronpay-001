@@ -93,7 +93,8 @@ import { RonPayWalletModal } from './components/RonPayWalletModal';
 import { SmartLoginModal } from './components/SmartLoginModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { getUrlRoute, updateBrowserUrl } from './utils/urlRouting';
+import { RonPayWebsite } from './components/RonPayWebsite';
+import { getUrlRoute, updateBrowserUrl, updateBrowserView } from './utils/urlRouting';
 
 export default function App() {
   // Splash screen state for smooth UX
@@ -101,6 +102,9 @@ export default function App() {
 
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
+
+  // View Mode: 'website' (Marketing & Information Landing Page) or 'app' (Web Application)
+  const [appView, setAppView] = useState<'website' | 'app'>(() => initialRoute?.view || 'website');
 
   // Navigation & View States
   const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'home');
@@ -360,6 +364,9 @@ export default function App() {
     const route = getUrlRoute();
     if (!route) return;
 
+    if (route.view) {
+      setAppView(route.view);
+    }
     if (route.screen) {
       setCurrentScreen(route.screen);
     }
@@ -669,6 +676,31 @@ export default function App() {
     handleNavigate('home');
   };
 
+  // Switch between Website view and App view
+  const handleLaunchApp = (targetScreen?: string, targetCategory?: BawmCategory) => {
+    // Default to Guest User (Khualmi) if not logged in
+    if (!creatorProfile || !creatorProfile.phone) {
+      setCreatorProfile(GUEST_CREATOR_PROFILE);
+    }
+    if (targetScreen) {
+      const validScreens: ScreenId[] = ['home', 'explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'cash_pending'];
+      const matched = validScreens.find(s => s === targetScreen);
+      if (matched) setCurrentScreen(matched);
+    } else {
+      setCurrentScreen('home');
+    }
+    if (targetCategory) {
+      setSelectedCategory(targetCategory);
+    }
+    setAppView('app');
+    updateBrowserView('app', (targetScreen as ScreenId) || 'home');
+  };
+
+  const handleSwitchToWebsite = () => {
+    setAppView('website');
+    updateBrowserView('website');
+  };
+
   // Filter transactions for Sulhnu History
   const userVisibleTransactions = getUserOrCreatorVisibleTransactions(
     transactions,
@@ -676,6 +708,27 @@ export default function App() {
     creatorProfile,
     userPaidIds
   );
+
+  // When in Marketing & Information Landing Page View:
+  if (appView === 'website') {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 text-slate-100 font-sans antialiased selection:bg-orange-500 selection:text-white">
+        {showSplash && (
+          <SplashScreen onFinish={() => setShowSplash(false)} minDurationMs={400} />
+        )}
+        <RonPayWebsite
+          onLaunchApp={handleLaunchApp}
+          onOpenCreateQR={() => handleLaunchApp('create_qr')}
+          onOpenRegister={() => handleLaunchApp('creator_reg')}
+          onOpenBBPS={(serviceId) => {
+            handleLaunchApp('home');
+            setIsBillModalOpen(true);
+          }}
+          initialLanguage={language}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
@@ -705,6 +758,7 @@ export default function App() {
           onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
           onOpenLogin={() => setIsLoginModalOpen(true)}
           creatorProfile={creatorProfile}
+          onSwitchToWebsite={handleSwitchToWebsite}
         />
 
         {/* Main Body Screen Router */}

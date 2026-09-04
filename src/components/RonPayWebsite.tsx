@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   QrCode,
   ShieldCheck,
@@ -9,39 +9,63 @@ import {
   CheckCircle2,
   ChevronDown,
   ArrowRight,
-  Download,
   Building2,
-  HeartHandshake,
   Receipt,
   Zap,
-  HelpCircle,
   MessageCircle,
-  ExternalLink,
   Volume2,
   Banknote,
-  Flame,
-  FileText,
   Lock,
   Globe,
-  Share2,
   Check,
-  Layers,
   Search,
-  Printer
+  Mail,
+  Copy,
+  Phone,
+  MapPin,
+  ExternalLink,
+  Droplets,
+  Car,
+  GraduationCap,
+  Building,
+  Send,
+  X,
+  Bot,
+  UserCheck,
+  RefreshCw,
+  HelpCircle,
+  Menu,
+  HeartHandshake,
+  Share2,
+  AlertTriangle,
+  CreditCard,
+  Tv,
+  Flame,
+  Shield
 } from 'lucide-react';
-import { Campaign, BawmCategory } from '../types';
+import { BawmCategory, BillService } from '../types';
+import { askAIHriatpui } from '../services/aiHriatpuiService';
 
 interface RonPayWebsiteProps {
-  onLaunchApp: () => void;
+  onLaunchApp: (targetScreen?: string, targetCategory?: BawmCategory) => void;
   onOpenCreateQR?: () => void;
   onOpenRegister?: () => void;
+  onOpenBBPS?: (serviceId?: string) => void;
   initialLanguage?: 'mizo' | 'english';
+}
+
+interface ChatMessage {
+  id: string;
+  sender: 'ai' | 'user';
+  text: string;
+  time: string;
 }
 
 export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   onLaunchApp,
   onOpenCreateQR,
   onOpenRegister,
+  onOpenBBPS,
   initialLanguage = 'mizo',
 }) => {
   const [lang, setLang] = useState<'mizo' | 'english'>(initialLanguage);
@@ -50,16 +74,50 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [simulatorCategory, setSimulatorCategory] = useState<BawmCategory>('ralna');
   const [simulatorAmount, setSimulatorAmount] = useState<number>(500);
   const [showSimulatedReceipt, setShowSimulatedReceipt] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  
+  // Interactive BBPS showcase state
+  const [selectedBbpsKey, setSelectedBbpsKey] = useState<string>('ebill');
+  const [bbpsInputVal, setBbpsInputVal] = useState<string>('102938475');
+  const [bbpsSimResult, setBbpsSimResult] = useState<{ consumerName: string; amount: number; dueDate: string } | null>({
+    consumerName: 'Lalramchhana (Bungkawn Veng)',
+    amount: 1420,
+    dueDate: '15th of this month'
+  });
 
-  // Soundbox voice audio synthesis demo
-  const playSoundboxDemo = () => {
+  // Contact section: Email copy feedback & App Link copy feedback
+  const [emailCopied, setEmailCopied] = useState<boolean>(false);
+  const [appLinkCopied, setAppLinkCopied] = useState<boolean>(false);
+
+  // AIChat (RonPay Khual chhawn) State
+  const [isAIChatOpen, setIsAIChatOpen] = useState<boolean>(false);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: 'msg-init-1',
+      sender: 'ai',
+      text: initialLanguage === 'mizo'
+        ? 'Chibai le! Kei hi RonPay Khual Chhawn (AI Assistant) ka ni e. India rama payment company lian ber PhonePe nen kan thawhdun dan te, Bawm hrang hrang 5-te, BBPS EBill, Water bill, Fastag, School fees, Municipal taxes, Mobile topup, emaw www.ronpay.app/app hman dan engpawh min zawt thei e!'
+        : 'Welcome! I am RonPay Khual Chhawn, your AI Greeter. Ask me about our official partnership with PhonePe, our 5 Community Bawms, BBPS Utility Bills, Mobile Topup, or how to launch www.ronpay.app/app as Guest User (Khualmi)!',
+      time: 'Just now'
+    }
+  ]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (isAIChatOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isAIChatOpen]);
+
+  // Voice synthesis demo
+  const playSoundboxDemo = (customText?: string) => {
     try {
       setSoundboxPlaying(true);
       if (typeof window !== 'undefined' && 'AudioContext' in window) {
         const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
-        
-        // Pleasant payment chime (E-flat major triad)
         const notes = [587.33, 739.99, 880.0];
         notes.forEach((freq, idx) => {
           const osc = ctx.createOscillator();
@@ -75,12 +133,11 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         });
       }
 
-      // Voice prompt using Web Speech Synthesis if available
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(
-          lang === 'mizo' 
+          customText || (lang === 'mizo' 
             ? `RonPay-ah cheng zanga dawn a ni e` 
-            : `Received Rupees five hundred on RonPay`
+            : `Received Rupees five hundred on RonPay`)
         );
         utterance.rate = 1.0;
         utterance.pitch = 1.1;
@@ -95,31 +152,222 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
     }
   };
 
+  // AIChat Message Sender
+  const handleSendChatMessage = async (presetText?: string) => {
+    const textToSend = (presetText || chatInput).trim();
+    if (!textToSend || isChatLoading) return;
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text: textToSend,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    if (!presetText) setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const response = await askAIHriatpui(textToSend, 'Khualmi (Guest User)');
+      const aiReply: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        sender: 'ai',
+        text: response.answer || (lang === 'mizo' ? 'Ka hrethiam e! RonPay ah hian engkim a awlsam a ni.' : 'Got it! RonPay makes everything smooth and instant.'),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setChatMessages((prev) => [...prev, aiReply]);
+    } catch (err) {
+      const fallbackReply: ChatMessage = {
+        id: `ai-err-${Date.now()}`,
+        sender: 'ai',
+        text: lang === 'mizo'
+          ? 'RonPay Khual Chhawn: RonPay hi PhonePe partner a ni a, Ralna, Kumtluang, Khawlsak, Rikrum, leh BBPS utilities (EBill, Tui Bill, Fastag, School Fees, Municipal Taxes, Mobile Topup) tan a hman theih vek e. www.ronpay.app/app ah hian Guest User angin a lut nghal theih e!'
+          : 'RonPay Khual Chhawn: RonPay partners with PhonePe to provide 5 Community Bawms and complete BBPS utilities (EBill, Water, Fastag, Fees, Municipal Taxes, Mobile Topup). Access www.ronpay.app/app as Guest User anytime!',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setChatMessages((prev) => [...prev, fallbackReply]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, type: 'email' | 'applink') => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      if (type === 'email') {
+        setEmailCopied(true);
+        setTimeout(() => setEmailCopied(false), 2500);
+      } else {
+        setAppLinkCopied(true);
+        setTimeout(() => setAppLinkCopied(false), 2500);
+      }
+    }
+  };
+
   const isMizo = lang === 'mizo';
+
+  // BBPS Services Master Definition with prominent EBill, Water, Fastag, School Fees, Municipal Taxes, and Mobile Topup
+  const BBPS_UTILITIES = [
+    {
+      id: 'ebill',
+      name: isMizo ? 'EBill (Electric Bill)' : 'EBill (Electricity)',
+      provider: 'Power & Electricity Dept, Mizoram (P&ED)',
+      icon: Zap,
+      color: 'amber',
+      accentBg: 'bg-amber-500/20 border-amber-500/30 text-amber-300',
+      tag: 'P&ED Mizoram',
+      description: isMizo 
+        ? 'Consumer No chhut luhin i Electric bill zat leh due date a lo lang nghal a, PhonePe / UPI hmangin second 5 chhungin a pek theih.' 
+        : 'Enter 9-digit Consumer ID to fetch official P&ED power bill and clear instantly with UPI.',
+      placeholder: 'Consumer Number (e.g. 102938475)',
+      sampleDue: '₹1,420',
+      sampleConsumer: 'Lalramchhana (Bungkawn Veng)'
+    },
+    {
+      id: 'water',
+      name: isMizo ? 'Water Bill (Tui Bill)' : 'Water Bill (PHED)',
+      provider: 'Public Health Engineering Dept (PHED Mizoram)',
+      icon: Droplets,
+      color: 'sky',
+      accentBg: 'bg-sky-500/20 border-sky-500/30 text-sky-300',
+      tag: 'PHED Mizoram',
+      description: isMizo 
+        ? 'PHED Mizoram Tui connection bill rang taka check leh pek nghal theihna. Payment receipt PDF download theih nghal.' 
+        : 'Instant PHED water supply bill fetching with verified digital clearance receipt.',
+      placeholder: 'Consumer ID / RR No (e.g. AZL-98421)',
+      sampleDue: '₹480',
+      sampleConsumer: 'Zothanpuii (Mission Veng)'
+    },
+    {
+      id: 'fastag',
+      name: isMizo ? 'FASTag Recharge' : 'FASTag Toll Recharge',
+      provider: 'National Electronic Toll Collection (NETC / NHAI)',
+      icon: Car,
+      color: 'indigo',
+      accentBg: 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300',
+      tag: 'Highway Tolls',
+      description: isMizo 
+        ? 'Motor registration number (e.g. MZ-01-AA-1234) hmangin SBI, ICICI, Airtel, Bank of Baroda FASTag awlsam taka recharge nghal theihna.' 
+        : 'Instant FASTag topup for all bank issuers across Indian highway toll plazas.',
+      placeholder: 'Vehicle Reg No (e.g. MZ-01-X-4321)',
+      sampleDue: '₹1,000',
+      sampleConsumer: 'H. Lalmalsawma (Scorpio-N)'
+    },
+    {
+      id: 'school_fees',
+      name: isMizo ? 'School & College Fees' : 'School & College Fees',
+      provider: 'Mizoram University, PUC, Colleges & Schools',
+      icon: GraduationCap,
+      color: 'emerald',
+      accentBg: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300',
+      tag: 'Education BBPS',
+      description: isMizo 
+        ? 'MZU, Pachhunga University College, Govt Colleges, leh Mizoram school hrang hrang admission, tuition & hostel fees awlsam taka pekna.' 
+        : 'Pay tuition, examination, and semester fees for Mizoram universities and schools with official roll verification.',
+      placeholder: 'Student Roll No / Enrollment ID',
+      sampleDue: '₹3,500',
+      sampleConsumer: 'Lalrinzuala (PUC Semester 4)'
+    },
+    {
+      id: 'municipal_taxes',
+      name: isMizo ? 'Municipal Taxes (AMC)' : 'Municipal Taxes (AMC)',
+      provider: 'Aizawl Municipal Corporation (AMC)',
+      icon: Building,
+      color: 'purple',
+      accentBg: 'bg-purple-500/20 border-purple-500/30 text-purple-300',
+      tag: 'AMC Mizoram',
+      description: isMizo 
+        ? 'AMC Property Tax, Trade License renewal, leh Municipal Ward fees official clearance receipt nen a ruka pek theihna.' 
+        : 'Aizawl Municipal Corporation Property Tax, Trade License fees, and urban dues with verified clearance seal.',
+      placeholder: 'Holding No / Trade License No (e.g. AMC-PR-8831)',
+      sampleDue: '₹850',
+      sampleConsumer: 'K. Lalchhandama (Dawrpui Commercial)'
+    },
+    {
+      id: 'mobile_topup',
+      name: isMizo ? 'Mobile Topup & Data Recharge' : 'Mobile Recharge & Topup',
+      provider: 'Jio, Airtel, Vodafone Idea (Vi), BSNL',
+      icon: Smartphone,
+      color: 'rose',
+      accentBg: 'bg-rose-500/20 border-rose-500/30 text-rose-300',
+      tag: 'All Operators',
+      description: isMizo 
+        ? 'Jio, Airtel, Vi, leh BSNL prepaid recharge leh postpaid bill payment. Unlimited 5G plan leh validity packs a thlan theih nghal.' 
+        : 'Instant prepaid recharges and postpaid bill clearance for Jio, Airtel, Vi, and BSNL with real-time plan browser.',
+      placeholder: '10-Digit Mobile Number (e.g. 9862899001)',
+      sampleDue: '₹299',
+      sampleConsumer: 'Jio 5G 28 Days Unlimited'
+    },
+    {
+      id: 'dth_gas',
+      name: isMizo ? 'DTH & LPG Cylinder' : 'DTH & LPG Cylinder',
+      provider: 'Tata Play, Airtel DTH, Indane / Bharat Gas',
+      icon: Tv,
+      color: 'teal',
+      accentBg: 'bg-teal-500/20 border-teal-500/30 text-teal-300',
+      tag: 'Home Utilities',
+      description: isMizo 
+        ? 'Tata Play, Airtel DTH, Dish TV recharge leh Indane/Bharat Gas cylinder booking rualin bill pek nghal theihna.' 
+        : 'DTH subscription renewal and LPG cylinder booking payment with instant SMS confirmation.',
+      placeholder: 'Subscriber ID / LPG Consumer ID',
+      sampleDue: '₹950',
+      sampleConsumer: 'Indane Gas Delivery Lunglei'
+    }
+  ];
+
+  const currentBbps = BBPS_UTILITIES.find(b => b.id === selectedBbpsKey) || BBPS_UTILITIES[0];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden">
       
-      {/* Top Authorized Partner Status Bar */}
-      <aside aria-label="Announcement" className="w-full bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border-b border-indigo-900/40 px-3 py-1.5 text-center text-[10px] sm:text-xs font-semibold text-indigo-200 flex items-center justify-center gap-2">
-        <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-400/30 text-[9px] font-black uppercase tracking-wider">
-          <ShieldCheck className="w-3 h-3 text-purple-300" />
-          {isMizo ? 'Authorized Partner' : 'Authorized PhonePe PG V2 Partner'}
-        </span>
-        <span className="hidden sm:inline text-indigo-300/80">|</span>
-        <span className="text-slate-300 truncate">
-          {isMizo 
-            ? 'Mizoram Kohhran leh Khawtlang Tana Digital Bawm Platform Felfai Ber' 
-            : "Mizoram's Leading Digital Community & Church Bawm Platform"}
-        </span>
+      {/* 1. TOP ANNOUNCEMENT RIBBON: PhonePe Partnership & App URL */}
+      <aside aria-label="Partner Announcement" className="w-full bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border-b border-indigo-900/40 px-3 py-1.5 text-center text-[11px] font-semibold text-indigo-200">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 px-2">
+          {/* PhonePe Partnership Badge */}
+          <div className="flex items-center gap-1.5 text-left">
+            <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-400/40 text-[9.5px] font-black uppercase tracking-wider">
+              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              Official PhonePe Partner
+            </span>
+            <span className="text-slate-300 text-[10px] sm:text-[11px] hidden sm:inline">
+              {isMizo 
+                ? 'India rama Digital Payment Company lian ber PhonePe nen thawhdun a ni' 
+                : "In official partnership with India's leading digital payment giant PhonePe"}
+            </span>
+          </div>
+
+          {/* Official App Link Pill & Guest User notice */}
+          <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+            <span className="hidden md:inline text-slate-400">
+              {isMizo ? 'Default in Khualmi (Guest User) ah a lut nghal ang' : 'Defaults to Guest User (Khualmi)'}
+            </span>
+            <span className="text-slate-500 hidden md:inline">•</span>
+            <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold text-amber-300 shadow-xs">
+              <span>App Link:</span>
+              <span className="text-white underline decoration-amber-400/60">www.ronpay.app/app</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
+                className="hover:text-white p-0.5 text-slate-400 transition"
+                title="Copy App Link"
+              >
+                {appLinkCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      {/* Main Sticky Header */}
-      <header className="sticky top-0 z-50 w-full bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 transition-all">
+      {/* 2. MAIN STICKY NAVIGATION HEADER */}
+      <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
-          {/* Brand Logo */}
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          {/* Brand Logo with FinTech Tag */}
+          <div 
+            className="flex items-center gap-2.5 cursor-pointer" 
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-md shadow-indigo-500/20 flex items-center justify-center">
               <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
                 <span className="font-black text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-400">
@@ -133,37 +381,43 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   Ron<span className="text-orange-500">Pay</span>
                 </span>
                 <span className="bg-purple-600/30 text-purple-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-purple-400/40 uppercase tracking-wider">
-                  PRO
+                  PhonePe TSP
                 </span>
               </div>
               <p className="text-[9.5px] text-slate-400 font-semibold tracking-tight">
-                Mizo Community FinTech
+                Mizo FinTech & BBPS Platform
               </p>
             </div>
           </div>
 
           {/* Center Navigation Links (Desktop) */}
-          <nav className="hidden md:flex items-center bg-slate-900/90 border border-slate-800/80 rounded-full p-1 text-xs font-semibold text-slate-300 shadow-inner">
-            <a href="#hero" className="px-3.5 py-1.5 rounded-full bg-amber-400 text-slate-950 font-black shadow-xs transition">
+          <nav className="hidden lg:flex items-center bg-slate-900/90 border border-slate-800/80 rounded-full p-1 text-xs font-semibold text-slate-300 shadow-inner">
+            <a href="#hero" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
               {isMizo ? 'Kawtchhuah' : 'Home'}
             </a>
-            <a href="#about" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
-              {isMizo ? 'Chanchin' : 'About Us'}
+            <a href="#phonepe" className="px-3 py-1.5 rounded-full text-purple-300 hover:text-purple-200 hover:bg-purple-950/50 transition flex items-center gap-1">
+              <Zap className="w-3 h-3 text-purple-400" />
+              <span>PhonePe</span>
             </a>
-            <a href="#features" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#services" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+              {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
+            </a>
+            <a href="#bbps" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1">
+              <CreditCard className="w-3 h-3 text-amber-400" />
+              <span>BBPS & Topup</span>
+            </a>
+            <a href="#features" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
               {isMizo ? 'Hmanruate' : 'Features'}
             </a>
-            <a href="#organizations" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
-              {isMizo ? 'Kohhran & Pawl' : 'Organizations'}
-            </a>
-            <a href="#security" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#security" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
               {isMizo ? 'Rinngamna' : 'Security'}
             </a>
-            <a href="#faq" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#faq" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
               FAQ
             </a>
-            <a href="#contact" className="px-3.5 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
-              {isMizo ? 'Biakpawhna' : 'Contact'}
+            <a href="#contact" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1 text-emerald-400">
+              <MessageCircle className="w-3 h-3" />
+              <span>{isMizo ? 'Biakpawhna' : 'Contact'}</span>
             </a>
           </nav>
 
@@ -195,126 +449,241 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </button>
             </div>
 
-            {/* Launch App Main CTA */}
+            {/* AI Khual Chhawn Trigger Button */}
             <button
               type="button"
-              onClick={onLaunchApp}
-              className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-indigo-600/30 transition cursor-pointer border border-indigo-400/40"
+              onClick={() => setIsAIChatOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 text-indigo-300 hover:text-white border border-indigo-700/60 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
             >
-              <Smartphone className="w-4 h-4 text-amber-300" />
-              <span>{isMizo ? 'RonPay App Lut Rawh' : 'Launch RonPay App'}</span>
+              <Bot className="w-3.5 h-3.5 text-amber-300" />
+              <span className="truncate">AIChat (Khual Chhawn)</span>
+            </button>
+
+            {/* Launch App Main CTA (Defaults to Guest User) */}
+            <button
+              type="button"
+              onClick={() => onLaunchApp('home')}
+              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition cursor-pointer border border-amber-300"
+              title="Launch www.ronpay.app/app as Guest User"
+            >
+              <Smartphone className="w-4 h-4 text-slate-950" />
+              <span>{isMizo ? 'App Lut Rawh' : 'Launch App'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition"
+              aria-label="Toggle Navigation Menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Dropdown Menu */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden bg-slate-950/98 border-b border-slate-800 px-4 py-4 space-y-3 animate-fadeIn">
+            <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+              <a 
+                href="#hero" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+              >
+                🏠 {isMizo ? 'Kawtchhuah' : 'Home'}
+              </a>
+              <a 
+                href="#phonepe" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/50 text-purple-300"
+              >
+                ⚡ PhonePe Thawhdun
+              </a>
+              <a 
+                href="#services" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+              >
+                📦 {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
+              </a>
+              <a 
+                href="#bbps" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-300"
+              >
+                💡 BBPS Bills & Topup
+              </a>
+              <a 
+                href="#security" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200"
+              >
+                🛡️ {isMizo ? 'Rinngamna' : 'Security'}
+              </a>
+              <a 
+                href="#contact" 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-300"
+              >
+                📞 {isMizo ? 'Biakpawhna' : 'Contact'}
+              </a>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setIsAIChatOpen(true);
+                }}
+                className="w-full bg-gradient-to-r from-indigo-900 to-purple-900 text-white font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 border border-indigo-700/60"
+              >
+                <Bot className="w-4 h-4 text-amber-300" />
+                <span>AIChat (RonPay Khual Chhawn) Biakna</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onLaunchApp('home');
+                }}
+                className="w-full bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-2"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>{isMizo ? 'RonPay App Lut Rawh (Khualmi)' : 'Launch App as Guest User'}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
-      {/* Hero Section */}
-      <section id="hero" className="relative pt-12 pb-20 sm:pt-20 sm:pb-28 overflow-hidden">
-        {/* Glow ambient backgrounds */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/3 right-10 w-[400px] h-[400px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* 3. HERO SECTION: Powerful & Beautiful High-Tech Presentation */}
+      <section id="hero" className="relative pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/3 right-10 w-[450px] h-[450px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
             
             {/* Left Column: Headlines & Call to Actions */}
-            <div className="lg:col-span-7 space-y-6 text-left">
+            <div className="lg:col-span-7 space-y-5 text-left">
               
-              {/* Feature Badges */}
+              {/* Feature Badges with PhonePe & BBPS */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>PhonePe PG V2 & TSP Certified</span>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/40 text-purple-300 text-xs font-bold shadow-xs">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>PhonePe PG V2 & TSP Official Partner</span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-bold">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>AI Hriatpui & BBPS Utility Bills</span>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold shadow-xs">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>EBill, Water, Fastag & School Fees BBPS</span>
                 </div>
               </div>
 
               {/* Main Headline */}
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.15]">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12]">
                 {isMizo ? (
                   <>
-                    Mizoram <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-amber-300">Kohhran & Khawtlang</span> Tana Digital Payment & AI
+                    Mizoram <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-amber-300">Kohhran & Khawtlang</span> Tana Digital Bawm & BBPS Platform
                   </>
                 ) : (
                   <>
-                    Empowering <span className="text-purple-400">Mizo</span> <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-orange-400 to-amber-300">Community</span> with Modern Digital Payments & AI
+                    Empowering <span className="text-purple-400">Mizo</span> <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-orange-400 to-amber-300">Community</span> with PhonePe Payments & BBPS Utilities
                   </>
                 )}
               </h1>
 
               {/* Sub-headline / Copywriting */}
-              <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl font-normal">
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl font-normal">
                 {isMizo 
-                  ? 'Ralna bawm, Kohhran thawhlawm chhungkaw bu, BBPS electric & tui bill, leh bank transfer te hi smart QR code, Mizo tawng soundbox, leh Gemini AI assistant hmanga awlsam leh fel taka enkawlna hmasa ber.' 
-                  : 'Manage Ralna condolence funds, church tithes, BBPS electricity/water bills, and bank transfers with smart QR codes, Mizo voice announcements, and Gemini-powered AI Hriatpui assistant.'}
+                  ? 'Digital payment company lian ber PhonePe nen a thawk dunin, Ralna bawm, Kohhran chhungkaw bu, BBPS electric & tui bill, Fastag, School fees, Municipal taxes leh Mobile topup awlsam taka tih theihna platform famkim.' 
+                  : "Engineered in partnership with India's largest payment giant PhonePe. Streamline Ralna bereavement funds, church family rolls, and complete BBPS utilities: EBill, Water, FASTag, School Fees, Municipal Taxes, and Mobile Topup."}
               </p>
 
-              {/* CTAs */}
-              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <button
                   type="button"
-                  onClick={onLaunchApp}
-                  className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white font-black text-base px-7 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/30 transition cursor-pointer border border-indigo-400/50"
+                  onClick={() => onLaunchApp('home')}
+                  className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-base px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition cursor-pointer border border-amber-300"
                 >
-                  <Smartphone className="w-5 h-5 text-amber-300" />
-                  <span>{isMizo ? 'RonPay Web App Hawng Rawh' : 'Launch RonPay Web App'}</span>
+                  <Smartphone className="w-5 h-5 text-slate-950" />
+                  <span>{isMizo ? 'RonPay Web App Hawng Rawh' : 'Launch RonPay App'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
-                {onOpenCreateQR && (
-                  <button
-                    type="button"
-                    onClick={onOpenCreateQR}
-                    className="bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-bold text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
-                  >
-                    <QrCode className="w-4 h-4 text-orange-400" />
-                    <span>{isMizo ? 'QR Bawm Thar Siam Rawh' : 'Create QR Bawm'}</span>
-                  </button>
-                )}
+                <a
+                  href="#services"
+                  className="bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4 text-orange-400" />
+                  <span>{isMizo ? 'Bawm 5 En Rawh' : 'Explore 5 Bawms'}</span>
+                </a>
 
-                {onOpenRegister && (
+                <a
+                  href="#bbps"
+                  className="bg-slate-900/80 hover:bg-slate-800 text-indigo-300 font-bold text-sm px-4 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-indigo-900/50 transition cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span>{isMizo ? 'BBPS Bill Pekna' : 'BBPS Utilities'}</span>
+                </a>
+              </div>
+
+              {/* App URL Copy Bar & Guest Note */}
+              <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-slate-300 text-[11px] sm:text-xs">
+                    {isMizo ? 'App chhungah hian default in Khualmi (Guest User) angin i lut nghal ang.' : 'Defaulting to Guest User (Khualmi) upon app launch.'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-slate-400">Official URL:</span>
+                  <code className="bg-slate-950 px-2 py-0.5 rounded text-[11px] text-amber-300 font-mono border border-slate-800">
+                    www.ronpay.app/app
+                  </code>
                   <button
                     type="button"
-                    onClick={onOpenRegister}
-                    className="bg-slate-900/80 hover:bg-slate-800 text-indigo-300 font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-indigo-900/50 transition cursor-pointer"
+                    onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
+                    className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition cursor-pointer"
+                    title="Copy Link"
                   >
-                    <Building2 className="w-4 h-4" />
-                    <span>{isMizo ? 'Kohhran / Pawl Register' : 'Register Org'}</span>
+                    {appLinkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
-                )}
+                </div>
               </div>
 
               {/* Trust Metric Counters */}
-              <div className="pt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-slate-800/80">
+              <div className="pt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-slate-800/80">
                 <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl sm:text-2xl font-black text-amber-400">₹95L+</div>
-                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {isMizo ? 'Sum Lutfai Kim' : 'Handled Securely'}
+                  <div className="text-xl font-black text-amber-400">PhonePe PG</div>
+                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                    {isMizo ? 'TSP V2 Certified' : 'PG V2 Engine'}
                   </div>
                 </div>
 
                 <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl sm:text-2xl font-black text-purple-400">600+</div>
-                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {isMizo ? 'Active QR Bawm' : 'Live Bawm QRs'}
+                  <div className="text-xl font-black text-purple-400">5 Bawm</div>
+                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                    {isMizo ? 'Community Category' : 'Community Suites'}
                   </div>
                 </div>
 
                 <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl sm:text-2xl font-black text-emerald-400">120+</div>
-                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {isMizo ? 'Kohhran & YMA' : 'Churches & YMAs'}
+                  <div className="text-xl font-black text-emerald-400">100% Direct</div>
+                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                    {isMizo ? 'Bank-ah Tlang Nghal' : 'Direct IMPS Payout'}
                   </div>
                 </div>
 
                 <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl sm:text-2xl font-black text-sky-400">100%</div>
-                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                    {isMizo ? 'Direct Bank-ah' : 'Direct to Bank'}
+                  <div className="text-xl font-black text-sky-400">BBPS Hub</div>
+                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                    {isMizo ? 'EBill & Topup Kim' : 'All Utilities Live'}
                   </div>
                 </div>
               </div>
@@ -329,12 +698,12 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <div className="relative bg-slate-900 border-4 border-slate-700/80 rounded-[38px] p-4 shadow-2xl shadow-purple-950/40 ring-1 ring-slate-800">
                   
                   {/* Phone Speaker Notch */}
-                  <div className="w-24 h-4 bg-slate-800 rounded-full mx-auto mb-3 flex items-center justify-center">
+                  <div className="w-24 h-3.5 bg-slate-800 rounded-full mx-auto mb-3 flex items-center justify-center">
                     <div className="w-8 h-1 bg-slate-700 rounded-full" />
                   </div>
 
                   {/* Card Header inside phone */}
-                  <div className="bg-slate-800/90 rounded-2xl p-3 border border-slate-700/70 mb-3 flex items-center justify-between">
+                  <div className="bg-slate-800/90 rounded-2xl p-2.5 border border-slate-700/70 mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-black flex items-center justify-center text-xs border border-amber-400/30">
                         R
@@ -342,85 +711,73 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                       <div>
                         <div className="text-xs font-black text-white flex items-center gap-1">
                           <span>Pi Lalhmingliani Ralna</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Mission Veng • Verified
+                          Bungkawn YMA • Verified
                         </div>
                       </div>
                     </div>
-                    <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-black px-2 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      LIVE
+                    <span className="text-[9px] bg-purple-900/60 text-purple-300 font-bold px-2 py-0.5 rounded-md border border-purple-700/50">
+                      PhonePe UPI
                     </span>
                   </div>
 
-                  {/* QR Code Canvas Mockup */}
-                  <div className="bg-white p-4 rounded-2xl shadow-inner text-center text-slate-900 space-y-2">
-                    <div className="w-48 h-48 mx-auto bg-slate-50 border-2 border-dashed border-indigo-200 rounded-xl p-3 flex flex-col items-center justify-center relative group">
-                      <QrCode className="w-36 h-36 text-slate-900" />
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-10 h-10 rounded-xl bg-orange-500 text-white font-black text-base flex items-center justify-center shadow-md border-2 border-white">
-                          R
-                        </div>
+                  {/* Live Dynamic QR Poster Preview */}
+                  <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 text-center space-y-2.5">
+                    <div className="text-[10.5px] font-bold text-slate-300 flex items-center justify-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Tamper-Proof RonPay Dynamic QR</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl inline-block shadow-lg">
+                      <QrCode className="w-28 h-28 text-slate-950" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="text-xs font-black text-amber-400">
+                        Scan with PhonePe, GPay, Paytm or any UPI
                       </div>
-                    </div>
-                    <div className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">
-                      UPI / PhonePe Accepted
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-500 bg-slate-100 py-1 px-2 rounded-md">
-                      ronpay.ralna@axl
+                      <div className="text-[10px] text-slate-400">
+                        100% Direct to Beneficiary Bank Account
+                      </div>
                     </div>
                   </div>
 
-                  {/* Soundbox Voice Interactive Demo Bar */}
-                  <div className="mt-3 bg-gradient-to-r from-purple-950/80 to-indigo-950/80 border border-purple-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                  {/* Mizo Soundbox Voice Audio Demonstration */}
+                  <div className="mt-3 bg-gradient-to-r from-purple-950/80 to-indigo-950/80 rounded-2xl p-3 border border-purple-700/50 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center">
-                        <Volume2 className={`w-4 h-4 ${soundboxPlaying ? 'text-amber-400 animate-bounce' : 'text-purple-300'}`} />
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs ${soundboxPlaying ? 'bg-amber-400 text-slate-950 animate-pulse' : 'bg-purple-600 text-white'}`}>
+                        <Volume2 className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold text-white">
-                          Mizo Soundbox Voice
-                        </div>
-                        <div className="text-[8.5px] text-purple-300">
-                          {soundboxPlaying ? 'Playing chime & voice...' : 'Click to hear audio'}
+                        <div className="text-xs font-black text-white">Mizo Soundbox Chhinna</div>
+                        <div className="text-[10px] text-purple-300">
+                          {soundboxPlaying ? 'Aw a chhuak mek...' : '"RonPay-ah cheng zanga..."'}
                         </div>
                       </div>
                     </div>
 
                     <button
                       type="button"
-                      onClick={playSoundboxDemo}
+                      onClick={() => playSoundboxDemo()}
                       disabled={soundboxPlaying}
-                      className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition cursor-pointer shadow-xs"
+                      className="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black text-[10.5px] px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0 shadow-xs"
                     >
-                      {soundboxPlaying ? 'Ngaihthlak mek...' : 'Play Demo 🔊'}
+                      {soundboxPlaying ? 'Rilawk...' : 'Play Aw'}
                     </button>
                   </div>
 
-                  {/* Floating App Launch Quick Pill */}
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={onLaunchApp}
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
-                    >
-                      <span>{isMizo ? 'RonPay App-ah Lut Rawh' : 'Launch RonPay App'}</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {/* Open in App Quick Button */}
+                  <button
+                    type="button"
+                    onClick={() => onLaunchApp('home')}
+                    className="w-full mt-3 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                  >
+                    <span>{isMizo ? 'App Chhungah En Rawh (Khualmi)' : 'Open App as Guest'}</span>
+                    <ArrowRight className="w-3 h-3 text-amber-400" />
+                  </button>
 
-                </div>
-
-                {/* Simulated Floating Receipt badge on side */}
-                <div className="hidden sm:flex absolute -bottom-5 -left-6 bg-slate-900 border border-emerald-500/40 p-3 rounded-2xl shadow-xl flex items-center gap-3 backdrop-blur-md">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-black text-white">Instant WhatsApp Receipt</div>
-                    <div className="text-[9.5px] text-emerald-400">TXN-RAL-8429 • Verified</div>
-                  </div>
                 </div>
 
               </div>
@@ -430,126 +787,376 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         </div>
       </section>
 
-      {/* About Section: Bridging Community Values with Modern FinTech */}
-      <section id="about" className="py-16 sm:py-24 bg-slate-900/60 border-y border-slate-800/80 relative">
+      {/* 4. DEDICATED PHONEPE PARTNERSHIP SHOWCASE SECTION */}
+      <section id="phonepe" className="py-14 sm:py-20 bg-gradient-to-b from-slate-950 via-purple-950/20 to-slate-950 border-y border-purple-900/30 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-            <span className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-300 text-xs font-bold px-3 py-1 rounded-full border border-purple-400/30">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              {isMizo ? 'RonPay Chanchin & Thiltum' : 'About RonPay Mission'}
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
+            <span className="inline-flex items-center gap-1.5 bg-purple-500/20 text-purple-300 text-xs font-black px-3.5 py-1 rounded-full border border-purple-400/40 uppercase tracking-wider">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              {isMizo ? 'Digital Payment Company Lian Ber Nen' : 'National Payment Powerhouse'}
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              {isMizo ? 'Mizozia leh FinTech Hmasawnna Thlunzawmtu' : 'Bridging Mizo Community Values with Modern FinTech'}
+              {isMizo 
+                ? 'PhonePe Nen A Hna Thawk Dunin, Rinngam & Rang Takin' 
+                : "Official Partnership with India's #1 Digital Payments Leader PhonePe"}
             </h2>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
               {isMizo 
-                ? 'RonPay hi Mizoram Kohhran leh Khawtlang sum thawhkhawm, tithes, condolence contributions, leh utility bills te him leh fel taka enkawl tura kutchhuak ngat a ni.' 
-                : 'RonPay is an authorized FinTech platform specifically engineered to digitize, secure, and streamline community collections, church tithes, condolence contributions, and utility bills across Mizoram.'}
+                ? 'RonPay hi India ram pum huapa digital transaction tam ber khawihtu PhonePe Technology Service Provider (TSP) leh PG V2 architecture hmanga duanchhuah a ni a. Mizo mipuiten hlauthawng miah lova sum thawhkhawm leh utilities kan pek theih nan a him tawk em em a ni.' 
+                : 'Built on the robust enterprise rails of PhonePe Payment Gateway V2 and Technology Service Provider (TSP) protocols. Ensuring instant direct IMPS bank payouts and zero fraudulent screenshots.'}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             
-            {/* Left Box: Why Traditional Giving Needed an Upgrade */}
-            <div className="lg:col-span-6 bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-4 flex flex-col justify-between">
-              <div>
-                <span className="text-[11px] font-black tracking-widest text-indigo-400 uppercase">
-                  {isMizo ? 'ENGVANGA SIAM NGE KAN NIH?' : 'WHY TRADITIONAL GIVING NEEDED AN UPGRADE'}
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black text-white mt-2 mb-3">
-                  {isMizo ? 'Hmanlai Thawhlawm & Tunlai Mamawh' : 'The Need for Seamless Giving'}
-                </h3>
-                <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
-                  <p>
-                    {isMizo 
-                      ? 'Hmanlai atangin Mizo zia-ah chhiatni-thatni leh kohhranah sum thawhkhawm a ngai thin a. Mahse tunlai khawvelah cash ken a buaithlak a, UPI screenshot der hmanga inbumna a awm fo bawk.' 
-                      : 'Traditional cash collections and manual record-keeping often face practical bottlenecks: tracking receipts, cash shortages, and fraudulent payment screenshots.'}
-                  </p>
-                  <p>
-                    {isMizo 
-                      ? 'Phai rama awmte leh hla taka awmten awlsam taka Ralna an rawn hlan theih nan leh, Committee-in fiah taka sum lut an hmuh theih nan RonPay hian platform felfai tak a rawn chhawp chhuak a ni.' 
-                      : 'RonPay allows donors anywhere in India or abroad to contribute instantly via UPI with tamper-proof digital receipts and instant Mizo sound announcements.'}
-                  </p>
-                </div>
+            {/* PhonePe Advantage 1 */}
+            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
+              <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-purple-400 group-hover:scale-105 transition-transform">
+                ⚡
               </div>
-
-              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{isMizo ? 'UPI Screenshot Der A Awm Lo' : 'Zero Fake Screenshots'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{isMizo ? 'Mizo Tawng Soundbox' : 'Mizo Voice Soundbox'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{isMizo ? '1-Click Audit Report' : '1-Click Audit Reports'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{isMizo ? 'Offline-First Engine' : 'Offline-First Engine'}</span>
-                </div>
+              <h3 className="text-base font-black text-white">PhonePe PG V2 Engine</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isMizo 
+                  ? '99.9% uptime nei, transaction second 2 chhung zela tling nghal zel thei architecture rintlak ber.' 
+                  : 'Blazing fast PG V2 architecture with 99.9% success rate and sub-second payment clearance.'}
+              </p>
+              <div className="pt-2 text-[11px] text-purple-300 font-bold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Sub-Second Clearance</span>
               </div>
             </div>
 
-            {/* Right Box: Architecture Core Engine */}
-            <div className="lg:col-span-6 bg-gradient-to-br from-indigo-950/60 to-purple-950/40 border border-indigo-800/60 rounded-3xl p-6 sm:p-8 space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black uppercase text-indigo-400 tracking-wider">
-                    Platform Architecture
+            {/* PhonePe Advantage 2 */}
+            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-emerald-400 group-hover:scale-105 transition-transform">
+                🏦
+              </div>
+              <h3 className="text-base font-black text-white">Direct IMPS Bank Settlement</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isMizo 
+                  ? 'RonPay hian sum kan khawl ve ngai lo. Pawisa thawhtu-in a scan rualin Kohhran emaw pawl bank account-ah direct-in a lut tlang nghal char char.' 
+                  : 'Zero escrow holding. Donated funds route directly into your church or community bank account via IMPS.'}
+              </p>
+              <div className="pt-2 text-[11px] text-emerald-300 font-bold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>100% Direct to Bank</span>
+              </div>
+            </div>
+
+            {/* PhonePe Advantage 3 */}
+            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
+              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-amber-400 group-hover:scale-105 transition-transform">
+                🛡️
+              </div>
+              <h3 className="text-base font-black text-white">Zero Screenshot Fraud</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isMizo 
+                  ? 'UPI screenshot der (fake screenshot) hmanga inbumna a awm tawh lo. Server-level verification leh Mizo soundbox-in a nemnghet nghal thlap.' 
+                  : 'Eliminates fraudulent screenshots through real-time server webhooks and instant voice soundbox alerts.'}
+              </p>
+              <div className="pt-2 text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Tamper-Proof Verification</span>
+              </div>
+            </div>
+
+            {/* PhonePe Advantage 4 */}
+            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-indigo-400 group-hover:scale-105 transition-transform">
+                📱
+              </div>
+              <h3 className="text-base font-black text-white">Universal UPI Support</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isMizo 
+                  ? 'PhonePe, Google Pay, Paytm, BHIM, Cred, leh Bank UPI apps tinreng atangin fiah fai takin a scan theih vek.' 
+                  : 'Seamlessly accepts payments from PhonePe, Google Pay, Paytm, BHIM, and all Indian banking UPI apps.'}
+              </p>
+              <div className="pt-2 text-[11px] text-indigo-300 font-bold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>All UPI Apps Compatible</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      {/* 5. RONPAY SERVICES SECTION: 5 BAWMS (TAWI FEL DEUHA HRILHFIAH) */}
+      <section id="services" className="py-16 sm:py-24 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
+            <span className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-300 text-xs font-bold px-3 py-1 rounded-full border border-amber-400/30 uppercase tracking-wider">
+              <QrCode className="w-3.5 h-3.5" />
+              {isMizo ? 'RonPay Bawm Hrang Hrang Te' : 'RonPay 5 Community Suites'}
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+              {isMizo ? 'Bawm Hrang Hrang Te Tawi Fel Takin' : 'Concise & Structured Community Bawm Categories'}
+            </h2>
+            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+              {isMizo 
+                ? 'Mizoram mamawh mil liau liava duan Bawm 5 te hi a hman dan leh thiltum tawi fel deuha hrilhfiahna:' 
+                : 'Built specifically for the needs of Mizoram churches, communities, and families. Here is each Bawm explained clearly:'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
+            {/* BAWM 1: RALNA BAWM */}
+            <div className="bg-slate-900 border-2 border-slate-800 hover:border-red-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-12 h-12 rounded-2xl bg-red-600/20 text-red-400 flex items-center justify-center border border-red-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                    🖤
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800">
+                    Chhiatni & YMA Pual
                   </span>
-                  <h4 className="text-xl font-black text-white">RonPay Core Engine</h4>
                 </div>
-                <span className="bg-indigo-600/30 text-indigo-300 text-[10px] font-black px-2.5 py-1 rounded-full border border-indigo-400/40 uppercase">
-                  TSP PG V2
-                </span>
+                <h3 className="text-lg font-black text-white group-hover:text-red-300 transition">
+                  1. Ralna Bawm
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Chhiatni-a ralna sum thawhkhawmna felfai. Mitthi thlalak, chanchin kimchang, vui hun chuanna QR poster mawi tak minute 1 chhungin siam la. Thawhtuten an scan rualin WhatsApp receipt an dawng nghal a, Mizo aw (Soundbox)-in a puang nghal bawk.' 
+                    : 'Dedicated condolence and bereavement collection. Generate high-resolution obituary QR posters with photos and funeral timings. Instant WhatsApp receipts and Mizo soundbox announcements.'}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Dynamic Obituary Poster Studio
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Automatic WhatsApp Digital Receipt
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Mizo Soundbox Voice Alert
+                  </li>
+                </ul>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-indigo-900/50">
-                  <div className="text-[10px] uppercase font-bold text-indigo-300">Partner Settlement</div>
-                  <div className="text-base font-black text-white mt-1">Instant IMPS</div>
-                  <div className="text-[11px] text-emerald-400 mt-0.5">99% Direct to Beneficiary</div>
-                </div>
-
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-indigo-900/50">
-                  <div className="text-[10px] uppercase font-bold text-purple-300">Voice Synthesis</div>
-                  <div className="text-base font-black text-white mt-1">Dual Engine</div>
-                  <div className="text-[11px] text-purple-300 mt-0.5">Authentic Mizo & English</div>
-                </div>
-
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-indigo-900/50">
-                  <div className="text-[10px] uppercase font-bold text-amber-300">Accounting Protocol</div>
-                  <div className="text-base font-black text-white mt-1">Dual-Ledger</div>
-                  <div className="text-[11px] text-amber-300 mt-0.5">Cash + Online Unified</div>
-                </div>
-
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-indigo-900/50">
-                  <div className="text-[10px] uppercase font-bold text-sky-300">Resilience</div>
-                  <div className="text-base font-black text-white mt-1">Offline-Ready</div>
-                  <div className="text-[11px] text-sky-300 mt-0.5">SmartCloud Background Sync</div>
-                </div>
-              </div>
-
-              <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-white">
-                    {isMizo ? 'RonPay Web App Experience' : 'Experience RonPay Right Now'}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    {isMizo ? 'Install ngai lo, browser atangin a hman theih nghal.' : 'Zero installation required, launches in browser instantly.'}
-                  </div>
-                </div>
+              <div className="pt-4 border-t border-slate-800/80">
                 <button
                   type="button"
-                  onClick={onLaunchApp}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1 transition shrink-0 cursor-pointer"
+                  onClick={() => onLaunchApp('explorer', 'ralna')}
+                  className="w-full bg-red-950 hover:bg-red-900 text-red-200 border border-red-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
-                  <span>{isMizo ? 'Lut Rawh' : 'Launch'}</span>
+                  <span>{isMizo ? 'Ralna Bawm En Rawh' : 'Explore Ralna Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* BAWM 2: KUMTLUANG BAWM */}
+            <div className="bg-slate-900 border-2 border-slate-800 hover:border-blue-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                    🏛️
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
+                    Kohhran & Pawl
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white group-hover:text-blue-300 transition">
+                  2. Kumtluang Bawm
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Kohhran thawhlawm (Pathian Ram, Tualchhung, Ramthim, Building) leh Pawl thla tin chhungkaw bu. 4-digit Quick Entry hmangin awlsam taka ziah luh theih niin, Secretary leh Treasurer tan 1-Click Committee Audit Report (PDF & Excel) a siam nghal zung zung thei.' 
+                    : 'Church and institutional recurring giving. Track monthly household registers, tithes, and mission funds with 4-digit Quick Entry and export 1-Click official Committee Audit Reports in PDF/Excel.'}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> Digital Chhungkaw Bu & Member Roll
+                  </li>
+                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> 4-Digit Blazing Fast Quick Entry
+                  </li>
+                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> 1-Click Committee PDF/Excel Export
+                  </li>
+                </ul>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('explorer', 'kumtluang')}
+                  className="w-full bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>{isMizo ? 'Kumtluang Bawm En Rawh' : 'Explore Kumtluang'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* BAWM 3: KHAWLSAK BAWM */}
+            <div className="bg-slate-900 border-2 border-slate-800 hover:border-emerald-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                    🏗️
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    Building & Projects
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white group-hover:text-emerald-300 transition">
+                  3. Khawlsak Bawm
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Biak In sak, YMA Hall sak, Community Hall, leh Project lian tham puala sum thawhkhawm vawnna. Target amount, sum lut zat, leh thawhtute hming fiah fai taka tarlanna Progress Dashboard nen a in-thuam thlap.' 
+                    : 'Church construction, hall development, and capital project fundraisers. Complete with real-time target amount progress bars, transparent donor lists, and verified receipts.'}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Target Amount Progress Bar
+                  </li>
+                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Transparent Donor Transparency Board
+                  </li>
+                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Cash & Online Unified Tracker
+                  </li>
+                </ul>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('explorer', 'khawlsak')}
+                  className="w-full bg-emerald-950 hover:bg-emerald-900 text-emerald-200 border border-emerald-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>{isMizo ? 'Khawlsak Bawm En Rawh' : 'Explore Khawlsak'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* BAWM 4: RIKRUM BAWM */}
+            <div className="bg-slate-900 border-2 border-slate-800 hover:border-rose-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                    🚨
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800">
+                    Free • Emergency Relief
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white group-hover:text-rose-300 transition">
+                  4. Rikrum Bawm
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Kangmei, tuilian, lei tlahmual, leh damlo zual thut tanpuina emergency bawm. Setup fee a awm lo (100% Free Setup), minute 1 chhungin live nghal theih a ni a, sum lut zawng zawng beneficiary account-ah a tlang nghal zel.' 
+                    : 'Zero-fee emergency and disaster relief for house fires, landslides, and urgent medical needs. Activates in under 1 minute with 100% direct hospital/victim bank routing.'}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Zero Platform Setup Charge (Free)
+                  </li>
+                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Minute 1 Instant QR Activation
+                  </li>
+                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Emergency Hospital & Relief Dispatch
+                  </li>
+                </ul>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('explorer', 'rikrum')}
+                  className="w-full bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>{isMizo ? 'Rikrum Bawm En Rawh' : 'Explore Emergency Bawm'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* BAWM 5: MIMAL & CHHUNGKUA (PERSONAL & OTHERS) */}
+            <div className="bg-slate-900 border-2 border-slate-800 hover:border-purple-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center border border-purple-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                    🎁
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800">
+                    Personal & Events
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-white group-hover:text-purple-300 transition">
+                  5. Mimal & Chhungkua
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Inneih lawmpuina (Wedding gift envelope), anniversary, piancham thilpek, damlo kan, leh chhungkaw thilpek sum pekna awlsam. Custom invitation card emaw WhatsApp-ah QR code share nghal zung zung theih.' 
+                    : 'Digital monetary gifts for weddings, anniversaries, birthdays, and personal hospital visitations. Easy custom QR sharing on wedding invitation cards or WhatsApp.'}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Digital Envelope & Wishing Note
+                  </li>
+                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Wedding QR for Invitation Cards
+                  </li>
+                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
+                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Direct Bank Account Credit
+                  </li>
+                </ul>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('explorer', 'others')}
+                  className="w-full bg-purple-950 hover:bg-purple-900 text-purple-200 border border-purple-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>{isMizo ? 'Mimal Bawm En Rawh' : 'Explore Mimal Bawm'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Action Box: Create QR in 2 Minutes */}
+            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 border-2 border-indigo-700/60 p-6 rounded-3xl space-y-4 flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                  Quick Launch
+                </span>
+                <h3 className="text-xl font-black text-white mt-1">
+                  {isMizo ? 'Bawm Thar Siam I Duh Em?' : 'Ready to Create Your Own Bawm?'}
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'I Kohhran emaw i pawl tan minute 2 chhungin QR Bawm thar i siam thei a. Bank account link la, print theih poster leh online payment receipt i nei nghal ang.' 
+                    : 'Launch a branded collection QR in under 2 minutes for your local church, branch, or family. Includes print-ready posters and automated receipting.'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('create_qr')}
+                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>{isMizo ? 'QR Bawm Thar Siam Rawh' : 'Create Live QR Bawm'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('creator_reg')}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-indigo-300 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>{isMizo ? 'Kohhran / Pawl Register Rawh' : 'Register Organization'}</span>
                 </button>
               </div>
             </div>
@@ -559,151 +1166,192 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         </div>
       </section>
 
-      {/* Comprehensive Features Section (Bento Grid) */}
-      <section id="features" className="py-16 sm:py-24 relative">
+      {/* 6. BBPS UTILITY BILLS & MOBILE TOPUP SECTION: PROMINENT & INTERACTIVE */}
+      <section id="bbps" className="py-16 sm:py-24 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 border-y border-slate-800 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-            <span className="inline-flex items-center gap-1 bg-purple-500/15 text-purple-300 text-xs font-bold px-3 py-1 rounded-full border border-purple-400/30">
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
+            <span className="inline-flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 text-xs font-black px-3.5 py-1 rounded-full border border-indigo-400/40 uppercase tracking-wider">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              {isMizo ? 'Hmanrua & Feature Kimchang' : 'Complete Feature Suite'}
+              Bharat Bill Payment System (BBPS)
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              {isMizo ? 'Mizoram Tan Liau Liava Duanchhuah' : 'Engineered for Performance & Community Ease'}
+              {isMizo 
+                ? 'BBPS Bill Hrang Hrang & Mobile Topup Pekna Hmunpui' 
+                : 'Complete BBPS Utility Clearinghouse & Mobile Topup'}
             </h2>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
               {isMizo 
-                ? 'Kohhran, Khawtlang, Tlawmngai pawl leh Mimal tana sum thawhkhawm leh enkawlna hmanrua famkim.' 
-                : 'Discover the complete suite of payment and accounting tools built specifically for Mizo churches, families, and organizations.'}
+                ? 'EBill (Electric Bill), Water Bill (Tui Bill), FASTag Toll, School Fees, Municipal Taxes (AMC), leh Mobile Topup te awlsam leh fiah taka pek theihna hmun a ni tih tarlanna:' 
+                : 'Pay all essential utility bills in Mizoram with instant online settlement and verified receipting: EBill, Water, FASTag, School & College fees, Municipal taxes, and Mobile Topup.'}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Interactive BBPS Utility Showcase Grid & Live Simulator */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            {/* Feature 1: Kumtluang Register */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition">
-                <Building2 className="w-5 h-5 text-amber-300" />
+            {/* Left: Interactive Tab Buttons for BBPS Services */}
+            <div className="lg:col-span-6 space-y-3">
+              <div className="text-xs font-black uppercase text-indigo-400 tracking-wider mb-2">
+                {isMizo ? 'Bill Service Thlang Rawh:' : 'Select Utility Bill Service:'}
               </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-purple-400">
-                1. Kohhran & Member Roll
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {BBPS_UTILITIES.map((service) => {
+                  const IconComp = service.icon;
+                  const isSelected = selectedBbpsKey === service.id;
+                  return (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedBbpsKey(service.id);
+                        if (service.id === 'ebill') {
+                          setBbpsInputVal('102938475');
+                          setBbpsSimResult({ consumerName: 'Lalramchhana (Bungkawn Veng)', amount: 1420, dueDate: '15th of this month' });
+                        } else if (service.id === 'water') {
+                          setBbpsInputVal('AZL-98421');
+                          setBbpsSimResult({ consumerName: 'Zothanpuii (Mission Veng)', amount: 480, dueDate: '20th of this month' });
+                        } else if (service.id === 'fastag') {
+                          setBbpsInputVal('MZ-01-X-4321');
+                          setBbpsSimResult({ consumerName: 'H. Lalmalsawma (Scorpio-N)', amount: 1000, dueDate: 'Active Tag' });
+                        } else if (service.id === 'school_fees') {
+                          setBbpsInputVal('PUC-2026-442');
+                          setBbpsSimResult({ consumerName: 'Lalrinzuala (PUC Semester 4)', amount: 3500, dueDate: 'Exam Fee Due' });
+                        } else if (service.id === 'municipal_taxes') {
+                          setBbpsInputVal('AMC-PR-8831');
+                          setBbpsSimResult({ consumerName: 'K. Lalchhandama (Dawrpui Commercial)', amount: 850, dueDate: 'Annual Assessment' });
+                        } else if (service.id === 'mobile_topup') {
+                          setBbpsInputVal('9862899001');
+                          setBbpsSimResult({ consumerName: 'Jio 5G 28 Days Unlimited', amount: 299, dueDate: 'Validity Extension' });
+                        } else {
+                          setBbpsInputVal('SUB-774921');
+                          setBbpsSimResult({ consumerName: 'Tata Play HD Annual', amount: 950, dueDate: 'Subscription Due' });
+                        }
+                      }}
+                      className={`p-3.5 rounded-2xl text-left transition flex items-center justify-between gap-3 border cursor-pointer ${
+                        isSelected 
+                          ? 'bg-indigo-950/80 border-amber-400 text-white shadow-lg shadow-indigo-950/50 scale-[1.02]' 
+                          : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${service.accentBg}`}>
+                          <IconComp className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-black text-white truncate">{service.name}</div>
+                          <div className="text-[10px] text-slate-400 truncate">{service.provider}</div>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase shrink-0 ${isSelected ? 'bg-amber-400 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'}`}>
+                        {service.tag}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'Kumtluang & Digital Chhungkaw Bu' : 'Kumtluang & Digital Family Register'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Kohhran thawhlawm chhungkaw bu, thla tin Pathian Ram, Tualchhung, Ramthim, leh Building Fund thlengin 4-digit Quick Entry hmangin awlsam takin a ziah luh theih.' 
-                  : 'Manage complete church tithes, monthly family rolls, Pathian Ram, and Mission funds with our blazing fast 4-digit Quick Entry mode.'}
-              </p>
-              <div className="pt-2 text-[11px] text-purple-300 font-bold flex items-center gap-1">
-                <span>✓ 4-Digit Quick Entry Ready</span>
+
+              {/* Note on Zero Hidden Fees */}
+              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl flex items-center gap-2 text-xs text-slate-400">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  {isMizo 
+                    ? 'BBPS Bill pekna-ah hian extra charge lak a ni lo. Direct NPCI & RBI approved network kaltlanga pek a ni.' 
+                    : 'Zero surcharge on BBPS utility bill clearing. Fully backed by NPCI & RBI guidelines.'}
+                </span>
               </div>
             </div>
 
-            {/* Feature 2: Dual Mode Cash & Approval */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-amber-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-300 flex items-center justify-center border border-amber-500/30 group-hover:scale-110 transition">
-                <Banknote className="w-5 h-5 text-amber-300" />
+            {/* Right: Live Interactive Bill Preview Card */}
+            <div className="lg:col-span-6 bg-slate-900 border-2 border-indigo-800/80 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative overflow-hidden">
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${currentBbps.accentBg}`}>
+                    {React.createElement(currentBbps.icon, { className: "w-5 h-5" })}
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-white">{currentBbps.name}</h4>
+                    <p className="text-xs text-slate-400">{currentBbps.provider}</p>
+                  </div>
+                </div>
+                <span className="bg-emerald-950 text-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full border border-emerald-800 uppercase">
+                  BBPS LIVE
+                </span>
               </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
-                2. Hybrid Cash & UPI
-              </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'Pawisa Fai (Cash) & Creator Hmuhpui' : 'Dual-Mode Cash Ledger & Approval'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Pawisa fai (cash) thehluhte pawh fiah taka chhinchhiahin, Creator emaw Admin-in awlsam takin "✓ Hmuhpui (Approve)" an hmet thei a, account a in-mil thlap zel.' 
-                  : 'Record both physical cash envelopes and online UPI in one place. Creators easily verify and approve pending cash payments with one click.'}
-              </p>
-              <div className="pt-2 text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                <span>✓ 1-Click Instant Approve</span>
-              </div>
-            </div>
 
-            {/* Feature 3: Dynamic Mizo QR Studio */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-indigo-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-500/30 group-hover:scale-110 transition">
-                <QrCode className="w-5 h-5 text-indigo-300" />
+              <div className="text-xs text-slate-300 leading-relaxed">
+                {currentBbps.description}
               </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400">
-                3. Studio Engine
-              </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'Dynamic Mizo QR Poster Studio' : 'Dynamic Mizo QR Studio'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Mitthi thlalak, chanchin, vui hun, leh chhungte biakpawhna kimchang chuanna QR poster mawi tak minute 1 chhungin siam la, WhatsApp leh print-ah hmang nghal rawh.' 
-                  : 'Generate high-resolution branded QR posters with obituary photo, funeral timing, donor instructions, and direct UPI deep linking.'}
-              </p>
-              <div className="pt-2 text-[11px] text-indigo-300 font-bold flex items-center gap-1">
-                <span>✓ High-Resolution Ready</span>
-              </div>
-            </div>
 
-            {/* Feature 4: 1-Click Committee & Audit Reports */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-emerald-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center border border-emerald-500/30 group-hover:scale-110 transition">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-300" />
+              {/* Input Box Preview */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 flex items-center justify-between">
+                  <span>{isMizo ? 'Consumer / Account Number:' : 'Consumer / Account Number:'}</span>
+                  <span className="text-[10.5px] text-amber-300 font-medium">{currentBbps.placeholder}</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={bbpsInputVal}
+                    onChange={(e) => setBbpsInputVal(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-amber-400 outline-hidden"
+                    placeholder={currentBbps.placeholder}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBbpsSimResult({
+                        consumerName: 'Verified Account Holder',
+                        amount: Math.floor(Math.random() * 2000) + 300,
+                        dueDate: '25th of this month'
+                      });
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer shrink-0"
+                  >
+                    Fetch Bill
+                  </button>
+                </div>
               </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                4. Financial Governance
-              </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'Committee & Audit Ready Reports' : '1-Click Committee & Audit Reports'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Secretary leh Treasurer-te tan committee thutkhawma thehluh tur PDF leh Excel statement, sign-na hmun kimchang nen download theih nghal a ni.' 
-                  : 'Generate official PDF and Excel audit statements complete with Treasurer and Finance Secretary signature blocks ready for review.'}
-              </p>
-              <div className="pt-2 text-[11px] text-emerald-300 font-bold flex items-center gap-1">
-                <span>✓ Official PDF & Excel Export</span>
-              </div>
-            </div>
 
-            {/* Feature 5: Instant WhatsApp Receipts */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition">
-                <Receipt className="w-5 h-5 text-purple-300" />
-              </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-purple-400">
-                5. Transparency & Trust
-              </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'WhatsApp & SMS Digital Receipt' : 'Instant WhatsApp & SMS Slips'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Pawisa thawhtute tana thlamuanthlak em em, thawh zawh rual ruala official verification slip WhatsApp leh SMS hmanga thawn nghal theihna.' 
-                  : 'Automatic verified digital receipts delivered straight to donors via WhatsApp or SMS, eliminating disputes.'}
-              </p>
-              <div className="pt-2 text-[11px] text-purple-300 font-bold flex items-center gap-1">
-                <span>✓ Verified Digital Slips</span>
-              </div>
-            </div>
+              {/* Bill Details Result Box */}
+              {bbpsSimResult && (
+                <div className="bg-slate-950 p-4 rounded-2xl border border-indigo-900/60 space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">{isMizo ? 'Consumer Hming:' : 'Consumer Name:'}</span>
+                    <span className="font-bold text-white">{bbpsSimResult.consumerName}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">{isMizo ? 'Due Date:' : 'Due Date:'}</span>
+                    <span className="text-slate-300 font-mono">{bbpsSimResult.dueDate}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                    <span className="text-xs font-bold text-slate-300">{isMizo ? 'Pek Tur Zat:' : 'Bill Amount:'}</span>
+                    <span className="text-xl font-black text-amber-400">₹{bbpsSimResult.amount}</span>
+                  </div>
+                </div>
+              )}
 
-            {/* Feature 6: AI Hriatpui Assistant */}
-            <div className="bg-slate-900 border border-slate-800 hover:border-sky-500/60 p-6 rounded-3xl space-y-3 transition duration-300 hover:shadow-xl group">
-              <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-300 flex items-center justify-center border border-sky-500/30 group-hover:scale-110 transition">
-                <Sparkles className="w-5 h-5 text-amber-300" />
+              {/* Launch App to Pay Bill */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('home')}
+                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4 text-slate-950" />
+                  <span>{isMizo ? `RonPay App-ah ${currentBbps.name} Pe Rawh` : `Pay ${currentBbps.name} in App`}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <p className="text-[10px] text-center text-slate-400">
+                  {isMizo 
+                    ? 'Default in Khualmi (Guest User) angin a lut nghal ang a, login kher ngai lovin bill a pek theih e.' 
+                    : 'Launches seamlessly as Guest User (Khualmi) without requiring account creation.'}
+                </p>
               </div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-sky-400">
-                6. Gemini AI Powered
-              </div>
-              <h3 className="text-lg font-black text-white">
-                {isMizo ? 'AI Hriatpui Assistant' : 'AI Hriatpui Assistant (Gemini AI)'}
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Zawhna hrang hrang, bawm category hman dan tur, tithe semzai dan, leh transaction fiah ngai te Mizo tawng ngeia chhang thei Gemini AI thluak.' 
-                  : 'Native conversational AI assistant powered by Gemini. Answers regulatory questions, explains donation distributions, and assists with rolls.'}
-              </p>
-              <div className="pt-2 text-[11px] text-sky-300 font-bold flex items-center gap-1">
-                <span>✓ Mizo Voice & Chat Enabled</span>
-              </div>
+
             </div>
 
           </div>
@@ -711,260 +1359,209 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         </div>
       </section>
 
-      {/* Organizations Section: Who Is It For */}
-      <section id="organizations" className="py-16 sm:py-24 bg-slate-900/40 border-y border-slate-800/80">
+      {/* 7. BIAKPAWNA (CONTACT) & AICHAT (RONPAY KHUAL CHHAWN) SECTION */}
+      <section id="contact" className="py-16 sm:py-24 bg-gradient-to-br from-purple-950/70 via-indigo-950/80 to-slate-950 border-t border-indigo-900/60 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-            <span className="inline-flex items-center gap-1 bg-indigo-500/15 text-indigo-300 text-xs font-bold px-3 py-1 rounded-full border border-indigo-400/30">
-              <Users className="w-3.5 h-3.5" />
-              {isMizo ? 'A Hmantu Turte' : 'Solutions by Organization'}
+            <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-xs font-black px-3.5 py-1 rounded-full border border-emerald-400/40 uppercase tracking-wider">
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+              {isMizo ? 'Biakpawhna & Khual Chhawn' : 'Contact & AI Reception'}
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              {isMizo ? 'Mizoram Khawtlang Mamawh Tinreng Tan' : 'Tailored for Every Mizo Institution'}
+              {isMizo ? 'Kan Hnenah Zawhna I Nei Em? Min Lo Be Pawh Rawh' : 'Get in Touch with RonPay Support & AI Greeter'}
             </h2>
-            <p className="text-sm sm:text-base text-slate-300">
+            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
               {isMizo 
-                ? 'Kohhran tualchhung atanga khawtlang thlengin sum lut leh chhuak fel fai taka vawnna.' 
-                : 'From village churches to community branches and bereaved families.'}
+                ? 'RonPay Khual Chhawn (AI Chat) biain zawhna zawt la, emaw kan official email ronpay@gmail.com leh WhatsApp hmangin min be pawh rawh le.' 
+                : 'Interact with AIChat (RonPay Khual chhawn) for instant answers, or reach us directly via ronpay@gmail.com and WhatsApp.'}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            {/* Org 1 */}
-            <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-black">
-                🏛️
-              </div>
-              <h3 className="text-base font-black text-white">Kohhran Tualchhung & Bial</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Pathian Ram, Tualchhung, Ramthim, Biak In sakna, leh Thawhlawm chhungkaw bu fel taka enkawlna.' 
-                  : 'Sunday tithes, mission pledges, building funds, and monthly household rolls.'}
-              </p>
-            </div>
-
-            {/* Org 2 */}
-            <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black">
-                🤝
-              </div>
-              <h3 className="text-base font-black text-white">YMA, MHIP & KNP</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Ralna, Khawtlang khawlsak, Member thla tin thawh zat, leh chhiatni-thatni fund vawnna.' 
-                  : 'Branch condolence drives, member registers, community development funds.'}
-              </p>
-            </div>
-
-            {/* Org 3 */}
-            <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black">
-                🖤
-              </div>
-              <h3 className="text-base font-black text-white">Mimal & Chhungkua</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Ralna Bawm pual, damlo tanpuina, inneih lawmpuina, leh sum thawhtu zawng zawng chhinchhiahna.' 
-                  : 'Personal bereavement condolence bawms, medical fundraisers, weddings.'}
-              </p>
-            </div>
-
-            {/* Org 4 */}
-            <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl space-y-3">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-black">
-                ⚡
-              </div>
-              <h3 className="text-base font-black text-white">Mizoram BBPS Utility Pay</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {isMizo 
-                  ? 'Power & Electricity (P&ED) electric bill leh PHED tui bill awlsam taka pek nghal zung zung theihna.' 
-                  : 'Electricity & water utility payments with verified digital clearance.'}
-              </p>
-            </div>
-
-          </div>
-
-        </div>
-      </section>
-
-      {/* Security & Regulatory Trust Section */}
-      <section id="security" className="py-16 sm:py-24 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="bg-gradient-to-r from-purple-950/70 via-indigo-950/60 to-slate-950 border border-purple-500/30 rounded-3xl p-8 sm:p-12">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              
-              <div className="lg:col-span-8 space-y-4">
-                <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full border border-emerald-400/30">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  {isMizo ? 'Dan Ang Thlapa Rinngam' : 'Bank-Grade Security & Trust'}
+            {/* Card 1: AIChat (RonPay Khual chhawn) */}
+            <div className="bg-slate-900/90 border-2 border-indigo-600/70 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-amber-400 transition">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center border border-indigo-500/50 mb-3 group-hover:scale-110 transition-transform">
+                  <Bot className="w-6 h-6 text-amber-300" />
+                </div>
+                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                  Mizo AI Assistant
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-white">
-                  {isMizo ? 'I Pawisa Chu I Bank Account-ah Direct-in A Lut Nghal Zel' : 'Zero Middleman Holding. Direct Bank-to-Bank Settlement.'}
-                </h2>
-                <p className="text-sm text-slate-300 leading-relaxed max-w-2xl">
+                <h3 className="text-lg font-black text-white mt-1">
+                  AIChat (RonPay Khual chhawn)
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
                   {isMizo 
-                    ? 'RonPay hian sum kan khawl ve ngai lo. Pawisa thawhtu-in QR a scan rualin i kohhran emaw i pawl bank account-ah a lut nghal char char zel a ni. RBI & NPCI UPI guidelines zawm thlap a ni.' 
-                    : 'RonPay does not operate an escrow or pool account. Every rupee paid through your dynamic QR code routes directly into your church or organization bank account via NPCI UPI protocol.'}
+                    ? 'PhonePe nen kan thawhdun dan, Bawm 5 hman dan, BBPS bill pek dan, leh www.ronpay.app/app luh dan Mizo tawng ngeia zawt rawh le.' 
+                    : 'Ask instant conversational questions about PhonePe partnership, 5 Bawm suites, BBPS utilities, and how to access the app.'}
                 </p>
-
-                <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{isMizo ? 'NPCI UPI Guidelines' : 'NPCI UPI Compliant'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{isMizo ? 'Creator KYC Verified' : 'Creator KYC Checked'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{isMizo ? '256-Bit Cloud Encryption' : '256-Bit SSL Secured'}</span>
-                  </div>
-                </div>
               </div>
 
-              <div className="lg:col-span-4 flex justify-center">
-                <div className="bg-slate-900/90 border border-slate-700/80 p-6 rounded-2xl text-center space-y-3 shadow-xl">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-                    <Lock className="w-6 h-6" />
-                  </div>
-                  <div className="text-sm font-black text-white">100% Direct Settlement</div>
-                  <div className="text-xs text-slate-400">
-                    {isMizo 
-                      ? 'Sum lakkhawm zawng zawng chu i beneficiary account-ah a tlang nghal zel.' 
-                      : 'Funds go straight from donor bank to beneficiary account without delay.'}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* Interactive Bawm Simulator Demo */}
-      <section className="py-16 sm:py-24 bg-slate-900/30 border-b border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="text-center max-w-2xl mx-auto space-y-2 mb-10">
-            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-              {isMizo ? 'Live Chhinna' : 'Live Simulator'}
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black text-white">
-              {isMizo ? 'RonPay Bawm Thawh Dan Han Chhin Teh' : 'Test How RonPay Bawm Works'}
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300">
-              {isMizo ? 'Bawm thlang la, sum zat thlangin a thawh dan en rawh le.' : 'Select a Bawm type and preview the real donor experience.'}
-            </p>
-          </div>
-
-          <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-5 shadow-2xl">
-            
-            {/* Category Select tabs */}
-            <div>
-              <label className="text-xs font-bold text-slate-400 block mb-2">
-                {isMizo ? '1. Bawm Category Thlang Rawh:' : '1. Select Bawm Category:'}
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { key: 'ralna', label: isMizo ? 'Ralna Bawm' : 'Ralna', icon: '🖤' },
-                  { key: 'kumtluang', label: isMizo ? 'Kumtluang' : 'Kumtluang', icon: '🏛️' },
-                  { key: 'rikrum', label: isMizo ? 'Rikrum' : 'Emergency', icon: '🚨' },
-                  { key: 'khawlsak', label: isMizo ? 'Khawlsak' : 'Khawlsak', icon: '🏗️' }
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setSimulatorCategory(item.key as BawmCategory);
-                      setShowSimulatedReceipt(false);
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer border ${
-                      simulatorCategory === item.key 
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md' 
-                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
-                    }`}
-                  >
-                    <span>{item.icon}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Amount Select buttons */}
-            <div>
-              <label className="text-xs font-bold text-slate-400 block mb-2">
-                {isMizo ? '2. Thawh Zat Tur Thlang Rawh (₹):' : '2. Choose Contribution Amount (₹):'}
-              </label>
-              <div className="flex items-center gap-2">
-                {[100, 200, 500, 1000, 2000].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => {
-                      setSimulatorAmount(amt);
-                      setShowSimulatedReceipt(false);
-                    }}
-                    className={`flex-1 py-2 rounded-xl text-xs font-black transition cursor-pointer border ${
-                      simulatorAmount === amt 
-                        ? 'bg-purple-600 text-white border-purple-400 shadow-sm' 
-                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
-                    }`}
-                  >
-                    ₹{amt}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Test Action */}
-            <div className="pt-2">
               <button
                 type="button"
-                onClick={() => {
-                  setShowSimulatedReceipt(true);
-                  playSoundboxDemo();
-                }}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm py-3 rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
+                onClick={() => setIsAIChatOpen(true)}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
               >
-                <span>{isMizo ? `₹${simulatorAmount} Thawhna Han Chhin Rawh` : `Simulate ₹${simulatorAmount} Contribution`}</span>
-                <Sparkles className="w-4 h-4 text-amber-300" />
+                <MessageCircle className="w-4 h-4" />
+                <span>{isMizo ? 'Khual Chhawn Biakna Hawng Rawh' : 'Open AI Khual Chhawn'}</span>
               </button>
             </div>
 
-            {/* Simulated Receipt Output */}
-            {showSimulatedReceipt && (
-              <div className="bg-emerald-950/50 border-2 border-emerald-500/50 p-4 rounded-2xl space-y-2.5 animate-in fade-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>{isMizo ? 'Thawhna Hlawhtling (Sample Slip)' : 'Verified Contribution Slip'}</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-emerald-300">TXN-SIM-9921</span>
+            {/* Card 2: Official Email (ronpay@gmail.com) */}
+            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-purple-500/70 transition">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-300 flex items-center justify-center border border-purple-500/40 mb-3 group-hover:scale-110 transition-transform">
+                  <Mail className="w-6 h-6 text-purple-300" />
                 </div>
-                <div className="text-xl font-black text-white">₹{simulatorAmount}</div>
-                <div className="text-xs text-slate-300">
-                  {isMizo ? 'Bawm Hming:' : 'Campaign:'} <strong className="text-white">
-                    {simulatorCategory === 'ralna' ? 'Pi Lalhmingliani Ralna' : simulatorCategory === 'kumtluang' ? 'BCM Ebenezer, Zobawk [Kumtluang]' : 'Emergency Relief Fund'}
-                  </strong>
-                </div>
-                <div className="text-[10.5px] text-emerald-300/90 pt-1 border-t border-emerald-800/60">
-                  {isMizo ? '✓ WhatsApp receipt donor hnenah thawn a ni a, Mizo voice announcement a ri bawk e.' : '✓ Verified slip delivered to donor phone & audio voice synthesized.'}
-                </div>
+                <span className="text-[10px] font-black uppercase text-purple-400 tracking-wider">
+                  Official Email Support
+                </span>
+                <h3 className="text-lg font-black text-white mt-1">
+                  ronpay@gmail.com
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Kohhran, pawl register emaw technical support mamawh tan email hmangin engtik lai pawhin kan inhawng e.' 
+                    : 'Official email correspondence for organization onboarding, partnership queries, and technical support.'}
+                </p>
               </div>
-            )}
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard('ronpay@gmail.com', 'email')}
+                  className="w-full bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                >
+                  {emailCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-black">Email Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-slate-300" />
+                      <span>Copy Email (ronpay@gmail.com)</span>
+                    </>
+                  )}
+                </button>
+
+                <a
+                  href="mailto:ronpay@gmail.com?subject=RonPay%20Inquiry"
+                  className="w-full bg-purple-950 hover:bg-purple-900 text-purple-200 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-purple-800/80 transition cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Send Mail</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Card 3: WhatsApp Helpdesk */}
+            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-emerald-500/70 transition">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-300 flex items-center justify-center border border-emerald-500/40 mb-3 group-hover:scale-110 transition-transform">
+                  <Phone className="w-6 h-6 text-emerald-400" />
+                </div>
+                <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">
+                  Live WhatsApp Helpline
+                </span>
+                <h3 className="text-lg font-black text-white mt-1">
+                  +91 9862899001
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'WhatsApp Helpdesk kaltlangin darkar 24 chhungin puihna i dawng nghal thei a, setup kan lo pui vek dawn che nia.' 
+                    : 'Fast-response WhatsApp community desk ready to assist with live Bawm setup and queries.'}
+                </p>
+              </div>
+
+              <a
+                href="https://wa.me/919862899001?text=RonPay%20chungchang%20ka%20hrechiang%20duh%20e"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp-ah Be Rawh</span>
+              </a>
+            </div>
+
+            {/* Card 4: Office Address & Mizoram Hub */}
+            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-amber-500/70 transition">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-600/20 text-amber-300 flex items-center justify-center border border-amber-500/40 mb-3 group-hover:scale-110 transition-transform">
+                  <MapPin className="w-6 h-6 text-amber-400" />
+                </div>
+                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                  Office Location
+                </span>
+                <h3 className="text-lg font-black text-white mt-1">
+                  Bethel Computer Centre
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                  {isMizo 
+                    ? 'Lunglei & Aizawl, Mizoram. Khawtlang leh Kohhran tana FinTech hmanrua thar siamtu.' 
+                    : 'Bethel Computer Centre, Lunglei & Aizawl, Mizoram. Driving community fintech innovation across the state.'}
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
+                <Building className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Lunglei / Aizawl, Mizoram - 796701</span>
+              </div>
+            </div>
 
           </div>
 
         </div>
       </section>
 
-      {/* Frequently Asked Questions (FAQ) Section */}
+      {/* 8. DEDICATED APP LINK (www.ronpay.app/app) SHOWCASE CALLOUT */}
+      <section className="py-14 sm:py-16 bg-slate-900/40 border-y border-slate-800/80">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+          <div className="inline-flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/30 text-amber-300 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+            <Globe className="w-3.5 h-3.5" />
+            Direct Web App Access
+          </div>
+
+          <h2 className="text-2xl sm:text-4xl font-black text-white">
+            {isMizo ? 'RonPay App Chu www.ronpay.app/app Ah A Awm E' : 'Access RonPay App Directly at www.ronpay.app/app'}
+          </h2>
+
+          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
+            {isMizo 
+              ? 'App Store emaw Play Store atanga download kher a ngai lo! Browser atangin a lut nghal zung zung theih a, default in Khualmi (Guest User) angin i lut nghal ang.' 
+              : 'Zero app store friction. Open immediately in any mobile or desktop web browser with automatic Guest User (Khualmi) access.'}
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <div className="flex items-center gap-2 bg-slate-950 border-2 border-amber-400/80 px-4 py-3 rounded-2xl text-amber-300 font-mono font-black text-sm sm:text-base shadow-xl">
+              <span>https://www.ronpay.app/app</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
+                className="p-1 hover:text-white transition cursor-pointer"
+                title="Copy App URL"
+              >
+                {appLinkCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onLaunchApp('home')}
+              className="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl transition cursor-pointer"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>{isMizo ? 'App Lut Rawh (Khualmi)' : 'Launch App as Guest'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 9. FREQUENTLY ASKED QUESTIONS (FAQ) */}
       <section id="faq" className="py-16 sm:py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           
@@ -981,43 +1578,43 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             {[
               {
                 q: isMizo 
-                  ? '1. RonPay hi engtin nge ka Kohhran / Pawl tan ka hman tan ang?' 
-                  : '1. How do I start using RonPay for my church or organization?',
+                  ? '1. PhonePe nen hian engtin nge in thawh dun?' 
+                  : '1. How does RonPay partner with PhonePe?',
                 a: isMizo 
-                  ? 'A awlsam lutuk! RonPay Web App-ah hian lut la, "Create QR Bawm" emaw "Register Org" tih hmetin i Kohhran/Pawl hming leh i bank account (UPI ID) i dah lut ang a. Minute 2 chhungin i QR Bawm chu hman theih a ni nghal ang.' 
-                  : 'Simply open the RonPay Web App, click "Create QR Bawm" or "Register Org", provide your organization name and bank account UPI ID. Your live QR is generated in under 2 minutes.'
+                  ? 'RonPay hi PhonePe Technology Service Provider (TSP) leh PG V2 architecture hmangin kan inzawm a. Donors-ten UPI hmanga an pek rualin sum chu 100% direct-in kohhran emaw pawl bank account-ah a lut nghal zel a, RonPay-in escrow-ah sum a vawng rih ve ngai lo.' 
+                  : 'RonPay is integrated with PhonePe PG V2 and TSP infrastructure. All payments settle directly into your organization bank account via IMPS with 0% escrow holding.'
               },
               {
                 q: isMizo 
-                  ? '2. Sum lutte hi RonPay hian a vawng rih em (Escrow)?' 
-                  : '2. Does RonPay hold our money in an escrow account?',
+                  ? '2. App chhung ka luh hian eng role-ah nge ka awm dawn?' 
+                  : '2. What is my role when I enter the RonPay App?',
                 a: isMizo 
-                  ? 'A vawng rih lo. Pawisa thawhtute sum chu NPCI UPI protocol hmangin i Kohhran emaw i Pawl bank account-ah direct-in a lut nghal char char zel a ni.' 
-                  : 'No. RonPay never holds your money. Every transaction settles directly into your designated organization bank account instantly.'
+                  ? 'RonPay App (www.ronpay.app/app) i luh rualin default in "Khualmi (Guest User)" angin i lut nghal ang. Login kher ngai lovin QR i scan thei a, Bawm i browse thei a, BBPS bill (Electric, Tui, Fastag, etc.) i pe thei nghal vek a ni.' 
+                  : 'You are automatically welcomed as Guest User (Khualmi). You can immediately scan QRs, browse all 5 Bawms, and pay BBPS bills without creating an account.'
               },
               {
                 q: isMizo 
-                  ? '3. Pawisa fai (Cash) thehluhte hi engtin nge a chhinchhiah theih?' 
-                  : '3. How are physical cash contributions recorded?',
+                  ? '3. BBPS bill (EBill, Tui Bill, Fastag, School Fees, Municipal Taxes) hi a pek theih em?' 
+                  : '3. Are BBPS utility bills and mobile topups supported?',
                 a: isMizo 
-                  ? 'Kan Dual-Mode Cash Ledger hmangin, inkhawm thawhlawm emaw ralna-a pawisa fai lut zawng zawng chu Creator/Admin-in a type lut zung zung thei a, "✓ Hmuhpui (Approve)" an hmeh rualin a in-belhkhawm vek thei a ni.' 
-                  : 'Our Dual-Mode ledger allows authorized creators to record cash envelopes, and approve them with one click so both cash and online totals match perfectly.'
+                  ? 'Aw, theih chiang e! Power & Electricity Department Electric Bill, PHED Tui Bill, NHAI FASTag recharge, School & College Fees, AMC Municipal Taxes, leh Mobile Topup (Jio, Airtel, Vi, BSNL) te second 5 chhungin a pek theih vek e.' 
+                  : 'Yes! Fully supports EBill (P&ED Mizoram), Water (PHED), FASTag, School & College Fees, Municipal Taxes (AMC), and Mobile Topup with instant receipts.'
               },
               {
                 q: isMizo 
-                  ? '4. Internet a chhiat laiin a hman theih em?' 
-                  : '4. Does RonPay work offline in areas with weak signal?',
+                  ? '4. Bawm hrang hrang 5-te hi engte nge?' 
+                  : '4. What are the 5 core RonPay Bawm services?',
                 a: isMizo 
-                  ? 'Aw, thei e! RonPay hi Offline-First Architecture a ni a, internet a awm loh pawhin local phone storage-ah a lo in-save zel a, signal a awm leh rualin cloud-ah a in-sync nghal vek a ni.' 
-                  : 'Yes! RonPay is built offline-first. Even without internet, entries are stored securely on the local device and automatically synced once a connection is detected.'
+                  ? '1. Ralna Bawm (Chhiatni & YMA pual), 2. Kumtluang Bawm (Kohhran & Pawl thawhlawm chhungkaw bu), 3. Khawlsak Bawm (Biak In & Hall sakna), 4. Rikrum Bawm (Kangmei & emergency tanpuina free), leh 5. Mimal & Chhungkua (Wedding & personal gifts).' 
+                  : '1. Ralna (Condolences), 2. Kumtluang (Church & NGO family rolls), 3. Khawlsak (Building projects), 4. Rikrum (Emergency relief), and 5. Mimal (Personal & wedding gifts).'
               },
               {
                 q: isMizo 
-                  ? '5. Committee atan Financial Report a lak chhuah theih em?' 
-                  : '5. Can we export financial reports for our committee meetings?',
+                  ? '5. AIChat (RonPay Khual chhawn) hi engtin nge ka biak ang?' 
+                  : '5. How can I chat with AIChat (RonPay Khual chhawn)?',
                 a: isMizo 
-                  ? 'Aw, theih chiang e! 1-Click Reports hmangin official PDF leh Excel spreadsheet kimchang, Treasurer leh Secretary signature block nen download theih a ni.' 
-                  : 'Yes! Generate comprehensive PDF statements and Excel spreadsheets with official headers and signature lines with just one click.'
+                  ? 'Biakpawhna section-a "Khual Chhawn Biakna Hawng Rawh" tih hmet la, emaw screen dinglam hnuai a widget hi hmet rawh. Mizo tawng ngeiin eng zawhna pawh a chhang thei che a ni.' 
+                  : 'Click the "Open AI Khual Chhawn" button or floating widget to chat in Mizo or English anytime!'
               }
             ].map((faq, idx) => (
               <div 
@@ -1044,83 +1641,185 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         </div>
       </section>
 
-      {/* Call to Action Final Banner */}
-      <section id="contact" className="py-16 sm:py-20 bg-gradient-to-br from-purple-950 via-indigo-950 to-slate-950 border-t border-indigo-900/40 relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-            {isMizo ? 'I Kohhran & Khawtlang Tan RonPay Hmang Ve Rawh Le' : 'Ready to Transform Giving for Your Community?'}
-          </h2>
-          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
-            {isMizo 
-              ? 'Minute 2 chhungin live bawm i siam thei a, buaipui ngai zawng zawng RonPay Tech team-ten kan lo pui vek dawn che nia.' 
-              : 'Launch your branded digital collection bawm in less than 2 minutes. Our team is ready to guide your community setup.'}
-          </p>
+      {/* 10. AICHAT (RONPAY KHUAL CHHAWN) FLOATING DRAWER / MODAL */}
+      {isAIChatOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-indigo-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh] sm:h-[620px]">
+            
+            {/* Chat Header */}
+            <div className="bg-slate-950 px-4 py-3.5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black shadow-sm">
+                  <Bot className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white flex items-center gap-1.5">
+                    <span>AIChat (RonPay Khual Chhawn)</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    PhonePe & BBPS Verified AI Assistant
+                  </div>
+                </div>
+              </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onLaunchApp}
-              className="w-full sm:w-auto bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-base px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl transition cursor-pointer"
-            >
-              <Smartphone className="w-5 h-5" />
-              <span>{isMizo ? 'RonPay App Hawng Rawh' : 'Launch RonPay App'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => playSoundboxDemo(chatMessages[chatMessages.length - 1]?.text)}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 rounded-lg transition"
+                  title="Speak Response in Mizo"
+                >
+                  <Volume2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAIChatOpen(false)}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-            <a
-              href="https://wa.me/919862899001?text=RonPay%20chungchang%20ka%20hrechiang%20duh%20e"
-              target="_blank"
-              rel="noreferrer"
-              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-850 text-white font-bold text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-              <span>{isMizo ? 'WhatsApp Helpdesk Biakpawhna' : 'WhatsApp Support'}</span>
-            </a>
+            {/* Chat Messages Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/60">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${
+                      msg.sender === 'user'
+                        ? 'bg-amber-400 text-slate-950 font-bold rounded-br-none shadow-md'
+                        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                  </div>
+                  <span className="text-[9px] text-slate-500 mt-1 px-1">{msg.time}</span>
+                </div>
+              ))}
+
+              {isChatLoading && (
+                <div className="flex items-center gap-2 text-xs text-indigo-300 bg-slate-900 border border-slate-800 rounded-2xl px-3 py-2 w-fit">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <span>RonPay Khual Chhawn a ngaihtuah mek e...</span>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Quick Prompt Chips */}
+            <div className="bg-slate-950 px-3 py-2 border-t border-slate-800/80 overflow-x-auto no-scrollbar">
+              <div className="flex gap-1.5 min-w-max text-[10px]">
+                {[
+                  'PhonePe nen engtin nge in thawhdun?',
+                  'Bawm 5-te hi engte nge?',
+                  'EBill leh Tui Bill pek dan',
+                  'Khualmi (Guest User) angin luh dan',
+                  'www.ronpay.app/app ah engte nge awm?'
+                ].map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSendChatMessage(chip)}
+                    className="bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer transition"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat Input Field */}
+            <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSendChatMessage();
+                }}
+                placeholder={isMizo ? 'Mizo tawngin zawhna zawt rawh le...' : 'Type a question in Mizo or English...'}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-hidden"
+              />
+              <button
+                type="button"
+                onClick={() => handleSendChatMessage()}
+                disabled={!chatInput.trim() || isChatLoading}
+                className="bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 p-2.5 rounded-xl transition cursor-pointer shrink-0 font-bold"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+
           </div>
         </div>
-      </section>
+      )}
 
-      {/* Footer */}
+      {/* Floating AIChat Action Button (Bottom Right) */}
+      <button
+        type="button"
+        onClick={() => setIsAIChatOpen(true)}
+        className="fixed bottom-5 right-5 z-40 bg-gradient-to-r from-indigo-600 via-purple-600 to-amber-500 text-white p-3.5 sm:px-4 sm:py-3 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 border-2 border-white/20 cursor-pointer"
+        title="AIChat (RonPay Khual Chhawn)"
+      >
+        <Bot className="w-5 h-5 text-amber-300 animate-bounce" />
+        <span className="hidden sm:inline text-xs font-black">AIChat (Khual Chhawn)</span>
+      </button>
+
+      {/* 11. FOOTER: Professional FinTech Branding & Information */}
       <footer className="bg-slate-950 border-t border-slate-900 py-12 text-slate-400 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             
-            {/* Brand in Footer */}
-            <div className="space-y-1">
+            {/* Brand */}
+            <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-orange-500 text-white font-black flex items-center justify-center text-xs">
+                <div className="w-8 h-8 rounded-lg bg-orange-500 text-white font-black flex items-center justify-center text-sm">
                   R
                 </div>
-                <span className="text-base font-black text-white">
+                <span className="text-lg font-black text-white">
                   Ron<span className="text-orange-500">Pay</span>
                 </span>
-                <span className="bg-purple-900/50 text-purple-300 text-[8px] font-bold px-1.5 py-0.5 rounded-full border border-purple-700/50">
-                  FinTech
+                <span className="bg-purple-900/50 text-purple-300 text-[8px] font-bold px-2 py-0.5 rounded-full border border-purple-700/50 uppercase">
+                  PhonePe TSP
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-400">
                 {isMizo 
-                  ? 'Mizoram Kohhran leh Khawtlang tana Digital Bawm Platform Felfai Ber' 
-                  : "Mizoram's premier digital community bawm platform"}
+                  ? 'Digital payment company lian ber PhonePe partner • Mizoram Kohhran & BBPS Platform' 
+                  : "Mizoram's premier digital community bawm platform in partnership with PhonePe"}
               </p>
+              <div className="text-[11px] text-slate-500 flex items-center gap-2 pt-1">
+                <span>Email: <strong className="text-slate-300">ronpay@gmail.com</strong></span>
+                <span>•</span>
+                <span>App Link: <strong className="text-amber-300 font-mono">www.ronpay.app/app</strong></span>
+              </div>
             </div>
 
             {/* Quick Links */}
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-400">
               <a href="#hero" className="hover:text-white transition">{isMizo ? 'Kawtchhuah' : 'Home'}</a>
-              <a href="#about" className="hover:text-white transition">{isMizo ? 'Chanchin' : 'About'}</a>
-              <a href="#features" className="hover:text-white transition">{isMizo ? 'Hmanruate' : 'Features'}</a>
-              <a href="#security" className="hover:text-white transition">{isMizo ? 'Rinngamna' : 'Security'}</a>
-              <a href="#faq" className="hover:text-white transition">FAQ</a>
-              <button type="button" onClick={onLaunchApp} className="text-indigo-400 hover:text-indigo-300 font-black cursor-pointer">
-                {isMizo ? 'App Lut Rawh →' : 'Launch App →'}
+              <a href="#phonepe" className="hover:text-purple-300 transition">PhonePe Thawhdun</a>
+              <a href="#services" className="hover:text-white transition">{isMizo ? 'Bawm 5' : '5 Bawms'}</a>
+              <a href="#bbps" className="hover:text-amber-300 transition">BBPS Bills</a>
+              <a href="#contact" className="hover:text-emerald-400 transition">{isMizo ? 'Biakpawhna' : 'Contact'}</a>
+              <button 
+                type="button" 
+                onClick={() => onLaunchApp('home')} 
+                className="text-amber-400 hover:text-amber-300 font-black cursor-pointer"
+              >
+                {isMizo ? 'App Lut Rawh (Khualmi) →' : 'Launch App →'}
               </button>
             </div>
 
           </div>
 
-          {/* Copyright line as strictly requested: "Developed & Maintained by © 2026 RonPay Technologies. All rights reserved." */}
+          {/* Copyright line as strictly mandated */}
           <div className="pt-6 border-t border-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
             <div>
               Developed & Maintained by © 2026 RonPay Technologies. All rights reserved.
@@ -1129,10 +1828,10 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                All Systems Operational
+                PhonePe TSP Live • All Systems Operational
               </span>
               <span>•</span>
-              <span className="text-slate-500">NPCI / UPI Protocol</span>
+              <span className="text-slate-400">NPCI / BBPS Protocol</span>
             </div>
           </div>
 

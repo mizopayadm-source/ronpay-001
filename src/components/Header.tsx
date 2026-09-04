@@ -20,7 +20,8 @@ import {
   AlertCircle,
   User,
   LogIn,
-  KeyRound
+  KeyRound,
+  Globe
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
@@ -40,6 +41,7 @@ interface HeaderProps {
   onOpenAIHriatpui?: () => void;
   onOpenLogin?: () => void;
   creatorProfile?: CreatorProfile;
+  onSwitchToWebsite?: () => void;
 }
 
 
@@ -156,6 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAIHriatpui,
   onOpenLogin,
   creatorProfile,
+  onSwitchToWebsite,
 }) => {
 
   const [userLocation, setUserLocation] = useState<string>(() => {
@@ -467,6 +470,19 @@ export const Header: React.FC<HeaderProps> = ({
                 EN
               </button>
             </div>
+
+            {/* Switch to Marketing Website Button */}
+            {onSwitchToWebsite && (
+              <button
+                type="button"
+                onClick={onSwitchToWebsite}
+                title="Go to RonPay Website (www.ronpay.app)"
+                className="h-7 sm:h-8 px-2 bg-slate-900 border border-slate-800 hover:border-indigo-500/60 text-indigo-300 hover:text-white rounded-lg flex items-center gap-1 text-[10px] font-bold transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
+              >
+                <Globe className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Website</span>
+              </button>
+            )}
 
             {/* Viewport Toggle (Desktop / Mobile Frame - Hidden on small mobile screens to save space) */}
             <button

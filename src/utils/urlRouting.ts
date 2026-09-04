@@ -3,6 +3,7 @@ import { INITIAL_CAMPAIGNS } from '../data/initialData';
 import { getStoredCampaigns, getStoredTransactions } from './storage';
 
 export interface ParsedRoute {
+  view?: 'website' | 'app';
   screen?: ScreenId;
   campaignId?: string;
   campaign?: Campaign;
@@ -25,7 +26,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const url = new URL(window.location.href);
     const searchParams = new URLSearchParams(url.search);
 
-    // Also check hash for parameters e.g. #/?campaign=xxx, #campaign=xxx, #/c/xxx, #/post/xxx
+    // Also check hash for parameters e.g. #/?campaign=xxx, #campaign=xxx, #/c/xxx, #/post/xxx, #/app
     if (window.location.hash) {
       const rawHash = window.location.hash.replace(/^#\/?/, '');
       if (rawHash.includes('?') || rawHash.includes('=')) {
@@ -41,11 +42,14 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         if (match && match[1] && !searchParams.has('campaign')) {
           searchParams.set('campaign', match[1]);
         }
+      } else if (rawHash === 'app' || rawHash.startsWith('app/')) {
+        searchParams.set('view', 'app');
       }
     }
 
-    // Also check pathname for /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
+    // Also check pathname for /app, /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
     const pathname = window.location.pathname;
+    const isAppPath = pathname === '/app' || pathname.startsWith('/app/');
     const campPathMatch = pathname.match(/\/(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
     if (campPathMatch && campPathMatch[1] && !searchParams.has('campaign')) {
       searchParams.set('campaign', campPathMatch[1]);
@@ -95,6 +99,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       
       if (existing) {
         return {
+          view: 'app',
           screen: 'checkout',
           campaignId: existing.id,
           campaign: existing,
@@ -144,6 +149,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
 
       return {
+        view: 'app',
         screen: 'checkout',
         campaignId: cleanId,
         campaign: reconstructed,
@@ -154,6 +160,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 2. If Receipt ID is present
     if (receiptId) {
       return {
+        view: 'app',
         screen: 'success',
         receiptId: decodeURIComponent(receiptId).trim(),
       };
@@ -162,6 +169,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 3. If Member Roll is requested
     if (rollId) {
       return {
+        view: 'app',
         isMemberRollOpen: true,
         memberRollCampaignId: decodeURIComponent(rollId).trim(),
       };
@@ -170,6 +178,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 4. If Sulhnu history is requested
     if (sulhnuParam === 'true' || sulhnuParam === '1') {
       return {
+        view: 'app',
         isSulhnuOpen: true,
       };
     }
@@ -180,7 +189,15 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const matched = validScreens.find(s => s === screenParam.toLowerCase());
       if (matched) {
         return {
+          view: 'app',
           screen: matched,
+          category: (catParam as BawmCategory) || undefined,
+        };
+      }
+      if (screenParam === 'app') {
+        return {
+          view: 'app',
+          screen: 'home',
           category: (catParam as BawmCategory) || undefined,
         };
       }
@@ -188,6 +205,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     if (catParam) {
       return {
+        view: 'app',
         screen: 'explorer',
         category: catParam as BawmCategory,
       };
@@ -195,21 +213,65 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     if (adminParam === 'true') {
       return {
+        view: 'app',
         isAdminOpen: true,
       };
     }
 
     if (walletParam === 'true') {
       return {
+        view: 'app',
         isWalletOpen: true,
       };
     }
 
-    return null;
+    // Check if user is on /app or hash #app or query ?app=true
+    if (isAppPath || searchParams.get('app') === 'true' || searchParams.get('view') === 'app') {
+      return {
+        view: 'app',
+        screen: 'home',
+      };
+    }
+
+    // Default view is the beautiful RonPay Marketing & Information Website
+    return {
+      view: 'website',
+    };
   } catch (err) {
     console.error('Error parsing route URL:', err);
-    return null;
+    return { view: 'website' };
   }
+}
+
+/**
+ * Switch between Website and App views with full browser history & URL update
+ */
+export function updateBrowserView(view: 'website' | 'app', screen: ScreenId = 'home') {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    if (view === 'website') {
+      // Clear app parameters
+      url.pathname = '/';
+      url.search = '';
+      url.hash = '';
+      const newUrl = url.pathname;
+      window.history.pushState({ view: 'website' }, '', newUrl);
+    } else {
+      // Switch to /app
+      if (!url.pathname.startsWith('/app')) {
+        url.pathname = '/app';
+      }
+      if (screen && screen !== 'home') {
+        url.searchParams.set('screen', screen);
+      } else {
+        url.searchParams.delete('screen');
+      }
+      const queryStr = url.searchParams.toString();
+      const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
+      window.history.pushState({ view: 'app', screen }, '', newUrl);
+    }
+  } catch {}
 }
 
 /**
