@@ -225,22 +225,102 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
     }
 
-    // Check if user is on /app or hash #app or query ?app=true
-    if (isAppPath || searchParams.get('app') === 'true' || searchParams.get('view') === 'app') {
+    // Explicit override checks in query parameters
+    const explicitView = searchParams.get('view');
+    const isExplicitWebsite = explicitView === 'website' || searchParams.get('website') === 'true' || searchParams.get('site') === 'true';
+    const isExplicitApp = explicitView === 'app' || 
+                          searchParams.get('app') === 'true' || 
+                          searchParams.get('platform') === 'android' ||
+                          searchParams.get('source') === 'android' ||
+                          isAppPath;
+
+    // 1. Explicit request for Website takes top precedence (e.g. user clicked "Website" button on mobile)
+    if (isExplicitWebsite) {
+      return {
+        view: 'website',
+      };
+    }
+
+    // 2. Explicit request for App
+    if (isExplicitApp) {
       return {
         view: 'app',
         screen: 'home',
       };
     }
 
-    // Default view is the beautiful RonPay Marketing & Information Website
+    // 3. Android Mobile App / Mobile Environment Check:
+    // When opened from a Mobile App (Android APK, Android WebView, PWA, or Android phone):
+    // The App dashboard (Khualmi Guest mode) launches directly without showing promotional web home.
+    if (isAndroidOrMobileApp()) {
+      return {
+        view: 'app',
+        screen: 'home',
+      };
+    }
+
+    // 4. Default for Desktop / Web Browsers accessing the root domain (e.g. www.ronpay.com):
+    // Shows the comprehensive RonPay Marketing & BBPS information website.
     return {
       view: 'website',
     };
   } catch (err) {
     console.error('Error parsing route URL:', err);
-    return { view: 'website' };
+    return { view: isAndroidOrMobileApp() ? 'app' : 'website' };
   }
+}
+
+/**
+ * Detects whether the current environment is a Mobile App, Android device, Android WebView, or standalone PWA.
+ * On Mobile App / Android environments, the user expects to see the actual App directly (Bawm suites, Guest mode)
+ * rather than the marketing website landing page.
+ */
+export function isAndroidOrMobileApp(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+
+  const ua = navigator.userAgent || '';
+  const win = window as any;
+
+  // 1. Injected Android or mobile native app bridge objects (Cordova, Capacitor, React Native, custom WebView)
+  if (
+    win.Android !== undefined ||
+    win.AndroidBridge !== undefined ||
+    win.Capacitor !== undefined ||
+    win.ReactNativeWebView !== undefined ||
+    win.flutter_inappwebview !== undefined ||
+    win._ronpay_android === true
+  ) {
+    return true;
+  }
+
+  // 2. Android device detection (all Android phones, tablets, Android APK wrappers, Android WebViews)
+  if (/Android/i.test(ua)) {
+    return true;
+  }
+
+  // 3. Standalone / Installed PWA / WebAPK / TWA (Trusted Web Activity)
+  try {
+    const isStandalone = 
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) ||
+      (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) ||
+      (navigator as any).standalone === true;
+    if (isStandalone) {
+      return true;
+    }
+  } catch {}
+
+  // 4. Android app intent referrer (e.g. android-app://com.ronpay.app)
+  if (typeof document !== 'undefined' && document.referrer && document.referrer.startsWith('android-app://')) {
+    return true;
+  }
+
+  // 5. Generic mobile device user agents (iPhone, iPad, Windows Phone, etc.)
+  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -251,17 +331,22 @@ export function updateBrowserView(view: 'website' | 'app', screen: ScreenId = 'h
   try {
     const url = new URL(window.location.href);
     if (view === 'website') {
-      // Clear app parameters
+      // Switch to website, set view=website explicitly so mobile devices know user intended to view website
       url.pathname = '/';
-      url.search = '';
+      url.searchParams.set('view', 'website');
+      url.searchParams.delete('screen');
+      url.searchParams.delete('app');
       url.hash = '';
-      const newUrl = url.pathname;
+      const newUrl = url.searchParams.toString() ? `${url.pathname}?${url.searchParams.toString()}` : url.pathname;
       window.history.pushState({ view: 'website' }, '', newUrl);
     } else {
       // Switch to /app
       if (!url.pathname.startsWith('/app')) {
         url.pathname = '/app';
       }
+      url.searchParams.delete('view');
+      url.searchParams.delete('website');
+      url.searchParams.delete('site');
       if (screen && screen !== 'home') {
         url.searchParams.set('screen', screen);
       } else {

@@ -94,7 +94,7 @@ import { SmartLoginModal } from './components/SmartLoginModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
-import { getUrlRoute, updateBrowserUrl, updateBrowserView } from './utils/urlRouting';
+import { getUrlRoute, updateBrowserUrl, updateBrowserView, isAndroidOrMobileApp } from './utils/urlRouting';
 
 export default function App() {
   // Splash screen state for smooth UX
@@ -103,8 +103,11 @@ export default function App() {
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
 
-  // View Mode: 'website' (Marketing & Information Landing Page) or 'app' (Web Application)
-  const [appView, setAppView] = useState<'website' | 'app'>(() => initialRoute?.view || 'website');
+  // View Mode: On Android Mobile App / WebViews, default directly to 'app' (Zero website detour). On Desktop, default to 'website'
+  const [appView, setAppView] = useState<'website' | 'app'>(() => {
+    if (initialRoute?.view) return initialRoute.view;
+    return isAndroidOrMobileApp() ? 'app' : 'website';
+  });
 
   // Navigation & View States
   const [currentScreen, setCurrentScreen] = useState<ScreenId>(() => initialRoute?.screen || 'home');

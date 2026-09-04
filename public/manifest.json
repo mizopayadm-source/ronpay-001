@@ -2,7 +2,7 @@
   "name": "RonPay - Mizoram Bawm & Payments",
   "short_name": "RonPay",
   "description": "RonPay Community Bawm & UPI Payments Platform",
-  "start_url": "/",
+  "start_url": "/app?platform=android",
   "display": "standalone",
   "background_color": "#070f1e",
   "theme_color": "#070f1e",
