@@ -188,14 +188,36 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
   }, []);
 
-  // Quick Entry State
+  // Dynamic current date calculations
+  const monthsList = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const now = new Date();
+  const currentMonthIdx = now.getMonth();
+  const currentMonthName = monthsList[currentMonthIdx] || 'September';
+  const currentYearNum = now.getFullYear();
+  const currentYearStr = String(currentYearNum);
+  const selectableYears = [
+    String(currentYearNum - 4), // 2022
+    String(currentYearNum - 3), // 2023
+    String(currentYearNum - 2), // 2024
+    String(currentYearNum - 1), // 2025
+    currentYearStr,             // 2026 (Current)
+    String(currentYearNum + 1), // 2027
+    String(currentYearNum + 2), // 2028
+    String(currentYearNum + 3), // 2029
+  ];
+
+  // Quick Entry State (Defaults to Current Month & Year)
   const [quickPhone4, setQuickPhone4] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
-  const [selectedMonth, setSelectedMonth] = useState<string>('August');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthName);
+  const [selectedYear, setSelectedYear] = useState<string>(() => currentYearStr);
   const [entryAmount, setEntryAmount] = useState<string>('500');
   const [entryPaymentMethod, setEntryPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [entryTxRef, setEntryTxRef] = useState<string>('');
@@ -209,8 +231,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editTxDonorName, setEditTxDonorName] = useState<string>('');
   const [editTxAmount, setEditTxAmount] = useState<string>('');
   const [editTxCategory, setEditTxCategory] = useState<string>('Pathian Ram Zauna');
-  const [editTxMonth, setEditTxMonth] = useState<string>('August');
-  const [editTxYear, setEditTxYear] = useState<string>('2026');
+  const [editTxMonth, setEditTxMonth] = useState<string>(() => currentMonthName);
+  const [editTxYear, setEditTxYear] = useState<string>(() => currentYearStr);
   const [editTxPaymentMethod, setEditTxPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [editTxRemark, setEditTxRemark] = useState<string>('');
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
@@ -257,7 +279,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [printOrgScope, setPrintOrgScope] = useState<string>('cmp-kumtluang-1');
   const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
   const [printMemberId, setPrintMemberId] = useState<string>('');
-  const [printYear, setPrintYear] = useState<string>('2026');
+  const [printYear, setPrintYear] = useState<string>(() => currentYearStr);
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
   const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
@@ -265,11 +287,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
-
-  const monthsList = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
 
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
@@ -519,8 +536,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setEditTxDonorName(tx.donorName || '');
     setEditTxAmount(String(tx.amount || 0));
     setEditTxCategory(tx.subCategory || tx.category || 'Pathian Ram Zauna');
-    setEditTxMonth(tx.periodMonth || selectedMonth || 'August');
-    setEditTxYear(tx.periodYear || selectedYear || '2026');
+    setEditTxMonth(tx.periodMonth || selectedMonth || currentMonthName);
+    setEditTxYear(tx.periodYear || selectedYear || currentYearStr);
     setEditTxPaymentMethod((tx.paymentMethod === 'online' ? 'online' : 'cash'));
     setEditTxRemark(tx.remark || '');
   };
@@ -1522,21 +1539,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       </select>
                     </div>
 
-                    {/* Category & Month */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
-                        <select
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        >
-                          {campaignCategories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
+                    {/* Fund Head / Category */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
+                      <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      >
+                        {campaignCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
 
+                    {/* Month & Year Selection (Defaults to Current, Past Selectable) */}
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">Thla (Month)</label>
                         <select
@@ -1544,8 +1562,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           onChange={(e) => setSelectedMonth(e.target.value)}
                           className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         >
-                          {monthsList.map(m => (
-                            <option key={m} value={m}>{m}</option>
+                          {monthsList.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Kum (Year)</label>
+                        <select
+                          value={selectedYear}
+                          onChange={(e) => setSelectedYear(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {selectableYears.map(yr => (
+                            <option key={yr} value={yr}>
+                              {yr}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -3306,8 +3341,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     onChange={(e) => setEditTxMonth(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
-                    {monthsList.map(m => (
-                      <option key={m} value={m}>{m}</option>
+                    {monthsList.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -3319,8 +3356,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     onChange={(e) => setEditTxYear(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
-                    {['2024', '2025', '2026', '2027', '2028', '2029', '2030'].map(y => (
-                      <option key={y} value={y}>{y}</option>
+                    {selectableYears.map(y => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
                     ))}
                   </select>
                 </div>

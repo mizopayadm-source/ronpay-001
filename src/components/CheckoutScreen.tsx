@@ -40,6 +40,7 @@ import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translati
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { UPIIntentModal } from './UPIIntentModal';
 import { validateUpiId } from '../utils/upi';
+import { ALL_MONTH_NAMES_FULL } from '../utils/monthHelper';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -100,11 +101,37 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const t = TRANSLATIONS[language];
 
-  // Kumtluang period & frequency selection
+  // Dynamic date calculations for Current Month, Quarter, and Year
+  const now = new Date();
+  const currentMonthIdx = now.getMonth();
+  const currentMonthName = ALL_MONTH_NAMES_FULL[currentMonthIdx] || 'September';
+  const currentYearNum = now.getFullYear();
+  const currentYearStr = String(currentYearNum);
+  const currentQuarterName = currentMonthIdx <= 2 
+    ? 'Q1 (Jan - Mar)' 
+    : currentMonthIdx <= 5 
+    ? 'Q2 (Apr - Jun)' 
+    : currentMonthIdx <= 8 
+    ? 'Q3 (Jul - Sep)' 
+    : 'Q4 (Oct - Dec)';
+
+  // Selectable years: Past years (for clearing past dues/records) + Current Year + Upcoming Years
+  const availableYears = [
+    String(currentYearNum - 4), // 2022
+    String(currentYearNum - 3), // 2023
+    String(currentYearNum - 2), // 2024
+    String(currentYearNum - 1), // 2025
+    currentYearStr,             // 2026 (Current)
+    String(currentYearNum + 1), // 2027
+    String(currentYearNum + 2), // 2028
+    String(currentYearNum + 3), // 2029
+  ];
+
+  // Kumtluang period & frequency selection (Defaults to Current Month and Current Year)
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>('August');
-  const [selectedQuarter, setSelectedQuarter] = useState<string>('Q3 (Jul - Sep)');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthName);
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => currentQuarterName);
+  const [selectedYear, setSelectedYear] = useState<string>(() => currentYearStr);
 
   // Kumtluang subcategory breakdown
   const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
@@ -1525,10 +1552,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     <select
                       value={selectedMonth}
                       onChange={(e) => setSelectedMonth(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
                     >
-                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
-                        <option key={m} value={m}>{m}</option>
+                      {ALL_MONTH_NAMES_FULL.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1540,7 +1569,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     <select
                       value={selectedQuarter}
                       onChange={(e) => setSelectedQuarter(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
                     >
                       <option value="Q1 (Jan - Mar)">Q1 (January - March)</option>
                       <option value="Q2 (Apr - Jun)">Q2 (April - June)</option>
@@ -1555,10 +1584,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
                   >
-                    {['2025', '2026', '2027', '2028'].map(yr => (
-                      <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
+                    {availableYears.map(yr => (
+                      <option key={yr} value={yr}>
+                        {yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>

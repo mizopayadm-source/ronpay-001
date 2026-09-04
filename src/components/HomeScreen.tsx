@@ -189,16 +189,41 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  // Recent Created QRs (Strictly sorted newest first by createdAt timestamp)
-  const recentCreatedQRs = useMemo(() => {
-    return [...campaigns]
-      .sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeB - timeA;
-      })
-      .slice(0, 5);
+  // Search and display state for Created QRs
+  const [qrSearchQuery, setQrSearchQuery] = useState<string>('');
+  const [showAllQRs, setShowAllQRs] = useState<boolean>(false);
+
+  // Sorted All Campaigns (Strictly sorted newest first by createdAt timestamp)
+  const sortedAllCampaigns = useMemo(() => {
+    return [...campaigns].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [campaigns]);
+
+  // Filtered / displayed QRs based on search query or recents limit
+  const displayedQRs = useMemo(() => {
+    const q = qrSearchQuery.trim().toLowerCase();
+    if (q) {
+      return sortedAllCampaigns.filter(c => {
+        const title = (c.title || '').toLowerCase();
+        const subTitle = (c.subTitle || '').toLowerCase();
+        const loc = (c.location || '').toLowerCase();
+        const org = (c.orgName || '').toLowerCase();
+        const creator = (c.creatorName || '').toLowerCase();
+        const cat = (c.category || '').toLowerCase();
+        const upi = (c.upiId || '').toLowerCase();
+        const mitthi = (c.mitthiHming || '').toLowerCase();
+        const cause = (c.cause || '').toLowerCase();
+        return title.includes(q) || subTitle.includes(q) || loc.includes(q) || org.includes(q) || creator.includes(q) || cat.includes(q) || upi.includes(q) || mitthi.includes(q) || cause.includes(q);
+      });
+    }
+    if (showAllQRs) {
+      return sortedAllCampaigns;
+    }
+    return sortedAllCampaigns.slice(0, 5);
+  }, [sortedAllCampaigns, qrSearchQuery, showAllQRs]);
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
@@ -632,32 +657,113 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* 5. Recent Created QRs Section (Replaces Recent Transactions as requested) */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5">
-            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+      {/* 5. Recent Created QRs Section with Real-time QR Search (QR Zawnna) */}
+      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <QrCode className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
             <h3 className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider">
-              Recent Created QRs
+              {qrSearchQuery.trim() 
+                ? (language === 'mizo' ? `QR Zawn Hmuh (${displayedQRs.length})` : `QR Search Results (${displayedQRs.length})`) 
+                : showAllQRs 
+                ? (language === 'mizo' ? `QR Awm Zawng Zawng (${displayedQRs.length})` : `All Created QRs (${displayedQRs.length})`) 
+                : 'Recent Created QRs'}
             </h3>
+            {!qrSearchQuery.trim() && (
+              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                {showAllQRs ? `${campaigns.length} Total` : `5 Recent`}
+              </span>
+            )}
           </div>
-          <button 
-            onClick={onCreateQRClick}
-            className="text-[10px] text-indigo-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            + Create / Manage QRs <ChevronRight className="w-3 h-3" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {campaigns.length > 5 && !qrSearchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setShowAllQRs(!showAllQRs)}
+                className="text-[10px] text-slate-600 hover:text-indigo-600 font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
+              >
+                {showAllQRs 
+                  ? (language === 'mizo' ? 'Recents chiah en rawh (5)' : 'Show Recents Only (5)') 
+                  : (language === 'mizo' ? `A vaiin en rawh (${campaigns.length})` : `View All (${campaigns.length})`)}
+              </button>
+            )}
+            <button 
+              onClick={onCreateQRClick}
+              className="text-[10px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
+            >
+              + Create / Manage QRs <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
+        {/* QR Search Bar (QR Zawnna) */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-3.5 w-3.5 text-slate-400" />
+          </div>
+          <input
+            type="text"
+            value={qrSearchQuery}
+            onChange={(e) => setQrSearchQuery(e.target.value)}
+            placeholder={language === 'mizo' ? 'QR hming, hmun, pawl emaw UPI ID zawnna...' : 'Search QR by name, location, organizer, or UPI ID...'}
+            className="w-full pl-8.5 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 font-medium transition focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
+          />
+          {qrSearchQuery && (
+            <button
+              type="button"
+              onClick={() => setQrSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+              title="Clear search"
+            >
+              <CloseIcon className="w-3.5 h-3.5 bg-slate-200 hover:bg-slate-300 rounded-full p-0.5 text-slate-600" />
+            </button>
+          )}
+        </div>
+
+        {/* Search Status & Fast Reset Bar */}
+        {qrSearchQuery.trim() && (
+          <div className="flex items-center justify-between text-[10.5px] text-slate-600 px-1 bg-indigo-50/50 p-1.5 rounded-lg border border-indigo-100/60">
+            <span>
+              {language === 'mizo' 
+                ? `"${qrSearchQuery}" nena inmil QR ${displayedQRs.length} hmuh a ni.` 
+                : `Found ${displayedQRs.length} QR(s) matching "${qrSearchQuery}".`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setQrSearchQuery('')}
+              className="text-indigo-600 font-bold hover:underline cursor-pointer"
+            >
+              {language === 'mizo' ? 'Zawnna Paih / Recents Let Leh' : 'Clear / Back to Recents'}
+            </button>
+          </div>
+        )}
+
         <div className="space-y-2.5">
-          {recentCreatedQRs.length === 0 ? (
+          {displayedQRs.length === 0 ? (
             <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/90 text-center space-y-2">
-              <QrCode className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">QR Siam a la awm lo</p>
-              <p className="text-[11px] text-slate-500">QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.</p>
+              <Search className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-xs font-bold text-slate-700">
+                {qrSearchQuery.trim() 
+                  ? (language === 'mizo' ? `"${qrSearchQuery}" nena inmil QR zawn hmuh a awm lo` : `No QR found matching "${qrSearchQuery}"`)
+                  : (language === 'mizo' ? 'QR Siam a la awm lo' : 'No QR Created Yet')}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {qrSearchQuery.trim() 
+                  ? (language === 'mizo' ? 'Hming dang, hmun emaw bawm category dang han zawng chhin teh.' : 'Try searching with another keyword or location.')
+                  : (language === 'mizo' ? 'QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.' : 'Click "+ Create / Manage QRs" to create a new QR code.')}
+              </p>
+              {qrSearchQuery.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setQrSearchQuery('')}
+                  className="mt-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  {language === 'mizo' ? 'Zawnna Paih Rawh' : 'Clear Search'}
+                </button>
+              )}
             </div>
           ) : (
-            recentCreatedQRs.map(camp => {
+            displayedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
             const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -805,6 +911,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             );
           }))}
         </div>
+
+        {/* View All toggle button when more than 5 QRs exist */}
+        {!qrSearchQuery.trim() && campaigns.length > 5 && !showAllQRs && (
+          <div className="pt-0.5 text-center">
+            <button
+              type="button"
+              onClick={() => setShowAllQRs(true)}
+              className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-indigo-600 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <span>{language === 'mizo' ? `QR dang zawng zawng en rawh (A vaiin: ${campaigns.length})` : `View all other QRs (Total: ${campaigns.length})`}</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
