@@ -91,6 +91,7 @@ import { AIHriatpuiModal } from './components/AIHriatpuiModal';
 import { BankTransferModal } from './components/BankTransferModal';
 import { RonPayWalletModal } from './components/RonPayWalletModal';
 import { SmartLoginModal } from './components/SmartLoginModal';
+import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
@@ -164,6 +165,7 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
@@ -474,7 +476,7 @@ export default function App() {
 
   const handleOpenNotifications = () => {
     setNotificationCount(0);
-    setIsHistoryOpen(true);
+    setIsNotificationsOpen(true);
   };
 
   const handleOpenHistory = () => {
@@ -897,7 +899,17 @@ export default function App() {
           {currentScreen === 'cash_pending' && (
             <CashPendingScreen
               transaction={completedTransaction}
+              creatorName={creatorProfile.name || 'Bawm Creator'}
               onGoHome={() => handleNavigate('home')}
+              onApprove={(approvedTx) => {
+                setTransactions(prev => prev.map(t => t.id === approvedTx.id ? approvedTx : t));
+                setCompletedTransaction(approvedTx);
+                setCurrentScreen('success');
+              }}
+              onReject={(rejectedTx) => {
+                setTransactions(prev => prev.map(t => t.id === rejectedTx.id ? rejectedTx : t));
+                setCompletedTransaction(rejectedTx);
+              }}
             />
           )}
         </main>
@@ -997,6 +1009,33 @@ export default function App() {
           />
         </ErrorBoundary>
 
+        <NotificationsModal
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          transactions={transactions}
+          campaigns={campaigns}
+          creatorProfile={creatorProfile}
+          onOpenReceipt={(tx) => {
+            setIsNotificationsOpen(false);
+            setCompletedTransaction(tx);
+            setCurrentScreen('success');
+          }}
+          onNavigateToCampaign={(camp) => {
+            setIsNotificationsOpen(false);
+            handleSelectCampaign(camp);
+          }}
+          onOpenMemberRoll={() => {
+            setIsNotificationsOpen(false);
+            setIsKumtluangManagerOpen(true);
+          }}
+          onUnreadCountChange={(cnt) => {
+            setNotificationCount(cnt);
+          }}
+          onTransactionUpdated={(updatedTx) => {
+            setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+          }}
+        />
+
         <PhonePeModal
           isOpen={isPhonePeOpen}
           onClose={() => setIsPhonePeOpen(false)}
@@ -1038,6 +1077,14 @@ export default function App() {
           onUpdateAnnouncement={handleUpdateAnnouncement}
           onRestoreDatabase={handleRestoreDatabase}
           onResetData={handleResetData}
+          onUpdateTransaction={(updatedTx) => {
+            setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+          }}
+          onViewReceipt={(tx) => {
+            setIsAdminDashboardOpen(false);
+            setCompletedTransaction(tx);
+            setCurrentScreen('success');
+          }}
         />
 
         <AdminApprovalModal

@@ -1931,4 +1931,128 @@ export const saveStoredWallet = (wallet: RonPayWallet) => {
   }
 };
 
+export const addStoredNotification = (notif: {
+  id?: string;
+  type?: 'general' | 'personal' | 'payment' | 'announcement' | 'system' | 'bawm';
+  title: string;
+  message: string;
+  amount?: number;
+  transactionId?: string;
+  campaignId?: string;
+  tag?: string;
+}) => {
+  try {
+    const raw = localStorage.getItem('ronpay_notifications_v2');
+    const list = raw ? JSON.parse(raw) : [];
+    const item = {
+      id: notif.id || `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: notif.type || 'general',
+      title: notif.title,
+      message: notif.message,
+      timestamp: new Date().toISOString(),
+      read: false,
+      amount: notif.amount,
+      transactionId: notif.transactionId,
+      campaignId: notif.campaignId,
+      tag: notif.tag || (notif.type === 'personal' ? 'Personal' : 'General')
+    };
+    const updated = [item, ...list];
+    localStorage.setItem('ronpay_notifications_v2', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_notifications_updated', { detail: updated }));
+    }
+  } catch (e) {
+    console.error('Failed to add stored notification', e);
+  }
+};
+
+export const approveCashTransaction = (
+  transactionId: string, 
+  verifierName: string = 'Admin / Creator'
+): Transaction | null => {
+  const all = getStoredTransactions();
+  const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
+  if (index === -1) return null;
+
+  const current = all[index];
+  const updated: Transaction = {
+    ...current,
+    status: 'completed',
+    verifiedBy: verifierName,
+    verifiedAt: new Date().toISOString(),
+    remark: current.remark ? `${current.remark} (Cash Approved by ${verifierName})` : `Cash Approved by ${verifierName}`
+  };
+
+  all[index] = updated;
+  saveStoredTransactions(all);
+  saveTransaction(updated);
+
+  // Record audit log
+  recordAuditLog(
+    'Cash Approved',
+    `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was APPROVED/VERIFIED by ${verifierName}`,
+    'transaction',
+    updated.id
+  );
+
+  // Add Notification
+  addStoredNotification({
+    type: 'personal',
+    title: `Cash Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}`,
+    message: `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian a dawng fel ta e. (Txn: ${updated.id})`,
+    amount: updated.amount,
+    transactionId: updated.id,
+    campaignId: updated.campaignId,
+    tag: 'Cash Approved'
+  });
+
+  return updated;
+};
+
+export const rejectCashTransaction = (
+  transactionId: string, 
+  rejectorName: string = 'Admin / Creator',
+  reason: string = 'Cash pawisa dawn a ni lo'
+): Transaction | null => {
+  const all = getStoredTransactions();
+  const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
+  if (index === -1) return null;
+
+  const current = all[index];
+  const updated: Transaction = {
+    ...current,
+    status: 'rejected',
+    rejectedBy: rejectorName,
+    rejectedAt: new Date().toISOString(),
+    rejectionReason: reason,
+    remark: current.remark ? `${current.remark} (Cash Rejected: ${reason})` : `Cash Rejected: ${reason}`
+  };
+
+  all[index] = updated;
+  saveStoredTransactions(all);
+  saveTransaction(updated);
+
+  // Record audit log
+  recordAuditLog(
+    'Cash Rejected',
+    `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`,
+    'transaction',
+    updated.id
+  );
+
+  // Add Notification
+  addStoredNotification({
+    type: 'personal',
+    title: `Cash Hnawl: ₹${updated.amount.toLocaleString('en-IN')}`,
+    message: `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`,
+    amount: updated.amount,
+    transactionId: updated.id,
+    campaignId: updated.campaignId,
+    tag: 'Cash Rejected'
+  });
+
+  return updated;
+};
+
+
 

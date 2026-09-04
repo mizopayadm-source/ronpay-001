@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -47,6 +47,7 @@ import {
   Coins,
   Receipt,
   AlertCircle,
+  Banknote,
   Trophy,
   Crown,
   Medal,
@@ -84,7 +85,7 @@ import {
   AnnouncementItem,
   UserRole
 } from '../types';
-import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { 
   exportFullDatabaseBackup, 
@@ -100,7 +101,9 @@ import {
   migrateCampaignMembersPrefix,
   getStoredCreatorsList,
   saveStoredCreatorsList,
-  saveStoredCreatorProfile
+  saveStoredCreatorProfile,
+  approveCashTransaction,
+  rejectCashTransaction
 } from '../utils/storage';
 import { 
   pushAllLocalDataToFirestore,
@@ -130,7 +133,7 @@ import {
   getRolePermissions
 } from '../utils/rbac';
 
-export type AdminTabId = 'campaigns' | 'creators' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'staff';
+export type AdminTabId = 'campaigns' | 'creators' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'staff';
 
 interface AdminDashboardModalProps {
   isOpen: boolean;
@@ -154,6 +157,8 @@ interface AdminDashboardModalProps {
   onUpdateAnnouncement?: (ann: AnnouncementBanner) => void;
   onRestoreDatabase?: (jsonString: string) => boolean;
   onResetData: () => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
+  onViewReceipt?: (tx: Transaction) => void;
 }
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
@@ -178,6 +183,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onUpdateAnnouncement,
   onRestoreDatabase,
   onResetData,
+  onUpdateTransaction,
+  onViewReceipt,
 }) => {
   // Authentication state & RBAC
   const baseUserRole = getUserRole(currentProfile);
@@ -246,12 +253,51 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Auto-correct tab if role does not allow it
   useEffect(() => {
-    if (isModerator && !['creators', 'campaigns', 'audit'].includes(activeTab)) {
+    if (isModerator && !['creators', 'campaigns', 'cash_approvals', 'audit'].includes(activeTab)) {
       setActiveTab('creators');
     } else if (isOperationsAdmin && ['rates', 'gateway', 'staff', 'backup'].includes(activeTab)) {
       setActiveTab('campaigns');
     }
   }, [activeRoleTier, activeTab]);
+
+  // Cash approvals state
+  const [localTransactions, setLocalTransactions] = useState<Transaction[]>(transactions);
+  useEffect(() => {
+    setLocalTransactions(transactions);
+  }, [transactions]);
+
+  const [cashFilter, setCashFilter] = useState<'all' | 'pending' | 'completed' | 'rejected'>('all');
+  const [cashSearch, setCashSearch] = useState<string>('');
+  const [rejectingCashId, setRejectingCashId] = useState<string | null>(null);
+  const [rejectCashReason, setRejectCashReason] = useState<string>('Cash pawisa dawn a ni lo');
+  const [cashActionFeedback, setCashActionFeedback] = useState<string | null>(null);
+
+  const pendingCashTxList = useMemo(() => {
+    return localTransactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
+  }, [localTransactions]);
+
+  const handleApproveCash = (txId: string) => {
+    const verifier = currentProfile?.name || 'Admin / Creator';
+    const updated = approveCashTransaction(txId, verifier);
+    if (updated) {
+      setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+      onUpdateTransaction?.(updated);
+      setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
+      setTimeout(() => setCashActionFeedback(null), 3500);
+    }
+  };
+
+  const handleRejectCash = (txId: string, reason?: string) => {
+    const verifier = currentProfile?.name || 'Admin / Creator';
+    const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo');
+    if (updated) {
+      setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+      onUpdateTransaction?.(updated);
+      setRejectingCashId(null);
+      setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
+      setTimeout(() => setCashActionFeedback(null), 3500);
+    }
+  };
   
   // Creators sub-filter
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'pending' | 'upgrades' | 'approved' | 'blocked'>('all');
@@ -1218,7 +1264,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
                   badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white'
                 },
-                // 3. Announcement: Super Admin, Admin
+                // 3. Cash Approvals & Verification: Super Admin, Admin, Moderator
+                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
+                  id: 'cash_approvals' as AdminTabId, 
+                  label: 'Cash Approvals & Fiahna', 
+                  icon: Banknote,
+                  badge: pendingCashTxList.length > 0 ? pendingCashTxList.length : undefined,
+                  badgeColor: 'bg-amber-500 text-slate-950 font-black animate-pulse'
+                },
+                // 4. Announcement: Super Admin, Admin
                 (isSuperAdmin || isOperationsAdmin) && { 
                   id: 'announcement' as AdminTabId, 
                   label: 'Announcement Banner', 
@@ -1319,6 +1373,36 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   >
                     <CheckCircle2 className="w-4 h-4 text-emerald-800" />
                     <span>En & Approve Rawh ({pendingCreators.length})</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Top Alert Banner for Pending Cash Approvals */}
+              {pendingCashTxList.length > 0 && activeTab !== 'cash_approvals' && (
+                <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white p-3.5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md border-2 border-amber-500/80 animate-fadeIn">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black shrink-0 shadow-xs animate-pulse">
+                      <Banknote className="w-5 h-5 text-slate-950" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black text-white flex items-center gap-2 flex-wrap">
+                        <span>💰 Cash Pekna Fiah Ngai ({pendingCashTxList.length}) Approve Nghak An Awm!</span>
+                        <span className="text-[9px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-md uppercase">Action Required</span>
+                      </h4>
+                      <p className="text-[11px] text-amber-200 mt-0.5 truncate">
+                        Pending: {pendingCashTxList.map(t => `${t.donorName || 'Donor'} (₹${t.amount.toLocaleString('en-IN')})`).slice(0, 3).join(', ')}{pendingCashTxList.length > 3 ? ` + ${pendingCashTxList.length - 3} more` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setActiveTab('cash_approvals');
+                      setCashFilter('pending');
+                    }}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 active:scale-98"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                    <span>En & Approve Rawh ({pendingCashTxList.length})</span>
                   </button>
                 </div>
               )}
@@ -2082,8 +2166,318 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               )}
 
               {/* ========================================================= */}
-              {/* TAB 3: CUSTOM ANNOUNCEMENT BANNER & MULTI-ITEM ROTATION   */}
+              {/* TAB: CASH APPROVALS & VERIFICATION                        */}
               {/* ========================================================= */}
+              {activeTab === 'cash_approvals' && (() => {
+                const allCashList = localTransactions.filter(t => t.paymentMethod === 'cash');
+                const pendingList = allCashList.filter(t => t.status === 'pending_verification');
+                const completedList = allCashList.filter(t => t.status === 'completed');
+                const rejectedList = allCashList.filter(t => t.status === 'rejected');
+                const totalCashReceived = completedList.reduce((sum, t) => sum + t.amount, 0);
+
+                const displayedCash = allCashList.filter(t => {
+                  if (cashFilter === 'pending' && t.status !== 'pending_verification') return false;
+                  if (cashFilter === 'completed' && t.status !== 'completed') return false;
+                  if (cashFilter === 'rejected' && t.status !== 'rejected') return false;
+                  if (cashSearch.trim()) {
+                    const q = cashSearch.toLowerCase();
+                    const name = (t.donorName || '').toLowerCase();
+                    const phone = (t.donorPhone || '').toLowerCase();
+                    const id = (t.id || '').toLowerCase();
+                    const camp = (t.campaignTitle || t.campaignId || '').toLowerCase();
+                    const veng = (t.donorVeng || '').toLowerCase();
+                    if (!name.includes(q) && !phone.includes(q) && !id.includes(q) && !camp.includes(q) && !veng.includes(q)) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-4">
+                    {/* Action Feedback Banner */}
+                    {cashActionFeedback && (
+                      <div className="p-3 bg-emerald-600 text-white font-bold text-xs rounded-2xl shadow-md flex items-center justify-between animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          <span>{cashActionFeedback}</span>
+                        </div>
+                        <button onClick={() => setCashActionFeedback(null)} className="text-white/80 hover:text-white cursor-pointer ml-2">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Summary Stat Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="p-3.5 bg-amber-50/80 border border-amber-300/80 rounded-2xl">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-extrabold text-amber-900">Pending Verification</p>
+                          <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                        </div>
+                        <p className="text-2xl font-black text-amber-950 mt-1">{pendingList.length}</p>
+                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">Pawisa fiah nghak mek</p>
+                      </div>
+
+                      <div className="p-3.5 bg-emerald-50/80 border border-emerald-300/80 rounded-2xl">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-extrabold text-emerald-900">Approved & Dawng Fel</p>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        </div>
+                        <p className="text-2xl font-black text-emerald-950 mt-1">{completedList.length}</p>
+                        <p className="text-[10px] text-emerald-700 font-medium mt-0.5">Dawng fel tawh zawng</p>
+                      </div>
+
+                      <div className="p-3.5 bg-rose-50/80 border border-rose-300/80 rounded-2xl">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-extrabold text-rose-900">Hnawl (Rejected)</p>
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                        </div>
+                        <p className="text-2xl font-black text-rose-950 mt-1">{rejectedList.length}</p>
+                        <p className="text-[10px] text-rose-700 font-medium mt-0.5">Pehhel / Hnawl tawh</p>
+                      </div>
+
+                      <div className="p-3.5 bg-indigo-50/80 border border-indigo-300/80 rounded-2xl">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-extrabold text-indigo-900">Total Cash Received</p>
+                          <Banknote className="w-4 h-4 text-indigo-600" />
+                        </div>
+                        <p className="text-2xl font-black text-indigo-950 mt-1">₹{totalCashReceived.toLocaleString('en-IN')}</p>
+                        <p className="text-[10px] text-indigo-700 font-medium mt-0.5">Cash sum tlingkhawm</p>
+                      </div>
+                    </div>
+
+                    {/* Filter Chips & Search */}
+                    <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        {[
+                          { key: 'all', label: `All Cash (${allCashList.length})` },
+                          { key: 'pending', label: `Pending Fiahna (${pendingList.length})`, alert: pendingList.length > 0 },
+                          { key: 'completed', label: `Approved (${completedList.length})` },
+                          { key: 'rejected', label: `Rejected (${rejectedList.length})` },
+                        ].map(f => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => setCashFilter(f.key as any)}
+                            className={`px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                              cashFilter === f.key
+                                ? 'bg-slate-900 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            <span>{f.label}</span>
+                            {f.alert && (
+                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Search Bar */}
+                      <div className="relative min-w-[200px] sm:w-64">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={cashSearch}
+                          onChange={(e) => setCashSearch(e.target.value)}
+                          placeholder="Hming, phone, receipt id..."
+                          className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {cashSearch && (
+                          <button
+                            onClick={() => setCashSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* List of Cash Transactions */}
+                    {displayedCash.length === 0 ? (
+                      <div className="text-center py-14 px-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-200 mx-auto flex items-center justify-center text-slate-400">
+                          <Banknote className="w-6 h-6" />
+                        </div>
+                        <p className="text-sm font-black text-slate-700">Cash transaction hmuh a ni lo</p>
+                        <p className="text-xs text-slate-500">I thlan filter leh search hnuaiah hian cash transaction a la awm lo e.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {displayedCash.map(tx => {
+                          const isPending = tx.status === 'pending_verification';
+                          const isCompleted = tx.status === 'completed';
+                          const isRejected = tx.status === 'rejected';
+
+                          return (
+                            <div
+                              key={tx.id}
+                              className={`p-4 rounded-2xl border transition-all ${
+                                isPending
+                                  ? 'bg-amber-50/40 border-2 border-amber-400/90 shadow-sm'
+                                  : isCompleted
+                                  ? 'bg-white border-slate-200 hover:border-emerald-300'
+                                  : 'bg-slate-50/80 border-slate-200 opacity-80'
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                                {/* Donor & Bawm Details */}
+                                <div className="space-y-1.5 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-sm font-black text-slate-900">
+                                      {tx.donorName || 'Anonymously Paid'}
+                                    </h4>
+                                    {tx.donorPhone && (
+                                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                        📱 {tx.donorPhone}
+                                      </span>
+                                    )}
+                                    {tx.donorVeng && (
+                                      <span className="text-[11px] font-medium text-slate-500">
+                                        📍 {tx.donorVeng}
+                                      </span>
+                                    )}
+                                    {/* Status Badge */}
+                                    <span
+                                      className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                        isPending
+                                          ? 'bg-amber-400 text-slate-950 animate-pulse'
+                                          : isCompleted
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-rose-100 text-rose-800'
+                                      }`}
+                                    >
+                                      {isPending
+                                        ? '⏳ Pending Fiahna'
+                                        : isCompleted
+                                        ? '✓ Approved (Dawng Fel)'
+                                        : '✕ Rejected'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
+                                    <span>
+                                      Bawm:{' '}
+                                      <strong className="text-indigo-700">
+                                        {tx.campaignTitle || tx.campaignId}
+                                      </strong>
+                                    </span>
+                                    <span>•</span>
+                                    <span>
+                                      Token / Txn ID: <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono text-slate-800">{tx.id}</code>
+                                    </span>
+                                    <span>•</span>
+                                    <span className="text-slate-500">
+                                      {formatDateTimeDDMMYYYY(tx.timestamp)}
+                                    </span>
+                                  </div>
+
+                                  {tx.remark && (
+                                    <p className="text-xs text-slate-600 italic bg-white/80 p-2 rounded-xl border border-slate-200/80">
+                                      💬 "{tx.remark}"
+                                    </p>
+                                  )}
+
+                                  {/* Verification Footnote */}
+                                  {isCompleted && (
+                                    <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1 mt-1">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      Dawngtu / Enfiahtu: <strong>{tx.verifiedBy || 'Admin / Creator'}</strong>
+                                      {tx.verifiedAt && ` (${formatDateTimeDDMMYYYY(tx.verifiedAt)})`}
+                                    </p>
+                                  )}
+
+                                  {isRejected && (
+                                    <p className="text-[11px] text-rose-700 font-medium flex items-center gap-1 mt-1">
+                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                      Hnawltu: <strong>{tx.verifiedBy || 'Admin / Creator'}</strong>
+                                      {tx.rejectionReason && ` — Chhan: "${tx.rejectionReason}"`}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Right Side: Amount & Controls */}
+                                <div className="flex flex-col items-start sm:items-end justify-between gap-3 shrink-0">
+                                  <div className="sm:text-right">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cash Amount</p>
+                                    <p className="text-2xl font-black text-slate-900">
+                                      ₹{tx.amount.toLocaleString('en-IN')}
+                                    </p>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {isPending ? (
+                                      rejectingCashId === tx.id ? (
+                                        <div className="flex flex-col gap-1.5 p-2 bg-rose-50 border border-rose-300 rounded-xl">
+                                          <input
+                                            type="text"
+                                            value={rejectCashReason}
+                                            onChange={(e) => setRejectCashReason(e.target.value)}
+                                            placeholder="Hnawl chhan ziak rawh..."
+                                            className="bg-white border border-rose-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 w-48"
+                                          />
+                                          <div className="flex gap-1.5">
+                                            <button
+                                              onClick={() => handleRejectCash(tx.id, rejectCashReason)}
+                                              className="flex-1 py-1 px-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer"
+                                            >
+                                              Hnawl Rawh
+                                            </button>
+                                            <button
+                                              onClick={() => setRejectingCashId(null)}
+                                              className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs cursor-pointer"
+                                            >
+                                              Sut
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApproveCash(tx.id)}
+                                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4 text-white" />
+                                            <span>Pawisa Ka Dawng Fel (Approve)</span>
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => setRejectingCashId(tx.id)}
+                                            className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
+                                          >
+                                            <XCircle className="w-3.5 h-3.5" />
+                                            <span>Hnawl</span>
+                                          </button>
+                                        </>
+                                      )
+                                    ) : null}
+
+                                    {onViewReceipt && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onViewReceipt(tx)}
+                                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
+                                      >
+                                        <Receipt className="w-3.5 h-3.5" />
+                                        <span>Receipt</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {activeTab === 'announcement' && (() => {
                 const currentItems = localAnnouncement.items && localAnnouncement.items.length > 0
                   ? localAnnouncement.items

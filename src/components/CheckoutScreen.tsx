@@ -113,6 +113,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     'Building Fund': 200,
   });
 
+  const [isUPIIntentOpen, setIsUPIIntentOpen] = useState<boolean>(false);
+  const [pendingDonorDetails, setPendingDonorDetails] = useState<{
+    donorName: string;
+    donorPhone?: string;
+    donorVeng?: string;
+    memberId?: string;
+    subId?: string;
+    isDependent?: boolean;
+  }>({
+    donorName: 'Valued Donor'
+  });
+
   const config = BAWM_CONFIG[category];
   const isVoided = campaign?.status === 'voided' || !!campaign?.isVoided;
   const isExpired = !isVoided && isCampaignExpired(campaign?.validityDate, campaign?.status);
@@ -478,48 +490,21 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       }
     }
 
-    setIsProcessing(true);
-
     if (paymentMethod === 'online') {
-      setPhonePeStatus('CALLING_PG');
-
-      setTimeout(() => {
-        setPhonePeStatus('SUCCESS');
-
-        setTimeout(() => {
-          const transaction: Transaction = {
-            id: 'RPAY-' + Math.floor(100000 + Math.random() * 900000),
-            campaignId: campaign?.id || `cmp-${category}-custom`,
-            campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
-            category: category,
-            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
-            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
-            memberId: isAnonymous ? undefined : resolvedMemberId,
-            subId: isAnonymous ? undefined : resolvedSubId,
-            isDependent: isAnonymous ? false : resolvedIsDependent,
-            isAnonymous: isAnonymous,
-            amount: subtotal,
-            platformFee: platformFee,
-            totalAmount: totalPayable,
-            paymentMethod: 'online',
-            status: 'completed',
-            remark: remark.trim() || undefined,
-            subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
-            periodType: category === 'kumtluang' ? periodType : undefined,
-            periodMonth: category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined,
-            periodYear: category === 'kumtluang' ? selectedYear : undefined,
-            periodLabel: category === 'kumtluang' ? periodLabel : undefined,
-            timestamp: new Date().toISOString(),
-            txHash: 'UPI' + Math.random().toString(36).substring(2, 12).toUpperCase(),
-          };
-
-          setIsProcessing(false);
-          onPaymentSuccess(transaction);
-        }, 900);
-      }, 1200);
+      setIsProcessing(false);
+      setPendingDonorDetails({
+        donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+        donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+        donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+        memberId: isAnonymous ? undefined : resolvedMemberId,
+        subId: isAnonymous ? undefined : resolvedSubId,
+        isDependent: isAnonymous ? false : resolvedIsDependent,
+      });
+      setIsUPIIntentOpen(true);
+      return;
     } else {
       // Cash payment
+      setIsProcessing(true);
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
         campaignId: campaign?.id || `cmp-${category}-custom`,
@@ -1435,6 +1420,31 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             )
           )}
 
+          {category !== 'kumtluang' && !isAnonymous && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                WhatsApp Phone Number (Receipt dawn nan - Optional)
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
+                  +91
+                </div>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={donorPhone}
+                  onChange={(e) => setDonorPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 9862300000 (WhatsApp Digital Receipt a thleng ang)"
+                  className="w-full pl-11 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                />
+              </div>
+              <p className="text-[9.5px] text-emerald-700 mt-1 flex items-center gap-1 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]"></span>
+                <span>Payment i tihfel veleh official WhatsApp Digital Receipt i dawng nghal theih nan.</span>
+              </p>
+            </div>
+          )}
+
           {category !== 'kumtluang' && (
             <div>
               <label className="text-[10px] font-bold text-slate-500 block mb-1">
@@ -1719,6 +1729,43 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </button>
       </form>
+
+      {/* UPI App Chooser Intent Modal */}
+      {isUPIIntentOpen && (
+        <UPIIntentModal
+          isOpen={isUPIIntentOpen}
+          onClose={() => setIsUPIIntentOpen(false)}
+          campaign={campaign || {
+            id: `cmp-${category}-custom`,
+            category,
+            title: category === 'ralna' ? 'Ralna Bawm' : config.name,
+            upiId: 'ronpay.bawm@okhdfcbank',
+            targetUpiId: 'ronpay.bawm@okhdfcbank',
+            orgName: 'RonPay Community Bawm',
+            location: 'Mizoram',
+            createdAt: new Date().toISOString()
+          }}
+          amount={subtotal}
+          platformFee={platformFee}
+          donorName={pendingDonorDetails.donorName}
+          donorPhone={pendingDonorDetails.donorPhone}
+          donorVeng={pendingDonorDetails.donorVeng}
+          memberId={pendingDonorDetails.memberId}
+          subId={pendingDonorDetails.subId}
+          isDependent={pendingDonorDetails.isDependent}
+          isAnonymous={isAnonymous}
+          subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+          periodType={category === 'kumtluang' ? periodType : undefined}
+          periodMonth={category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined}
+          periodYear={category === 'kumtluang' ? selectedYear : undefined}
+          periodLabel={category === 'kumtluang' ? periodLabel : undefined}
+          remark={remark.trim() || undefined}
+          onPaymentSuccess={(tx) => {
+            setIsUPIIntentOpen(false);
+            onPaymentSuccess(tx);
+          }}
+        />
+      )}
     </div>
   );
 };

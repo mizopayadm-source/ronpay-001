@@ -78,10 +78,11 @@ export function UPIIntentModal({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [utrInput, setUtrInput] = useState<string>('');
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
+  const [hasReturnedFromApp, setHasReturnedFromApp] = useState<boolean>(false);
 
-  const targetUpi = campaign.targetUpiId || campaign.upiId || '';
+  const targetUpi = campaign?.targetUpiId || campaign?.upiId || 'ronpay.bawm@okhdfcbank';
   const totalPayable = amount + platformFee;
-  const payeeDisplayName = campaign.orgName || campaign.creatorName || campaign.title || 'RonPay Merchant';
+  const payeeDisplayName = campaign?.orgName || campaign?.creatorName || campaign?.title || 'RonPay Bawm';
 
   // Validate recipient UPI ID on modal open
   useEffect(() => {
@@ -94,6 +95,7 @@ export function UPIIntentModal({
     } else {
       setValidationError(null);
       setStep('select');
+      setHasReturnedFromApp(false);
       const newRef = `RPAY-${Math.floor(100000 + Math.random() * 900000)}`;
       setTxRef(newRef);
     }
@@ -141,6 +143,7 @@ export function UPIIntentModal({
       if (document.visibilityState === 'visible') {
         // User returned back to RonPay browser tab from Google Pay / PhonePe / Paytm
         console.log('User returned to RonPay tab after launching UPI app');
+        setHasReturnedFromApp(true);
       }
     };
 
@@ -452,6 +455,15 @@ export function UPIIntentModal({
           {/* Waiting / Verification State after App Launch */}
           {step === 'waiting' && (
             <div className="space-y-4 py-2 animate-fadeIn">
+              {hasReturnedFromApp && (
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3 flex items-center gap-2.5 text-xs text-emerald-950 animate-fadeIn shadow-xs">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span className="leading-snug">
+                    UPI App aṭangin RonPay-ah i lo let leh ta! Pawisa i pe fel tawh a nih chuan a hnuaia <b>"Ka Pe Zo Tawh"</b> button hi hmet rawh le.
+                  </span>
+                </div>
+              )}
+
               <div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-4 text-center space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md animate-pulse">
                   <Smartphone className="w-7 h-7" />

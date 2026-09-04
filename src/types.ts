@@ -119,6 +119,9 @@ export interface Transaction {
   billOperator?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface CategoryRequest {
