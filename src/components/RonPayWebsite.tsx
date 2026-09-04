@@ -41,7 +41,9 @@ import {
   CreditCard,
   Tv,
   Flame,
-  Shield
+  Shield,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
@@ -75,6 +77,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [simulatorAmount, setSimulatorAmount] = useState<number>(500);
   const [showSimulatedReceipt, setShowSimulatedReceipt] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  // Eye Comfort Theme (Mit Tihahdam Theme) - true = soothing warm light, false = muted dark
+  const [eyeComfortMode, setEyeComfortMode] = useState<boolean>(true);
   
   // Interactive BBPS showcase state
   const [selectedBbpsKey, setSelectedBbpsKey] = useState<string>('ebill');
@@ -319,18 +323,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const currentBbps = BBPS_UTILITIES.find(b => b.id === selectedBbpsKey) || BBPS_UTILITIES[0];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden">
+    <div className={`min-h-screen ${eyeComfortMode ? 'bg-[#f8fafc] text-slate-850' : 'bg-slate-950 text-slate-100'} font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden transition-colors duration-150`}>
       
       {/* 1. TOP ANNOUNCEMENT RIBBON: PhonePe Partnership & App URL */}
-      <aside aria-label="Partner Announcement" className="w-full bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border-b border-indigo-900/40 px-3 py-1.5 text-center text-[11px] font-semibold text-indigo-200">
+      <aside aria-label="Partner Announcement" className={`w-full ${eyeComfortMode ? 'bg-indigo-50 border-b border-indigo-100/90 text-indigo-950' : 'bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border-b border-indigo-900/40 text-indigo-200'} px-3 py-1.5 text-center text-[11px] font-semibold transition-colors`}>
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 px-2">
           {/* PhonePe Partnership Badge */}
           <div className="flex items-center gap-1.5 text-left">
-            <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-400/40 text-[9.5px] font-black uppercase tracking-wider">
-              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span className={`inline-flex items-center gap-1 ${eyeComfortMode ? 'bg-white text-indigo-900 border-indigo-200 shadow-xs' : 'bg-purple-500/20 text-purple-300 border-purple-400/40'} px-2.5 py-0.5 rounded-full border text-[9.5px] font-black uppercase tracking-wider`}>
+              <ShieldCheck className="w-3 h-3 text-emerald-600" />
               Official PhonePe Partner
             </span>
-            <span className="text-slate-300 text-[10px] sm:text-[11px] hidden sm:inline">
+            <span className={`${eyeComfortMode ? 'text-slate-650 font-medium' : 'text-slate-300'} text-[10px] sm:text-[11px] hidden sm:inline`}>
               {isMizo 
                 ? 'India rama Digital Payment Company lian ber PhonePe nen thawhdun a ni' 
                 : "In official partnership with India's leading digital payment giant PhonePe"}
@@ -339,20 +343,20 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
           {/* Official App Link Pill & Guest User notice */}
           <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-            <span className="hidden md:inline text-slate-400">
+            <span className={`hidden md:inline ${eyeComfortMode ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>
               {isMizo ? 'Default in Khualmi (Guest User) ah a lut nghal ang' : 'Defaults to Guest User (Khualmi)'}
             </span>
-            <span className="text-slate-500 hidden md:inline">•</span>
-            <div className="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold text-amber-300 shadow-xs">
-              <span>App Link:</span>
-              <span className="text-white underline decoration-amber-400/60">www.ronpay.app/app</span>
+            <span className="text-slate-400 hidden md:inline">•</span>
+            <div className={`inline-flex items-center gap-1.5 ${eyeComfortMode ? 'bg-white border-slate-250 text-slate-800 shadow-xs' : 'bg-slate-900/90 border-slate-700/80 text-amber-300 shadow-xs'} border px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold`}>
+              <span className={eyeComfortMode ? 'text-slate-600' : 'text-slate-300'}>App Link:</span>
+              <span className={`${eyeComfortMode ? 'text-indigo-700' : 'text-white'} underline decoration-amber-500/60`}>www.ronpay.app/app</span>
               <button
                 type="button"
                 onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
-                className="hover:text-white p-0.5 text-slate-400 transition"
+                className={`p-0.5 ${eyeComfortMode ? 'hover:text-slate-900 text-slate-400' : 'hover:text-white text-slate-400'} transition`}
                 title="Copy App Link"
               >
-                {appLinkCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                {appLinkCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
               </button>
             </div>
           </div>
@@ -360,7 +364,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </aside>
 
       {/* 2. MAIN STICKY NAVIGATION HEADER */}
-      <header className="sticky top-0 z-50 w-full bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 transition-all">
+      <header className={`sticky top-0 z-50 w-full ${eyeComfortMode ? 'bg-white/95 border-b border-slate-200/90 text-slate-800 shadow-xs' : 'bg-slate-950/95 border-b border-slate-800/80 text-white'} backdrop-blur-md transition-all`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
           {/* Brand Logo with FinTech Tag */}
@@ -368,70 +372,91 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             className="flex items-center gap-2.5 cursor-pointer" 
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-md shadow-indigo-500/20 flex items-center justify-center">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <span className="font-black text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-400">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-sm flex items-center justify-center">
+              <div className={`w-full h-full ${eyeComfortMode ? 'bg-white' : 'bg-slate-950'} rounded-[10px] flex items-center justify-center transition-colors`}>
+                <span className="font-black text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500">
                   R
                 </span>
               </div>
             </div>
             <div>
               <div className="flex items-center gap-1.5 leading-none">
-                <span className="font-black text-lg sm:text-xl tracking-tight text-white">
+                <span className={`font-black text-lg sm:text-xl tracking-tight ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
                   Ron<span className="text-orange-500">Pay</span>
                 </span>
-                <span className="bg-purple-600/30 text-purple-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-purple-400/40 uppercase tracking-wider">
+                <span className={`${eyeComfortMode ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-purple-600/30 text-purple-300 border-purple-400/40'} text-[8px] font-black px-1.5 py-0.5 rounded-full border uppercase tracking-wider`}>
                   PhonePe TSP
                 </span>
               </div>
-              <p className="text-[9.5px] text-slate-400 font-semibold tracking-tight">
+              <p className={`text-[9.5px] ${eyeComfortMode ? 'text-slate-500 font-medium' : 'text-slate-400 font-semibold'} tracking-tight`}>
                 Mizo FinTech & BBPS Platform
               </p>
             </div>
           </div>
 
           {/* Center Navigation Links (Desktop) */}
-          <nav className="hidden lg:flex items-center bg-slate-900/90 border border-slate-800/80 rounded-full p-1 text-xs font-semibold text-slate-300 shadow-inner">
-            <a href="#hero" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+          <nav className={`hidden lg:flex items-center ${eyeComfortMode ? 'bg-slate-100/90 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800/80 text-slate-300'} border rounded-full p-1 text-xs font-semibold shadow-xs transition-colors`}>
+            <a href="#hero" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               {isMizo ? 'Kawtchhuah' : 'Home'}
             </a>
-            <a href="#phonepe" className="px-3 py-1.5 rounded-full text-purple-300 hover:text-purple-200 hover:bg-purple-950/50 transition flex items-center gap-1">
-              <Zap className="w-3 h-3 text-purple-400" />
+            <a href="#phonepe" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'text-purple-700 hover:text-purple-900 hover:bg-white' : 'text-purple-300 hover:text-purple-200 hover:bg-purple-950/50'} transition flex items-center gap-1`}>
+              <Zap className="w-3 h-3 text-purple-500" />
               <span>PhonePe</span>
             </a>
-            <a href="#services" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#services" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
             </a>
-            <a href="#bbps" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1">
-              <CreditCard className="w-3 h-3 text-amber-400" />
+            <a href="#bbps" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white text-slate-700' : 'hover:text-white hover:bg-slate-800/60 text-slate-300'} transition flex items-center gap-1`}>
+              <CreditCard className="w-3 h-3 text-amber-500" />
               <span>BBPS & Topup</span>
             </a>
-            <a href="#features" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
-              {isMizo ? 'Hmanruate' : 'Features'}
-            </a>
-            <a href="#security" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#security" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               {isMizo ? 'Rinngamna' : 'Security'}
             </a>
-            <a href="#faq" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition">
+            <a href="#faq" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               FAQ
             </a>
-            <a href="#contact" className="px-3 py-1.5 rounded-full hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1 text-emerald-400">
+            <a href="#contact" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'text-emerald-700 hover:text-emerald-900 hover:bg-white' : 'text-emerald-400 hover:text-white hover:bg-slate-800/60'} transition flex items-center gap-1`}>
               <MessageCircle className="w-3 h-3" />
               <span>{isMizo ? 'Biakpawhna' : 'Contact'}</span>
             </a>
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Eye-Comfort Theme Toggle Button (Mit Tihahdam Theme) */}
+            <button
+              type="button"
+              onClick={() => setEyeComfortMode(!eyeComfortMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                eyeComfortMode 
+                  ? 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 shadow-xs' 
+                  : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+              }`}
+              title={eyeComfortMode ? 'Mit Tihahdam Theme (Active) - Switch to Dark' : 'Switch to Mit Tihahdam Theme'}
+            >
+              {eyeComfortMode ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="hidden xl:inline text-[10.5px]">Mit Tihahdam</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-slate-300" />
+                  <span className="hidden xl:inline text-[10.5px]">Thim Chhum</span>
+                </>
+              )}
+            </button>
+
             {/* Language Switcher Pill */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-bold">
+            <div className={`flex items-center ${eyeComfortMode ? 'bg-slate-100 border-slate-200' : 'bg-slate-900 border-slate-800'} border rounded-lg p-0.5 text-xs font-bold`}>
               <button
                 type="button"
                 onClick={() => setLang('mizo')}
                 className={`px-2 py-0.5 rounded-md transition cursor-pointer text-[10px] ${
                   lang === 'mizo' 
                     ? 'bg-amber-400 text-slate-950 font-black' 
-                    : 'text-slate-400 hover:text-slate-200'
+                    : (eyeComfortMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200')
                 }`}
               >
                 MZ
@@ -442,7 +467,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 className={`px-2 py-0.5 rounded-md transition cursor-pointer text-[10px] ${
                   lang === 'english' 
                     ? 'bg-amber-400 text-slate-950 font-black' 
-                    : 'text-slate-400 hover:text-slate-200'
+                    : (eyeComfortMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200')
                 }`}
               >
                 EN
@@ -453,9 +478,13 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             <button
               type="button"
               onClick={() => setIsAIChatOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 text-indigo-300 hover:text-white border border-indigo-700/60 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              className={`hidden sm:flex items-center gap-1.5 ${
+                eyeComfortMode 
+                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200' 
+                  : 'bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 text-indigo-300 hover:text-white border-indigo-700/60'
+              } border px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer`}
             >
-              <Bot className="w-3.5 h-3.5 text-amber-300" />
+              <Bot className="w-3.5 h-3.5 text-indigo-600" />
               <span className="truncate">AIChat (Khual Chhawn)</span>
             </button>
 
@@ -463,7 +492,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             <button
               type="button"
               onClick={() => onLaunchApp('home')}
-              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition cursor-pointer border border-amber-300"
+              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition cursor-pointer border border-amber-300"
               title="Launch www.ronpay.app/app as Guest User"
             >
               <Smartphone className="w-4 h-4 text-slate-950" />
@@ -475,7 +504,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition"
+              className={`lg:hidden p-2 rounded-xl ${eyeComfortMode ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'} border transition`}
               aria-label="Toggle Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -561,10 +590,14 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </header>
 
       {/* 3. HERO SECTION: Powerful & Beautiful High-Tech Presentation */}
-      <section id="hero" className="relative pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden">
+      <section id="hero" className={`relative pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden ${eyeComfortMode ? 'bg-gradient-to-b from-indigo-50/30 via-slate-50/50 to-white' : ''}`}>
         {/* Ambient background glows */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/3 right-10 w-[450px] h-[450px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+        {!eyeComfortMode && (
+          <>
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-1/3 right-10 w-[450px] h-[450px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+          </>
+        )}
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
@@ -574,31 +607,31 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               
               {/* Feature Badges with PhonePe & BBPS */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/40 text-purple-300 text-xs font-bold shadow-xs">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${eyeComfortMode ? 'bg-indigo-50 border-indigo-200 text-indigo-900 shadow-xs' : 'bg-purple-500/15 border-purple-500/40 text-purple-300 shadow-xs'} border text-xs font-bold`}>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   <span>PhonePe PG V2 & TSP Official Partner</span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold shadow-xs">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${eyeComfortMode ? 'bg-amber-50 border-amber-200 text-amber-900 shadow-xs' : 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-xs'} border text-xs font-bold`}>
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
                   <span>EBill, Water, Fastag & School Fees BBPS</span>
                 </div>
               </div>
 
               {/* Main Headline */}
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12]">
+              <h1 className={`text-3xl sm:text-5xl lg:text-6xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight leading-[1.12]`}>
                 {isMizo ? (
                   <>
-                    Mizoram <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-amber-300">Kohhran & Khawtlang</span> Tana Digital Bawm & BBPS Platform
+                    Mizoram <span className={eyeComfortMode ? 'text-indigo-900' : 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-amber-300'}>Kohhran & Khawtlang</span> Tana Digital Bawm & BBPS Platform
                   </>
                 ) : (
                   <>
-                    Empowering <span className="text-purple-400">Mizo</span> <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-orange-400 to-amber-300">Community</span> with PhonePe Payments & BBPS Utilities
+                    Empowering <span className={eyeComfortMode ? 'text-indigo-800' : 'text-purple-400'}>Mizo</span> <span className={eyeComfortMode ? 'text-amber-800' : 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-orange-400 to-amber-300'}>Community</span> with PhonePe Payments & BBPS Utilities
                   </>
                 )}
               </h1>
 
               {/* Sub-headline / Copywriting */}
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl font-normal">
+              <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed max-w-2xl font-normal`}>
                 {isMizo 
                   ? 'Digital payment company lian ber PhonePe nen a thawk dunin, Ralna bawm, Kohhran chhungkaw bu, BBPS electric & tui bill, Fastag, School fees, Municipal taxes leh Mobile topup awlsam taka tih theihna platform famkim.' 
                   : "Engineered in partnership with India's largest payment giant PhonePe. Streamline Ralna bereavement funds, church family rolls, and complete BBPS utilities: EBill, Water, FASTag, School Fees, Municipal Taxes, and Mobile Topup."}
@@ -609,7 +642,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchApp('home')}
-                  className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-base px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition cursor-pointer border border-amber-300"
+                  className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-base px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm transition cursor-pointer border border-amber-300"
                 >
                   <Smartphone className="w-5 h-5 text-slate-950" />
                   <span>{isMizo ? 'RonPay Web App Hawng Rawh' : 'Launch RonPay App'}</span>
@@ -618,71 +651,71 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
                 <a
                   href="#services"
-                  className="bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
+                  className={`${eyeComfortMode ? 'bg-white hover:bg-slate-50 text-slate-800 border-slate-250 shadow-xs' : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700'} font-bold text-sm px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 border transition cursor-pointer`}
                 >
-                  <QrCode className="w-4 h-4 text-orange-400" />
+                  <QrCode className="w-4 h-4 text-orange-500" />
                   <span>{isMizo ? 'Bawm 5 En Rawh' : 'Explore 5 Bawms'}</span>
                 </a>
 
                 <a
                   href="#bbps"
-                  className="bg-slate-900/80 hover:bg-slate-800 text-indigo-300 font-bold text-sm px-4 py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-indigo-900/50 transition cursor-pointer"
+                  className={`${eyeComfortMode ? 'bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 border-indigo-200' : 'bg-slate-900/80 hover:bg-slate-800 text-indigo-300 border-indigo-900/50'} font-bold text-sm px-4 py-3.5 rounded-2xl flex items-center justify-center gap-2 border transition cursor-pointer`}
                 >
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-4 h-4 text-amber-500" />
                   <span>{isMizo ? 'BBPS Bill Pekna' : 'BBPS Utilities'}</span>
                 </a>
               </div>
 
               {/* App URL Copy Bar & Guest Note */}
-              <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className={`p-3 ${eyeComfortMode ? 'bg-white border-slate-200 text-slate-700 shadow-xs' : 'bg-slate-900/70 border-slate-800 text-slate-300'} border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs`}>
                 <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="text-slate-300 text-[11px] sm:text-xs">
+                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className={`${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'} text-[11px] sm:text-xs`}>
                     {isMizo ? 'App chhungah hian default in Khualmi (Guest User) angin i lut nghal ang.' : 'Defaulting to Guest User (Khualmi) upon app launch.'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-slate-400">Official URL:</span>
-                  <code className="bg-slate-950 px-2 py-0.5 rounded text-[11px] text-amber-300 font-mono border border-slate-800">
+                  <span className={`text-[10px] ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>Official URL:</span>
+                  <code className={`${eyeComfortMode ? 'bg-slate-100 text-indigo-900 border-slate-200' : 'bg-slate-950 text-amber-300 border-slate-800'} px-2 py-0.5 rounded text-[11px] font-mono border`}>
                     www.ronpay.app/app
                   </code>
                   <button
                     type="button"
                     onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
-                    className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition cursor-pointer"
+                    className={`p-1 ${eyeComfortMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'} rounded transition cursor-pointer`}
                     title="Copy Link"
                   >
-                    {appLinkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {appLinkCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
 
               {/* Trust Metric Counters */}
-              <div className="pt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-slate-800/80">
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl font-black text-amber-400">PhonePe PG</div>
-                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+              <div className={`pt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t ${eyeComfortMode ? 'border-slate-200' : 'border-slate-800/80'}`}>
+                <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/40 border-slate-800/60'} p-3 rounded-xl border`}>
+                  <div className={`text-xl font-black ${eyeComfortMode ? 'text-amber-800' : 'text-amber-400'}`}>PhonePe PG</div>
+                  <div className={`text-[10.5px] ${eyeComfortMode ? 'text-slate-550' : 'text-slate-400'} font-medium mt-0.5`}>
                     {isMizo ? 'TSP V2 Certified' : 'PG V2 Engine'}
                   </div>
                 </div>
 
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl font-black text-purple-400">5 Bawm</div>
-                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/40 border-slate-800/60'} p-3 rounded-xl border`}>
+                  <div className={`text-xl font-black ${eyeComfortMode ? 'text-purple-800' : 'text-purple-400'}`}>5 Bawm</div>
+                  <div className={`text-[10.5px] ${eyeComfortMode ? 'text-slate-550' : 'text-slate-400'} font-medium mt-0.5`}>
                     {isMizo ? 'Community Category' : 'Community Suites'}
                   </div>
                 </div>
 
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl font-black text-emerald-400">100% Direct</div>
-                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/40 border-slate-800/60'} p-3 rounded-xl border`}>
+                  <div className={`text-xl font-black ${eyeComfortMode ? 'text-emerald-800' : 'text-emerald-400'}`}>100% Direct</div>
+                  <div className={`text-[10.5px] ${eyeComfortMode ? 'text-slate-550' : 'text-slate-400'} font-medium mt-0.5`}>
                     {isMizo ? 'Bank-ah Tlang Nghal' : 'Direct IMPS Payout'}
                   </div>
                 </div>
 
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
-                  <div className="text-xl font-black text-sky-400">BBPS Hub</div>
-                  <div className="text-[10.5px] text-slate-400 font-medium mt-0.5">
+                <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-900/40 border-slate-800/60'} p-3 rounded-xl border`}>
+                  <div className={`text-xl font-black ${eyeComfortMode ? 'text-sky-800' : 'text-sky-400'}`}>BBPS Hub</div>
+                  <div className={`text-[10.5px] ${eyeComfortMode ? 'text-slate-550' : 'text-slate-400'} font-medium mt-0.5`}>
                     {isMizo ? 'EBill & Topup Kim' : 'All Utilities Live'}
                   </div>
                 </div>
@@ -690,69 +723,69 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
             </div>
 
-            {/* Right Column: High-Tech Phone & Soundbox Interactive Demo */}
+            {/* Right Column: Phone & Soundbox Interactive Demo */}
             <div className="lg:col-span-5 flex justify-center">
               <div className="relative w-full max-w-sm">
                 
                 {/* Phone Frame Mockup */}
-                <div className="relative bg-slate-900 border-4 border-slate-700/80 rounded-[38px] p-4 shadow-2xl shadow-purple-950/40 ring-1 ring-slate-800">
+                <div className={`relative ${eyeComfortMode ? 'bg-white border-4 border-slate-200 shadow-lg ring-1 ring-slate-100' : 'bg-slate-900 border-4 border-slate-700/80 shadow-2xl shadow-purple-950/40 ring-1 ring-slate-800'} rounded-[38px] p-4 transition-colors`}>
                   
                   {/* Phone Speaker Notch */}
-                  <div className="w-24 h-3.5 bg-slate-800 rounded-full mx-auto mb-3 flex items-center justify-center">
-                    <div className="w-8 h-1 bg-slate-700 rounded-full" />
+                  <div className={`w-24 h-3.5 ${eyeComfortMode ? 'bg-slate-100' : 'bg-slate-800'} rounded-full mx-auto mb-3 flex items-center justify-center`}>
+                    <div className={`w-8 h-1 ${eyeComfortMode ? 'bg-slate-300' : 'bg-slate-700'} rounded-full`} />
                   </div>
 
                   {/* Card Header inside phone */}
-                  <div className="bg-slate-800/90 rounded-2xl p-2.5 border border-slate-700/70 mb-3 flex items-center justify-between">
+                  <div className={`${eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/90 border-slate-700/70'} rounded-2xl p-2.5 border mb-3 flex items-center justify-between`}>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-black flex items-center justify-center text-xs border border-amber-400/30">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 font-black flex items-center justify-center text-xs border border-amber-400/30">
                         R
                       </div>
                       <div>
-                        <div className="text-xs font-black text-white flex items-center gap-1">
+                        <div className={`text-xs font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} flex items-center gap-1`}>
                           <span>Pi Lalhmingliani Ralna</span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className={`text-[10px] ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
                           Bungkawn YMA • Verified
                         </div>
                       </div>
                     </div>
-                    <span className="text-[9px] bg-purple-900/60 text-purple-300 font-bold px-2 py-0.5 rounded-md border border-purple-700/50">
+                    <span className={`text-[9px] ${eyeComfortMode ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-purple-900/60 text-purple-300 border-purple-700/50'} font-bold px-2 py-0.5 rounded-md border`}>
                       PhonePe UPI
                     </span>
                   </div>
 
                   {/* Live Dynamic QR Poster Preview */}
-                  <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 text-center space-y-2.5">
-                    <div className="text-[10.5px] font-bold text-slate-300 flex items-center justify-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <div className={`${eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'} rounded-2xl p-4 border text-center space-y-2.5`}>
+                    <div className={`text-[10.5px] font-bold ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'} flex items-center justify-center gap-1`}>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Tamper-Proof RonPay Dynamic QR</span>
                     </div>
 
-                    <div className="bg-white p-3 rounded-xl inline-block shadow-lg">
-                      <QrCode className="w-28 h-28 text-slate-950" />
+                    <div className="bg-white p-3 rounded-xl inline-block shadow-sm border border-slate-200/80">
+                      <QrCode className="w-28 h-28 text-slate-900" />
                     </div>
 
                     <div className="space-y-1">
-                      <div className="text-xs font-black text-amber-400">
+                      <div className={`text-xs font-black ${eyeComfortMode ? 'text-amber-800' : 'text-amber-400'}`}>
                         Scan with PhonePe, GPay, Paytm or any UPI
                       </div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className={`text-[10px] ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
                         100% Direct to Beneficiary Bank Account
                       </div>
                     </div>
                   </div>
 
                   {/* Mizo Soundbox Voice Audio Demonstration */}
-                  <div className="mt-3 bg-gradient-to-r from-purple-950/80 to-indigo-950/80 rounded-2xl p-3 border border-purple-700/50 flex items-center justify-between gap-2">
+                  <div className={`mt-3 ${eyeComfortMode ? 'bg-indigo-50 border-indigo-200' : 'bg-gradient-to-r from-purple-950/80 to-indigo-950/80 border-purple-700/50'} rounded-2xl p-3 border flex items-center justify-between gap-2`}>
                     <div className="flex items-center gap-2">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs ${soundboxPlaying ? 'bg-amber-400 text-slate-950 animate-pulse' : 'bg-purple-600 text-white'}`}>
                         <Volume2 className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="text-xs font-black text-white">Mizo Soundbox Chhinna</div>
-                        <div className="text-[10px] text-purple-300">
+                        <div className={`text-xs font-black ${eyeComfortMode ? 'text-indigo-950' : 'text-white'}`}>Mizo Soundbox Chhinna</div>
+                        <div className={`text-[10px] ${eyeComfortMode ? 'text-indigo-700' : 'text-purple-300'}`}>
                           {soundboxPlaying ? 'Aw a chhuak mek...' : '"RonPay-ah cheng zanga..."'}
                         </div>
                       </div>
@@ -772,10 +805,10 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   <button
                     type="button"
                     onClick={() => onLaunchApp('home')}
-                    className="w-full mt-3 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                    className={`w-full mt-3 ${eyeComfortMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200' : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'} font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border transition cursor-pointer`}
                   >
                     <span>{isMizo ? 'App Chhungah En Rawh (Khualmi)' : 'Open App as Guest'}</span>
-                    <ArrowRight className="w-3 h-3 text-amber-400" />
+                    <ArrowRight className="w-3 h-3 text-amber-500" />
                   </button>
 
                 </div>
@@ -788,20 +821,20 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 4. DEDICATED PHONEPE PARTNERSHIP SHOWCASE SECTION */}
-      <section id="phonepe" className="py-14 sm:py-20 bg-gradient-to-b from-slate-950 via-purple-950/20 to-slate-950 border-y border-purple-900/30 relative">
+      <section id="phonepe" className={`py-14 sm:py-20 ${eyeComfortMode ? 'bg-purple-50/40 border-y border-purple-100' : 'bg-gradient-to-b from-slate-950 via-purple-950/20 to-slate-950 border-y border-purple-900/30'} relative transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
-            <span className="inline-flex items-center gap-1.5 bg-purple-500/20 text-purple-300 text-xs font-black px-3.5 py-1 rounded-full border border-purple-400/40 uppercase tracking-wider">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span className={`inline-flex items-center gap-1.5 ${eyeComfortMode ? 'bg-purple-100 text-purple-900 border-purple-200' : 'bg-purple-500/20 text-purple-300 border-purple-400/40'} text-xs font-black px-3.5 py-1 rounded-full border uppercase tracking-wider`}>
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
               {isMizo ? 'Digital Payment Company Lian Ber Nen' : 'National Payment Powerhouse'}
             </span>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight`}>
               {isMizo 
                 ? 'PhonePe Nen A Hna Thawk Dunin, Rinngam & Rang Takin' 
                 : "Official Partnership with India's #1 Digital Payments Leader PhonePe"}
             </h2>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+            <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
               {isMizo 
                 ? 'RonPay hi India ram pum huapa digital transaction tam ber khawihtu PhonePe Technology Service Provider (TSP) leh PG V2 architecture hmanga duanchhuah a ni a. Mizo mipuiten hlauthawng miah lova sum thawhkhawm leh utilities kan pek theih nan a him tawk em em a ni.' 
                 : 'Built on the robust enterprise rails of PhonePe Payment Gateway V2 and Technology Service Provider (TSP) protocols. Ensuring instant direct IMPS bank payouts and zero fraudulent screenshots.'}
@@ -811,69 +844,69 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             
             {/* PhonePe Advantage 1 */}
-            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
-              <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-purple-400 group-hover:scale-105 transition-transform">
+            <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs hover:border-purple-300 hover:shadow-sm' : 'bg-slate-900/80 border-purple-900/50 hover:border-purple-500/60'} border p-6 rounded-3xl space-y-3 transition group`}>
+              <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-xl shadow-xs border border-purple-400 group-hover:scale-105 transition-transform">
                 ⚡
               </div>
-              <h3 className="text-base font-black text-white">PhonePe PG V2 Engine</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <h3 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>PhonePe PG V2 Engine</h3>
+              <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
                 {isMizo 
                   ? '99.9% uptime nei, transaction second 2 chhung zela tling nghal zel thei architecture rintlak ber.' 
                   : 'Blazing fast PG V2 architecture with 99.9% success rate and sub-second payment clearance.'}
               </p>
-              <div className="pt-2 text-[11px] text-purple-300 font-bold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <div className={`pt-2 text-[11px] ${eyeComfortMode ? 'text-purple-700' : 'text-purple-300'} font-bold flex items-center gap-1`}>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Sub-Second Clearance</span>
               </div>
             </div>
 
             {/* PhonePe Advantage 2 */}
-            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-emerald-400 group-hover:scale-105 transition-transform">
+            <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs hover:border-purple-300 hover:shadow-sm' : 'bg-slate-900/80 border-purple-900/50 hover:border-purple-500/60'} border p-6 rounded-3xl space-y-3 transition group`}>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shadow-xs border border-emerald-400 group-hover:scale-105 transition-transform">
                 🏦
               </div>
-              <h3 className="text-base font-black text-white">Direct IMPS Bank Settlement</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <h3 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>Direct IMPS Bank Settlement</h3>
+              <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
                 {isMizo 
                   ? 'RonPay hian sum kan khawl ve ngai lo. Pawisa thawhtu-in a scan rualin Kohhran emaw pawl bank account-ah direct-in a lut tlang nghal char char.' 
                   : 'Zero escrow holding. Donated funds route directly into your church or community bank account via IMPS.'}
               </p>
-              <div className="pt-2 text-[11px] text-emerald-300 font-bold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <div className={`pt-2 text-[11px] ${eyeComfortMode ? 'text-emerald-700' : 'text-emerald-300'} font-bold flex items-center gap-1`}>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>100% Direct to Bank</span>
               </div>
             </div>
 
             {/* PhonePe Advantage 3 */}
-            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
-              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-amber-400 group-hover:scale-105 transition-transform">
+            <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs hover:border-purple-300 hover:shadow-sm' : 'bg-slate-900/80 border-purple-900/50 hover:border-purple-500/60'} border p-6 rounded-3xl space-y-3 transition group`}>
+              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black text-xl shadow-xs border border-amber-400 group-hover:scale-105 transition-transform">
                 🛡️
               </div>
-              <h3 className="text-base font-black text-white">Zero Screenshot Fraud</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <h3 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>Zero Screenshot Fraud</h3>
+              <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
                 {isMizo 
                   ? 'UPI screenshot der (fake screenshot) hmanga inbumna a awm tawh lo. Server-level verification leh Mizo soundbox-in a nemnghet nghal thlap.' 
                   : 'Eliminates fraudulent screenshots through real-time server webhooks and instant voice soundbox alerts.'}
               </p>
-              <div className="pt-2 text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <div className={`pt-2 text-[11px] ${eyeComfortMode ? 'text-amber-700' : 'text-amber-300'} font-bold flex items-center gap-1`}>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Tamper-Proof Verification</span>
               </div>
             </div>
 
             {/* PhonePe Advantage 4 */}
-            <div className="bg-slate-900/80 border border-purple-900/50 hover:border-purple-500/60 p-6 rounded-3xl space-y-3 transition group">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg border border-indigo-400 group-hover:scale-105 transition-transform">
+            <div className={`${eyeComfortMode ? 'bg-white border-slate-200 shadow-xs hover:border-purple-300 hover:shadow-sm' : 'bg-slate-900/80 border-purple-900/50 hover:border-purple-500/60'} border p-6 rounded-3xl space-y-3 transition group`}>
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-xs border border-indigo-400 group-hover:scale-105 transition-transform">
                 📱
               </div>
-              <h3 className="text-base font-black text-white">Universal UPI Support</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <h3 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>Universal UPI Support</h3>
+              <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
                 {isMizo 
                   ? 'PhonePe, Google Pay, Paytm, BHIM, Cred, leh Bank UPI apps tinreng atangin fiah fai takin a scan theih vek.' 
                   : 'Seamlessly accepts payments from PhonePe, Google Pay, Paytm, BHIM, and all Indian banking UPI apps.'}
               </p>
-              <div className="pt-2 text-[11px] text-indigo-300 font-bold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <div className={`pt-2 text-[11px] ${eyeComfortMode ? 'text-indigo-700' : 'text-indigo-300'} font-bold flex items-center gap-1`}>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>All UPI Apps Compatible</span>
               </div>
             </div>
@@ -884,18 +917,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 5. RONPAY SERVICES SECTION: 5 BAWMS (TAWI FEL DEUHA HRILHFIAH) */}
-      <section id="services" className="py-16 sm:py-24 relative">
+      <section id="services" className={`py-16 sm:py-24 relative ${eyeComfortMode ? 'bg-[#f8fafc]' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-            <span className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-300 text-xs font-bold px-3 py-1 rounded-full border border-amber-400/30 uppercase tracking-wider">
+            <span className={`inline-flex items-center gap-1 ${eyeComfortMode ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-amber-500/15 text-amber-300 border-amber-400/30'} text-xs font-bold px-3 py-1 rounded-full border uppercase tracking-wider`}>
               <QrCode className="w-3.5 h-3.5" />
               {isMizo ? 'RonPay Bawm Hrang Hrang Te' : 'RonPay 5 Community Suites'}
             </span>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight`}>
               {isMizo ? 'Bawm Hrang Hrang Te Tawi Fel Takin' : 'Concise & Structured Community Bawm Categories'}
             </h2>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+            <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
               {isMizo 
                 ? 'Mizoram mamawh mil liau liava duan Bawm 5 te hi a hman dan leh thiltum tawi fel deuha hrilhfiahna:' 
                 : 'Built specifically for the needs of Mizoram churches, communities, and families. Here is each Bawm explained clearly:'}
@@ -905,42 +938,42 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             
             {/* BAWM 1: RALNA BAWM */}
-            <div className="bg-slate-900 border-2 border-slate-800 hover:border-red-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 hover:border-red-400 shadow-sm' : 'bg-slate-900 border-2 border-slate-800 hover:border-red-500/70 shadow-xl'} p-6 rounded-3xl space-y-3 transition duration-300 group flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-red-600/20 text-red-400 flex items-center justify-center border border-red-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-red-600/15 text-red-500 flex items-center justify-center border border-red-400/40 text-xl font-black group-hover:scale-105 transition-transform">
                     🖤
                   </div>
-                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800">
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${eyeComfortMode ? 'bg-red-50 text-red-700 border-red-200' : 'bg-red-950 text-red-300 border-red-800'} border`}>
                     Chhiatni & YMA Pual
                   </span>
                 </div>
-                <h3 className="text-lg font-black text-white group-hover:text-red-300 transition">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900 group-hover:text-red-700' : 'text-white group-hover:text-red-300'} transition`}>
                   1. Ralna Bawm
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Chhiatni-a ralna sum thawhkhawmna felfai. Mitthi thlalak, chanchin kimchang, vui hun chuanna QR poster mawi tak minute 1 chhungin siam la. Thawhtuten an scan rualin WhatsApp receipt an dawng nghal a, Mizo aw (Soundbox)-in a puang nghal bawk.' 
                     : 'Dedicated condolence and bereavement collection. Generate high-resolution obituary QR posters with photos and funeral timings. Instant WhatsApp receipts and Mizo soundbox announcements.'}
                 </p>
-                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Dynamic Obituary Poster Studio
+                <ul className={`mt-3 space-y-1.5 text-[11px] ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-red-500 shrink-0" /> Dynamic Obituary Poster Studio
                   </li>
-                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Automatic WhatsApp Digital Receipt
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-red-500 shrink-0" /> Automatic WhatsApp Digital Receipt
                   </li>
-                  <li className="flex items-center gap-1.5 text-red-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-red-400 shrink-0" /> Mizo Soundbox Voice Alert
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-red-500 shrink-0" /> Mizo Soundbox Voice Alert
                   </li>
                 </ul>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80">
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'ralna')}
-                  className="w-full bg-red-950 hover:bg-red-900 text-red-200 border border-red-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-red-50 hover:bg-red-100 text-red-800 border-red-200' : 'bg-red-950 hover:bg-red-900 text-red-200 border-red-800'} border font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
                 >
                   <span>{isMizo ? 'Ralna Bawm En Rawh' : 'Explore Ralna Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -949,42 +982,42 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* BAWM 2: KUMTLUANG BAWM */}
-            <div className="bg-slate-900 border-2 border-slate-800 hover:border-blue-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 hover:border-blue-400 shadow-sm' : 'bg-slate-900 border-2 border-slate-800 hover:border-blue-500/70 shadow-xl'} p-6 rounded-3xl space-y-3 transition duration-300 group flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600/15 text-blue-500 flex items-center justify-center border border-blue-400/40 text-xl font-black group-hover:scale-105 transition-transform">
                     🏛️
                   </div>
-                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${eyeComfortMode ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-950 text-blue-300 border-blue-800'} border`}>
                     Kohhran & Pawl
                   </span>
                 </div>
-                <h3 className="text-lg font-black text-white group-hover:text-blue-300 transition">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900 group-hover:text-blue-700' : 'text-white group-hover:text-blue-300'} transition`}>
                   2. Kumtluang Bawm
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Kohhran thawhlawm (Pathian Ram, Tualchhung, Ramthim, Building) leh Pawl thla tin chhungkaw bu. 4-digit Quick Entry hmangin awlsam taka ziah luh theih niin, Secretary leh Treasurer tan 1-Click Committee Audit Report (PDF & Excel) a siam nghal zung zung thei.' 
                     : 'Church and institutional recurring giving. Track monthly household registers, tithes, and mission funds with 4-digit Quick Entry and export 1-Click official Committee Audit Reports in PDF/Excel.'}
                 </p>
-                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> Digital Chhungkaw Bu & Member Roll
+                <ul className={`mt-3 space-y-1.5 text-[11px] ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" /> Digital Chhungkaw Bu & Member Roll
                   </li>
-                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> 4-Digit Blazing Fast Quick Entry
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" /> 4-Digit Blazing Fast Quick Entry
                   </li>
-                  <li className="flex items-center gap-1.5 text-blue-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> 1-Click Committee PDF/Excel Export
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" /> 1-Click Committee PDF/Excel Export
                   </li>
                 </ul>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80">
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'kumtluang')}
-                  className="w-full bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200' : 'bg-blue-950 hover:bg-blue-900 text-blue-200 border-blue-800'} border font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
                 >
                   <span>{isMizo ? 'Kumtluang Bawm En Rawh' : 'Explore Kumtluang'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -993,42 +1026,42 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* BAWM 3: KHAWLSAK BAWM */}
-            <div className="bg-slate-900 border-2 border-slate-800 hover:border-emerald-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 hover:border-emerald-400 shadow-sm' : 'bg-slate-900 border-2 border-slate-800 hover:border-emerald-500/70 shadow-xl'} p-6 rounded-3xl space-y-3 transition duration-300 group flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/15 text-emerald-500 flex items-center justify-center border border-emerald-400/40 text-xl font-black group-hover:scale-105 transition-transform">
                     🏗️
                   </div>
-                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${eyeComfortMode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-950 text-emerald-300 border-emerald-800'} border`}>
                     Building & Projects
                   </span>
                 </div>
-                <h3 className="text-lg font-black text-white group-hover:text-emerald-300 transition">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900 group-hover:text-emerald-700' : 'text-white group-hover:text-emerald-300'} transition`}>
                   3. Khawlsak Bawm
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Biak In sak, YMA Hall sak, Community Hall, leh Project lian tham puala sum thawhkhawm vawnna. Target amount, sum lut zat, leh thawhtute hming fiah fai taka tarlanna Progress Dashboard nen a in-thuam thlap.' 
                     : 'Church construction, hall development, and capital project fundraisers. Complete with real-time target amount progress bars, transparent donor lists, and verified receipts.'}
                 </p>
-                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Target Amount Progress Bar
+                <ul className={`mt-3 space-y-1.5 text-[11px] ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Target Amount Progress Bar
                   </li>
-                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Transparent Donor Transparency Board
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Transparent Donor Transparency Board
                   </li>
-                  <li className="flex items-center gap-1.5 text-emerald-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Cash & Online Unified Tracker
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Cash & Online Unified Tracker
                   </li>
                 </ul>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80">
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'khawlsak')}
-                  className="w-full bg-emerald-950 hover:bg-emerald-900 text-emerald-200 border border-emerald-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-200 border-emerald-800'} border font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
                 >
                   <span>{isMizo ? 'Khawlsak Bawm En Rawh' : 'Explore Khawlsak'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1037,42 +1070,42 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* BAWM 4: RIKRUM BAWM */}
-            <div className="bg-slate-900 border-2 border-slate-800 hover:border-rose-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 hover:border-rose-400 shadow-sm' : 'bg-slate-900 border-2 border-slate-800 hover:border-rose-500/70 shadow-xl'} p-6 rounded-3xl space-y-3 transition duration-300 group flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-600/15 text-rose-500 flex items-center justify-center border border-rose-400/40 text-xl font-black group-hover:scale-105 transition-transform">
                     🚨
                   </div>
-                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800">
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${eyeComfortMode ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-rose-950 text-rose-300 border-rose-800'} border`}>
                     Free • Emergency Relief
                   </span>
                 </div>
-                <h3 className="text-lg font-black text-white group-hover:text-rose-300 transition">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900 group-hover:text-rose-700' : 'text-white group-hover:text-rose-300'} transition`}>
                   4. Rikrum Bawm
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Kangmei, tuilian, lei tlahmual, leh damlo zual thut tanpuina emergency bawm. Setup fee a awm lo (100% Free Setup), minute 1 chhungin live nghal theih a ni a, sum lut zawng zawng beneficiary account-ah a tlang nghal zel.' 
                     : 'Zero-fee emergency and disaster relief for house fires, landslides, and urgent medical needs. Activates in under 1 minute with 100% direct hospital/victim bank routing.'}
                 </p>
-                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Zero Platform Setup Charge (Free)
+                <ul className={`mt-3 space-y-1.5 text-[11px] ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-rose-500 shrink-0" /> Zero Platform Setup Charge (Free)
                   </li>
-                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Minute 1 Instant QR Activation
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-rose-500 shrink-0" /> Minute 1 Instant QR Activation
                   </li>
-                  <li className="flex items-center gap-1.5 text-rose-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> Emergency Hospital & Relief Dispatch
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-rose-500 shrink-0" /> Emergency Hospital & Relief Dispatch
                   </li>
                 </ul>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80">
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'rikrum')}
-                  className="w-full bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200' : 'bg-rose-950 hover:bg-rose-900 text-rose-200 border-rose-800'} border font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
                 >
                   <span>{isMizo ? 'Rikrum Bawm En Rawh' : 'Explore Emergency Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1081,42 +1114,42 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* BAWM 5: MIMAL & CHHUNGKUA (PERSONAL & OTHERS) */}
-            <div className="bg-slate-900 border-2 border-slate-800 hover:border-purple-500/70 p-6 rounded-3xl space-y-3 transition duration-300 shadow-xl group flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 hover:border-purple-400 shadow-sm' : 'bg-slate-900 border-2 border-slate-800 hover:border-purple-500/70 shadow-xl'} p-6 rounded-3xl space-y-3 transition duration-300 group flex flex-col justify-between`}>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center border border-purple-500/40 text-xl font-black group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600/15 text-purple-500 flex items-center justify-center border border-purple-400/40 text-xl font-black group-hover:scale-105 transition-transform">
                     🎁
                   </div>
-                  <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800">
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${eyeComfortMode ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-purple-950 text-purple-300 border-purple-800'} border`}>
                     Personal & Events
                   </span>
                 </div>
-                <h3 className="text-lg font-black text-white group-hover:text-purple-300 transition">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900 group-hover:text-purple-700' : 'text-white group-hover:text-purple-300'} transition`}>
                   5. Mimal & Chhungkua
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Inneih lawmpuina (Wedding gift envelope), anniversary, piancham thilpek, damlo kan, leh chhungkaw thilpek sum pekna awlsam. Custom invitation card emaw WhatsApp-ah QR code share nghal zung zung theih.' 
                     : 'Digital monetary gifts for weddings, anniversaries, birthdays, and personal hospital visitations. Easy custom QR sharing on wedding invitation cards or WhatsApp.'}
                 </p>
-                <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Digital Envelope & Wishing Note
+                <ul className={`mt-3 space-y-1.5 text-[11px] ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" /> Digital Envelope & Wishing Note
                   </li>
-                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Wedding QR for Invitation Cards
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" /> Wedding QR for Invitation Cards
                   </li>
-                  <li className="flex items-center gap-1.5 text-purple-300 font-semibold">
-                    <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> Direct Bank Account Credit
+                  <li className="flex items-center gap-1.5 font-medium">
+                    <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" /> Direct Bank Account Credit
                   </li>
                 </ul>
               </div>
 
-              <div className="pt-4 border-t border-slate-800/80">
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'others')}
-                  className="w-full bg-purple-950 hover:bg-purple-900 text-purple-200 border border-purple-800 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200' : 'bg-purple-950 hover:bg-purple-900 text-purple-200 border-purple-800'} border font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
                 >
                   <span>{isMizo ? 'Mimal Bawm En Rawh' : 'Explore Mimal Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1125,15 +1158,15 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Quick Action Box: Create QR in 2 Minutes */}
-            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 border-2 border-indigo-700/60 p-6 rounded-3xl space-y-4 flex flex-col justify-between">
+            <div className={`${eyeComfortMode ? 'bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/80 border-2 border-indigo-200 text-slate-900 shadow-sm' : 'bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 border-2 border-indigo-700/60'} p-6 rounded-3xl space-y-4 flex flex-col justify-between`}>
               <div>
-                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                <span className={`text-[10px] font-black uppercase ${eyeComfortMode ? 'text-indigo-700' : 'text-amber-400'} tracking-wider`}>
                   Quick Launch
                 </span>
-                <h3 className="text-xl font-black text-white mt-1">
+                <h3 className={`text-xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
                   {isMizo ? 'Bawm Thar Siam I Duh Em?' : 'Ready to Create Your Own Bawm?'}
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'I Kohhran emaw i pawl tan minute 2 chhungin QR Bawm thar i siam thei a. Bank account link la, print theih poster leh online payment receipt i nei nghal ang.' 
                     : 'Launch a branded collection QR in under 2 minutes for your local church, branch, or family. Includes print-ready posters and automated receipting.'}
@@ -1144,7 +1177,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchApp('create_qr')}
-                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
                 >
                   <QrCode className="w-4 h-4" />
                   <span>{isMizo ? 'QR Bawm Thar Siam Rawh' : 'Create Live QR Bawm'}</span>
@@ -1153,7 +1186,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchApp('creator_reg')}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-indigo-300 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-50 text-indigo-900 border-slate-200 shadow-xs' : 'bg-slate-900 hover:bg-slate-800 text-indigo-300 border-slate-700'} font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 border transition cursor-pointer`}
                 >
                   <Building2 className="w-4 h-4" />
                   <span>{isMizo ? 'Kohhran / Pawl Register Rawh' : 'Register Organization'}</span>
@@ -1167,20 +1200,20 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 6. BBPS UTILITY BILLS & MOBILE TOPUP SECTION: PROMINENT & INTERACTIVE */}
-      <section id="bbps" className="py-16 sm:py-24 bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 border-y border-slate-800 relative">
+      <section id="bbps" className={`py-16 sm:py-24 ${eyeComfortMode ? 'bg-[#f1f5f9]/70 border-y border-slate-200' : 'bg-gradient-to-b from-slate-950 via-slate-900/60 to-slate-950 border-y border-slate-800'} relative transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
-            <span className="inline-flex items-center gap-1.5 bg-indigo-500/20 text-indigo-300 text-xs font-black px-3.5 py-1 rounded-full border border-indigo-400/40 uppercase tracking-wider">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span className={`inline-flex items-center gap-1.5 ${eyeComfortMode ? 'bg-indigo-100 text-indigo-900 border-indigo-200' : 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40'} text-xs font-black px-3.5 py-1 rounded-full border uppercase tracking-wider`}>
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
               Bharat Bill Payment System (BBPS)
             </span>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight`}>
               {isMizo 
                 ? 'BBPS Bill Hrang Hrang & Mobile Topup Pekna Hmunpui' 
                 : 'Complete BBPS Utility Clearinghouse & Mobile Topup'}
             </h2>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+            <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
               {isMizo 
                 ? 'EBill (Electric Bill), Water Bill (Tui Bill), FASTag Toll, School Fees, Municipal Taxes (AMC), leh Mobile Topup te awlsam leh fiah taka pek theihna hmun a ni tih tarlanna:' 
                 : 'Pay all essential utility bills in Mizoram with instant online settlement and verified receipting: EBill, Water, FASTag, School & College fees, Municipal taxes, and Mobile Topup.'}
@@ -1192,7 +1225,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             
             {/* Left: Interactive Tab Buttons for BBPS Services */}
             <div className="lg:col-span-6 space-y-3">
-              <div className="text-xs font-black uppercase text-indigo-400 tracking-wider mb-2">
+              <div className={`text-xs font-black uppercase ${eyeComfortMode ? 'text-indigo-900' : 'text-indigo-400'} tracking-wider mb-2`}>
                 {isMizo ? 'Bill Service Thlang Rawh:' : 'Select Utility Bill Service:'}
               </div>
 
@@ -1231,8 +1264,12 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                       }}
                       className={`p-3.5 rounded-2xl text-left transition flex items-center justify-between gap-3 border cursor-pointer ${
                         isSelected 
-                          ? 'bg-indigo-950/80 border-amber-400 text-white shadow-lg shadow-indigo-950/50 scale-[1.02]' 
-                          : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
+                          ? eyeComfortMode
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
+                            : 'bg-indigo-950/80 border-amber-400 text-white shadow-lg shadow-indigo-950/50 scale-[1.02]' 
+                          : eyeComfortMode
+                            ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs'
+                            : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:bg-slate-850 hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -1240,11 +1277,19 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                           <IconComp className="w-5 h-5" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-xs font-black text-white truncate">{service.name}</div>
-                          <div className="text-[10px] text-slate-400 truncate">{service.provider}</div>
+                          <div className={`text-xs font-black truncate ${isSelected && eyeComfortMode ? 'text-white' : eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                            {service.name}
+                          </div>
+                          <div className={`text-[10px] truncate ${isSelected && eyeComfortMode ? 'text-indigo-100' : eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {service.provider}
+                          </div>
                         </div>
                       </div>
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase shrink-0 ${isSelected ? 'bg-amber-400 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'}`}>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase shrink-0 ${
+                        isSelected 
+                          ? eyeComfortMode ? 'bg-amber-300 text-slate-950 font-black' : 'bg-amber-400 text-slate-950 font-black' 
+                          : eyeComfortMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400'
+                      }`}>
                         {service.tag}
                       </span>
                     </button>
@@ -1253,8 +1298,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </div>
 
               {/* Note on Zero Hidden Fees */}
-              <div className="p-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl flex items-center gap-2 text-xs text-slate-400">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className={`p-3 ${eyeComfortMode ? 'bg-white border-slate-200 text-slate-600 shadow-xs' : 'bg-slate-900/60 border-slate-800/80 text-slate-400'} border rounded-2xl flex items-center gap-2 text-xs`}>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                 <span>
                   {isMizo 
                     ? 'BBPS Bill pekna-ah hian extra charge lak a ni lo. Direct NPCI & RBI approved network kaltlanga pek a ni.' 
@@ -1264,39 +1309,39 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Right: Live Interactive Bill Preview Card */}
-            <div className="lg:col-span-6 bg-slate-900 border-2 border-indigo-800/80 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative overflow-hidden">
+            <div className={`lg:col-span-6 ${eyeComfortMode ? 'bg-white border-2 border-indigo-200 shadow-md' : 'bg-slate-900 border-2 border-indigo-800/80 shadow-2xl'} rounded-3xl p-6 sm:p-7 space-y-5 relative overflow-hidden`}>
               
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className={`flex items-center justify-between border-b ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800'} pb-4`}>
                 <div className="flex items-center gap-2.5">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${currentBbps.accentBg}`}>
                     {React.createElement(currentBbps.icon, { className: "w-5 h-5" })}
                   </div>
                   <div>
-                    <h4 className="text-base font-black text-white">{currentBbps.name}</h4>
-                    <p className="text-xs text-slate-400">{currentBbps.provider}</p>
+                    <h4 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>{currentBbps.name}</h4>
+                    <p className={`text-xs ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>{currentBbps.provider}</p>
                   </div>
                 </div>
-                <span className="bg-emerald-950 text-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full border border-emerald-800 uppercase">
+                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border uppercase ${eyeComfortMode ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-emerald-950 text-emerald-300 border-emerald-800'}`}>
                   BBPS LIVE
                 </span>
               </div>
 
-              <div className="text-xs text-slate-300 leading-relaxed">
+              <div className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
                 {currentBbps.description}
               </div>
 
               {/* Input Box Preview */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 flex items-center justify-between">
+                <label className={`text-xs font-bold ${eyeComfortMode ? 'text-slate-700' : 'text-slate-400'} flex items-center justify-between`}>
                   <span>{isMizo ? 'Consumer / Account Number:' : 'Consumer / Account Number:'}</span>
-                  <span className="text-[10.5px] text-amber-300 font-medium">{currentBbps.placeholder}</span>
+                  <span className={`text-[10.5px] font-medium ${eyeComfortMode ? 'text-indigo-600' : 'text-amber-300'}`}>{currentBbps.placeholder}</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={bbpsInputVal}
                     onChange={(e) => setBbpsInputVal(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-amber-400 outline-hidden"
+                    className={`flex-1 ${eyeComfortMode ? 'bg-slate-50 border-slate-300 text-slate-900 focus:border-indigo-600' : 'bg-slate-950 border-slate-700 text-white focus:border-amber-400'} border rounded-xl px-3.5 py-2.5 text-xs font-mono outline-hidden`}
                     placeholder={currentBbps.placeholder}
                   />
                   <button
@@ -1317,18 +1362,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
               {/* Bill Details Result Box */}
               {bbpsSimResult && (
-                <div className="bg-slate-950 p-4 rounded-2xl border border-indigo-900/60 space-y-2 animate-fadeIn">
+                <div className={`${eyeComfortMode ? 'bg-indigo-50/60 border-indigo-200 text-slate-900' : 'bg-slate-950 border-indigo-900/60'} p-4 rounded-2xl border space-y-2 animate-fadeIn`}>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">{isMizo ? 'Consumer Hming:' : 'Consumer Name:'}</span>
-                    <span className="font-bold text-white">{bbpsSimResult.consumerName}</span>
+                    <span className={eyeComfortMode ? 'text-slate-600' : 'text-slate-400'}>{isMizo ? 'Consumer Hming:' : 'Consumer Name:'}</span>
+                    <span className={`font-bold ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>{bbpsSimResult.consumerName}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">{isMizo ? 'Due Date:' : 'Due Date:'}</span>
-                    <span className="text-slate-300 font-mono">{bbpsSimResult.dueDate}</span>
+                    <span className={eyeComfortMode ? 'text-slate-600' : 'text-slate-400'}>{isMizo ? 'Due Date:' : 'Due Date:'}</span>
+                    <span className={`font-mono ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>{bbpsSimResult.dueDate}</span>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                    <span className="text-xs font-bold text-slate-300">{isMizo ? 'Pek Tur Zat:' : 'Bill Amount:'}</span>
-                    <span className="text-xl font-black text-amber-400">₹{bbpsSimResult.amount}</span>
+                  <div className={`flex items-center justify-between pt-2 border-t ${eyeComfortMode ? 'border-indigo-200/80' : 'border-slate-800'}`}>
+                    <span className={`text-xs font-bold ${eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}`}>{isMizo ? 'Pek Tur Zat:' : 'Bill Amount:'}</span>
+                    <span className={`text-xl font-black ${eyeComfortMode ? 'text-indigo-950' : 'text-amber-400'}`}>₹{bbpsSimResult.amount}</span>
                   </div>
                 </div>
               )}
@@ -1338,14 +1383,14 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => onLaunchApp('home')}
-                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+                  className="w-full bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   <CreditCard className="w-4 h-4 text-slate-950" />
                   <span>{isMizo ? `RonPay App-ah ${currentBbps.name} Pe Rawh` : `Pay ${currentBbps.name} in App`}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
-                <p className="text-[10px] text-center text-slate-400">
+                <p className={`text-[10px] text-center ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
                   {isMizo 
                     ? 'Default in Khualmi (Guest User) angin a lut nghal ang a, login kher ngai lovin bill a pek theih e.' 
                     : 'Launches seamlessly as Guest User (Khualmi) without requiring account creation.'}
@@ -1360,18 +1405,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 7. BIAKPAWNA (CONTACT) & AICHAT (RONPAY KHUAL CHHAWN) SECTION */}
-      <section id="contact" className="py-16 sm:py-24 bg-gradient-to-br from-purple-950/70 via-indigo-950/80 to-slate-950 border-t border-indigo-900/60 relative">
+      <section id="contact" className={`py-16 sm:py-24 ${eyeComfortMode ? 'bg-[#f8fafc] border-t border-slate-200' : 'bg-gradient-to-br from-purple-950/70 via-indigo-950/80 to-slate-950 border-t border-indigo-900/60'} relative transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
-            <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-xs font-black px-3.5 py-1 rounded-full border border-emerald-400/40 uppercase tracking-wider">
-              <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+            <span className={`inline-flex items-center gap-1.5 ${eyeComfortMode ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'} text-xs font-black px-3.5 py-1 rounded-full border uppercase tracking-wider`}>
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
               {isMizo ? 'Biakpawhna & Khual Chhawn' : 'Contact & AI Reception'}
             </span>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight`}>
               {isMizo ? 'Kan Hnenah Zawhna I Nei Em? Min Lo Be Pawh Rawh' : 'Get in Touch with RonPay Support & AI Greeter'}
             </h2>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+            <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
               {isMizo 
                 ? 'RonPay Khual Chhawn (AI Chat) biain zawhna zawt la, emaw kan official email ronpay@gmail.com leh WhatsApp hmangin min be pawh rawh le.' 
                 : 'Interact with AIChat (RonPay Khual chhawn) for instant answers, or reach us directly via ronpay@gmail.com and WhatsApp.'}
@@ -1381,18 +1426,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
             {/* Card 1: AIChat (RonPay Khual chhawn) */}
-            <div className="bg-slate-900/90 border-2 border-indigo-600/70 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-amber-400 transition">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-indigo-200 shadow-sm hover:border-indigo-400' : 'bg-slate-900/90 border-2 border-indigo-600/70 shadow-xl hover:border-amber-400'} p-6 rounded-3xl space-y-4 flex flex-col justify-between group transition`}>
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 text-indigo-300 flex items-center justify-center border border-indigo-500/50 mb-3 group-hover:scale-110 transition-transform">
-                  <Bot className="w-6 h-6 text-amber-300" />
+                <div className={`w-12 h-12 rounded-2xl ${eyeComfortMode ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50'} flex items-center justify-center border mb-3 group-hover:scale-110 transition-transform`}>
+                  <Bot className={`w-6 h-6 ${eyeComfortMode ? 'text-indigo-600' : 'text-amber-300'}`} />
                 </div>
-                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                <span className={`text-[10px] font-black uppercase ${eyeComfortMode ? 'text-indigo-600' : 'text-amber-400'} tracking-wider`}>
                   Mizo AI Assistant
                 </span>
-                <h3 className="text-lg font-black text-white mt-1">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
                   AIChat (RonPay Khual chhawn)
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'PhonePe nen kan thawhdun dan, Bawm 5 hman dan, BBPS bill pek dan, leh www.ronpay.app/app luh dan Mizo tawng ngeia zawt rawh le.' 
                     : 'Ask instant conversational questions about PhonePe partnership, 5 Bawm suites, BBPS utilities, and how to access the app.'}
@@ -1402,7 +1447,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAIChatOpen(true)}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>{isMizo ? 'Khual Chhawn Biakna Hawng Rawh' : 'Open AI Khual Chhawn'}</span>
@@ -1410,18 +1455,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Card 2: Official Email (ronpay@gmail.com) */}
-            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-purple-500/70 transition">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 shadow-sm hover:border-purple-300' : 'bg-slate-900/90 border-2 border-slate-800 shadow-xl hover:border-purple-500/70'} p-6 rounded-3xl space-y-4 flex flex-col justify-between group transition`}>
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-300 flex items-center justify-center border border-purple-500/40 mb-3 group-hover:scale-110 transition-transform">
-                  <Mail className="w-6 h-6 text-purple-300" />
+                <div className={`w-12 h-12 rounded-2xl ${eyeComfortMode ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-purple-600/20 text-purple-300 border-purple-500/40'} flex items-center justify-center border mb-3 group-hover:scale-110 transition-transform`}>
+                  <Mail className="w-6 h-6 text-purple-500" />
                 </div>
-                <span className="text-[10px] font-black uppercase text-purple-400 tracking-wider">
+                <span className={`text-[10px] font-black uppercase ${eyeComfortMode ? 'text-purple-600' : 'text-purple-400'} tracking-wider`}>
                   Official Email Support
                 </span>
-                <h3 className="text-lg font-black text-white mt-1">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
                   ronpay@gmail.com
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Kohhran, pawl register emaw technical support mamawh tan email hmangin engtik lai pawhin kan inhawng e.' 
                     : 'Official email correspondence for organization onboarding, partnership queries, and technical support.'}
@@ -1432,16 +1477,16 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => copyToClipboard('ronpay@gmail.com', 'email')}
-                  className="w-full bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200' : 'bg-slate-800 hover:bg-slate-750 text-white border-slate-700'} font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border transition cursor-pointer`}
                 >
                   {emailCopied ? (
                     <>
-                      <Check className="w-4 h-4 text-emerald-400" />
-                      <span className="text-emerald-400 font-black">Email Copied!</span>
+                      <Check className="w-4 h-4 text-emerald-500" />
+                      <span className="text-emerald-600 font-black">Email Copied!</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4 text-slate-300" />
+                      <Copy className={`w-4 h-4 ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'}`} />
                       <span>Copy Email (ronpay@gmail.com)</span>
                     </>
                   )}
@@ -1449,7 +1494,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
                 <a
                   href="mailto:ronpay@gmail.com?subject=RonPay%20Inquiry"
-                  className="w-full bg-purple-950 hover:bg-purple-900 text-purple-200 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border border-purple-800/80 transition cursor-pointer"
+                  className={`w-full ${eyeComfortMode ? 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200' : 'bg-purple-950 hover:bg-purple-900 text-purple-200 border-purple-800/80'} font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border transition cursor-pointer`}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Send Mail</span>
@@ -1458,18 +1503,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Card 3: WhatsApp Helpdesk */}
-            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-emerald-500/70 transition">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 shadow-sm hover:border-emerald-300' : 'bg-slate-900/90 border-2 border-slate-800 shadow-xl hover:border-emerald-500/70'} p-6 rounded-3xl space-y-4 flex flex-col justify-between group transition`}>
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-300 flex items-center justify-center border border-emerald-500/40 mb-3 group-hover:scale-110 transition-transform">
-                  <Phone className="w-6 h-6 text-emerald-400" />
+                <div className={`w-12 h-12 rounded-2xl ${eyeComfortMode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40'} flex items-center justify-center border mb-3 group-hover:scale-110 transition-transform`}>
+                  <Phone className="w-6 h-6 text-emerald-500" />
                 </div>
-                <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">
+                <span className={`text-[10px] font-black uppercase ${eyeComfortMode ? 'text-emerald-700' : 'text-emerald-400'} tracking-wider`}>
                   Live WhatsApp Helpline
                 </span>
-                <h3 className="text-lg font-black text-white mt-1">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
                   +91 9862899001
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'WhatsApp Helpdesk kaltlangin darkar 24 chhungin puihna i dawng nghal thei a, setup kan lo pui vek dawn che nia.' 
                     : 'Fast-response WhatsApp community desk ready to assist with live Bawm setup and queries.'}
@@ -1480,7 +1525,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 href="https://wa.me/919862899001?text=RonPay%20chungchang%20ka%20hrechiang%20duh%20e"
                 target="_blank"
                 rel="noreferrer"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>WhatsApp-ah Be Rawh</span>
@@ -1488,26 +1533,26 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Card 4: Office Address & Mizoram Hub */}
-            <div className="bg-slate-900/90 border-2 border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl flex flex-col justify-between group hover:border-amber-500/70 transition">
+            <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 shadow-sm hover:border-amber-300' : 'bg-slate-900/90 border-2 border-slate-800 shadow-xl hover:border-amber-500/70'} p-6 rounded-3xl space-y-4 flex flex-col justify-between group transition`}>
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-amber-600/20 text-amber-300 flex items-center justify-center border border-amber-500/40 mb-3 group-hover:scale-110 transition-transform">
-                  <MapPin className="w-6 h-6 text-amber-400" />
+                <div className={`w-12 h-12 rounded-2xl ${eyeComfortMode ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-amber-600/20 text-amber-300 border-amber-500/40'} flex items-center justify-center border mb-3 group-hover:scale-110 transition-transform`}>
+                  <MapPin className="w-6 h-6 text-amber-500" />
                 </div>
-                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                <span className={`text-[10px] font-black uppercase ${eyeComfortMode ? 'text-amber-700' : 'text-amber-400'} tracking-wider`}>
                   Office Location
                 </span>
-                <h3 className="text-lg font-black text-white mt-1">
+                <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
                   Bethel Computer Centre
                 </h3>
-                <p className="text-xs text-slate-300 leading-relaxed mt-2">
+                <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
                     ? 'Lunglei & Aizawl, Mizoram. Khawtlang leh Kohhran tana FinTech hmanrua thar siamtu.' 
                     : 'Bethel Computer Centre, Lunglei & Aizawl, Mizoram. Driving community fintech innovation across the state.'}
                 </p>
               </div>
 
-              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
-                <Building className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className={`p-2.5 ${eyeComfortMode ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-950 border-slate-800 text-slate-400'} rounded-xl border text-[11px] flex items-center gap-2`}>
+                <Building className="w-4 h-4 text-amber-500 shrink-0" />
                 <span>Lunglei / Aizawl, Mizoram - 796701</span>
               </div>
             </div>
@@ -1518,40 +1563,40 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 8. DEDICATED APP LINK (www.ronpay.app/app) SHOWCASE CALLOUT */}
-      <section className="py-14 sm:py-16 bg-slate-900/40 border-y border-slate-800/80">
+      <section className={`py-14 sm:py-16 ${eyeComfortMode ? 'bg-amber-50/50 border-y border-amber-200/80' : 'bg-slate-900/40 border-y border-slate-800/80'} transition-colors`}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-          <div className="inline-flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/30 text-amber-300 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+          <div className={`inline-flex items-center gap-1.5 ${eyeComfortMode ? 'bg-amber-100 text-amber-900 border-amber-200' : 'bg-amber-500/15 border-amber-400/30 text-amber-300'} px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border`}>
             <Globe className="w-3.5 h-3.5" />
             Direct Web App Access
           </div>
 
-          <h2 className="text-2xl sm:text-4xl font-black text-white">
+          <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
             {isMizo ? 'RonPay App Chu www.ronpay.app/app Ah A Awm E' : 'Access RonPay App Directly at www.ronpay.app/app'}
           </h2>
 
-          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
+          <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} max-w-2xl mx-auto`}>
             {isMizo 
               ? 'App Store emaw Play Store atanga download kher a ngai lo! Browser atangin a lut nghal zung zung theih a, default in Khualmi (Guest User) angin i lut nghal ang.' 
               : 'Zero app store friction. Open immediately in any mobile or desktop web browser with automatic Guest User (Khualmi) access.'}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <div className="flex items-center gap-2 bg-slate-950 border-2 border-amber-400/80 px-4 py-3 rounded-2xl text-amber-300 font-mono font-black text-sm sm:text-base shadow-xl">
+            <div className={`flex items-center gap-2 ${eyeComfortMode ? 'bg-white border-2 border-amber-400 text-amber-900 shadow-sm' : 'bg-slate-950 border-2 border-amber-400/80 text-amber-300 shadow-xl'} px-4 py-3 rounded-2xl font-mono font-black text-sm sm:text-base`}>
               <span>https://www.ronpay.app/app</span>
               <button
                 type="button"
                 onClick={() => copyToClipboard('https://www.ronpay.app/app', 'applink')}
-                className="p-1 hover:text-white transition cursor-pointer"
+                className={`p-1 ${eyeComfortMode ? 'hover:text-amber-600 text-slate-700' : 'hover:text-white text-slate-300'} transition cursor-pointer`}
                 title="Copy App URL"
               >
-                {appLinkCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {appLinkCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
 
             <button
               type="button"
               onClick={() => onLaunchApp('home')}
-              className="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xl transition cursor-pointer"
+              className="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-sm px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
             >
               <Smartphone className="w-4 h-4" />
               <span>{isMizo ? 'App Lut Rawh (Khualmi)' : 'Launch App as Guest'}</span>
@@ -1562,14 +1607,14 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </section>
 
       {/* 9. FREQUENTLY ASKED QUESTIONS (FAQ) */}
-      <section id="faq" className="py-16 sm:py-24">
+      <section id="faq" className={`py-16 sm:py-24 ${eyeComfortMode ? 'bg-white' : ''}`}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           
           <div className="text-center space-y-2">
-            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+            <span className={`text-xs font-bold uppercase tracking-wider ${eyeComfortMode ? 'text-indigo-700' : 'text-indigo-400'}`}>
               {isMizo ? 'Zawhna Tlanglawn' : 'Got Questions?'}
             </span>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className={`text-2xl sm:text-4xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} tracking-tight`}>
               {isMizo ? 'Zawhna & Chhanna Tlangpui' : 'Frequently Asked Questions'}
             </h2>
           </div>
@@ -1619,18 +1664,18 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             ].map((faq, idx) => (
               <div 
                 key={idx} 
-                className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden transition"
+                className={`${eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-900 border-slate-800'} border rounded-2xl overflow-hidden transition`}
               >
                 <button
                   type="button"
                   onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
-                  className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-3 text-sm sm:text-base font-black text-white hover:text-amber-300 transition cursor-pointer"
+                  className={`w-full p-4 sm:p-5 text-left flex items-center justify-between gap-3 text-sm sm:text-base font-black ${eyeComfortMode ? 'text-slate-900 hover:text-indigo-700' : 'text-white hover:text-amber-300'} transition cursor-pointer`}
                 >
                   <span>{faq.q}</span>
-                  <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${activeFaq === idx ? 'rotate-180 text-amber-400' : 'text-slate-400'}`} />
+                  <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${activeFaq === idx ? (eyeComfortMode ? 'rotate-180 text-indigo-600' : 'rotate-180 text-amber-400') : (eyeComfortMode ? 'text-slate-400' : 'text-slate-400')}`} />
                 </button>
                 {activeFaq === idx && (
-                  <div className="px-4 sm:px-5 pb-5 text-xs sm:text-sm text-slate-300 leading-relaxed border-t border-slate-800/80 pt-3">
+                  <div className={`px-4 sm:px-5 pb-5 text-xs sm:text-sm ${eyeComfortMode ? 'text-slate-600 border-slate-200' : 'text-slate-300 border-slate-800/80'} leading-relaxed border-t pt-3`}>
                     {faq.a}
                   </div>
                 )}
@@ -1643,21 +1688,21 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
       {/* 10. AICHAT (RONPAY KHUAL CHHAWN) FLOATING DRAWER / MODAL */}
       {isAIChatOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-indigo-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh] sm:h-[620px]">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
+          <div className={`${eyeComfortMode ? 'bg-white border-2 border-indigo-200 text-slate-900' : 'bg-slate-900 border border-indigo-700/80 text-white'} w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh] sm:h-[620px] transition-colors`}>
             
             {/* Chat Header */}
-            <div className="bg-slate-950 px-4 py-3.5 border-b border-slate-800 flex items-center justify-between">
+            <div className={`${eyeComfortMode ? 'bg-indigo-600 text-white border-b border-indigo-700' : 'bg-slate-950 px-4 py-3.5 border-b border-slate-800 text-white'} px-4 py-3.5 flex items-center justify-between`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black shadow-sm">
+                <div className={`w-9 h-9 rounded-xl ${eyeComfortMode ? 'bg-white/20 text-white' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'} flex items-center justify-center font-black shadow-xs`}>
                   <Bot className="w-5 h-5 text-amber-300" />
                 </div>
                 <div>
-                  <div className="text-sm font-black text-white flex items-center gap-1.5">
+                  <div className="text-sm font-black flex items-center gap-1.5">
                     <span>AIChat (RonPay Khual Chhawn)</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
                   </div>
-                  <div className="text-[10px] text-slate-400">
+                  <div className={`text-[10px] ${eyeComfortMode ? 'text-indigo-100' : 'text-slate-400'}`}>
                     PhonePe & BBPS Verified AI Assistant
                   </div>
                 </div>
@@ -1667,7 +1712,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => playSoundboxDemo(chatMessages[chatMessages.length - 1]?.text)}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 rounded-lg transition"
+                  className={`p-1.5 ${eyeComfortMode ? 'bg-indigo-700 hover:bg-indigo-800 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300'} rounded-lg transition cursor-pointer`}
                   title="Speak Response in Mizo"
                 >
                   <Volume2 className="w-4 h-4" />
@@ -1675,7 +1720,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAIChatOpen(false)}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                  className={`p-1.5 ${eyeComfortMode ? 'bg-indigo-700 hover:bg-indigo-800 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'} rounded-lg transition cursor-pointer`}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1683,7 +1728,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Chat Messages Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/60">
+            <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${eyeComfortMode ? 'bg-slate-50' : 'bg-slate-950/60'}`}>
               {chatMessages.map((msg) => (
                 <div
                   key={msg.id}
@@ -1692,19 +1737,23 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${
                       msg.sender === 'user'
-                        ? 'bg-amber-400 text-slate-950 font-bold rounded-br-none shadow-md'
-                        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md'
+                        ? eyeComfortMode
+                          ? 'bg-indigo-600 text-white font-bold rounded-br-none shadow-sm'
+                          : 'bg-amber-400 text-slate-950 font-bold rounded-br-none shadow-md'
+                        : eyeComfortMode
+                          ? 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-xs'
+                          : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-md'
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{msg.text}</p>
                   </div>
-                  <span className="text-[9px] text-slate-500 mt-1 px-1">{msg.time}</span>
+                  <span className={`text-[9px] ${eyeComfortMode ? 'text-slate-400' : 'text-slate-500'} mt-1 px-1`}>{msg.time}</span>
                 </div>
               ))}
 
               {isChatLoading && (
-                <div className="flex items-center gap-2 text-xs text-indigo-300 bg-slate-900 border border-slate-800 rounded-2xl px-3 py-2 w-fit">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                <div className={`flex items-center gap-2 text-xs ${eyeComfortMode ? 'text-indigo-900 bg-white border-indigo-200' : 'text-indigo-300 bg-slate-900 border-slate-800'} border rounded-2xl px-3 py-2 w-fit shadow-xs`}>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
                   <span>RonPay Khual Chhawn a ngaihtuah mek e...</span>
                 </div>
               )}
@@ -1712,7 +1761,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Quick Prompt Chips */}
-            <div className="bg-slate-950 px-3 py-2 border-t border-slate-800/80 overflow-x-auto no-scrollbar">
+            <div className={`${eyeComfortMode ? 'bg-slate-100 border-t border-slate-200' : 'bg-slate-950 border-t border-slate-800/80'} px-3 py-2 overflow-x-auto no-scrollbar`}>
               <div className="flex gap-1.5 min-w-max text-[10px]">
                 {[
                   'PhonePe nen engtin nge in thawhdun?',
@@ -1725,7 +1774,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                     key={idx}
                     type="button"
                     onClick={() => handleSendChatMessage(chip)}
-                    className="bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer transition"
+                    className={`${eyeComfortMode ? 'bg-white hover:bg-indigo-50 text-indigo-800 border-slate-200 shadow-xs' : 'bg-slate-900 hover:bg-slate-800 text-indigo-300 border-slate-800'} border px-2.5 py-1 rounded-full whitespace-nowrap cursor-pointer transition`}
                   >
                     {chip}
                   </button>
@@ -1734,7 +1783,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
 
             {/* Chat Input Field */}
-            <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+            <div className={`p-3 ${eyeComfortMode ? 'bg-white border-t border-slate-200' : 'bg-slate-950 border-t border-slate-800'} flex items-center gap-2`}>
               <input
                 type="text"
                 value={chatInput}
@@ -1743,13 +1792,13 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   if (e.key === 'Enter') handleSendChatMessage();
                 }}
                 placeholder={isMizo ? 'Mizo tawngin zawhna zawt rawh le...' : 'Type a question in Mizo or English...'}
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-hidden"
+                className={`flex-1 ${eyeComfortMode ? 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-600' : 'bg-slate-900 border-slate-700 text-white placeholder-slate-500 focus:border-amber-400'} border rounded-xl px-3.5 py-2.5 text-xs outline-hidden`}
               />
               <button
                 type="button"
                 onClick={() => handleSendChatMessage()}
                 disabled={!chatInput.trim() || isChatLoading}
-                className="bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 p-2.5 rounded-xl transition cursor-pointer shrink-0 font-bold"
+                className={`${eyeComfortMode ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'} disabled:opacity-40 p-2.5 rounded-xl transition cursor-pointer shrink-0 font-bold`}
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -1771,7 +1820,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
       </button>
 
       {/* 11. FOOTER: Professional FinTech Branding & Information */}
-      <footer className="bg-slate-950 border-t border-slate-900 py-12 text-slate-400 text-xs">
+      <footer className={`${eyeComfortMode ? 'bg-slate-900 border-t border-slate-800 text-slate-400' : 'bg-slate-950 border-t border-slate-900 text-slate-400'} py-12 text-xs transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -1794,8 +1843,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   ? 'Digital payment company lian ber PhonePe partner • Mizoram Kohhran & BBPS Platform' 
                   : "Mizoram's premier digital community bawm platform in partnership with PhonePe"}
               </p>
-              <div className="text-[11px] text-slate-500 flex items-center gap-2 pt-1">
-                <span>Email: <strong className="text-slate-300">ronpay@gmail.com</strong></span>
+              <div className="text-[11px] text-slate-400 flex items-center gap-2 pt-1">
+                <span>Email: <strong className="text-slate-200">ronpay@gmail.com</strong></span>
                 <span>•</span>
                 <span>App Link: <strong className="text-amber-300 font-mono">www.ronpay.app/app</strong></span>
               </div>
@@ -1820,7 +1869,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           </div>
 
           {/* Copyright line as strictly mandated */}
-          <div className="pt-6 border-t border-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+          <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
             <div>
               Developed & Maintained by © 2026 RonPay Technologies. All rights reserved.
             </div>

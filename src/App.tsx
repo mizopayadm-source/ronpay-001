@@ -712,7 +712,7 @@ export default function App() {
   // When in Marketing & Information Landing Page View:
   if (appView === 'website') {
     return (
-      <div className="min-h-screen w-full bg-slate-950 text-slate-100 font-sans antialiased selection:bg-orange-500 selection:text-white">
+      <div className="min-h-screen w-full bg-slate-50 text-slate-900 font-sans antialiased selection:bg-orange-500 selection:text-white">
         {showSplash && (
           <SplashScreen onFinish={() => setShowSplash(false)} minDurationMs={400} />
         )}
