@@ -43,7 +43,8 @@ import {
   Flame,
   Shield,
   Sun,
-  Moon
+  Moon,
+  BookOpen
 } from 'lucide-react';
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
@@ -79,6 +80,11 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   // Eye Comfort Theme (Mit Tihahdam Theme) - true = soothing warm light, false = muted dark
   const [eyeComfortMode, setEyeComfortMode] = useState<boolean>(true);
+
+  // User Manual Modal & Tab States for RonPay 4+1 Services
+  const [manualModalOpen, setManualModalOpen] = useState<boolean>(false);
+  const [manualActiveKey, setManualActiveKey] = useState<'ralna' | 'kumtluang' | 'khawlsak' | 'rikrum' | 'mimal'>('ralna');
+  const [quickManualExpanded, setQuickManualExpanded] = useState<boolean>(false);
   
   // Interactive BBPS showcase state
   const [selectedBbpsKey, setSelectedBbpsKey] = useState<string>('ebill');
@@ -322,6 +328,219 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
   const currentBbps = BBPS_UTILITIES.find(b => b.id === selectedBbpsKey) || BBPS_UTILITIES[0];
 
+  // User Manual / Hman Dan Kaihhruaina for RonPay 4+1 Core Services
+  const SERVICE_MANUALS = {
+    ralna: {
+      id: 'ralna',
+      name: isMizo ? 'Ralna Bawm' : 'Ralna Bawm (Condolence & Bereavement)',
+      icon: '🖤',
+      badge: isMizo ? 'Chhiatni & YMA Pual' : 'Condolence & YMA',
+      color: 'red',
+      summary: isMizo 
+        ? 'Mitthi ralna sum felfai, rintlak, leh zahawm taka vawnna a ni a. YMA Khawhar In committee leh chhungkua-te tan buaipui a awlsam em em a ni.' 
+        : 'Transparent, respectful bereavement condolence management for families and YMA relief committees.',
+      steps: [
+        {
+          step: 1,
+          title: isMizo ? 'QR Poster & Bawm Siam (Minute 1-ah Live)' : 'Generate Obituary QR Poster (Live in 1 Min)',
+          desc: isMizo 
+            ? 'RonPay App-ah lut la, "QR Bawm Thar Siam" thlang rawh. Mitthi hming, kum zat, thlalak, chanchin tawi, leh vui hun/hmun dah lut la. Khawhar In bank account (UPI ID / Account Number) link nghal a ni ang.' 
+            : 'Open RonPay App, select "Create Live QR Bawm". Enter deceased person’s name, photo, brief bio, and funeral timing. Link the family or YMA bank account/UPI.'
+        },
+        {
+          step: 2,
+          title: isMizo ? 'Khawhar In-ah Print Tar & WhatsApp-ah Share' : 'Print Poster & Share on Social/WhatsApp',
+          desc: isMizo 
+            ? 'A4 mawi takin poster a in-generate a, Khawhar In luhna, dawhkan, emaw YMA Information Board-ah print chhuah a tar nghal theih. Khualkhua leh ram pawn a mite tan WhatsApp link & QR a thawn nghal theih bawk.' 
+            : 'Instantly download printable A4 obituary posters with integrated QR. Share via WhatsApp for distant relatives and community members.'
+        },
+        {
+          step: 3,
+          title: isMizo ? 'Thawhtuten Second 5-ah Scan & Pe' : 'Supporters Scan & Pay in 5 Seconds',
+          desc: isMizo 
+            ? 'Thawhtuten an phone-a PhonePe, GPay, Paytm, emaw banking app engpawh hmangin QR an scan mai ang. Sum pek zat leh ralna chibai bukna thuchah (wishing note) an ziak lut thei.' 
+            : 'Supporters scan with PhonePe, Google Pay, Paytm, or any BHIM UPI app. They can leave condolence notes alongside their donation.'
+        },
+        {
+          step: 4,
+          title: isMizo ? 'WhatsApp Digital Receipt & Soundbox Mizo Aw' : 'Instant WhatsApp Receipt & Mizo Voice Alert',
+          desc: isMizo 
+            ? 'Sum thawhtu phone-ah official digital receipt WhatsApp hmangin a thleng nghal zel a. Khawhar In table-ah Mizo aw ngeiin "Lalhmangaiha hnen atangin cheng 500 ralna sum a lo lut e" tiin a puang bawk ang.' 
+            : 'Donors immediately receive verified digital WhatsApp receipts, and the Khawhar In table soundbox speaks out receipts in native Mizo voice.'
+        },
+        {
+          step: 5,
+          title: isMizo ? 'Chhiatni Zawhah 1-Click Committee Audit Report' : '1-Click Committee Audit & Financial Report',
+          desc: isMizo 
+            ? 'YMA Treasurer leh Secretary-ten buaina awm miah lovin sum thawhtu zawng zawng hming, veng, phone number, leh pek zat PDF leh Excel-in 1-click-in an download thei nghal vek a ni.' 
+            : 'Download complete donor records with names, localities, amounts, and timestamps into PDF and Excel for hassle-free committee auditing.'
+        }
+      ]
+    },
+    kumtluang: {
+      id: 'kumtluang',
+      name: isMizo ? 'Kumtluang Bawm' : 'Kumtluang Bawm (Church & Organization)',
+      icon: '🏛️',
+      badge: isMizo ? 'Kohhran & Pawl Thla Tin' : 'Church & Monthly Registry',
+      color: 'blue',
+      summary: isMizo 
+        ? 'Kohhran thawhlawm (Pathian Ram, Tualchhung, Ramthim, Building) leh thla tin chhungkaw bu fel taka vawnna a ni.' 
+        : 'Complete recurring church tithes, monthly household registers, and mission fund administration.',
+      steps: [
+        {
+          step: 1,
+          title: isMizo ? 'Kohhran / Pawl Register & Member Roll Siam' : 'Register Church & Import Member Roll',
+          desc: isMizo 
+            ? 'Kohhran hming, Kohhran Treasurer bank account, leh Department hrang hrang (KTP, Kohhran Hmeichhia, Pavalai, etc.) thlang la. Chhungkaw bu (Household numbers 001, 002...) a in-set nghal ang.' 
+            : 'Register your church/branch, link church bank accounts, and configure departmental funds with designated household roll numbers.'
+        },
+        {
+          step: 2,
+          title: isMizo ? 'Bawm Hrang Hrang QR Code Tar' : 'Deploy Multi-Head Dynamic QR Codes',
+          desc: isMizo 
+            ? 'Biak In chhung, pulpit bul, leh dawhkanah Pathian Ram, Tualchhung, leh Ramthim thawhlawm QR dah niin, member-ten awlsam takin an pe thei.' 
+            : 'Mount custom QR placards at the church entrance or altar table for Sunday offerings and departmental thanksgiving envelopes.'
+        },
+        {
+          step: 3,
+          title: isMizo ? '4-Digit Quick Entry (Treasurer Tan)' : '4-Digit Fast Entry for Sunday Treasurers',
+          desc: isMizo 
+            ? 'Sunday thawhlawm chhiar hunah envelope leh pawisa fai a lo luhin, Treasurer-in chhungkaw number (e.g. 042) chhut luh zung zungin sum zat a record theih a, darkar 2 hna kha minute 5-ah a zo hman.' 
+            : 'Treasurers use the blazing fast 4-digit keycode system to rapidly log cash envelope offerings alongside online UPI transfers.'
+        },
+        {
+          step: 4,
+          title: isMizo ? 'WhatsApp Chhungkaw Thla Tin Statement' : 'Automated Monthly Household Statement via WhatsApp',
+          desc: isMizo 
+            ? 'Chhungkua-ten an thla tin thawh zat leh thawhlawm hrang hrang kalphung fel fai takin an WhatsApp-ah an dawng zel a, rinhlelhna leh tihsual a awm thei lo.' 
+            : 'Households automatically receive transparent monthly contribution statements directly on WhatsApp.'
+        },
+        {
+          step: 5,
+          title: isMizo ? 'Kumpuan / Synod / Committee Report Print' : '1-Click Committee Audit & Synod Financial Report',
+          desc: isMizo 
+            ? 'Kum tawp leh thla tawpa Committee-a pharh tur Audit Report, Balance Sheet, leh Thawhlawm bu PDF & Excel-in fel thlapin a chhuak nghal vek.' 
+            : 'Export comprehensive audit reports, balance sheets, and head-wise breakdowns in PDF and Excel for committee tabling.'
+        }
+      ]
+    },
+    khawlsak: {
+      id: 'khawlsak',
+      name: isMizo ? 'Khawlsak Bawm' : 'Khawlsak Bawm (Building & Projects)',
+      icon: '🏗️',
+      badge: isMizo ? 'Building & Project Pual' : 'Capital Projects',
+      color: 'emerald',
+      summary: isMizo 
+        ? 'Biak In sak, YMA Hall sak, Community Hall, leh Project lian tham puala sum thawhkhawm vawnna fiah fai tak a ni.' 
+        : 'Transparent fundraising for church buildings, community halls, and major infrastructure projects.',
+      steps: [
+        {
+          step: 1,
+          title: isMizo ? 'Project Goal & Target Amount Siam' : 'Set Project Target & Financial Goals',
+          desc: isMizo 
+            ? 'Biak In sak nan cheng Nuai 50 (₹50,00,000) mamawh a nih chuan, target zat, project hming, leh hmalak dan thlalak dah lut la.' 
+            : 'Define project scope, photo blueprints, target sum (e.g. ₹50 Lakhs), and committee bank account.'
+        },
+        {
+          step: 2,
+          title: isMizo ? 'Live Progress Tracker & Target Progress Bar' : 'Live Real-Time Public Progress Bar',
+          desc: isMizo 
+            ? 'Sum rawn lut zawng zawng chu real-time-in a in-update zel a, 45% thawh a nih chuan progress bar-ah a lang nghal a, thawhtuten an phur phah em em a ni.' 
+            : 'Donations instantly increment the public progress bar, showing transparent progress percentage to all supporters.'
+        },
+        {
+          step: 3,
+          title: isMizo ? 'Donor Transparency Board & Hming Tarlanna' : 'Donor Transparency Board & Leaderboard',
+          desc: isMizo 
+            ? 'Thawhtute hming, veng, leh pek zat (duh tan anonymous/a ruka pek theih) fiah fai takin screen-ah leh hall-ah tarlan theih a ni.' 
+            : 'Showcase donor appreciation boards with customizable anonymity options for private benefactors.'
+        },
+        {
+          step: 4,
+          title: isMizo ? 'Building Fund Official Receipt' : 'Official Building Fund Verified Receipt',
+          desc: isMizo 
+            ? 'Thawhtu tin tan Building Committee Seal leh Signature chuanna Tax/Deduction eligible official receipt a in-generate nghal zel.' 
+            : 'Generates branded project receipts with committee registration details, building seal, and transaction IDs.'
+        }
+      ]
+    },
+    rikrum: {
+      id: 'rikrum',
+      name: isMizo ? 'Rikrum Bawm' : 'Rikrum Bawm (Disaster & Emergency)',
+      icon: '🚨',
+      badge: isMizo ? 'Emergency • Zero Fee' : 'Disaster Relief • 100% Free',
+      color: 'rose',
+      summary: isMizo 
+        ? 'Kangmei, tuilian, lei tlahmual, leh damlo zual thut tanpuina emergency bawm a ni a. Setup fee leh platform charge a awm lo (100% Free).' 
+        : 'Zero-fee rapid disaster relief for fires, landslides, and critical medical emergencies.',
+      steps: [
+        {
+          step: 1,
+          title: isMizo ? 'Minute 1 Chhungin Emergency QR Siam' : 'Instant 1-Minute Emergency Activation',
+          desc: isMizo 
+            ? 'Buaina leh vanduaina a thlen rualin RonPay App-ah Rikrum Bawm thlang la, hming leh hospital/beneficiary account number dah lut rawh. Minute 1 chhungin live nghal vek a ni.' 
+            : 'Launch instant relief campaign with patient/victim details and hospital/bank account details in under 60 seconds.'
+        },
+        {
+          step: 2,
+          title: isMizo ? 'Zero Platform Setup Charge (A Thlawn / Free)' : 'Zero Platform Fee (100% Free Service)',
+          desc: isMizo 
+            ? 'Tanpuina sum a nih avangin RonPay chuan hetiang emergency-ah hian service fee engmah a la ve lo (0% platform charge).' 
+            : 'RonPay waives all platform setup charges to ensure 100% of compassion funds reach the victims.'
+        },
+        {
+          step: 3,
+          title: isMizo ? 'Direct Bank & Hospital Routing' : 'Immediate Direct Bank & Hospital Account Routing',
+          desc: isMizo 
+            ? 'Sum rawn thawh zawng zawng chu intermediate wallet-a vawn khawm lovin damlo/vanduai tuartu bank account-ah direct-in a lut nghal zel.' 
+            : 'Funds credit directly into the beneficiary’s verified bank account without intermediate holding delays.'
+        },
+        {
+          step: 4,
+          title: isMizo ? 'Live WhatsApp Broadcast & Solidarity Message' : 'Live WhatsApp Broadcast & Encouragement Notes',
+          desc: isMizo 
+            ? 'Mizo mipuite tanpuina leh ṭawngṭaipuina thuchah damlo leh chhungkua-ten an hmu thei a, sum zat in-update zung zungin hmalak a awlsam.' 
+            : 'Real-time message wall showing heartfelt prayers and financial support from the Mizo community worldwide.'
+        }
+      ]
+    },
+    mimal: {
+      id: 'mimal',
+      name: isMizo ? 'Mimal & Chhungkua Bawm' : 'Mimal & Chhungkua (Personal & Events)',
+      icon: '🎁',
+      badge: isMizo ? 'Inneih & Piancham' : 'Weddings & Birthdays',
+      color: 'purple',
+      summary: isMizo 
+        ? 'Inneih lawmpuina (Wedding gift envelope), anniversary, piancham thilpek, leh damlo kan sum pekna awlsam tak a ni.' 
+        : 'Digital monetary gifts and blessings for weddings, birthdays, anniversaries, and personal visitations.',
+      steps: [
+        {
+          step: 1,
+          title: isMizo ? 'Personal Event QR Siam' : 'Create Branded Wedding / Birthday QR',
+          desc: isMizo 
+            ? 'Mo leh Mopa hming, thlalak, leh lawmpuina thuchah dah lutin wedding QR mawi tak minute 2-ah i nei thei.' 
+            : 'Set up custom couple photo, wedding invitation details, and personal bank UPI.'
+        },
+        {
+          step: 2,
+          title: isMizo ? 'Invitation Card-ah Print & WhatsApp-ah Thawn' : 'Print on Invitation Cards & Send digitally',
+          desc: isMizo 
+            ? 'Inneih sawmna lehkha (Invitation Card)-ah QR code dah tel theih a ni a, ram dang leh hmun hla a mite tan WhatsApp-ah a share theih bawk.' 
+            : 'Embed sleek QR code directly onto wedding invitation cards or send digitally to friends overseas.'
+        },
+        {
+          step: 3,
+          title: isMizo ? 'Digital Envelope & Lawmpuina Thuchah' : 'Digital Shagun Envelope with Custom Greeting',
+          desc: isMizo 
+            ? 'Sum pek rualin lawmpuina thuchah mawi tak ziak theih a ni a, bank account-ah pawisa a thleng nghal bawk.' 
+            : 'Guests attach personal heartfelt blessing notes inside their digital monetary gift.'
+        }
+      ]
+    }
+  };
+
+  const activeManual = SERVICE_MANUALS[manualActiveKey] || SERVICE_MANUALS.ralna;
+
   return (
     <div className={`min-h-screen ${eyeComfortMode ? 'bg-[#f8fafc] text-slate-850' : 'bg-slate-950 text-slate-100'} font-sans selection:bg-orange-500 selection:text-white relative overflow-x-hidden transition-colors duration-150`}>
       
@@ -406,6 +625,14 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             <a href="#services" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
             </a>
+            <button
+              type="button"
+              onClick={() => setManualModalOpen(true)}
+              className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'text-indigo-700 hover:text-indigo-900 hover:bg-white' : 'text-indigo-300 hover:text-indigo-100 hover:bg-slate-800/60'} transition flex items-center gap-1 cursor-pointer`}
+            >
+              <BookOpen className="w-3 h-3 text-indigo-500" />
+              <span>{isMizo ? 'User Manual' : 'Manual'}</span>
+            </button>
             <a href="#bbps" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white text-slate-700' : 'hover:text-white hover:bg-slate-800/60 text-slate-300'} transition flex items-center gap-1`}>
               <CreditCard className="w-3 h-3 text-amber-500" />
               <span>BBPS & Topup</span>
@@ -537,6 +764,16 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               >
                 📦 {isMizo ? 'Bawm 5 Services' : '5 Bawm Services'}
               </a>
+              <button 
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setManualModalOpen(true);
+                }}
+                className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-indigo-300 text-left flex items-center gap-1 cursor-pointer"
+              >
+                📖 <span>{isMizo ? 'User Manual' : 'User Manual'}</span>
+              </button>
               <a 
                 href="#bbps" 
                 onClick={() => setMobileMenuOpen(false)}
@@ -969,7 +1206,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 </ul>
               </div>
 
-              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'ralna')}
@@ -977,6 +1214,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 >
                   <span>{isMizo ? 'Ralna Bawm En Rawh' : 'Explore Ralna Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualActiveKey('ralna');
+                    setManualModalOpen(true);
+                  }}
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'} border font-semibold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-red-500" />
+                  <span>{isMizo ? '📖 Hman Dan / User Manual' : '📖 User Guide & Steps'}</span>
                 </button>
               </div>
             </div>
@@ -1013,7 +1261,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 </ul>
               </div>
 
-              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'kumtluang')}
@@ -1021,6 +1269,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 >
                   <span>{isMizo ? 'Kumtluang Bawm En Rawh' : 'Explore Kumtluang'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualActiveKey('kumtluang');
+                    setManualModalOpen(true);
+                  }}
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'} border font-semibold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{isMizo ? '📖 Hman Dan / User Manual' : '📖 User Guide & Steps'}</span>
                 </button>
               </div>
             </div>
@@ -1057,7 +1316,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 </ul>
               </div>
 
-              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'khawlsak')}
@@ -1065,6 +1324,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 >
                   <span>{isMizo ? 'Khawlsak Bawm En Rawh' : 'Explore Khawlsak'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualActiveKey('khawlsak');
+                    setManualModalOpen(true);
+                  }}
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'} border font-semibold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{isMizo ? '📖 Hman Dan / User Manual' : '📖 User Guide & Steps'}</span>
                 </button>
               </div>
             </div>
@@ -1101,7 +1371,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 </ul>
               </div>
 
-              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'rikrum')}
@@ -1109,6 +1379,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 >
                   <span>{isMizo ? 'Rikrum Bawm En Rawh' : 'Explore Emergency Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualActiveKey('rikrum');
+                    setManualModalOpen(true);
+                  }}
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'} border font-semibold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-rose-500" />
+                  <span>{isMizo ? '📖 Hman Dan / User Manual' : '📖 User Guide & Steps'}</span>
                 </button>
               </div>
             </div>
@@ -1145,7 +1426,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 </ul>
               </div>
 
-              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'}`}>
+              <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>
                 <button
                   type="button"
                   onClick={() => onLaunchApp('explorer', 'others')}
@@ -1153,6 +1434,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 >
                   <span>{isMizo ? 'Mimal Bawm En Rawh' : 'Explore Mimal Bawm'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualActiveKey('mimal');
+                    setManualModalOpen(true);
+                  }}
+                  className={`w-full ${eyeComfortMode ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'} border font-semibold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-purple-500" />
+                  <span>{isMizo ? '📖 Hman Dan / User Manual' : '📖 User Guide & Steps'}</span>
                 </button>
               </div>
             </div>
@@ -1192,6 +1484,128 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   <span>{isMizo ? 'Kohhran / Pawl Register Rawh' : 'Register Organization'}</span>
                 </button>
               </div>
+            </div>
+
+          </div>
+
+          {/* INTERACTIVE USER MANUAL TAB GUIDE SECTION (Option 2: Inline Quick Guide) */}
+          <div className={`mt-10 p-6 sm:p-8 rounded-3xl border ${eyeComfortMode ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/90 border-slate-800 shadow-xl'} transition duration-300`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold text-lg">
+                  📖
+                </div>
+                <div>
+                  <h3 className={`text-lg sm:text-xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                    {isMizo ? 'RonPay Bawm Hman Dan Kaihhruaina (User Manual)' : 'RonPay Community Bawm User Manual'}
+                  </h3>
+                  <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'} mt-0.5`}>
+                    {isMizo 
+                      ? 'Bawm hrang hrang 4+1 te hman dan step-by-step a hnuaiah hian thlang la, fiah takin en rawh:' 
+                      : 'Step-by-step operating guide for Treasurers, Donors, and Beneficiaries. Click each service tab:'}
+                  </p>
+                </div>
+              </div>
+
+              {/* View Full Manual Button */}
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(true)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto ${
+                  eyeComfortMode 
+                    ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200' 
+                    : 'bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>{isMizo ? 'Manual Kimchang Pop-up-ah En Rawh' : 'Open Detailed Guide Modal'}</span>
+              </button>
+            </div>
+
+            {/* Service Selection Tabs */}
+            <div className="flex flex-wrap gap-2 pt-6">
+              {(['ralna', 'kumtluang', 'khawlsak', 'rikrum', 'mimal'] as const).map((key) => {
+                const item = SERVICE_MANUALS[key];
+                const isSelected = manualActiveKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setManualActiveKey(key)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                      isSelected
+                        ? eyeComfortMode
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                          : 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                        : eyeComfortMode
+                          ? 'bg-slate-100/90 text-slate-700 hover:bg-slate-200 border-slate-200'
+                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 border-slate-700'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.name.split(' ')[0]} {item.name.split(' ')[1] || ''}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Service Active Steps & Guide */}
+            <div className={`mt-6 p-5 sm:p-6 rounded-2xl border ${eyeComfortMode ? 'bg-slate-50 border-slate-200/90' : 'bg-slate-950/70 border-slate-800/80'}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-200/70 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">{activeManual.icon}</span>
+                  <div>
+                    <h4 className={`text-base font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                      {activeManual.name}
+                    </h4>
+                    <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                      {activeManual.summary}
+                    </p>
+                  </div>
+                </div>
+                <span className={`text-[11px] font-black uppercase px-2.5 py-1 rounded-full ${eyeComfortMode ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-indigo-950 text-indigo-300 border border-indigo-800'}`}>
+                  {activeManual.badge}
+                </span>
+              </div>
+
+              {/* Steps Timeline Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeManual.steps.map((st) => (
+                  <div 
+                    key={st.step}
+                    className={`p-4 rounded-xl border ${eyeComfortMode ? 'bg-white border-slate-200 shadow-2xs' : 'bg-slate-900 border-slate-800'} space-y-2`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                        {st.step}
+                      </span>
+                      <h5 className={`text-xs font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                        {st.title}
+                      </h5>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                      {st.desc}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bottom Direct CTA */}
+              <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{isMizo ? 'Heng process zawng zawng hi RonPay App chhungah rintlak taka kalpui theih vek a ni.' : 'All features are fully functional inside the RonPay App.'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onLaunchApp('explorer', manualActiveKey === 'mimal' ? 'others' : manualActiveKey)}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <span>{isMizo ? `${activeManual.name.split(' ')[0]} Hmang Tan Rawh` : `Launch ${activeManual.name.split(' ')[0]}`}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
             </div>
 
           </div>
@@ -1801,6 +2215,175 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 className={`${eyeComfortMode ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-amber-400 hover:bg-amber-300 text-slate-950'} disabled:opacity-40 p-2.5 rounded-xl transition cursor-pointer shrink-0 font-bold`}
               >
                 <Send className="w-4 h-4" />
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* USER MANUAL MODAL (Option 1: Interactive Popup Dialog) */}
+      {manualModalOpen && (
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manual-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in"
+        >
+          <div className={`w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden ${
+            eyeComfortMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+          }`}>
+            {/* Modal Header */}
+            <div className={`p-4 sm:p-5 border-b flex items-center justify-between gap-3 ${
+              eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+                  📖
+                </div>
+                <div>
+                  <h3 id="manual-modal-title" className="text-base sm:text-lg font-black tracking-tight">
+                    {isMizo ? 'RonPay Services - Hman Dan Kaihhruaina' : 'RonPay Community Services - User Manual'}
+                  </h3>
+                  <p className={`text-[11px] ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {isMizo ? 'A hnuaia service hrang hrangte hi thlang la, hman dan en rawh' : 'Select any service tab below to review operations'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(false)}
+                className={`p-2 rounded-xl border transition cursor-pointer ${
+                  eyeComfortMode 
+                    ? 'hover:bg-slate-200 text-slate-600 border-slate-300' 
+                    : 'hover:bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Service Filter Tabs */}
+            <div className={`px-4 sm:px-5 py-3 border-b flex items-center gap-1.5 overflow-x-auto ${
+              eyeComfortMode ? 'bg-slate-100/70 border-slate-200' : 'bg-slate-950/50 border-slate-800'
+            }`}>
+              {(['ralna', 'kumtluang', 'khawlsak', 'rikrum', 'mimal'] as const).map((key) => {
+                const item = SERVICE_MANUALS[key];
+                const isSelected = manualActiveKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setManualActiveKey(key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer border ${
+                      isSelected
+                        ? eyeComfortMode
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                          : 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                        : eyeComfortMode
+                          ? 'bg-white text-slate-700 hover:bg-slate-200/80 border-slate-300'
+                          : 'bg-slate-850 text-slate-300 hover:bg-slate-800 border-slate-700'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.name.split(' ')[0]}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+              {/* Service Summary Card */}
+              <div className={`p-4 rounded-2xl border ${
+                eyeComfortMode ? 'bg-indigo-50/50 border-indigo-100' : 'bg-indigo-950/30 border-indigo-900/50'
+              } flex items-start gap-3`}>
+                <span className="text-2xl sm:text-3xl shrink-0">{activeManual.icon}</span>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm sm:text-base font-black">
+                      {activeManual.name}
+                    </h4>
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                      eyeComfortMode ? 'bg-indigo-100 text-indigo-800' : 'bg-indigo-900 text-indigo-200'
+                    }`}>
+                      {activeManual.badge}
+                    </span>
+                  </div>
+                  <p className={`text-xs leading-relaxed ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                    {activeManual.summary}
+                  </p>
+                </div>
+              </div>
+
+              {/* Step By Step Guide List */}
+              <div className="space-y-3">
+                <h5 className={`text-xs font-black uppercase tracking-wider ${eyeComfortMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {isMizo ? 'Hman Dan Kalhmang (Step-by-Step Instructions):' : 'Operating Steps & Protocol:'}
+                </h5>
+
+                {activeManual.steps.map((st) => (
+                  <div 
+                    key={st.step}
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 ${
+                      eyeComfortMode ? 'bg-slate-50 border-slate-200/80' : 'bg-slate-850/70 border-slate-800'
+                    }`}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
+                      {st.step}
+                    </div>
+                    <div className="space-y-0.5">
+                      <h6 className="text-xs font-bold">
+                        {st.title}
+                      </h6>
+                      <p className={`text-[11px] leading-relaxed ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                        {st.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Helpful Tips */}
+              <div className={`p-3.5 rounded-xl border text-[11px] ${
+                eyeComfortMode ? 'bg-amber-50/70 border-amber-200 text-amber-900' : 'bg-amber-950/40 border-amber-900 text-amber-200'
+              } flex items-start gap-2.5`}>
+                <span className="text-sm">💡</span>
+                <p>
+                  {isMizo 
+                    ? 'Tip: RonPay App chhungah hian Mizo ṭawng leh English-in zawn awlsam takin a awm a, PhonePe / UPI hmangin sum lut leh chhuak engkim live-in a lang nghal zel e.'
+                    : 'Tip: Available in both Mizo and English. All collections route directly through PhonePe and NPCI bank channels with live receipting.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className={`p-4 border-t flex items-center justify-between gap-3 ${
+              eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(false)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  eyeComfortMode 
+                    ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300' 
+                    : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-700'
+                }`}
+              >
+                {isMizo ? 'Khar Rawh' : 'Close'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setManualModalOpen(false);
+                  onLaunchApp('explorer', manualActiveKey === 'mimal' ? 'others' : manualActiveKey);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              >
+                <span>{isMizo ? `${activeManual.name.split(' ')[0]} Hmang Tan Rawh` : `Open ${activeManual.name.split(' ')[0]}`}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
