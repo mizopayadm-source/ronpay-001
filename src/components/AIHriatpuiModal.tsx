@@ -91,12 +91,12 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
   // Custom Doc Builder Form
   const [isBuilderExpanded, setIsBuilderExpanded] = useState<boolean>(false);
   const [builderDocType, setBuilderDocType] = useState<'creator_application' | 'hriatpuina_cert'>('creator_application');
-  const [builderApplicantName, setBuilderApplicantName] = useState<string>(creatorProfile?.name || '');
-  const [builderOrgName, setBuilderOrgName] = useState<string>(creatorProfile?.orgName || 'YMA / Branch Committee');
-  const [builderLocality, setBuilderLocality] = useState<string>('Aizawl, Mizoram');
+  const [builderApplicantName, setBuilderApplicantName] = useState<string>('');
+  const [builderOrgName, setBuilderOrgName] = useState<string>('');
+  const [builderLocality, setBuilderLocality] = useState<string>('');
   const [builderCategory, setBuilderCategory] = useState<string>('ralna');
-  const [builderPurpose, setBuilderPurpose] = useState<string>('Khawtlang tanpuina leh Bawm enkawl nan');
-  const [builderPhone, setBuilderPhone] = useState<string>(creatorProfile?.phone || '');
+  const [builderPurpose, setBuilderPurpose] = useState<string>('');
+  const [builderPhone, setBuilderPhone] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -153,20 +153,20 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
   const handleGenerateCustomDoc = () => {
     const doc = generateConversationalDocument({
       docType: builderDocType,
-      applicantName: builderApplicantName || 'Diltu Hming',
-      orgName: builderOrgName || 'Pawl / Branch Hming',
-      locality: builderLocality || 'Mizoram',
+      applicantName: builderApplicantName.trim() || '________________ (Diltu Hming)',
+      orgName: builderOrgName.trim() || '________________ (Pawl / Branch Hming)',
+      locality: builderLocality.trim() || '________________ (Veng / Khua)',
       category: builderCategory,
-      purpose: builderPurpose,
-      applicantPhone: builderPhone || '9862XXXXXX',
-      signatoryName: builderDocType === 'creator_application' ? (builderApplicantName || 'Diltu') : 'Branch Secretary',
-      signatoryTitle: builderDocType === 'creator_application' ? 'Representative' : 'Secretary / President',
+      purpose: builderPurpose.trim() || 'Tanpuina leh rawngbawlna sum lakkhawm nan',
+      applicantPhone: builderPhone.trim() || '__________ (Phone Number)',
+      signatoryName: builderDocType === 'creator_application' ? (builderApplicantName.trim() || '________________ (Diltu)') : 'Branch Secretary',
+      signatoryTitle: builderDocType === 'creator_application' ? 'Diltu / Representative' : 'Secretary / President',
     });
 
     const userMsg: ChatMessage = {
       id: 'user-' + Date.now(),
       sender: 'user',
-      text: `📜 ${builderDocType === 'creator_application' ? 'Creator Dilna Form' : 'Hriatpuina Certificate'} siam rawh: ${builderOrgName} (${builderApplicantName})`,
+      text: `📜 ${builderDocType === 'creator_application' ? 'Creator Dilna Form' : 'Hriatpuina Certificate'} siam rawh: ${builderOrgName || 'Pawl Hming'} (${builderApplicantName || 'Diltu'})`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -482,6 +482,25 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                 </div>
               </div>
 
+              <div className="flex items-center justify-between text-[10.5px] bg-slate-100 text-slate-600 p-2 rounded-xl">
+                <span>💡 Example Form a nih avangin a ruakin a awm a, i duh ang zelin a hnuai text box-ah hian i chhu lut thei e.</span>
+                {(builderApplicantName || builderPhone || builderOrgName || builderLocality || builderPurpose) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuilderApplicantName('');
+                      setBuilderPhone('');
+                      setBuilderOrgName('');
+                      setBuilderLocality('');
+                      setBuilderPurpose('');
+                    }}
+                    className="text-rose-600 font-bold hover:underline cursor-pointer shrink-0 ml-2"
+                  >
+                    Tifai Rawh (Clear)
+                  </button>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[10px] font-bold text-slate-600 block">Diltu Hming (Applicant Name)</label>
@@ -489,7 +508,7 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                     type="text"
                     value={builderApplicantName}
                     onChange={(e) => setBuilderApplicantName(e.target.value)}
-                    placeholder="e.g. Lalmuana / Zothansanga"
+                    placeholder="Entirna: Diltu Hming"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none"
                   />
                 </div>
@@ -500,7 +519,7 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                     type="tel"
                     value={builderPhone}
                     onChange={(e) => setBuilderPhone(e.target.value)}
-                    placeholder="e.g. 9862123456"
+                    placeholder="Entirna: 9862XXXXXX"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none"
                   />
                 </div>
@@ -511,7 +530,7 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                     type="text"
                     value={builderOrgName}
                     onChange={(e) => setBuilderOrgName(e.target.value)}
-                    placeholder="e.g. YMA Chanmari Branch / BCM Ebenezer"
+                    placeholder="Entirna: Pawl / Kohhran Hming"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none"
                   />
                 </div>
@@ -522,7 +541,7 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                     type="text"
                     value={builderLocality}
                     onChange={(e) => setBuilderLocality(e.target.value)}
-                    placeholder="e.g. Aizawl, Lunglei, Champhai"
+                    placeholder="Entirna: Veng / Khua Hming"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none"
                   />
                 </div>
@@ -559,7 +578,7 @@ export const AIHriatpuiModal: React.FC<AIHriatpuiModalProps> = ({
                   type="text"
                   value={builderPurpose}
                   onChange={(e) => setBuilderPurpose(e.target.value)}
-                  placeholder="e.g. Chhiatni ralna leh tanpuina sum dawnkhawm nan"
+                  placeholder="Entirna: Tanpuina leh Bawm enkawl nan"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-indigo-600 focus:outline-none"
                 />
               </div>
