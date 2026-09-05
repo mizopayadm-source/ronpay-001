@@ -101,7 +101,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
     onClose();
   };
 
-  const whatsappUrl = `https://wa.me/919862300000?text=${encodeURIComponent(
+  const whatsappUrl = `https://wa.me/917005153902?text=${encodeURIComponent(
     `Chibai RonPay Admin,\nKa Creator Account (${creatorProfile.name} - ${creatorProfile.phone}) ah Category ${requestType === 'add' ? 'dah belh' : 'paih'} dilna ka nei a, khawngaihin min lo check sak ta che.`
   )}`;
 

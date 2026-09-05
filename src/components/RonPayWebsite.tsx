@@ -2003,7 +2003,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   Live WhatsApp Helpline
                 </span>
                 <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
-                  +91 9862899001
+                  +91 7005153902
                 </h3>
                 <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
@@ -2013,7 +2013,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </div>
 
               <a
-                href="https://wa.me/919862899001?text=RonPay%20chungchang%20ka%20hrechiang%20duh%20e"
+                href="https://wa.me/917005153902?text=RonPay%20chungchang%20ka%20hrechiang%20duh%20e"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"

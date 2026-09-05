@@ -283,7 +283,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
     setRegisteredPendingProfile(updatedProfile);
   };
 
-  const whatsappAdminUrl = `https://wa.me/919862300000?text=${encodeURIComponent(
+  const whatsappAdminUrl = `https://wa.me/917005153902?text=${encodeURIComponent(
     `Chibai RonPay Admin,\nCreator thar registration ka submit a (${applicantName || phone}). Khawngaihin min lo check sak la min approve sak ta che.`
   )}`;
 
