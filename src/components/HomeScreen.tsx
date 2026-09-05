@@ -767,12 +767,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             const isOwner = isCampaignCreator(camp, creatorProfile);
             const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
-            const target = camp.targetAmount || (
-              camp.category === 'ralna' ? 25000 :
-              camp.category === 'khawlsak' ? 50000 :
-              camp.category === 'rikrum' ? 100000 :
-              camp.category === 'kumtluang' ? 100000 : 50000
-            );
+            const hasTarget = Boolean(camp.targetAmount && camp.targetAmount > 0);
+            const target = hasTarget ? camp.targetAmount! : 0;
             const percentage = target > 0 ? Math.round((totalRaised / target) * 100) : 0;
             const clampedPercentage = Math.min(percentage, 100);
 
@@ -861,11 +857,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
                 {isOwner && (
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
-                    {camp.category === 'ralna' ? (
+                    {!hasTarget ? (
                       <div className="flex items-center justify-between text-[10px]">
                         <div className="flex items-center gap-1 font-bold text-slate-700">
                           <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
-                          <span className="text-slate-500 font-medium">Pek tlingkhawm zat</span>
+                          <span className="text-slate-500 font-medium">
+                            {language === 'english' ? 'Total collected' : 'Pek tlingkhawm zat'}
+                          </span>
                           <span className="text-[7.5px] font-black uppercase text-slate-700 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded ml-1">
                             {language === 'english' ? 'Creator Only' : 'Creator View'}
                           </span>

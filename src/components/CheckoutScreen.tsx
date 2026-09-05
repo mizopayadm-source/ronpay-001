@@ -759,16 +759,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <p className="text-[11px] text-slate-600 bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100 font-medium">
               {translateDynamicText(campaign?.cause || 'Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.', language)}
             </p>
-            <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
-              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
-                <span className="font-black text-slate-900">₹{(campaign?.targetAmount || 50000).toLocaleString('en-IN')}</span>
+            {(Boolean(campaign?.targetAmount && campaign.targetAmount > 0) || Boolean(campaign?.maxLimit && campaign.maxLimit > 0)) && (
+              <div className={`grid gap-2 text-center text-[11px] ${
+                (campaign?.targetAmount && campaign.targetAmount > 0) && (campaign?.maxLimit && campaign.maxLimit > 0)
+                  ? 'grid-cols-2'
+                  : 'grid-cols-1'
+              }`}>
+                {Boolean(campaign?.targetAmount && campaign.targetAmount > 0) && (
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
+                    <span className="font-black text-slate-900">₹{campaign!.targetAmount!.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                {Boolean(campaign?.maxLimit && campaign.maxLimit > 0) && (
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
+                    <span className="font-black text-slate-900">₹{campaign!.maxLimit!.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
               </div>
-              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
-                <span className="font-black text-slate-900">₹{(campaign?.maxLimit || 100000).toLocaleString('en-IN')}</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
