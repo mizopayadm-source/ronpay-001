@@ -102,40 +102,21 @@ export const downloadFileUniversal = async (
   content: string | Blob,
   fileName: string,
   mimeType: string,
-  title: string = 'RonPay Report'
+  _title: string = 'RonPay Report'
 ): Promise<boolean> => {
   try {
     const blob = content instanceof Blob 
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
 
-    // Step 1: Check Web Share API with files (Android / iOS / Mobile WebViews)
-    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-      try {
-        const file = new File([blob], fileName, { type: mimeType.split(';')[0] });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: title || fileName,
-            text: `${title} - RonPay Report`,
-            files: [file],
-          });
-          return true;
-        }
-      } catch (shareErr: any) {
-        if (shareErr?.name === 'AbortError') {
-          return true; // User intentionally dismissed the share sheet
-        }
-        console.warn('Web Share API error, falling back to download link', shareErr);
-      }
-    }
+    const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
 
-    // Step 2: Standard Blob Object URL
+    // Step 1: Standard Blob Object URL with direct anchor download
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
 
@@ -146,26 +127,43 @@ export const downloadFileUniversal = async (
       } catch (e) {
         // ignore cleanup error
       }
-    }, 1500);
+    }, 2500);
 
-    // Step 3: Additional fallback for Android WebView which ignores blob URLs
+    // Step 2: Base64 Data URI fallback for Android WebViews that restrict Blob downloads
     if (typeof content === 'string') {
       try {
         const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
         const fallbackA = document.createElement('a');
         fallbackA.href = dataUri;
         fallbackA.download = fileName;
-        fallbackA.target = '_blank';
+        fallbackA.style.display = 'none';
         document.body.appendChild(fallbackA);
         fallbackA.click();
         setTimeout(() => {
           try {
             document.body.removeChild(fallbackA);
           } catch (e) {}
-        }, 1000);
-      } catch (e) {
-        // ignore
-      }
+        }, 1200);
+      } catch (e) {}
+    } else if (blob instanceof Blob && isMobile) {
+      // For binary blobs (like PDF) in Android WebViews:
+      try {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result && typeof reader.result === 'string') {
+            const fbLink = document.createElement('a');
+            fbLink.href = reader.result;
+            fbLink.download = fileName;
+            fbLink.style.display = 'none';
+            document.body.appendChild(fbLink);
+            fbLink.click();
+            setTimeout(() => {
+              try { document.body.removeChild(fbLink); } catch {}
+            }, 1200);
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (e) {}
     }
 
     return true;
@@ -1331,18 +1329,19 @@ export const generateTransactionsPDFHtml = (
 
     /* Table Styles */
     table { 
-      width: 100%; 
+      width: 100% !important; 
+      max-width: 100% !important;
       border-collapse: collapse; 
       text-align: left; 
       font-size: 11px; 
-      margin-top: 10px; 
+      margin-top: 8px; 
     }
     thead th {
       background: #1e1b4b;
       color: #ffffff;
-      padding: 10px 12px;
+      padding: 8px 10px;
       text-transform: uppercase;
-      font-size: 9.5px;
+      font-size: 9px;
       letter-spacing: 0.5px;
     }
     .total-row {
@@ -1364,49 +1363,49 @@ export const generateTransactionsPDFHtml = (
 
     /* Signature Blocks */
     .sign-grid {
-      margin-top: 40px;
+      margin-top: 20px;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
+      gap: 16px;
       text-align: center;
-      page-break-inside: avoid;
-      break-inside: avoid;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
     .sign-box {
       border-top: 1.5px dashed #64748b;
-      padding-top: 8px;
+      padding-top: 6px;
     }
     .sign-label {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 800;
       color: #1e293b;
     }
     .sign-subtext {
-      font-size: 9.5px;
+      font-size: 9px;
       color: #64748b;
       margin-top: 2px;
     }
     .digital-seal {
-      font-size: 8.5px;
+      font-size: 8px;
       font-weight: bold;
       color: #4338ca;
-      margin-top: 4px;
+      margin-top: 3px;
       display: inline-block;
       background: #e0e7ff;
-      padding: 2px 8px;
+      padding: 2px 6px;
       border-radius: 4px;
     }
 
     .footer {
-      margin-top: 30px;
+      margin-top: 14px;
       border-top: 1px solid #cbd5e1;
-      padding-top: 10px;
-      font-size: 9px;
+      padding-top: 8px;
+      font-size: 8.5px;
       color: #64748b;
       display: flex;
       justify-content: space-between;
-      page-break-inside: avoid;
-      break-inside: avoid;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     @media screen and (max-width: 640px) {
@@ -1418,7 +1417,7 @@ export const generateTransactionsPDFHtml = (
       .target-bar { flex-direction: column; gap: 6px; }
       table { font-size: 10px; }
       th, td { padding: 6px 8px !important; }
-      .sign-grid { grid-template-columns: 1fr; gap: 14px; margin-top: 24px; }
+      .sign-grid { grid-template-columns: 1fr; gap: 14px; margin-top: 18px; }
     }
 
     @media print {
@@ -1431,26 +1430,40 @@ export const generateTransactionsPDFHtml = (
   // If Kumtluang Bawm, format matrix table: Sl No | Hming | Mode | Cat 1 | Cat 2 | ... | Total
   if (isKumtluang) {
     const matrix = buildKumtluangMatrix(transactions, sortOrder);
-    const matrixHeaderThs = matrix.categories.map(c => `<th style="text-align: right; padding: 9px 12px; font-weight: 800;">${c.toUpperCase()}</th>`).join('');
+    const catCount = matrix.categories.length;
+    // Multi-category matrix statements are wide ledgers - standard accounting format is A4 Landscape
+    const isWideLedger = catCount >= 3;
+    const pageOrientation = isWideLedger ? 'landscape' : 'portrait';
+
+    const thPadding = catCount >= 6 ? '5px 4px' : catCount >= 4 ? '6px 6px' : '8px 10px';
+    const thFontSize = catCount >= 6 ? '7.5px' : catCount >= 4 ? '8.5px' : '9.5px';
+    const tdPadding = catCount >= 6 ? '5px 4px' : catCount >= 4 ? '6px 6px' : '7px 8px';
+    const tdFontSize = catCount >= 6 ? '8.5px' : catCount >= 4 ? '9.5px' : '10px';
+
+    const matrixHeaderThs = matrix.categories.map(c => `
+      <th style="text-align: right; padding: ${thPadding}; font-weight: 800; font-size: ${thFontSize}; line-height: 1.15; word-break: break-word;">
+        <div style="min-width: 55px;">${c.toUpperCase()}</div>
+      </th>
+    `).join('');
     
     const matrixRowsHtml = matrix.rows.map((r, idx) => {
       const modeBadge = r.paymentMethodLabel === 'CASH'
-        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
         : r.paymentMethodLabel === 'ONLINE'
-        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
-        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
+        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
+        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
 
       return `
       <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">${r.donorName}</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center; width: 85px;">${modeBadge}</td>
+        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 34px; font-size: ${tdFontSize};">${idx + 1}</td>
+        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a; font-size: ${tdFontSize}; max-width: 170px; word-break: break-word;">${r.donorName}</td>
+        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: center; width: 66px;">${modeBadge}</td>
         ${matrix.categories.map(c => `
-          <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
+          <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; font-size: ${tdFontSize}; white-space: nowrap; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
             ${r.categoryAmounts[c] > 0 ? `₹${r.categoryAmounts[c].toLocaleString('en-IN')}` : '-'}
           </td>
         `).join('')}
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #4338ca; background-color: #f1f5f9;">
+        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #4338ca; background-color: #f1f5f9; font-size: ${tdFontSize}; white-space: nowrap;">
           ₹${r.total.toLocaleString('en-IN')}
         </td>
       </tr>
@@ -1458,10 +1471,16 @@ export const generateTransactionsPDFHtml = (
     }).join('');
 
     const matrixFooterTds = matrix.categories.map(c => `
-      <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 12px;">
+      <td style="text-align: right; padding: ${tdPadding}; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: ${tdFontSize}; white-space: nowrap;">
         ₹${matrix.columnTotals[c].toLocaleString('en-IN')}
       </td>
     `).join('');
+
+    const orientationStyle = isWideLedger ? `
+      @page { size: A4 landscape; margin: 8mm; }
+    ` : `
+      @page { size: A4 portrait; margin: 10mm; }
+    `;
 
     return `
       <!DOCTYPE html>
@@ -1470,9 +1489,13 @@ export const generateTransactionsPDFHtml = (
           <title>${orgDisplay} - Financial Statement</title>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <style>${sharedPrintStyles}</style>
+          <meta name="x-report-orientation" content="${pageOrientation}" />
+          <style>
+            ${sharedPrintStyles}
+            ${orientationStyle}
+          </style>
         </head>
-        <body>
+        <body data-default-orientation="${pageOrientation}" class="report-orientation-${pageOrientation}">
           <div class="header-banner">
             <div class="header-left-wrap">
               ${avatarHtml}
@@ -1489,29 +1512,31 @@ export const generateTransactionsPDFHtml = (
           ${collectionSummaryBarHtml}
           ${targetSummaryHtml}
 
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 45px; text-align: center;">SL NO.</th>
-                <th style="padding: 10px 12px;">HMING (DONOR)</th>
-                <th style="width: 85px; text-align: center;">MODE</th>
-                ${matrixHeaderThs}
-                <th style="text-align: right; padding: 10px 12px; background: #312e81;">TOTAL (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${matrixRowsHtml}
-            </tbody>
-            <tfoot>
-              <tr class="total-row">
-                <td colspan="3" style="padding: 11px 12px; font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; font-size: 12px;">GRAND TOTAL</td>
-                ${matrixFooterTds}
-                <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 13px; background-color: #dcfce7;">
-                  ₹${matrix.grandTotal.toLocaleString('en-IN')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+          <div style="width: 100%; overflow-x: visible;">
+            <table style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: auto;">
+              <thead>
+                <tr>
+                  <th style="width: 34px; text-align: center; padding: ${thPadding}; font-size: ${thFontSize};">SL NO.</th>
+                  <th style="padding: ${thPadding}; font-size: ${thFontSize};">HMING (DONOR)</th>
+                  <th style="width: 66px; text-align: center; padding: ${thPadding}; font-size: ${thFontSize};">MODE</th>
+                  ${matrixHeaderThs}
+                  <th style="text-align: right; padding: ${thPadding}; background: #312e81; font-size: ${thFontSize}; white-space: nowrap;">TOTAL (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${matrixRowsHtml}
+              </tbody>
+              <tfoot>
+                <tr class="total-row">
+                  <td colspan="3" style="padding: ${tdPadding}; font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; font-size: ${tdFontSize};">GRAND TOTAL</td>
+                  ${matrixFooterTds}
+                  <td style="text-align: right; padding: ${tdPadding}; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: ${tdFontSize}; background-color: #dcfce7; white-space: nowrap;">
+                    ₹${matrix.grandTotal.toLocaleString('en-IN')}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
 
           ${signatureBlockHtml}
 
@@ -1640,9 +1665,13 @@ export const generateTransactionsPDFHtml = (
         <title>${orgDisplay} - Financial Statement</title>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <style>${sharedPrintStyles}</style>
+        <meta name="x-report-orientation" content="portrait" />
+        <style>
+          ${sharedPrintStyles}
+          @page { size: A4 portrait; margin: 10mm; }
+        </style>
       </head>
-      <body>
+      <body data-default-orientation="portrait" class="report-orientation-portrait">
         <div class="header-banner">
           <div class="header-left-wrap">
             ${avatarHtml}

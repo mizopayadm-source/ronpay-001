@@ -41,7 +41,12 @@ import {
   Banknote,
   MessageSquare,
   Target,
-  Printer
+  Printer,
+  HeartHandshake,
+  AlertTriangle,
+  Home,
+  HandHeart,
+  Info
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { 
@@ -316,15 +321,98 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return getMembers(selectedCampaignId);
   }, [selectedCampaignId]);
 
-  // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
+  // Helper to get formatted display metadata for any Bawm category
+  const getCategoryDisplayInfo = (cat: string) => {
+    switch (cat) {
+      case 'kumtluang':
+        return {
+          title: 'Kumtluang & Thlatin Bawm',
+          shortLabel: 'Kumtluang',
+          subtitle: 'Kohhran, YMA leh Pawl Thawhlawm / Membership Collections',
+          gradient: 'from-indigo-950 via-purple-950 to-slate-900',
+          borderColor: 'border-indigo-400/60',
+          accentColor: 'text-indigo-300',
+          badgeBg: 'bg-indigo-500/20 text-indigo-200 border-indigo-400/40'
+        };
+      case 'ralna':
+        return {
+          title: 'Ralna Bawm (Chhiatni)',
+          shortLabel: 'Ralna',
+          subtitle: 'Chhiatni, Sunna leh Ralna Pual Collections',
+          gradient: 'from-slate-950 via-rose-950 to-slate-900',
+          borderColor: 'border-rose-400/60',
+          accentColor: 'text-rose-300',
+          badgeBg: 'bg-rose-500/20 text-rose-200 border-rose-400/40'
+        };
+      case 'khawlsak':
+        return {
+          title: 'Khawlsak Bawm (Riangvai & In sak)',
+          shortLabel: 'Khawlsak',
+          subtitle: 'In sak, Damlo leh Riangvai Tanpuina Collections',
+          gradient: 'from-slate-950 via-emerald-950 to-slate-900',
+          borderColor: 'border-emerald-400/60',
+          accentColor: 'text-emerald-300',
+          badgeBg: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+        };
+      case 'rikrum':
+        return {
+          title: 'Rikrum Bawm (Emergency)',
+          shortLabel: 'Rikrum',
+          subtitle: 'Emergency, Chhiatrupna leh Accident Collections',
+          gradient: 'from-slate-950 via-amber-950 to-slate-900',
+          borderColor: 'border-amber-400/60',
+          accentColor: 'text-amber-300',
+          badgeBg: 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+        };
+      case 'others':
+        return {
+          title: 'Bawm Dangte (Others & Bills)',
+          shortLabel: 'Dangte',
+          subtitle: 'Utility Bills, Special Projects leh General Collections',
+          gradient: 'from-slate-950 via-sky-950 to-slate-900',
+          borderColor: 'border-sky-400/60',
+          accentColor: 'text-sky-300',
+          badgeBg: 'bg-sky-500/20 text-sky-200 border-sky-400/40'
+        };
+      default:
+        return {
+          title: 'All My Created Categories',
+          shortLabel: 'All Bawm',
+          subtitle: 'Consolidated Collections across all Categories',
+          gradient: 'from-indigo-950 via-slate-900 to-indigo-900',
+          borderColor: 'border-amber-400/60',
+          accentColor: 'text-amber-300',
+          badgeBg: 'bg-amber-400/20 text-amber-200 border-amber-400/40'
+        };
+    }
+  };
+
+  // 1. Text chung ber atan: NGO / Church / Hming / Title
   const headerTitle = useMemo(() => {
     if (selectedCampaignObj) {
       return selectedCampaignObj.title || selectedCampaignObj.orgName || creatorProfile.orgName || creatorProfile.name || 'RonPay Community';
     }
-    return creatorProfile.orgName || creatorProfile.name || (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM`);
+    if (selectedFilter !== 'all') {
+      const catInfo = getCategoryDisplayInfo(selectedFilter);
+      return catInfo.title;
+    }
+    return creatorProfile.orgName 
+      ? `${creatorProfile.orgName} (Consolidated Report)` 
+      : 'All My Created Categories (Consolidated Report)';
   }, [selectedCampaignObj, creatorProfile, selectedFilter]);
 
-  // 2. A hnuai ah: Veng / Khua / Location (Creator-in a dah luh)
+  // Subtitle / context
+  const headerSubtitle = useMemo(() => {
+    if (selectedCampaignObj) {
+      return selectedCampaignObj.orgName || creatorProfile.orgName || 'RonPay Verified Campaign';
+    }
+    if (selectedFilter !== 'all') {
+      return `${creatorProfile.orgName || creatorProfile.name || 'RonPay'} • All ${availableCampaigns.length} Campaigns in this Bawm`;
+    }
+    return `Consolidated Report • ${creatorCampaigns.length} Total Campaigns Across Categories`;
+  }, [selectedCampaignObj, creatorProfile, selectedFilter, availableCampaigns, creatorCampaigns]);
+
+  // 2. A hnuai ah: Veng / Khua / Location
   const headerLocation = useMemo(() => {
     if (selectedCampaignObj?.location) {
       return selectedCampaignObj.location;
@@ -335,8 +423,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return 'Mizoram, India';
   }, [selectedCampaignObj, creatorProfile]);
 
-  // Active uploaded image associated with campaign / QR
-  const activeCampaignImage = selectedCampaignObj?.imageUrl || (availableCampaigns.find(c => Boolean(c.imageUrl))?.imageUrl);
+  // Active uploaded image associated with campaign / QR:
+  // ONLY display an image if a SPECIFIC campaign is selected AND THAT specific campaign has an imageUrl!
+  // NEVER fall back to another random campaign's photo when viewing all campaigns or an entire category!
+  const activeCampaignImage = selectedCampaignId !== 'all' ? (selectedCampaignObj?.imageUrl || undefined) : undefined;
 
   const dateRangeText = startDate && endDate
     ? `${formatDateDDMMYYYY(startDate)} to ${formatDateDDMMYYYY(endDate)}`
@@ -349,54 +439,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     address: headerLocation
   } : undefined;
 
-  // Active target information for the current campaign or filter context
+  // Active target information for the current campaign:
+  // ONLY show target progress when a SPECIFIC campaign is selected AND that campaign has a configured target!
+  // Unrelated campaigns across different categories or categories as a whole MUST NEVER be artificially summed up!
   const activeTargetInfo: TargetExportInfo | null = useMemo(() => {
-    // 1. When a specific campaign is selected (selectedCampaignId !== 'all')
-    if (selectedCampaignId !== 'all') {
-      if (selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
-        const targetAmount = selectedCampaignObj.targetAmount;
-        const targetPeriod = selectedCampaignObj.targetPeriod;
-        const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
-        const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-        const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
-        const isCompleted = grandTotal >= targetAmount;
-        const remaining = Math.max(0, targetAmount - grandTotal);
-        const surplus = Math.max(0, grandTotal - targetAmount);
-
-        return {
-          targetAmount,
-          targetPeriod,
-          periodLabel,
-          periodSuffix,
-          progressPct,
-          isCompleted,
-          remaining,
-          surplus,
-          campaignTitle: selectedCampaignObj.title
-        };
-      }
-      // If the selected specific campaign has no target configured, DO NOT show/mix targets from other campaigns!
-      return null;
-    }
-
-    // 2. Only when "All My Campaigns in this Bawm" is selected (selectedCampaignId === 'all')
-    const targetedCampaigns = (selectedFilter === 'all' 
-      ? creatorCampaigns 
-      : creatorCampaigns.filter(c => c.category === selectedFilter)
-    ).filter(c => Boolean(c.targetAmount && c.targetAmount > 0));
-
-    if (targetedCampaigns.length === 1) {
-      const c = targetedCampaigns[0];
-      const targetAmount = c.targetAmount!;
-      const targetPeriod = c.targetPeriod;
+    if (selectedCampaignId !== 'all' && selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
+      const targetAmount = selectedCampaignObj.targetAmount;
+      const targetPeriod = selectedCampaignObj.targetPeriod;
       const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
       const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-      const campTxns = filteredTransactions.filter(t => t.campaignId === c.id || t.campaignTitle === c.title);
-      const campTotal = campTxns.reduce((sum, t) => sum + t.amount, 0);
-      const progressPct = targetAmount > 0 ? Math.round((campTotal / targetAmount) * 100) : 0;
-      const isCompleted = campTotal >= targetAmount;
-      const remaining = Math.max(0, targetAmount - campTotal);
-      const surplus = Math.max(0, campTotal - targetAmount);
+      const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
+      const isCompleted = grandTotal >= targetAmount;
+      const remaining = Math.max(0, targetAmount - grandTotal);
+      const surplus = Math.max(0, grandTotal - targetAmount);
 
       return {
         targetAmount,
@@ -407,30 +462,62 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         isCompleted,
         remaining,
         surplus,
-        campaignTitle: c.title
-      };
-    } else if (targetedCampaigns.length > 1) {
-      const combinedTarget = targetedCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
-      const progressPct = combinedTarget > 0 ? Math.round((grandTotal / combinedTarget) * 100) : 0;
-      const isCompleted = grandTotal >= combinedTarget;
-      const remaining = Math.max(0, combinedTarget - grandTotal);
-      const surplus = Math.max(0, grandTotal - combinedTarget);
-
-      return {
-        targetAmount: combinedTarget,
-        targetPeriod: undefined,
-        periodLabel: `${targetedCampaigns.length} Bawm Targets Combined`,
-        periodSuffix: '',
-        progressPct,
-        isCompleted,
-        remaining,
-        surplus,
-        campaignTitle: `${targetedCampaigns.length} Bawm Targets`
+        campaignTitle: selectedCampaignObj.title
       };
     }
 
     return null;
-  }, [selectedCampaignId, selectedCampaignObj, grandTotal, selectedFilter, creatorCampaigns, filteredTransactions]);
+  }, [selectedCampaignId, selectedCampaignObj, grandTotal]);
+
+  // Online vs Cash breakdown calculations
+  const onlineTotal = useMemo(() => {
+    return filteredTransactions.filter(t => t.paymentMethod === 'online').reduce((sum, t) => sum + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const cashTotal = useMemo(() => {
+    return filteredTransactions.filter(t => t.paymentMethod === 'cash').reduce((sum, t) => sum + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const campaignsWithTargetCount = useMemo(() => {
+    return availableCampaigns.filter(c => Boolean(c.targetAmount && c.targetAmount > 0)).length;
+  }, [availableCampaigns]);
+
+  // Category breakdown metrics for the consolidated overview card
+  const categoryOverviewStats = useMemo(() => {
+    const cats: { 
+      key: BawmCategory | 'others'; 
+      label: string; 
+      count: number; 
+      total: number; 
+      campaignCount: number;
+      badgeColor: string;
+    }[] = [
+      { key: 'kumtluang', label: 'Kumtluang & Thlatin', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-indigo-500/20 text-indigo-200 border-indigo-400/40' },
+      { key: 'ralna', label: 'Ralna (Chhiatni)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-rose-500/20 text-rose-200 border-rose-400/40' },
+      { key: 'khawlsak', label: 'Khawlsak (Riangvai)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' },
+      { key: 'rikrum', label: 'Rikrum (Emergency)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
+      { key: 'others', label: 'Bawm Dangte', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-sky-500/20 text-sky-200 border-sky-400/40' },
+    ];
+
+    const catMap = new Map(cats.map(c => [c.key, c]));
+
+    creatorCampaigns.forEach(c => {
+      const entry = catMap.get(c.category as any) || catMap.get('others');
+      if (entry) {
+        entry.campaignCount++;
+      }
+    });
+
+    filteredTransactions.forEach(t => {
+      const entry = catMap.get(t.category as any) || catMap.get('others');
+      if (entry) {
+        entry.count++;
+        entry.total += t.amount;
+      }
+    });
+
+    return cats.filter(c => c.campaignCount > 0 || c.total > 0);
+  }, [creatorCampaigns, filteredTransactions]);
 
   // Compute monthly trend for the live banner & reports with customizable month range
   const monthlyDistribution = useMemo(() => {
@@ -570,10 +657,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       alert('⚠️ He filter-ah hian transaction hmuh tur a awm rih lo.');
       return;
     }
+    const isMultiCategoryMode = isKumtluang || Boolean(selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 1);
     printTransactionsPDF(
       sortedTransactions, 
       `${headerTitle} - Financial Audit Statement`, 
-      isKumtluang,
+      isMultiCategoryMode,
       headerTitle,
       dateRangeText,
       activeCampaignImage,
@@ -803,11 +891,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   }}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition text-xs"
                 >
-                  <option value="kumtluang">Kumtluang Bawm (Category Matrix View)</option>
-                  <option value="ralna">Ralna Bawm (Chhiatni)</option>
-                  <option value="khawlsak">Khawlsak Bawm (Riangvai)</option>
+                  <option value="all">🌟 All My Created Categories (Zawng zawng)</option>
+                  <option value="kumtluang">Kumtluang & Thlatin Bawm (Matrix View)</option>
+                  <option value="ralna">Ralna Bawm (Chhiatni / Sunna)</option>
+                  <option value="khawlsak">Khawlsak Bawm (Riangvai & In sak)</option>
                   <option value="rikrum">Rikrum Bawm (Emergency)</option>
-                  <option value="all">All My Created Categories</option>
+                  <option value="others">Bawm Dangte (Others & Bills)</option>
                 </select>
               </div>
 
@@ -997,7 +1086,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             {/* Active Report Focus Banner with Uploaded Campaign Image (Spacious & High-Visibility) */}
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5.5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div className="flex items-start sm:items-center gap-3.5 sm:gap-4.5 min-w-0 flex-1">
-                {/* Vei lamah: Creator-in Thlalak a dah sa */}
+                {/* Vei lamah: Creator-in Thlalak a dah sa emaw Official Emblem */}
                 {activeCampaignImage ? (
                   <div 
                     onClick={() => onOpenImagePreview && onOpenImagePreview(
@@ -1021,32 +1110,78 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       </span>
                     </div>
                   </div>
+                ) : selectedCampaignObj ? (
+                  /* Specific Campaign selected, but has NO uploaded photo */
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-950/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md p-1 text-center">
+                    <ImageIcon className="w-7 h-7 text-indigo-400" />
+                    <span className="text-[8px] text-indigo-300 font-bold uppercase tracking-wider leading-none">No Photo</span>
+                    <span className="text-[7.5px] text-slate-400 font-semibold leading-none truncate max-w-[76px] mt-0.5">{selectedCampaignObj.category.toUpperCase()}</span>
+                  </div>
+                ) : selectedFilter !== 'all' ? (
+                  /* Category Selected, but "All Campaigns in this Bawm" */
+                  (() => {
+                    const catInfo = getCategoryDisplayInfo(selectedFilter);
+                    return (
+                      <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br ${catInfo.gradient} border-2 ${catInfo.borderColor} flex flex-col items-center justify-center shrink-0 p-1 text-center shadow-md select-none`}>
+                        {selectedFilter === 'kumtluang' ? (
+                          <Layers className="w-7 h-7 text-indigo-300" />
+                        ) : selectedFilter === 'ralna' ? (
+                          <HeartHandshake className="w-7 h-7 text-rose-300" />
+                        ) : selectedFilter === 'khawlsak' ? (
+                          <Home className="w-7 h-7 text-emerald-300" />
+                        ) : selectedFilter === 'rikrum' ? (
+                          <AlertTriangle className="w-7 h-7 text-amber-300" />
+                        ) : (
+                          <Sparkles className="w-7 h-7 text-sky-300" />
+                        )}
+                        <span className={`text-[8.5px] font-black uppercase tracking-wide mt-1 leading-tight ${catInfo.accentColor}`}>
+                          {catInfo.shortLabel}
+                        </span>
+                        <span className="text-[7px] font-bold bg-white/15 text-white px-1.5 py-0.5 rounded-md border border-white/20 mt-0.5">
+                          Category
+                        </span>
+                      </div>
+                    );
+                  })()
                 ) : (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
-                    <ImageIcon className="w-8 h-8 text-indigo-400" />
-                    <span className="text-[8.5px] text-indigo-300 font-bold uppercase tracking-wider">No Photo</span>
+                  /* "All My Created Categories" & "All Campaigns" */
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border-2 border-amber-400/70 flex flex-col items-center justify-center shrink-0 p-1 text-center shadow-md select-none">
+                    <BarChart3 className="w-7 h-7 text-amber-400" />
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-300 mt-1 leading-tight">
+                      ALL BAWM
+                    </span>
+                    <span className="text-[7px] font-bold bg-amber-400/20 text-amber-200 px-1.5 py-0.5 rounded-md border border-amber-400/30 mt-0.5">
+                      Overview
+                    </span>
                   </div>
                 )}
 
                 {/* Thlalak sir / hrul ah: Text Hierarchy */}
                 <div className="space-y-1 min-w-0 flex-1">
-                  {/* 1. Chung ber atan: NGO / Church / Hming / Title (Hawrawp Font Size lian hlek) */}
-                  <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-tight break-words">
-                    {headerTitle}
-                  </h3>
+                  {/* 1. Chung ber atan: NGO / Church / Hming / Title */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-tight break-words">
+                      {headerTitle}
+                    </h3>
+                    {selectedFilter !== 'all' && selectedCampaignId === 'all' && (
+                      <span className="text-[9px] font-extrabold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded-md">
+                        {availableCampaigns.length} Campaigns
+                      </span>
+                    )}
+                  </div>
 
-                  {/* 2. A hnuai ah: Veng / Khua / etc Creatorin a dah luh kha (Hawrawp te deuh zawk) */}
-                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5">
+                  {/* 2. Subtitle / Context */}
+                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5 truncate">
+                    <span>{headerSubtitle}</span>
+                  </p>
+
+                  {/* 3. Location */}
+                  <p className="text-[11px] sm:text-xs font-semibold text-slate-300 leading-normal flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>{headerLocation}</span>
                   </p>
 
-                  {/* 3. A hnuaiah: Reports & Financial Statements */}
-                  <p className="text-[11px] sm:text-xs font-bold text-sky-400 tracking-wide">
-                    Reports & Financial Statements
-                  </p>
-
-                  {/* 4. A hnuai leh ah: Trxn Date */}
+                  {/* 4. Trxn Date */}
                   <p className="text-[10.5px] sm:text-[11px] font-medium text-slate-300 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
                     <span>Trxn Date: <b className="text-white font-bold">{dateRangeText}</b></span>
@@ -1070,8 +1205,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* TARGET & COLLECTION PROGRESS CARD (When Target is Configured) */}
-            {activeTargetInfo && activeTargetInfo.targetAmount > 0 && (
+            {/* TARGET & COLLECTION PROGRESS OR CONSOLIDATED STATS CARD */}
+            {activeTargetInfo && activeTargetInfo.targetAmount > 0 ? (
+              /* SPECIFIC CAMPAIGN TARGET PROGRESS */
               <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border-2 border-indigo-500/60 p-3.5 sm:p-4.5 rounded-2xl text-white shadow-md space-y-2.5 animate-fadeIn">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-800/40 pb-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1150,6 +1286,106 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     />
                   </div>
                 </div>
+              </div>
+            ) : (
+              /* CONSOLIDATED / CATEGORY OVERVIEW STATS CARD */
+              <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border-2 border-indigo-500/40 p-3.5 sm:p-4 rounded-2xl text-white shadow-md space-y-3 animate-fadeIn">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-800/40 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/40 shrink-0">
+                      <BarChart3 className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div>
+                      <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wide">
+                        {selectedCampaignObj 
+                          ? `${selectedCampaignObj.title} • Performance Stats`
+                          : selectedFilter !== 'all' 
+                          ? `${getCategoryDisplayInfo(selectedFilter).shortLabel} Bawm • Overview Stats` 
+                          : 'All Categories Consolidated Stats'}
+                      </span>
+                      <p className="text-[10px] text-slate-300 font-medium">
+                        {selectedCampaignObj 
+                          ? 'Continuous / Open Collection (No Fixed Target Cap)'
+                          : `${availableCampaigns.length} Campaigns • Verified Audit & Collection Breakdown`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <span className="text-[10.5px] font-extrabold bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      Total: <b className="text-emerald-300 font-black">₹{grandTotal.toLocaleString('en-IN')}</b>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics 4-box Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
+                    <span className="text-[9.5px] text-indigo-300 font-bold uppercase block">📦 Active Campaigns</span>
+                    <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                      {selectedCampaignObj ? '1 Campaign' : `${availableCampaigns.length} Bawm`}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
+                    <span className="text-[9.5px] text-sky-400 font-bold uppercase block">👥 Donors & Txns</span>
+                    <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                      {uniqueDonorsCount} <span className="text-[10.5px] text-slate-300 font-medium">({totalCount} Txns)</span>
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
+                    <span className="text-[9.5px] text-indigo-300 font-bold uppercase block">⚡ Online (UPI)</span>
+                    <span className="text-sm sm:text-base font-black text-indigo-200 block mt-0.5">
+                      ₹{onlineTotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
+                    <span className="text-[9.5px] text-amber-400 font-bold uppercase block">💵 Cash (Counter)</span>
+                    <span className="text-sm sm:text-base font-black text-amber-200 block mt-0.5">
+                      ₹{cashTotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Category breakdown pills when "All Categories" is selected */}
+                {selectedFilter === 'all' && selectedCampaignId === 'all' && categoryOverviewStats.length > 0 && (
+                  <div className="pt-1 border-t border-indigo-950/80 space-y-1.5">
+                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Category Distribution:
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {categoryOverviewStats.map(cat => (
+                        <button
+                          key={cat.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedFilter(cat.key);
+                            setSelectedCampaignId('all');
+                          }}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition hover:scale-105 cursor-pointer flex items-center gap-1.5 ${cat.badgeColor}`}
+                          title={`Click to filter by ${cat.label}`}
+                        >
+                          <span>{cat.label}:</span>
+                          <b className="font-black text-white">₹{cat.total.toLocaleString('en-IN')}</b>
+                          <span className="text-[8.5px] opacity-80">({cat.count} txns)</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Helpful guidance note */}
+                {selectedCampaignId === 'all' && campaignsWithTargetCount > 0 && (
+                  <div className="text-[10px] text-slate-300/90 bg-indigo-950/50 border border-indigo-800/40 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span>
+                      Campaign {campaignsWithTargetCount}-in target ruahman a nei. Individual Target Progress leh completion rate en turin a chunga <b>"My Specific Campaign / QR"</b> ah campaign duh bik thlang rawh le.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 

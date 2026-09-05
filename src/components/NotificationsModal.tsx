@@ -1,30 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
   Bell, 
   CheckCheck, 
   CheckCircle2, 
   XCircle,
-  ArrowRight, 
   Clock, 
   Sparkles, 
   ShieldCheck, 
   Receipt, 
   Megaphone, 
   Trash2, 
-  CreditCard,
   Building2,
   Users,
-  Banknote
+  Banknote,
+  Lock,
+  ExternalLink,
+  Shield,
+  Layers,
+  User,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { Transaction, Campaign, CreatorProfile } from '../types';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
-import { approveCashTransaction, rejectCashTransaction } from '../utils/storage';
+import { 
+  approveCashTransaction, 
+  rejectCashTransaction, 
+  canApproveCashPayment, 
+  isCampaignCreator, 
+  getStoredUserPaidTxIds 
+} from '../utils/storage';
+import { getUserRole } from '../utils/rbac';
 
 export interface AppNotification {
   id: string;
-  type: 'payment' | 'announcement' | 'system' | 'bawm' | 'personal' | 'general';
-  categoryScope?: 'general' | 'personal';
+  type: 'payment' | 'announcement' | 'system' | 'bawm' | 'personal' | 'general' | 'campaign_review' | 'cash_approval';
+  categoryScope: 'general' | 'personal'; // 'general' = Common (Tlangpui), 'personal' = Private (Ta Bik)
   title: string;
   message: string;
   timestamp: string;
@@ -32,7 +44,10 @@ export interface AppNotification {
   amount?: number;
   transactionId?: string;
   campaignId?: string;
+  campaign?: Campaign;
+  transaction?: Transaction;
   tag?: string;
+  canApproveCash?: boolean;
 }
 
 interface NotificationsModalProps {
@@ -43,12 +58,19 @@ interface NotificationsModalProps {
   creatorProfile?: CreatorProfile | null;
   onOpenReceipt?: (tx: Transaction) => void;
   onNavigateToCampaign?: (campaign: Campaign) => void;
+  onOpenCampaignReview?: (campaign: Campaign) => void;
   onOpenMemberRoll?: () => void;
   onUnreadCountChange?: (count: number) => void;
   onTransactionUpdated?: (tx: Transaction) => void;
 }
 
 const STORAGE_KEY = 'ronpay_notifications_v2';
+
+const formatRupees = (val?: number | string | null): string => {
+  if (val === undefined || val === null || val === '') return '0';
+  const num = Number(val);
+  return isNaN(num) ? '0' : num.toLocaleString('en-IN');
+};
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   isOpen,
@@ -58,32 +80,75 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   creatorProfile,
   onOpenReceipt,
   onNavigateToCampaign,
+  onOpenCampaignReview,
   onOpenMemberRoll,
   onUnreadCountChange,
   onTransactionUpdated,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'general' | 'personal'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'common' | 'private'>('all');
   const [rejectingTxId, setRejectingTxId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('Cash pawisa dawn a ni lo');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const pendingCashList = useMemo(() => {
-    return transactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
-  }, [transactions]);
+  // Determine current user's role hierarchy & permissions
+  const userRole = useMemo(() => getUserRole(creatorProfile), [creatorProfile]);
+  const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || !!creatorProfile?.isAdmin;
+  const isModerator = userRole === 'MODERATOR';
+  const isCreator = userRole === 'CREATOR' || (!!creatorProfile?.isApproved && !isAdmin && !isModerator);
+  const isGeneralMember = !isAdmin && !isModerator && !isCreator;
 
+  // Stored read-states
+  const [readStateMap, setReadStateMap] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const map: Record<string, boolean> = {};
+          parsed.forEach((item: any) => {
+            if (item && item.id) map[item.id] = !!item.read;
+          });
+          return map;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  });
+
+  // Handle cash approval
   const handleApproveCashInNotif = (tx: Transaction) => {
-    const verifier = creatorProfile?.name || 'Bawm Creator';
-    const updated = approveCashTransaction(tx.id, verifier);
+    const auth = canApproveCashPayment(tx, campaigns, creatorProfile);
+    if (!auth.allowed) {
+      setToastMessage(`⚠️ ${auth.reason || 'He cash pekna hi approve phalna i nei lo.'}`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    const verifier = creatorProfile?.name || (isAdmin ? 'Admin' : 'Bawm Creator');
+    const updated = approveCashTransaction(tx.id, verifier, creatorProfile, campaigns);
     if (updated) {
       onTransactionUpdated?.(updated);
       setToastMessage(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
       setTimeout(() => setToastMessage(null), 3500);
+    } else {
+      setToastMessage(`⚠️ Pawm theih a ni lo.`);
+      setTimeout(() => setToastMessage(null), 3500);
     }
   };
 
+  // Handle cash rejection
   const handleRejectCashInNotif = (tx: Transaction, reason?: string) => {
-    const verifier = creatorProfile?.name || 'Bawm Creator';
-    const updated = rejectCashTransaction(tx.id, verifier, reason || 'Cash pawisa dawn a ni lo');
+    const auth = canApproveCashPayment(tx, campaigns, creatorProfile);
+    if (!auth.allowed) {
+      setToastMessage(`⚠️ ${auth.reason || 'He cash pekna hi hnawl phalna i nei lo.'}`);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    const verifier = creatorProfile?.name || (isAdmin ? 'Admin' : 'Bawm Creator');
+    const updated = rejectCashTransaction(tx.id, verifier, reason || 'Cash pawisa dawn a ni lo', creatorProfile, campaigns);
     if (updated) {
       onTransactionUpdated?.(updated);
       setRejectingTxId(null);
@@ -92,147 +157,378 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     }
   };
 
-  // Load custom/system notifications with saved state
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+  // Build role-scoped notifications
+  const allNotifications = useMemo(() => {
+    const list: AppNotification[] = [];
 
-    // Default Seed Notifications with General + Personal classifications
-    const now = new Date();
-    return [
+    // =========================================================================
+    // 1. COMMON / GENERAL (Tlangpui) - Available to all users
+    // =========================================================================
+    const commonItems: AppNotification[] = [
       {
-        id: 'notif-sys-camera',
+        id: 'common-camera-scanner',
         type: 'general',
         categoryScope: 'general',
-        title: 'Camera & QR Scanner Update',
-        message: 'Live Camera QR Scanner leh Offline Mode a in-update tawh a, Phone App leh Browser-ah rang takin UPI QR a scan theih e.',
-        timestamp: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-        read: false,
-        tag: 'General'
+        title: 'Camera & Live QR Scanner Update',
+        message: 'Phone camera hmangin direct QR scan theih reng a ni a, gallery file select leh offline sync support a awm bawk e.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+        read: readStateMap['common-camera-scanner'] ?? false,
+        tag: 'Common Update'
       },
       {
-        id: 'notif-sys-kumtluang',
-        type: 'general',
-        categoryScope: 'general',
-        title: 'Kumtluang Member Roll Manager',
-        message: 'Kumtluang Member Roll Manager-ah bial/veng member thar registration leh chhiarna dashboard a nung reng e.',
-        timestamp: new Date(now.getTime() - 1000 * 60 * 180).toISOString(),
-        read: false,
-        tag: 'General'
-      },
-      {
-        id: 'notif-sys-security',
+        id: 'common-upi-zerofee',
         type: 'general',
         categoryScope: 'general',
         title: 'RonPay Direct UPI Protocol & 0% Fee',
-        message: 'RonPay hmanga sum thawh leh pekna zawng zawngte hi UPI direct-in Creator account-ah 0% fee deduction-in a lut nghal zel e.',
-        timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24).toISOString(),
-        read: true,
-        tag: 'General'
+        message: 'RonPay hmanga thawh leh pekna zawng zawng hi UPI direct-in Creator account-ah 0% fee deduction-in a lut nghal zel e.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+        read: readStateMap['common-upi-zerofee'] ?? true,
+        tag: 'General Notice'
+      },
+      {
+        id: 'common-kumtluang-roll',
+        type: 'general',
+        categoryScope: 'general',
+        title: 'Kumtluang Member Roll Dashboard',
+        message: 'Kumtluang Member Roll Manager hmangin khawtlang, kohhran leh pawl hrang hrang member roll awlsam takin a enkawl theih e.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
+        read: readStateMap['common-kumtluang-roll'] ?? true,
+        tag: 'System Update'
+      },
+      {
+        id: 'common-offline-cache',
+        type: 'general',
+        categoryScope: 'general',
+        title: 'Offline Mode & Local Storage Cache',
+        message: 'Internet connection a chhiat pawhin i transaction data leh saved QRs te i phone/browser storage-ah a him reng.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+        read: readStateMap['common-offline-cache'] ?? true,
+        tag: 'General Notice'
       }
     ];
-  });
 
-  // Merge recent user transactions into notifications as personal notifications
-  const allNotifications = useMemo(() => {
-    const personalNotifs: AppNotification[] = [];
+    list.push(...commonItems);
 
-    // Convert transactions to personal notifications
-    transactions.slice(0, 15).forEach(tx => {
-      const isRead = notifications.find(n => n.id === `tx-notif-${tx.id}`)?.read ?? false;
-      const isCash = tx.paymentMethod === 'cash';
+    // =========================================================================
+    // 2. PRIVATE (Mimal / Ta Bik) - STRICT ROLE ISOLATION
+    // =========================================================================
 
-      if (isCash) {
-        if (tx.status === 'pending_verification') {
-          personalNotifs.push({
-            id: `tx-notif-${tx.id}`,
-            type: 'personal',
-            categoryScope: 'personal',
-            title: `Cash Fiah Mek: ₹${tx.amount.toLocaleString('en-IN')}`,
-            message: `${tx.campaignTitle || 'RonPay Bawm'}-ah ₹${tx.amount.toLocaleString('en-IN')} cash i thehlut a, Creator/Admin-in a lo enfiah mek e. (Token: ${tx.id})`,
-            timestamp: tx.timestamp,
-            read: isRead,
-            amount: tx.amount,
-            transactionId: tx.id,
-            campaignId: tx.campaignId,
-            tag: 'Cash Fiah Mek'
-          });
-        } else if (tx.status === 'completed') {
-          personalNotifs.push({
-            id: `tx-notif-${tx.id}`,
-            type: 'personal',
-            categoryScope: 'personal',
-            title: `Cash Dawn Fel: ₹${tx.amount.toLocaleString('en-IN')}`,
-            message: `${tx.campaignTitle || 'RonPay Bawm'}-ah ₹${tx.amount.toLocaleString('en-IN')} cash pek chu ${tx.verifiedBy || 'Creator/Admin'}-in a dawng fel ta e.`,
-            timestamp: tx.verifiedAt || tx.timestamp,
-            read: isRead,
-            amount: tx.amount,
-            transactionId: tx.id,
-            campaignId: tx.campaignId,
-            tag: 'Cash Dawng Fel'
-          });
-        } else if (tx.status === 'rejected') {
-          personalNotifs.push({
-            id: `tx-notif-${tx.id}`,
-            type: 'personal',
-            categoryScope: 'personal',
-            title: `Cash Hnawl A Ni: ₹${tx.amount.toLocaleString('en-IN')}`,
-            message: `${tx.campaignTitle || 'RonPay Bawm'}-ah ₹${tx.amount.toLocaleString('en-IN')} cash pek chu hnawl a ni. ${tx.rejectionReason ? `Chhan: ${tx.rejectionReason}` : ''}`,
-            timestamp: tx.rejectedAt || tx.timestamp,
-            read: isRead,
-            amount: tx.amount,
-            transactionId: tx.id,
-            campaignId: tx.campaignId,
-            tag: 'Cash Hnawl'
-          });
+    // -------------------------------------------------------------------------
+    // A. CREATOR: "ama bawm chhung a mi poisa pek lo kal te"
+    // -------------------------------------------------------------------------
+    if (isCreator && creatorProfile) {
+      // Find all campaigns created by this creator
+      const myCampaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+      const myCampaignIds = new Set(myCampaigns.map(c => String(c.id).toLowerCase().trim()));
+      const myCampaignTitles = new Set(myCampaigns.map(c => (c.title || '').toLowerCase().trim()));
+
+      // Incoming transactions specifically for this creator's campaigns
+      transactions.forEach(tx => {
+        const txCampId = String(tx.campaignId || '').toLowerCase().trim();
+        const txCampTitle = String(tx.campaignTitle || '').toLowerCase().trim();
+        const isForMyCampaign = (txCampId && myCampaignIds.has(txCampId)) || (txCampTitle && myCampaignTitles.has(txCampTitle));
+
+        if (isForMyCampaign) {
+          const isRead = readStateMap[`creator-tx-${tx.id}`] ?? false;
+
+          if (tx.paymentMethod === 'cash') {
+            if (tx.status === 'pending_verification') {
+              list.push({
+                id: `creator-tx-${tx.id}`,
+                type: 'cash_approval',
+                categoryScope: 'personal',
+                title: `Cash Fiah Ngai: ₹${formatRupees(tx.amount)}`,
+                message: `"${tx.campaignTitle || 'I Bawm'}"-ah ${tx.donorName || 'Petu'} in ₹${formatRupees(tx.amount)} cash a thehlut a, pawisa i dawn fel tawh chuan lo pawm (Approve) rawh le. (Token: ${tx.id})`,
+                timestamp: tx.timestamp,
+                read: isRead,
+                amount: tx.amount,
+                transactionId: tx.id,
+                campaignId: tx.campaignId,
+                transaction: tx,
+                tag: 'Cash Fiah Ngai',
+                canApproveCash: true // Creator's own campaign!
+              });
+            } else if (tx.status === 'completed') {
+              list.push({
+                id: `creator-tx-${tx.id}`,
+                type: 'payment',
+                categoryScope: 'personal',
+                title: `Cash Dawn Fel: ₹${formatRupees(tx.amount)}`,
+                message: `"${tx.campaignTitle || 'I Bawm'}"-ah ${tx.donorName || 'Petu'} cash pek ₹${formatRupees(tx.amount)} chu ${tx.verifiedBy || 'Creator'}-in a dawng fel ta e.`,
+                timestamp: tx.verifiedAt || tx.timestamp,
+                read: isRead,
+                amount: tx.amount,
+                transactionId: tx.id,
+                campaignId: tx.campaignId,
+                transaction: tx,
+                tag: 'Cash Dawng Fel'
+              });
+            } else if (tx.status === 'rejected') {
+              list.push({
+                id: `creator-tx-${tx.id}`,
+                type: 'personal',
+                categoryScope: 'personal',
+                title: `Cash Hnawl A Ni: ₹${formatRupees(tx.amount)}`,
+                message: `"${tx.campaignTitle || 'I Bawm'}"-a ${tx.donorName || 'Petu'} cash pek ₹${formatRupees(tx.amount)} chu hnawl a ni. ${tx.rejectionReason ? `(Chhan: ${tx.rejectionReason})` : ''}`,
+                timestamp: tx.rejectedAt || tx.timestamp,
+                read: isRead,
+                amount: tx.amount,
+                transactionId: tx.id,
+                campaignId: tx.campaignId,
+                transaction: tx,
+                tag: 'Cash Hnawl'
+              });
+            }
+          } else {
+            // Online UPI payment to creator's campaign
+            list.push({
+              id: `creator-tx-${tx.id}`,
+              type: 'payment',
+              categoryScope: 'personal',
+              title: `UPI Thawhlawm Lo Lut: ₹${formatRupees(tx.amount)}`,
+              message: `"${tx.campaignTitle || 'I Bawm'}"-ah ${tx.isAnonymous ? 'Anonymous' : (tx.donorName || 'Petu')} hnen atangin ₹${formatRupees(tx.amount)} UPI direct payment a lo lut e. (Txn: ${tx.id})`,
+              timestamp: tx.timestamp,
+              read: isRead,
+              amount: tx.amount,
+              transactionId: tx.id,
+              campaignId: tx.campaignId,
+              transaction: tx,
+              tag: 'UPI Bawm Lut'
+            });
+          }
         }
-      } else {
-        // Online UPI payment
-        personalNotifs.push({
-          id: `tx-notif-${tx.id}`,
-          type: 'personal',
+      });
+
+      // Creator account profile notification
+      list.push({
+        id: 'creator-profile-status',
+        type: 'personal',
+        categoryScope: 'personal',
+        title: `Creator Status: ${creatorProfile.name}`,
+        message: `I Creator Profile hi approved a ni a, Bawm ${myCampaigns.length} i nei e. Ama bawm siam a mi cash chauh i approve thei tih hria ang che.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+        read: readStateMap['creator-profile-status'] ?? true,
+        tag: 'Creator Profile'
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // B. MODERATOR: "Moderator in Creator new Campaign lo kal tea hran theuhin anmahni ta tur theuh a lo kal bawk tur a ni"
+    // -------------------------------------------------------------------------
+    if (isModerator) {
+      // Find Creator new campaigns (especially pending ones, or recently added)
+      const pendingReviewCampaigns = campaigns.filter(c => !c.isApproved || c.status === 'pending' || c.status === 'pending_approval');
+      const allCreatorCampaigns = campaigns.slice(0, 10);
+
+      // Pending campaign reviews for Moderator
+      pendingReviewCampaigns.forEach(camp => {
+        const isRead = readStateMap[`mod-review-${camp.id}`] ?? false;
+        list.push({
+          id: `mod-review-${camp.id}`,
+          type: 'campaign_review',
           categoryScope: 'personal',
-          title: `Online UPI Pekna Fel: ₹${tx.amount.toLocaleString('en-IN')}`,
-          message: `${tx.campaignTitle || 'RonPay Bawm'}-ah ₹${tx.amount.toLocaleString('en-IN')} i pe tlang fel e. Txn: ${tx.id}`,
+          title: `Creator Campaign Thar Endik Tur: "${camp.title}"`,
+          message: `Creator ${camp.creatorName || camp.createdBy || 'Creator'} (${camp.orgName || 'Pawl'}) in ${camp.category} bawm thar "${camp.title}" a thehlut a. Moderator i nih angin endik (Review) a pawm/hnawl tur a ni e.${camp.targetAmount ? ` Target: ₹${formatRupees(camp.targetAmount)}.` : ''}`,
+          timestamp: camp.createdAt || new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+          read: isRead,
+          campaignId: camp.id,
+          campaign: camp,
+          tag: 'Moderator Review'
+        });
+      });
+
+      // Show recently registered creator campaigns
+      if (pendingReviewCampaigns.length === 0 && allCreatorCampaigns.length > 0) {
+        allCreatorCampaigns.slice(0, 3).forEach(camp => {
+          list.push({
+            id: `mod-recent-${camp.id}`,
+            type: 'campaign_review',
+            categoryScope: 'personal',
+            title: `Creator Campaign: "${camp.title}"`,
+            message: `Creator ${camp.creatorName || camp.createdBy} bawm "${camp.title}" hi Moderator queue-ah audit fel a ni tawh e.`,
+            timestamp: camp.createdAt || new Date(Date.now() - 1000 * 60 * 300).toISOString(),
+            read: readStateMap[`mod-recent-${camp.id}`] ?? true,
+            campaignId: camp.id,
+            campaign: camp,
+            tag: 'Moderated Campaign'
+          });
+        });
+      }
+
+      // Moderator Role Guidance
+      list.push({
+        id: 'mod-role-guidance',
+        type: 'personal',
+        categoryScope: 'personal',
+        title: 'Moderator Desk: Campaign Content Clearance',
+        message: 'Moderator chuan Creator campaign thar lo lut leh content endikna i nei a. Cash pawisa approve phalna erawh Creator (ama bawm) leh Admin chauhin an nei a ni.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
+        read: readStateMap['mod-role-guidance'] ?? false,
+        tag: 'Moderator Desk'
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // C. ADMIN / SUPER ADMIN: "Chutiangin Admin / Super Admin pawh a hran vek in a awm ang, chumi tur chuan thliar fai rawh"
+    // -------------------------------------------------------------------------
+    if (isAdmin) {
+      // 1. All pending cash transactions across the platform
+      const pendingCashTxs = transactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
+      pendingCashTxs.forEach(tx => {
+        const isRead = readStateMap[`admin-cash-${tx.id}`] ?? false;
+        list.push({
+          id: `admin-cash-${tx.id}`,
+          type: 'cash_approval',
+          categoryScope: 'personal',
+          title: `Admin Cash Clearance: ₹${formatRupees(tx.amount)}`,
+          message: `"${tx.campaignTitle || tx.campaignId}"-ah ${tx.donorName || 'Petu'} cash thehluh ₹${formatRupees(tx.amount)} hi verification nghah mek a ni. Admin i nih angin he cash payment hi i approve / hnawl thei e. (Token: ${tx.id})`,
           timestamp: tx.timestamp,
           read: isRead,
           amount: tx.amount,
           transactionId: tx.id,
           campaignId: tx.campaignId,
-          tag: 'UPI Receipt'
+          transaction: tx,
+          tag: 'Admin Cash Action',
+          canApproveCash: true // Admin has global approval authority
         });
-      }
-    });
+      });
 
-    // Combine personal notifications with general/system notifications
-    const combined = [...personalNotifs];
-    notifications.forEach(n => {
-      if (!combined.some(c => c.id === n.id)) {
-        // Ensure categoryScope is assigned
-        const withScope: AppNotification = {
-          ...n,
-          categoryScope: n.categoryScope || (n.type === 'personal' || n.type === 'payment' ? 'personal' : 'general')
-        };
-        combined.push(withScope);
-      }
-    });
+      // 2. Pending Creator New Campaigns requiring clearance
+      const pendingCampaigns = campaigns.filter(c => !c.isApproved || c.status === 'pending' || c.status === 'pending_approval');
+      pendingCampaigns.forEach(camp => {
+        const isRead = readStateMap[`admin-camp-${camp.id}`] ?? false;
+        list.push({
+          id: `admin-camp-${camp.id}`,
+          type: 'campaign_review',
+          categoryScope: 'personal',
+          title: `Admin Campaign Review: "${camp.title}"`,
+          message: `Creator ${camp.creatorName || camp.createdBy || 'Creator'} (${camp.orgName || 'Pawl'}) thehluh "${camp.title}" approval nghah mek a ni. Admin clearance pek a ngai e.`,
+          timestamp: camp.createdAt || new Date(Date.now() - 1000 * 60 * 100).toISOString(),
+          read: isRead,
+          campaignId: camp.id,
+          campaign: camp,
+          tag: 'Admin Review'
+        });
+      });
+
+      // 3. Platform Ledger & Reserve status
+      list.push({
+        id: 'admin-system-ledger',
+        type: 'personal',
+        categoryScope: 'personal',
+        title: userRole === 'SUPER_ADMIN' ? '👑 Super Admin Master Ledger' : '🛡️ Admin Master Ledger',
+        message: `Platform-ah transactions ${transactions.length} leh campaigns ${campaigns.length} a awm mek e. Cash verification leh creator registration te fiah reng a ni.`,
+        timestamp: new Date(Date.now() - 1000 * 60 * 150).toISOString(),
+        read: readStateMap['admin-system-ledger'] ?? true,
+        tag: 'Platform Ledger'
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // D. GENERAL MEMBER / DONOR / GUEST: User's personal contributions
+    // -------------------------------------------------------------------------
+    if (isGeneralMember) {
+      const userPaidIds = new Set(getStoredUserPaidTxIds().map(id => String(id).toLowerCase().trim()));
+      const userTxs = transactions.filter(tx => {
+        const idMatch = userPaidIds.has(String(tx.id).toLowerCase().trim());
+        const nameMatch = creatorProfile?.name && tx.donorName && tx.donorName.toLowerCase().trim() === creatorProfile.name.toLowerCase().trim();
+        const phoneMatch = creatorProfile?.phone && tx.donorPhone && tx.donorPhone === creatorProfile.phone;
+        return idMatch || nameMatch || phoneMatch;
+      });
+
+      // If user contributed, show personal receipts
+      userTxs.forEach(tx => {
+        const isRead = readStateMap[`user-tx-${tx.id}`] ?? false;
+        if (tx.paymentMethod === 'cash') {
+          if (tx.status === 'pending_verification') {
+            list.push({
+              id: `user-tx-${tx.id}`,
+              type: 'personal',
+              categoryScope: 'personal',
+              title: `Cash Fiah Mek: ₹${formatRupees(tx.amount)}`,
+              message: `"${tx.campaignTitle || 'RonPay Bawm'}"-ah ₹${formatRupees(tx.amount)} cash i thehlut a. Bawm Siamtu emaw Admin-in an lo enfiah a, official receipt an pe thuai ang che. (Token: ${tx.id})`,
+              timestamp: tx.timestamp,
+              read: isRead,
+              amount: tx.amount,
+              transactionId: tx.id,
+              campaignId: tx.campaignId,
+              transaction: tx,
+              tag: 'Cash Fiah Mek',
+              canApproveCash: false // Member CANNOT approve!
+            });
+          } else if (tx.status === 'completed') {
+            list.push({
+              id: `user-tx-${tx.id}`,
+              type: 'payment',
+              categoryScope: 'personal',
+              title: `Cash Dawn Fel: ₹${formatRupees(tx.amount)}`,
+              message: `"${tx.campaignTitle || 'RonPay Bawm'}"-a i cash pek ₹${formatRupees(tx.amount)} chu ${tx.verifiedBy || 'Creator'}-in a dawng fel ta e.`,
+              timestamp: tx.verifiedAt || tx.timestamp,
+              read: isRead,
+              amount: tx.amount,
+              transactionId: tx.id,
+              campaignId: tx.campaignId,
+              transaction: tx,
+              tag: 'Cash Dawn Fel'
+            });
+          } else if (tx.status === 'rejected') {
+            list.push({
+              id: `user-tx-${tx.id}`,
+              type: 'personal',
+              categoryScope: 'personal',
+              title: `Cash Hnawl A Ni: ₹${formatRupees(tx.amount)}`,
+              message: `"${tx.campaignTitle || 'RonPay Bawm'}"-a i cash pek ₹${formatRupees(tx.amount)} chu hnawl a ni. ${tx.rejectionReason ? `Chhan: ${tx.rejectionReason}` : ''}`,
+              timestamp: tx.rejectedAt || tx.timestamp,
+              read: isRead,
+              amount: tx.amount,
+              transactionId: tx.id,
+              campaignId: tx.campaignId,
+              transaction: tx,
+              tag: 'Cash Hnawl'
+            });
+          }
+        } else {
+          // Online UPI
+          list.push({
+            id: `user-tx-${tx.id}`,
+            type: 'payment',
+            categoryScope: 'personal',
+            title: `UPI Pekna Hlawhtling: ₹${formatRupees(tx.amount)}`,
+            message: `"${tx.campaignTitle || 'RonPay Bawm'}"-ah ₹${formatRupees(tx.amount)} i pe tlang fel e. Txn: ${tx.id}`,
+            timestamp: tx.timestamp,
+            read: isRead,
+            amount: tx.amount,
+            transactionId: tx.id,
+            campaignId: tx.campaignId,
+            transaction: tx,
+            tag: 'UPI Receipt'
+          });
+        }
+      });
+
+      // Member welcome note
+      list.push({
+        id: 'member-welcome-note',
+        type: 'personal',
+        categoryScope: 'personal',
+        title: 'RonPay Mimal Thawhlawm Sulhnu',
+        message: 'Bawm hrang hrang i thawhna receipt leh cash status te hetah hian i hmu zel thei ang. Cash payment hi bawm siamtu leh admin chauhin an approve thei a ni.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 200).toISOString(),
+        read: readStateMap['member-welcome-note'] ?? true,
+        tag: 'Mimal Note'
+      });
+    }
 
     // Sort newest first
-    return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [transactions, notifications]);
+    return list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [campaigns, transactions, creatorProfile, userRole, isAdmin, isModerator, isCreator, isGeneralMember, readStateMap]);
 
-  // Sync unread count back to parent header
+  // Synchronize unread count back to the Bell icon in Header
   const unreadCount = useMemo(() => {
     return allNotifications.filter(n => !n.read).length;
   }, [allNotifications]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (onUnreadCountChange) {
       onUnreadCountChange(unreadCount);
     }
@@ -240,28 +536,28 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Mark a single notification as read
   const handleMarkAsRead = (id: string) => {
-    const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
-    // If it's a tx-notif not yet in local state, save it
-    if (!updated.some(n => n.id === id)) {
-      const notif = allNotifications.find(n => n.id === id);
-      if (notif) {
-        updated.push({ ...notif, read: true });
-      }
-    }
-    setNotifications(updated);
+    const nextMap = { ...readStateMap, [id]: true };
+    setReadStateMap(nextMap);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const stored = Object.keys(nextMap).map(k => ({ id: k, read: nextMap[k] }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
     } catch (e) {
       console.error(e);
     }
   };
 
+  // Mark all as read
   const handleMarkAllAsRead = () => {
-    const updated = allNotifications.map(n => ({ ...n, read: true }));
-    setNotifications(updated);
+    const nextMap = { ...readStateMap };
+    allNotifications.forEach(n => {
+      nextMap[n.id] = true;
+    });
+    setReadStateMap(nextMap);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const stored = Object.keys(nextMap).map(k => ({ id: k, read: true }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
     } catch (e) {
       console.error(e);
     }
@@ -270,8 +566,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     }
   };
 
+  // Clear all
   const handleClearNotifications = () => {
-    setNotifications([]);
+    const nextMap: Record<string, boolean> = {};
+    allNotifications.forEach(n => {
+      nextMap[n.id] = true;
+    });
+    setReadStateMap(nextMap);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch (e) {
@@ -282,18 +583,21 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     }
   };
 
+  // Filtered notifications
   const filteredNotifications = allNotifications.filter(n => {
-    if (filter === 'general') {
-      return n.categoryScope === 'general' || n.type === 'general' || n.type === 'system' || n.type === 'announcement' || n.type === 'bawm';
+    if (activeTab === 'common') {
+      return n.categoryScope === 'general';
     }
-    if (filter === 'personal') {
-      return n.categoryScope === 'personal' || n.type === 'personal' || n.type === 'payment';
+    if (activeTab === 'private') {
+      return n.categoryScope === 'personal';
     }
     return true;
   });
 
-  const generalCount = allNotifications.filter(n => n.categoryScope === 'general' || n.type === 'general' || n.type === 'system' || n.type === 'announcement' || n.type === 'bawm').length;
-  const personalCount = allNotifications.filter(n => n.categoryScope === 'personal' || n.type === 'personal' || n.type === 'payment').length;
+  const commonCount = allNotifications.filter(n => n.categoryScope === 'general').length;
+  const privateCount = allNotifications.filter(n => n.categoryScope === 'personal').length;
+  const commonUnread = allNotifications.filter(n => n.categoryScope === 'general' && !n.read).length;
+  const privateUnread = allNotifications.filter(n => n.categoryScope === 'personal' && !n.read).length;
 
   return (
     <div 
@@ -305,9 +609,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="p-4 bg-slate-950/80 border-b border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-xs">
               <Bell className="w-5 h-5" />
             </div>
             <div>
@@ -319,7 +623,28 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11.5px] text-slate-400">General & Personal information, receipts leh updates</p>
+              
+              {/* Role Scope Indicator */}
+              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
+                <span>Scope:</span>
+                <span className={`px-2 py-0.5 rounded-md font-bold text-[10.5px] border ${
+                  isAdmin 
+                    ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                    : isModerator
+                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                    : isCreator
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  {isAdmin 
+                    ? '👑 Admin Scope' 
+                    : isModerator 
+                    ? '⚖️ Moderator Scope' 
+                    : isCreator 
+                    ? `🏷️ Creator (${creatorProfile?.name || 'Bawm Siamtu'})` 
+                    : '👤 Member / Donor Scope'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -345,50 +670,67 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         </div>
 
-        {/* Filter Tabs: All, General, Personal */}
-        <div className="flex items-center gap-1 p-2 bg-slate-950/40 border-b border-slate-800/60 text-xs">
+        {/* Tab Selector: ALL | COMMON (Tlangpui) | PRIVATE (Mimal / Ta Bik) */}
+        <div className="flex items-center gap-1 p-2 bg-slate-950/60 border-b border-slate-800/80 text-xs">
           <button
             type="button"
-            onClick={() => setFilter('all')}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg font-bold text-center transition cursor-pointer ${
-              filter === 'all'
-                ? 'bg-amber-500 text-slate-950 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            onClick={() => setActiveTab('all')}
+            className={`flex-1 py-2 px-2 rounded-xl font-bold text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'all'
+                ? 'bg-slate-800 text-amber-400 border border-amber-400/40 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            All ({allNotifications.length})
+            <Layers className="w-3.5 h-3.5" />
+            <span>All ({allNotifications.length})</span>
           </button>
+
           <button
             type="button"
-            onClick={() => setFilter('general')}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg font-bold text-center transition cursor-pointer flex items-center justify-center gap-1 ${
-              filter === 'general'
-                ? 'bg-sky-500 text-slate-950 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            onClick={() => setActiveTab('common')}
+            className={`flex-1 py-2 px-2 rounded-xl font-bold text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'common'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <Megaphone className="w-3.5 h-3.5" />
-            General ({generalCount})
+            <Megaphone className="w-3.5 h-3.5 text-sky-400" />
+            <span>Common ({commonCount})</span>
+            {commonUnread > 0 && (
+              <span className="w-2 h-2 rounded-full bg-sky-400" />
+            )}
           </button>
+
           <button
             type="button"
-            onClick={() => setFilter('personal')}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg font-bold text-center transition cursor-pointer flex items-center justify-center gap-1 ${
-              filter === 'personal'
-                ? 'bg-emerald-500 text-slate-950 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            onClick={() => setActiveTab('private')}
+            className={`flex-1 py-2 px-2 rounded-xl font-bold text-center transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'private'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <Receipt className="w-3.5 h-3.5" />
-            Personal ({personalCount})
+            {isCreator ? (
+              <Receipt className="w-3.5 h-3.5 text-amber-400" />
+            ) : isModerator ? (
+              <Shield className="w-3.5 h-3.5 text-blue-400" />
+            ) : isAdmin ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            ) : (
+              <User className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>Private ({privateCount})</span>
+            {privateUnread > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+            )}
           </button>
         </div>
 
-        {/* Notification List Body */}
+        {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
-          {/* Toast Message */}
+          {/* Action Feedback Toast */}
           {toastMessage && (
-            <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl flex items-center justify-between animate-fadeIn mb-2">
+            <div className="p-3 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl flex items-center justify-between animate-fadeIn">
               <span>{toastMessage}</span>
               <button onClick={() => setToastMessage(null)} className="text-emerald-400 hover:text-white cursor-pointer ml-2">
                 <X className="w-4 h-4" />
@@ -396,31 +738,23 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             </div>
           )}
 
-          {/* Pending Cash Approvals Queue Alert */}
-          {pendingCashList.length > 0 && (
-            <div className="bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/90 border-2 border-amber-500/50 rounded-2xl p-3.5 space-y-2 text-xs shadow-md animate-fadeIn">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-xs animate-pulse">
-                    <Banknote className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                      <span>💰 Cash Fiah Ngai ({pendingCashList.length}) A Awm!</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-300">
-                      Bawm Siamtu / Admin tan pawisa i dawn fel tawh chuan lo pawm (Approve) rawh le.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFilter('personal')}
-                  className="px-2 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 text-[10px] font-black rounded-lg cursor-pointer transition shrink-0"
-                >
-                  En Rawh
-                </button>
+          {/* Role Header Context Banner in Private Tab */}
+          {activeTab === 'private' && (
+            <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-xs flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0">
+                <Lock className="w-3.5 h-3.5" />
               </div>
+              <p className="text-[11px] text-slate-300 leading-tight">
+                {isCreator ? (
+                  <><b>Creator Private Box:</b> I bawm siam a mi pawisa lo kal te chauh a lang a, i bawm a mi chauh i approve thei.</>
+                ) : isModerator ? (
+                  <><b>Moderator Private Box:</b> Creator new Campaign thehluh lo kal te endik a review na a ni e.</>
+                ) : isAdmin ? (
+                  <><b>Admin Private Box:</b> Platform pumpui a Cash approvals leh Campaign clearance turte a lang vek e.</>
+                ) : (
+                  <><b>Mimal Box:</b> I pawisa thehluh receipt leh cash confirmation status te hetah hian a lang.</>
+                )}
+              </p>
             </div>
           )}
 
@@ -430,62 +764,79 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 <Bell className="w-6 h-6" />
               </div>
               <p className="text-sm font-bold text-slate-300">Hriattirna a awm rih lo</p>
-              <p className="text-xs text-slate-500">I thlan category-ah hian hriattirna thar a la awm lo e.</p>
+              <p className="text-xs text-slate-500">
+                {activeTab === 'common' 
+                  ? 'Common / Tlangpui hriattirna thar a awm lo.' 
+                  : activeTab === 'private'
+                  ? 'I role tana Private hriattirna a la awm lo.'
+                  : 'Hriattirna thar a la awm lo e.'}
+              </p>
             </div>
           ) : (
             filteredNotifications.map(notif => {
-              const tx = notif.transactionId ? transactions.find(t => t.id === notif.transactionId) : undefined;
-              const camp = notif.campaignId ? campaigns.find(c => c.id === notif.campaignId) : undefined;
-              const isPersonal = notif.categoryScope === 'personal' || notif.type === 'personal' || notif.type === 'payment';
+              const isCommon = notif.categoryScope === 'general';
+              const tx = notif.transaction;
+              const camp = notif.campaign || (notif.campaignId ? campaigns.find(c => c.id === notif.campaignId) : undefined);
               const isPendingCash = tx && tx.paymentMethod === 'cash' && tx.status === 'pending_verification';
+              const canApprove = notif.canApproveCash && tx;
 
               return (
                 <div 
                   key={notif.id}
                   onClick={() => handleMarkAsRead(notif.id)}
-                  className={`rounded-2xl p-3 transition flex gap-3 cursor-pointer ${
-                    isPendingCash
-                      ? 'bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border-2 border-amber-500/60 shadow-md'
+                  className={`rounded-2xl p-3.5 transition flex gap-3 cursor-pointer ${
+                    isPendingCash && canApprove
+                      ? 'bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border-2 border-amber-500/70 shadow-lg'
                       : notif.read
                       ? 'bg-slate-900/40 hover:bg-slate-800/40 border border-slate-800/60'
                       : 'bg-slate-800/60 hover:bg-slate-800/80 border-l-4 border-l-amber-500 border border-slate-700/60'
                   }`}
                 >
-                  {/* Type Icon */}
+                  {/* Left Icon */}
                   <div className="shrink-0 mt-0.5">
                     {isPendingCash ? (
-                      <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black animate-pulse shadow-xs">
-                        <Clock className="w-4 h-4 text-slate-950" />
+                      <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black animate-pulse shadow-sm">
+                        <Clock className="w-5 h-5 text-slate-950" />
                       </div>
-                    ) : isPersonal ? (
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                        <Receipt className="w-4 h-4" />
+                    ) : notif.type === 'campaign_review' ? (
+                      <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center">
+                        <Shield className="w-5 h-5" />
+                      </div>
+                    ) : isCommon ? (
+                      <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center">
+                        <Megaphone className="w-5 h-5" />
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
-                        <Sparkles className="w-4 h-4" />
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+                        <Receipt className="w-5 h-5" />
                       </div>
                     )}
                   </div>
 
-                  {/* Content */}
+                  {/* Body Content */}
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <h3 className={`text-xs sm:text-sm font-bold truncate ${notif.read ? 'text-slate-300' : 'text-white'}`}>
                           {notif.title}
                         </h3>
-                        {/* General / Personal badge */}
+
+                        {/* Common vs Private Badge */}
                         <span className={`px-1.5 py-0.2 rounded text-[9px] font-black border ${
-                          isPendingCash
-                            ? 'bg-amber-400 text-slate-950 border-amber-400'
-                            : isPersonal 
-                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
-                            : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                          isCommon
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                         }`}>
-                          {isPendingCash ? 'ACTION REQUIRED' : isPersonal ? 'Personal' : 'General'}
+                          {isCommon ? 'COMMON' : 'PRIVATE'}
                         </span>
+
+                        {notif.tag && (
+                          <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[9px] font-semibold text-slate-400">
+                            {notif.tag}
+                          </span>
+                        )}
                       </div>
+
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!notif.read && (
                           <span className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
@@ -497,19 +848,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-[11.5px] text-slate-400 leading-relaxed break-words">
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed break-words">
                       {notif.message}
                     </p>
 
-                    {/* DIRECT APPROVAL / REJECTION PANEL FOR CREATORS & ADMINS */}
-                    {isPendingCash && (
+                    {/* CASH APPROVAL INTERACTION PANEL (ONLY FOR PERMITTED CREATOR OR ADMIN) */}
+                    {isPendingCash && tx && (
                       <div className="mt-2.5 pt-2 border-t border-amber-500/40 space-y-2 bg-slate-950/70 p-3 rounded-xl border border-amber-500/30">
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-extrabold text-amber-400 flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> Cash Pawisa Dawng Fel Rawh:
+                            <Banknote className="w-3.5 h-3.5" /> Cash Amount:
                           </span>
                           <span className="font-black text-emerald-400 text-sm">
-                            ₹{tx.amount.toLocaleString('en-IN')}
+                            ₹{formatRupees(tx.amount)}
                           </span>
                         </div>
 
@@ -518,66 +869,96 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <span className="truncate">Bawm: <b className="text-indigo-300">{tx.campaignTitle || tx.campaignId}</b></span>
                         </div>
 
-                        {rejectingTxId === tx.id ? (
-                          <div className="space-y-1.5 pt-1" onClick={(e) => e.stopPropagation()}>
-                            <label className="text-[10px] text-rose-300 font-bold block">
-                              Hnawlna Chhan (Rejection Reason):
-                            </label>
-                            <input
-                              type="text"
-                              value={rejectReason}
-                              onChange={(e) => setRejectReason(e.target.value)}
-                              placeholder="Cash a lo thleng lo / a dik lo..."
-                              className="w-full bg-slate-900 border border-rose-500/60 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                            />
-                            <div className="flex gap-2 pt-0.5">
+                        {canApprove ? (
+                          // Authorized Creator or Admin Approval Panel
+                          rejectingTxId === tx.id ? (
+                            <div className="space-y-1.5 pt-1" onClick={(e) => e.stopPropagation()}>
+                              <label className="text-[10px] text-rose-300 font-bold block">
+                                Hnawlna Chhan (Rejection Reason):
+                              </label>
+                              <input
+                                type="text"
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                placeholder="Cash a lo thleng lo / a dik lo..."
+                                className="w-full bg-slate-900 border border-rose-500/60 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              />
+                              <div className="flex gap-2 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectCashInNotif(tx, rejectReason)}
+                                  className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer transition shadow-xs"
+                                >
+                                  Hnawlna Nemnghet Rawh
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRejectingTxId(null)}
+                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
+                                >
+                                  Sut
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 pt-1">
                               <button
                                 type="button"
-                                onClick={() => handleRejectCashInNotif(tx, rejectReason)}
-                                className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer transition shadow-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApproveCashInNotif(tx);
+                                }}
+                                className="flex-1 py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition shadow-sm active:scale-[0.98]"
                               >
-                                Hnawlna Nemnghet Rawh
+                                <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                                {isAdmin ? 'Admin Approve Cash' : 'Pawisa Ka Dawng Fel (Approve)'}
                               </button>
+
                               <button
                                 type="button"
-                                onClick={() => setRejectingTxId(null)}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRejectingTxId(tx.id);
+                                }}
+                                className="py-2 px-2.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer transition"
                               >
-                                Sut
+                                <XCircle className="w-3.5 h-3.5" />
+                                Hnawl
                               </button>
                             </div>
-                          </div>
+                          )
                         ) : (
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleApproveCashInNotif(tx);
-                              }}
-                              className="flex-1 py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition shadow-sm active:scale-[0.98]"
-                            >
-                              <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                              Pawisa Ka Dawng Fel (Approve)
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRejectingTxId(tx.id);
-                              }}
-                              className="py-2 px-2.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer transition"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              Hnawl
-                            </button>
+                          // Non-authorized viewers (e.g. Donor)
+                          <div className="bg-slate-900/90 border border-slate-800 p-2 rounded-lg text-[11px] text-amber-300/90 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>Bawm Siamtu / Admin verification nghah mek a ni. (Token: {tx.id})</span>
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Quick action buttons if applicable */}
+                    {/* MODERATOR / ADMIN CAMPAIGN REVIEW BUTTON */}
+                    {notif.type === 'campaign_review' && camp && (
+                      <div className="pt-1 flex items-center gap-2">
+                        {onOpenCampaignReview && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsRead(notif.id);
+                              onClose();
+                              onOpenCampaignReview(camp);
+                            }}
+                            className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                          >
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>Endik Rawh (Review Campaign)</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* GENERAL QUICK ACTION BUTTONS */}
                     <div className="pt-1 flex items-center gap-2 flex-wrap">
                       {tx && onOpenReceipt && (
                         <button
@@ -594,7 +975,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         </button>
                       )}
 
-                      {camp && onNavigateToCampaign && (
+                      {camp && onNavigateToCampaign && notif.type !== 'campaign_review' && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -609,7 +990,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                         </button>
                       )}
 
-                      {notif.type === 'bawm' && onOpenMemberRoll && (
+                      {notif.id === 'common-kumtluang-roll' && onOpenMemberRoll && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -623,12 +1004,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           <Users className="w-3 h-3" /> Member Roll Hawng Rawh
                         </button>
                       )}
-
-                      {notif.tag && (
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[9.5px] font-semibold text-slate-400">
-                          {notif.tag}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -638,7 +1013,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-slate-950/70 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+        <div className="p-3 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
           <button
             type="button"
             onClick={handleClearNotifications}
@@ -651,7 +1026,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition cursor-pointer text-xs"
+            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition cursor-pointer text-xs"
           >
             Kharna
           </button>

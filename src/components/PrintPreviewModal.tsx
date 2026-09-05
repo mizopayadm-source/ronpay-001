@@ -20,7 +20,9 @@ import {
   MessageCircle,
   Sparkles,
   Maximize2,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal,
+  ExternalLink
 } from 'lucide-react';
 import { downloadFileUniversal } from '../utils/export';
 import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
@@ -48,6 +50,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [viewMode, setViewMode] = useState<'phone-flow' | 'a4-sheet'>('phone-flow');
   const [fitMode, setFitMode] = useState<'fit-width' | 'actual' | 'custom'>('fit-width');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [pageOrientation, setPageOrientation] = useState<'portrait' | 'landscape'>('portrait');
   
   // PDF Generation & Print states
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
@@ -57,7 +60,8 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [waToast, setWaToast] = useState<string>('');
   
   // Container & Sheet Dimensions for responsive scaling
-  const A4_BASE_WIDTH = 794; // Standard A4 base width in px
+  // Standard A4 base width: Portrait = 794px, Landscape = 1123px
+  const A4_BASE_WIDTH = pageOrientation === 'landscape' ? 1123 : 794;
   const [containerWidth, setContainerWidth] = useState<number>(800);
   const [measuredPaperHeight, setMeasuredPaperHeight] = useState<number>(1123);
   
@@ -65,15 +69,44 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const printableRootRef = useRef<HTMLDivElement>(null);
   const touchStateRef = useRef<{ initialDist: number; initialScale: number } | null>(null);
 
+  const detectOrientation = (htmlContent: string): 'portrait' | 'landscape' => {
+    if (!htmlContent) return 'portrait';
+    if (
+      htmlContent.includes('data-default-orientation="landscape"') ||
+      htmlContent.includes('size: A4 landscape') ||
+      htmlContent.includes('size: landscape') ||
+      htmlContent.includes('x-report-orientation" content="landscape"') ||
+      htmlContent.includes('report-orientation-landscape') ||
+      htmlContent.includes('orientation: landscape')
+    ) {
+      return 'landscape';
+    }
+    if (
+      htmlContent.includes('data-default-orientation="portrait"') ||
+      htmlContent.includes('size: A4 portrait') ||
+      htmlContent.includes('x-report-orientation" content="portrait"')
+    ) {
+      return 'portrait';
+    }
+    // Column count heuristic: 7+ table header columns (e.g. multi-category ledger) => Landscape
+    const thMatches = htmlContent.match(/<th\b[^>]*>/gi) || [];
+    if (thMatches.length >= 7) {
+      return 'landscape';
+    }
+    return 'portrait';
+  };
+
   // Sync prop changes
   useEffect(() => {
     if (propIsOpen && propHtml) {
+      const detected = detectOrientation(propHtml);
       setModalData({
         html: propHtml,
         docTitle: propDocTitle || 'Financial Statement',
       });
-      // Default to phone-flow on smaller screens, a4-sheet on desktop
-      setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
+      setPageOrientation(detected);
+      // Landscape reports display best in A4 Paper view with fit-width
+      setViewMode(detected === 'landscape' ? 'a4-sheet' : (window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet'));
       setFitMode('fit-width');
       setZoomLevel(100);
       setPdfSuccessResult(null);
@@ -87,11 +120,13 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     const handleOpenEvent = (e: Event) => {
       const customEvent = e as CustomEvent<PrintModalData>;
       if (customEvent.detail && customEvent.detail.html) {
+        const detected = detectOrientation(customEvent.detail.html);
         setModalData({
           html: customEvent.detail.html,
           docTitle: customEvent.detail.docTitle || 'RonPay Financial Statement',
         });
-        setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
+        setPageOrientation(detected);
+        setViewMode(detected === 'landscape' ? 'a4-sheet' : (window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet'));
         setFitMode('fit-width');
         setZoomLevel(100);
         setPdfSuccessResult(null);
@@ -144,7 +179,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     const padding = window.innerWidth < 640 ? 12 : 24;
     const avail = Math.max(260, containerWidth - padding);
     return Math.min(1.0, Number((avail / A4_BASE_WIDTH).toFixed(3)));
-  }, [containerWidth]);
+  }, [containerWidth, A4_BASE_WIDTH]);
 
   const currentScale = useMemo(() => {
     if (viewMode === 'phone-flow') return 1.0;
@@ -200,6 +235,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     if (!rootElement || !modalData) return;
 
     setIsGeneratingPdf(true);
+    setPdfStatusText('PDF snapshot siam mek a ni...');
     setPdfSuccessResult(null);
 
     const cleanTitle = (modalData.docTitle || 'RonPay_Statement')
@@ -210,7 +246,8 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       const result = await exportElementToPDF(
         rootElement,
         fileName,
-        (status) => setPdfStatusText(status)
+        (status) => setPdfStatusText(status),
+        { orientation: pageOrientation }
       );
 
       if (result.success) {
@@ -231,6 +268,9 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   // Open generated PDF or re-download on mobile
   const handleOpenPdfBlob = () => {
     if (pdfSuccessResult?.blobUrl) {
+      try {
+        window.open(pdfSuccessResult.blobUrl, '_blank');
+      } catch {}
       const a = document.createElement('a');
       a.href = pdfSuccessResult.blobUrl;
       a.download = pdfSuccessResult.fileName;
@@ -344,7 +384,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     setIsPrinting(true);
     
     try {
-      executePrintSafely(modalData.html, modalData.docTitle);
+      executePrintSafely(modalData.html, modalData.docTitle, pageOrientation);
     } catch (err) {
       console.warn('Print command fallback', err);
       window.print();
@@ -411,12 +451,17 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       
       {/* Dynamic Native Print CSS to ensure physical print only prints the document */}
       <style>{`
+        @page {
+          size: ${pageOrientation === 'landscape' ? 'landscape' : 'portrait'};
+          margin: ${pageOrientation === 'landscape' ? '8mm' : '10mm'};
+        }
         @media print {
-          body {
+          html, body {
             background: #ffffff !important;
             color: #000000 !important;
             margin: 0 !important;
             padding: 0 !important;
+            width: 100% !important;
           }
           body * {
             visibility: hidden !important;
@@ -429,12 +474,24 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
+            max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #0f172a !important;
             box-shadow: none !important;
             border: none !important;
+            transform: none !important;
+          }
+          #ronpay-printable-preview-root table {
+            display: table !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: auto !important;
+          }
+          .sign-grid {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .no-print {
             display: none !important;
@@ -539,6 +596,35 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             >
               <Layers className="w-3 h-3 text-emerald-300" />
               <span>A4 Paper</span>
+            </button>
+          </div>
+
+          {/* Orientation Switcher: Ding (Portrait) vs Phek (Landscape) */}
+          <div className="flex items-center bg-slate-950/90 rounded-xl border border-slate-700 p-0.5 shadow-xs">
+            <button
+              onClick={() => setPageOrientation('portrait')}
+              className={`px-2 py-1 rounded-lg text-[10.5px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                pageOrientation === 'portrait'
+                  ? 'bg-slate-800 text-indigo-300 shadow-xs border border-indigo-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Ding (Portrait A4)"
+            >
+              <FileText className="w-3 h-3 text-indigo-400" />
+              <span>Ding</span>
+            </button>
+
+            <button
+              onClick={() => setPageOrientation('landscape')}
+              className={`px-2 py-1 rounded-lg text-[10.5px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                pageOrientation === 'landscape'
+                  ? 'bg-emerald-700 text-white shadow-xs border border-emerald-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Phek (Landscape A4 - Wide table / Multi-category matrix)"
+            >
+              <SlidersHorizontal className="w-3 h-3 text-emerald-300" />
+              <span>Phek (Wide)</span>
             </button>
           </div>
 
@@ -716,39 +802,52 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
       {/* 4. SUCCESS / DIRECT PDF ACTION BOTTOM SHEET (IF DOWNLOADED) */}
       {pdfSuccessResult && (
-        <div className="no-print w-full bg-emerald-950 border-t border-emerald-500/50 p-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl animate-slideUp z-20">
-          <div className="flex items-center gap-2 min-w-0 text-left">
+        <div className="no-print w-full bg-emerald-950 border-t border-emerald-500/50 p-3 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl animate-slideUp z-20">
+          <div className="flex items-center gap-2.5 min-w-0 text-left w-full md:w-auto">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs font-black text-white">
-                PDF Download Fel Ta! <span className="text-emerald-300 font-bold">({pdfSuccessResult.fileName})</span>
+              <p className="text-xs font-black text-white flex items-center gap-1.5 flex-wrap">
+                <span>PDF Download Fel Ta!</span>
+                <span className="text-emerald-300 font-bold truncate max-w-[200px]">({pdfSuccessResult.fileName})</span>
               </p>
-              <p className="text-[10px] text-emerald-200/90 flex items-center gap-1">
-                <FolderDown className="w-3 h-3 text-emerald-400 shrink-0" />
-                I phone <b>Downloads / Files</b> folder-ah a in-save e.
+              <p className="text-[10.5px] text-emerald-200/90 flex items-center gap-1">
+                <FolderDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>I phone <b>Downloads / Files</b> folder-ah a in-save e. A lo awm loh chuan a hnuaia button te hi hmet rawh le:</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-end flex-wrap">
+            {/* Native Android / Mobile File Save */}
+            <button
+              onClick={handleShareNative}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
+              title="Save to Phone Storage or Share"
+            >
+              <Share2 className="w-3.5 h-3.5 text-slate-950" />
+              <span>Phone-ah Save / Share</span>
+            </button>
+
+            {/* Direct Open PDF in Browser Tab */}
             {pdfSuccessResult.blobUrl && (
               <button
                 onClick={handleOpenPdfBlob}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
-                title="Download another copy"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
+                title="Open PDF Viewer"
               >
-                <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Download Nawn</span>
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
+                <span>PDF Hawng Rawh</span>
               </button>
             )}
 
+            {/* WhatsApp Share */}
             <button
               onClick={handleShareToWhatsApp}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-emerald-900/50 transition cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
               title="Share report summary and status to WhatsApp"
             >
               <MessageCircle className="w-3.5 h-3.5 text-white" />
-              <span>WhatsApp Share</span>
+              <span>WhatsApp</span>
             </button>
 
             <button

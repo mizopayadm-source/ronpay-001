@@ -278,23 +278,29 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   const handleApproveCash = (txId: string) => {
     const verifier = currentProfile?.name || 'Admin / Creator';
-    const updated = approveCashTransaction(txId, verifier);
+    const updated = approveCashTransaction(txId, verifier, currentProfile, campaigns);
     if (updated) {
       setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
       onUpdateTransaction?.(updated);
       setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
+      setTimeout(() => setCashActionFeedback(null), 3500);
+    } else {
+      setCashActionFeedback(`⚠️ He cash hi approve phalna i nei lo.`);
       setTimeout(() => setCashActionFeedback(null), 3500);
     }
   };
 
   const handleRejectCash = (txId: string, reason?: string) => {
     const verifier = currentProfile?.name || 'Admin / Creator';
-    const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo');
+    const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo', currentProfile, campaigns);
     if (updated) {
       setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
       onUpdateTransaction?.(updated);
       setRejectingCashId(null);
       setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
+      setTimeout(() => setCashActionFeedback(null), 3500);
+    } else {
+      setCashActionFeedback(`⚠️ He cash hi hnawl phalna i nei lo.`);
       setTimeout(() => setCashActionFeedback(null), 3500);
     }
   };

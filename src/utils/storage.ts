@@ -1,4 +1,5 @@
 import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction } from '../types';
+import { getUserRole } from './rbac';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import {
   syncCampaignToFirestore,
@@ -1966,15 +1967,95 @@ export const addStoredNotification = (notif: {
   }
 };
 
+/**
+ * Finds the corresponding campaign for a given transaction.
+ */
+export const getTransactionCampaign = (tx: Transaction, campaigns?: Campaign[]): Campaign | undefined => {
+  if (!tx) return undefined;
+  const list = (campaigns && campaigns.length > 0) ? campaigns : getStoredCampaigns();
+  const txCampId = String(tx.campaignId || '').toLowerCase().trim();
+  const txCampTitle = String(tx.campaignTitle || '').toLowerCase().trim();
+
+  return list.find(c => {
+    const cId = String(c.id || '').toLowerCase().trim();
+    const cTitle = String(c.title || '').toLowerCase().trim();
+    return (txCampId && cId === txCampId) || (txCampTitle && cTitle === txCampTitle);
+  });
+};
+
+/**
+ * Validates whether the active user profile has authority to approve or reject a cash payment receipt.
+ * Strict RBAC & Ownership Mandate:
+ * 1. Admin & Super Admin: Authorized to approve/reject cash across all campaigns.
+ * 2. Creator: Authorized to approve/reject cash ONLY for campaigns they personally created (ama bawm siam a mi chauh).
+ *    Midang bawm a mi emaw, ama siam loh bawm a mi chu a approve thei tur a ni lo.
+ * 3. Moderator, Member, Guest: STRICTLY NOT AUTHORIZED to approve cash receipts.
+ */
+export const canApproveCashPayment = (
+  tx: Transaction,
+  campaigns?: Campaign[],
+  creatorProfile?: CreatorProfile | null
+): { allowed: boolean; reason?: string } => {
+  if (!tx) return { allowed: false, reason: 'Transaction hmuh a ni lo' };
+  if (!creatorProfile) {
+    return { allowed: false, reason: 'Log in a ngai (Authentication required)' };
+  }
+
+  const role = getUserRole(creatorProfile);
+
+  // 1. Super Admin & Admin can approve any cash payment
+  if (role === 'SUPER_ADMIN' || role === 'ADMIN' || creatorProfile.isAdmin) {
+    return { allowed: true };
+  }
+
+  // 2. Creator can ONLY approve for their own campaign
+  if (role === 'CREATOR' || creatorProfile.isApproved) {
+    const camp = getTransactionCampaign(tx, campaigns);
+    if (camp && isCampaignCreator(camp, creatorProfile)) {
+      return { allowed: true };
+    }
+    return { 
+      allowed: false, 
+      reason: 'Bawm siamtu (Creator) amah ngei emaw Admin chauhvin he bawma cash lo kal hi an approve thei. Ama siam loh bawm a mi chu approve theih a ni lo.' 
+    };
+  }
+
+  // 3. Moderator is restricted to content/campaign/KYC reviews, not cash handling
+  if (role === 'MODERATOR') {
+    return { 
+      allowed: false, 
+      reason: 'Moderator chuan Cash pawisa a approve thei lo. Bawm Siamtu (Creator) emaw Admin chauhvin an approve thei.' 
+    };
+  }
+
+  // 4. Member / Donor / Guest
+  return { 
+    allowed: false, 
+    reason: 'He Cash payment receipt hi Creator leh Admin chauhin an approve thei.' 
+  };
+};
+
 export const approveCashTransaction = (
   transactionId: string, 
-  verifierName: string = 'Admin / Creator'
+  verifierName: string = 'Admin / Creator',
+  creatorProfile?: CreatorProfile | null,
+  campaignsList?: Campaign[]
 ): Transaction | null => {
   const all = getStoredTransactions();
   const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
   if (index === -1) return null;
 
   const current = all[index];
+
+  // Enforce security & ownership verification if creatorProfile is provided
+  if (creatorProfile) {
+    const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
+    if (!auth.allowed) {
+      console.warn('Unauthorized cash approval attempt:', auth.reason);
+      return null;
+    }
+  }
+
   const updated: Transaction = {
     ...current,
     status: 'completed',
@@ -2012,13 +2093,25 @@ export const approveCashTransaction = (
 export const rejectCashTransaction = (
   transactionId: string, 
   rejectorName: string = 'Admin / Creator',
-  reason: string = 'Cash pawisa dawn a ni lo'
+  reason: string = 'Cash pawisa dawn a ni lo',
+  creatorProfile?: CreatorProfile | null,
+  campaignsList?: Campaign[]
 ): Transaction | null => {
   const all = getStoredTransactions();
   const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
   if (index === -1) return null;
 
   const current = all[index];
+
+  // Enforce security & ownership verification if creatorProfile is provided
+  if (creatorProfile) {
+    const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
+    if (!auth.allowed) {
+      console.warn('Unauthorized cash rejection attempt:', auth.reason);
+      return null;
+    }
+  }
+
   const updated: Transaction = {
     ...current,
     status: 'rejected',

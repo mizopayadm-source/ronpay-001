@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Clock, Check, ArrowLeft, AlertCircle, Banknote, ShieldCheck, CheckCircle2, XCircle, UserCheck } from 'lucide-react';
-import { Transaction } from '../types';
-import { approveCashTransaction, rejectCashTransaction } from '../utils/storage';
+import React, { useState, useMemo } from 'react';
+import { Clock, Check, ArrowLeft, AlertCircle, Banknote, ShieldCheck, CheckCircle2, XCircle, UserCheck, Lock } from 'lucide-react';
+import { Transaction, Campaign, CreatorProfile } from '../types';
+import { approveCashTransaction, rejectCashTransaction, canApproveCashPayment, getTransactionCampaign } from '../utils/storage';
 
 interface CashPendingScreenProps {
   transaction: Transaction | null;
@@ -9,6 +9,8 @@ interface CashPendingScreenProps {
   onApprove?: (updatedTx: Transaction) => void;
   onReject?: (rejectedTx: Transaction) => void;
   creatorName?: string;
+  creatorProfile?: CreatorProfile | null;
+  campaigns?: Campaign[];
 }
 
 export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
@@ -17,11 +19,25 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   onApprove,
   onReject,
   creatorName = 'Bawm Creator',
+  creatorProfile,
+  campaigns = [],
 }) => {
   const [currentTx, setCurrentTx] = useState<Transaction | null>(transaction);
   const [isRejecting, setIsRejecting] = useState<boolean>(false);
   const [rejectionReason, setRejectionReason] = useState<string>('Cash pawisa dawn a ni lo');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  const targetCampaign = useMemo(() => {
+    if (!currentTx) return undefined;
+    return getTransactionCampaign(currentTx, campaigns);
+  }, [currentTx, campaigns]);
+
+  const authCheck = useMemo(() => {
+    if (!currentTx) return { allowed: false, reason: 'Transaction hmuh a ni lo' };
+    return canApproveCashPayment(currentTx, campaigns, creatorProfile);
+  }, [currentTx, campaigns, creatorProfile]);
+
+  const targetCreatorDisplayName = targetCampaign?.creatorName || targetCampaign?.createdBy || (targetCampaign?.orgName ? `${targetCampaign.orgName} Creator` : 'Bawm Siamtu');
 
   if (!currentTx) {
     return (
@@ -39,7 +55,12 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   const isRejected = currentTx.status === 'rejected';
 
   const handleApprove = () => {
-    const updated = approveCashTransaction(currentTx.id, creatorName);
+    if (!authCheck.allowed) {
+      setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi approve phalna i nei lo.'}`);
+      return;
+    }
+    const verifier = creatorProfile?.name || creatorName;
+    const updated = approveCashTransaction(currentTx.id, verifier, creatorProfile, campaigns);
     if (updated) {
       setCurrentTx(updated);
       setActionMessage('Cash pekna hi hlawhtling takin pawm (Approved) a ni ta e!');
@@ -52,7 +73,12 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   };
 
   const handleConfirmReject = () => {
-    const updated = rejectCashTransaction(currentTx.id, creatorName, rejectionReason);
+    if (!authCheck.allowed) {
+      setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi hnawl phalna i nei lo.'}`);
+      return;
+    }
+    const verifier = creatorProfile?.name || creatorName;
+    const updated = rejectCashTransaction(currentTx.id, verifier, rejectionReason, creatorProfile, campaigns);
     if (updated) {
       setCurrentTx(updated);
       setIsRejecting(false);
@@ -142,7 +168,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         <div className="flex justify-between items-center">
           <span className="text-slate-500 font-medium">Cash Amount:</span>
           <span className="font-black text-slate-900 text-base">
-            ₹{currentTx.amount.toLocaleString('en-IN')}
+            ₹{(Number(currentTx.amount) || 0).toLocaleString('en-IN')}
           </span>
         </div>
 
@@ -159,75 +185,102 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         </div>
       </div>
 
-      {/* CREATOR / ADMIN APPROVAL CONTROLS */}
+      {/* CREATOR / ADMIN APPROVAL CONTROLS OR VISITOR STATUS */}
       {isPending && (
-        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-amber-400/40 p-4 rounded-2xl mx-1 text-left space-y-3 shadow-lg">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-xs">
-              <ShieldCheck className="w-5 h-5" />
+        authCheck.allowed ? (
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-amber-400/40 p-4 rounded-2xl mx-1 text-left space-y-3 shadow-lg animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-xs">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-amber-300 tracking-wide uppercase">
+                  {creatorProfile?.isAdmin ? 'Admin / Super Admin Approval' : `${targetCreatorDisplayName} (Bawm Siamtu Approval)`}
+                </h4>
+                <p className="text-[11px] text-slate-300 leading-tight">
+                  He cash pekna hi i enkawl bawm a mi a ni a. Pawisa i dawn fel tawh chuan pawm (Approve) rawh le.
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xs font-black text-amber-300 tracking-wide uppercase">
-                Bawm Siamtu / Admin Approval
-              </h4>
-              <p className="text-[11px] text-slate-300 leading-tight">
-                Cash pawisa hi dawn a nih tawh chuan hetah hian pawm (Approve) rawh le.
-              </p>
-            </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-1">
-            <button
-              type="button"
-              onClick={handleApprove}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
-            >
-              <CheckCircle2 className="w-4 h-4 text-slate-950" />
-              Pawisa Ka Dawng Fel (Approve Cash)
-            </button>
-
-            {!isRejecting ? (
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={() => setIsRejecting(true)}
-                className="w-full bg-slate-800/80 hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 font-bold py-2 rounded-xl transition text-[11px] cursor-pointer flex items-center justify-center gap-1.5"
+                onClick={handleApprove}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
               >
-                <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                Pawisa Dawn A Ni Lo / Hnawl (Reject)
+                <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                Pawisa Ka Dawng Fel (Approve Cash)
               </button>
-            ) : (
-              <div className="bg-rose-950/80 border border-rose-500/50 p-3 rounded-xl space-y-2 animate-fadeIn text-xs">
-                <label className="text-[11px] text-rose-200 font-bold block">
-                  Hnawlna Chhan (Rejection Reason):
-                </label>
-                <input
-                  type="text"
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  className="w-full bg-slate-900 border border-rose-400/60 rounded-lg p-2 text-white text-xs"
-                  placeholder="Chhan ziak rawh (e.g. Cash a lo thleng lo)"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleConfirmReject}
-                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-2 rounded-lg text-xs cursor-pointer"
-                  >
-                    Hnawlna Nemnghet Rawh
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsRejecting(false)}
-                    className="px-3 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-lg text-xs cursor-pointer"
-                  >
-                    Sut Leh
-                  </button>
+
+              {!isRejecting ? (
+                <button
+                  type="button"
+                  onClick={() => setIsRejecting(true)}
+                  className="w-full bg-slate-800/80 hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 font-bold py-2 rounded-xl transition text-[11px] cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                  Pawisa Dawn A Ni Lo / Hnawl (Reject)
+                </button>
+              ) : (
+                <div className="bg-rose-950/80 border border-rose-500/50 p-3 rounded-xl space-y-2 animate-fadeIn text-xs">
+                  <label className="text-[11px] text-rose-200 font-bold block">
+                    Hnawlna Chhan (Rejection Reason):
+                  </label>
+                  <input
+                    type="text"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-rose-400/60 rounded-lg p-2 text-white text-xs"
+                    placeholder="Chhan ziak rawh (e.g. Cash a lo thleng lo)"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmReject}
+                      className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-2 rounded-lg text-xs cursor-pointer"
+                    >
+                      Hnawlna Nemnghet Rawh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsRejecting(false)}
+                      className="px-3 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-lg text-xs cursor-pointer"
+                    >
+                      Sut Leh
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-slate-900 border-2 border-indigo-500/30 p-4 rounded-2xl mx-1 text-left space-y-2.5 shadow-md animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-amber-300">
+                  Creator & Admin Clearance Only
+                </h4>
+                <p className="text-[10.5px] text-slate-400 leading-tight">
+                  Cash payment receipt hi he bawm siamtu (Creator) leh Admin chauhin an approve thei.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+              I thehluh cash ₹<b>{(Number(currentTx.amount) || 0).toLocaleString('en-IN')}</b> hi Bawm Siamtu (<b>{targetCreatorDisplayName}</b>) emaw Admin-in an lo enfiah a, pawisa an dawn fel veleh official receipt i dawng nghal dawn a ni.
+            </p>
+
+            <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+              <span>Receipt Verification Token:</span>
+              <span className="font-mono font-bold text-amber-300">{currentTx.id}</span>
+            </div>
+          </div>
+        )
       )}
 
       {/* Navigation Buttons */}

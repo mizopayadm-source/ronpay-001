@@ -900,6 +900,8 @@ export default function App() {
             <CashPendingScreen
               transaction={completedTransaction}
               creatorName={creatorProfile.name || 'Bawm Creator'}
+              creatorProfile={creatorProfile}
+              campaigns={campaigns}
               onGoHome={() => handleNavigate('home')}
               onApprove={(approvedTx) => {
                 setTransactions(prev => prev.map(t => t.id === approvedTx.id ? approvedTx : t));
@@ -1023,6 +1025,11 @@ export default function App() {
           onNavigateToCampaign={(camp) => {
             setIsNotificationsOpen(false);
             handleSelectCampaign(camp);
+          }}
+          onOpenCampaignReview={(camp) => {
+            setIsNotificationsOpen(false);
+            setAdminApprovalCampaign(camp);
+            setIsAdminApprovalOpen(true);
           }}
           onOpenMemberRoll={() => {
             setIsNotificationsOpen(false);

@@ -63,6 +63,11 @@ function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement
   }
 }
 
+export interface PDFExportOptions {
+  orientation?: 'portrait' | 'landscape' | 'auto';
+  autoDownload?: boolean;
+}
+
 /**
  * High-quality client-side PDF generator that works reliably across all devices,
  * Mobile WebViews, Android, iOS, and sandboxed iframes.
@@ -70,7 +75,8 @@ function sanitizeClonedDocumentStyles(clonedDoc: Document, clonedEl: HTMLElement
 export async function exportElementToPDF(
   element: HTMLElement,
   fileName: string = 'RonPay_Statement.pdf',
-  onProgress?: (status: string) => void
+  onProgress?: (status: string) => void,
+  options?: PDFExportOptions
 ): Promise<PDFExportResult> {
   try {
     if (onProgress) onProgress('Document buatsaih mek a ni...');
@@ -78,7 +84,36 @@ export async function exportElementToPDF(
     // Ensure clean filename
     const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
 
-    // 1. Capture element to high-res canvas (2x density for crisp text & charts)
+    // 1. Detect orientation: explicit options > element data attribute > column count
+    const targetOrientation = options?.orientation;
+    const dataOrientation = element.getAttribute('data-orientation') || 
+                            element.querySelector('[data-default-orientation]')?.getAttribute('data-default-orientation') ||
+                            element.getAttribute('data-default-orientation');
+    
+    // Count columns in rendered table
+    const table = element.querySelector('table');
+    const thCols = table ? table.querySelectorAll('thead tr:first-child th').length : 0;
+    
+    let isLandscape = false;
+    if (targetOrientation === 'landscape') {
+      isLandscape = true;
+    } else if (targetOrientation === 'portrait') {
+      isLandscape = false;
+    } else if (dataOrientation === 'landscape') {
+      isLandscape = true;
+    } else if (dataOrientation === 'portrait') {
+      isLandscape = false;
+    } else if (thCols >= 7) {
+      // Automatic rule: 7+ columns (multi-category ledger / Kumtluang) => Landscape
+      isLandscape = true;
+    } else {
+      isLandscape = false;
+    }
+
+    // Exact A4 dimensions in px at standard 96 CSS DPI (Portrait: 794x1123, Landscape: 1123x794)
+    const targetWidth = isLandscape ? 1123 : 794;
+
+    // 2. Capture element to high-res canvas (2x density for crisp text & charts)
     if (onProgress) onProgress('High-resolution snapshot siam mek a ni...');
     
     // Temporarily ensure element is at full width without zoom scale distortion
@@ -93,9 +128,29 @@ export async function exportElementToPDF(
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: Math.max(element.scrollWidth, 850),
+        width: targetWidth,
+        windowWidth: targetWidth + 40,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+          if (clonedEl) {
+            clonedEl.classList.remove('mobile-phone-flow');
+            clonedEl.style.width = `${targetWidth}px`;
+            clonedEl.style.maxWidth = `${targetWidth}px`;
+            clonedEl.style.minWidth = `${targetWidth}px`;
+            clonedEl.style.boxSizing = 'border-box';
+            clonedEl.style.overflow = 'visible';
+            clonedEl.style.position = 'relative';
+            clonedEl.style.transform = 'none';
+
+            // Ensure all tables display as standard tables and occupy full width
+            const tables = clonedEl.querySelectorAll('table');
+            tables.forEach(t => {
+              t.style.display = 'table';
+              t.style.width = '100%';
+              t.style.maxWidth = '100%';
+              t.style.tableLayout = 'auto';
+            });
+          }
         }
       });
     } catch (h2cError: any) {
@@ -106,8 +161,28 @@ export async function exportElementToPDF(
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
+        width: targetWidth,
+        windowWidth: targetWidth + 40,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+          if (clonedEl) {
+            clonedEl.classList.remove('mobile-phone-flow');
+            clonedEl.style.width = `${targetWidth}px`;
+            clonedEl.style.maxWidth = `${targetWidth}px`;
+            clonedEl.style.minWidth = `${targetWidth}px`;
+            clonedEl.style.boxSizing = 'border-box';
+            clonedEl.style.overflow = 'visible';
+            clonedEl.style.position = 'relative';
+            clonedEl.style.transform = 'none';
+
+            const tables = clonedEl.querySelectorAll('table');
+            tables.forEach(t => {
+              t.style.display = 'table';
+              t.style.width = '100%';
+              t.style.maxWidth = '100%';
+              t.style.tableLayout = 'auto';
+            });
+          }
         }
       });
     } finally {
@@ -117,12 +192,8 @@ export async function exportElementToPDF(
 
     if (onProgress) onProgress('PDF phek rem fel mek a ni...');
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const canvasWidth = canvas.width;
     const canvasHeight = canvas.height;
-
-    // Check if wide (landscape) or tall (portrait)
-    const isLandscape = canvasWidth > canvasHeight * 1.15;
     
     const pdf = new jsPDF({
       orientation: isLandscape ? 'landscape' : 'portrait',
@@ -137,44 +208,146 @@ export async function exportElementToPDF(
     // Standard 6mm margin for clean printable borders
     const margin = 6;
     const contentWidth = pageWidth - (margin * 2);
-    const scaledContentHeight = (canvasHeight * contentWidth) / canvasWidth;
-
     const pageContentHeight = pageHeight - (margin * 2);
+    const mmToPx = canvasWidth / contentWidth;
+    const pageMaxHeightPx = Math.floor(pageContentHeight * mmToPx);
 
-    let heightLeft = scaledContentHeight;
-    let position = margin;
-    let page = 0;
+    // Helper to calculate relative offsetTop without being affected by CSS scale or transforms
+    const getRelativeOffsetTop = (target: HTMLElement, container: HTMLElement): number => {
+      let top = 0;
+      let curr: HTMLElement | null = target;
+      while (curr && curr !== container && curr !== document.body) {
+        top += curr.offsetTop;
+        curr = curr.offsetParent as HTMLElement | null;
+      }
+      return top;
+    };
 
-    // Draw first page
-    pdf.addImage(
-      imgData,
-      'JPEG',
-      margin,
-      position,
-      contentWidth,
-      scaledContentHeight,
-      undefined,
-      'FAST'
-    );
-    heightLeft -= pageContentHeight;
-    page++;
+    const containerHeight = element.scrollHeight || element.offsetHeight || 1;
+    const scaleY = canvasHeight / containerHeight;
 
-    // Add extra pages if document exceeds one A4 page
-    while (heightLeft > 0) {
-      position = margin - (page * pageContentHeight);
-      pdf.addPage();
+    // Collect elements that should not be split across pages (table rows, footer, signature grid)
+    interface BreakableBlock {
+      topPx: number;
+      bottomPx: number;
+    }
+
+    const breakableElements = element.querySelectorAll('tbody tr, tfoot tr, .sign-grid, .summary-bar, .report-footer');
+    const blocks: BreakableBlock[] = [];
+
+    breakableElements.forEach(el => {
+      const topPx = Math.round(getRelativeOffsetTop(el as HTMLElement, element) * scaleY);
+      const bottomPx = Math.round((getRelativeOffsetTop(el as HTMLElement, element) + (el as HTMLElement).offsetHeight) * scaleY);
+      if (bottomPx > topPx) {
+        blocks.push({ topPx, bottomPx });
+      }
+    });
+
+    blocks.sort((a, b) => a.topPx - b.topPx);
+
+    // Smart single-page fit threshold:
+    // If the canvas height is slightly larger than 1 page (up to 20% overflow, such as ~25-28 rows + signatures),
+    // scale it cleanly so the entire statement fits on ONE pristine page!
+    if (canvasHeight <= pageMaxHeightPx * 1.20) {
+      const fitScale = Math.min(1, pageMaxHeightPx / canvasHeight);
+      const scaledWidth = contentWidth * fitScale;
+      const scaledHeight = (canvasHeight * scaledWidth) / canvasWidth;
+      const offsetX = margin + (contentWidth - scaledWidth) / 2;
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       pdf.addImage(
         imgData,
         'JPEG',
+        offsetX,
         margin,
-        position,
-        contentWidth,
-        scaledContentHeight,
+        scaledWidth,
+        scaledHeight,
         undefined,
         'FAST'
       );
-      heightLeft -= pageContentHeight;
-      page++;
+    } else {
+      // Clean, non-overlapping multi-page slicing with exact row boundary awareness
+      let currentY = 0;
+      let pageIndex = 0;
+
+      while (currentY < canvasHeight) {
+        const availableSlicePx = pageMaxHeightPx;
+        const targetY = currentY + availableSlicePx;
+
+        let cutY = targetY;
+        if (targetY >= canvasHeight) {
+          cutY = canvasHeight;
+        } else {
+          // Check if any block is split across targetY
+          let foundSplit = false;
+          for (const block of blocks) {
+            if (block.topPx < targetY && block.bottomPx > targetY) {
+              if (block.topPx > currentY + (availableSlicePx * 0.35)) {
+                cutY = block.topPx;
+                foundSplit = true;
+              }
+              break;
+            }
+          }
+
+          if (!foundSplit) {
+            let bestBoundary = -1;
+            for (const block of blocks) {
+              if (block.bottomPx <= targetY && block.bottomPx > bestBoundary) {
+                bestBoundary = block.bottomPx;
+              }
+            }
+            if (bestBoundary > currentY + (availableSlicePx * 0.35)) {
+              cutY = bestBoundary;
+            }
+          }
+        }
+
+        if (cutY <= currentY) {
+          cutY = Math.min(canvasHeight, currentY + availableSlicePx);
+        }
+
+        const sliceHeightPx = cutY - currentY;
+
+        // Create isolated canvas for this specific page slice
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvasWidth;
+        pageCanvas.height = sliceHeightPx;
+        const pageCtx = pageCanvas.getContext('2d');
+
+        if (pageCtx) {
+          pageCtx.fillStyle = '#ffffff';
+          pageCtx.fillRect(0, 0, canvasWidth, sliceHeightPx);
+
+          // Draw ONLY the exact unique slice for this page
+          pageCtx.drawImage(
+            canvas,
+            0, currentY, canvasWidth, sliceHeightPx,
+            0, 0, canvasWidth, sliceHeightPx
+          );
+        }
+
+        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+        const sliceHeightMm = (sliceHeightPx * contentWidth) / canvasWidth;
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+
+        pdf.addImage(
+          pageImgData,
+          'JPEG',
+          margin,
+          margin,
+          contentWidth,
+          sliceHeightMm,
+          undefined,
+          'FAST'
+        );
+
+        // Advance to next slice with ZERO overlap
+        currentY = cutY;
+        pageIndex++;
+      }
     }
 
     if (onProgress) onProgress('PDF download & save mek a ni...');
@@ -185,26 +358,35 @@ export async function exportElementToPDF(
     const dataUri = pdf.output('datauristring');
 
     // Multi-tier download execution for Android WebViews and mobile browsers
-    try {
-      // 1. Trigger direct anchor download using Blob Object URL
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = cleanFileName;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        try {
-          document.body.removeChild(a);
-        } catch {}
-      }, 800);
-    } catch (e) {
-      console.warn('Anchor blob download failed, trying dataUri and pdf.save', e);
+    if (options?.autoDownload !== false) {
       try {
-        pdf.save(cleanFileName);
-      } catch (saveErr) {
-        console.warn('pdf.save failed', saveErr);
+        await downloadFileUniversal(
+          pdfBlob,
+          cleanFileName,
+          'application/pdf',
+          cleanFileName.replace(/_/g, ' ').replace(/\.pdf$/i, '')
+        );
+      } catch (e) {
+        console.warn('downloadFileUniversal in exportElementToPDF failed, using direct anchor fallback:', e);
+        try {
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = cleanFileName;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            try {
+              document.body.removeChild(a);
+            } catch {}
+          }, 1000);
+        } catch (anchorErr) {
+          console.warn('Anchor fallback failed, trying pdf.save:', anchorErr);
+          try {
+            pdf.save(cleanFileName);
+          } catch {}
+        }
       }
     }
 
@@ -231,8 +413,19 @@ export async function exportElementToPDF(
  * 2. Window.print()
  * 3. Pop-up window fallback
  */
-export function executePrintSafely(htmlContent: string, docTitle: string = 'RonPay Document'): void {
+export function executePrintSafely(
+  htmlContent: string, 
+  docTitle: string = 'RonPay Document',
+  orientation?: 'portrait' | 'landscape'
+): void {
   try {
+    const isLandscape = orientation === 'landscape' || 
+      htmlContent.includes('data-default-orientation="landscape"') ||
+      htmlContent.includes('size: A4 landscape') ||
+      htmlContent.includes('size: landscape') ||
+      htmlContent.includes('x-report-orientation" content="landscape"') ||
+      htmlContent.includes('report-orientation-landscape');
+
     let frame = document.getElementById('ronpay-direct-print-frame') as HTMLIFrameElement;
     if (frame) {
       try {
@@ -247,8 +440,8 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
     frame.style.position = 'fixed';
     frame.style.left = '-9999px';
     frame.style.top = '0';
-    frame.style.width = '1024px';
-    frame.style.height = '768px';
+    frame.style.width = isLandscape ? '1123px' : '794px';
+    frame.style.height = isLandscape ? '794px' : '1123px';
     frame.style.border = '0';
     frame.style.opacity = '0';
     frame.style.pointerEvents = 'none';
@@ -257,8 +450,10 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
     const frameDoc = frame.contentWindow?.document || frame.contentDocument;
     if (frameDoc) {
       frameDoc.open();
-      // Ensure UTF-8 charset and document title are properly preserved
+      
+      const pageCss = `@page { size: ${isLandscape ? 'landscape' : 'portrait'}; margin: 8mm; }`;
       let completeHtml = htmlContent;
+      
       if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
         completeHtml = `
           <!DOCTYPE html>
@@ -267,7 +462,7 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
               <meta charset="utf-8">
               <title>${docTitle || 'RonPay Document'}</title>
               <style>
-                @page { size: auto; margin: 8mm; }
+                ${pageCss}
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 10px; color: #0f172a; background: #ffffff; }
                 table { width: 100%; border-collapse: collapse; }
                 @media print {
@@ -281,7 +476,10 @@ export function executePrintSafely(htmlContent: string, docTitle: string = 'RonP
             </body>
           </html>
         `;
+      } else if (!completeHtml.includes('@page')) {
+        completeHtml = completeHtml.replace('</head>', `<style>${pageCss}</style></head>`);
       }
+
       frameDoc.write(completeHtml);
       frameDoc.close();
 
