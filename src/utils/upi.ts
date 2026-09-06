@@ -75,7 +75,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'gpay',
     name: 'Google Pay (GPay)',
     shortName: 'GPay',
-    scheme: 'gpay://upi/pay',
+    scheme: 'tez://upi/pay',
     androidPackage: 'com.google.android.apps.npos',
     iosScheme: 'gpay://',
     accentColor: '#1a73e8',
@@ -162,10 +162,10 @@ export function buildUpiIntentUrl(
   const { upiId, payeeName, amount, note, transactionRef } = payload;
   
   const cleanUpiId = upiId.trim();
-  const cleanPayee = payeeName.trim().substring(0, 50);
-  const cleanNote = (note || `RonPay:${transactionRef}`).trim().substring(0, 50);
+  const cleanPayee = payeeName.trim().replace(/[^a-zA-Z0-9 ]/g, ' ').substring(0, 50);
+  // NPCI spec: Note should be alphanumeric and spaces only, no colons or special chars
+  const cleanNote = (note || `RonPay ${transactionRef}`).replace(/[^a-zA-Z0-9 ]/g, ' ').trim().substring(0, 40);
   const formattedAmount = Number(amount).toFixed(2);
-  const callbackUrl = generateReceiptWebLink(transactionRef);
 
   // Parse target base scheme
   let base = appScheme;
@@ -176,12 +176,11 @@ export function buildUpiIntentUrl(
   // NPCI UPI Standard Query Parameters:
   // pa = Payee VPA
   // pn = Payee Name
-  // mc = Merchant Code (optional)
   // tr = Transaction Reference ID
   // tn = Transaction Note
   // am = Transaction Amount
   // cu = Currency (INR)
-  // url = Callback / Receipt URL
+  // NOTE: 'url' parameter is strictly rejected by NPCI for P2P personal VPAs unless merchant-certified
   const queryParams = new URLSearchParams();
   queryParams.set('pa', cleanUpiId);
   queryParams.set('pn', cleanPayee);
@@ -189,7 +188,6 @@ export function buildUpiIntentUrl(
   queryParams.set('tn', cleanNote);
   queryParams.set('am', formattedAmount);
   queryParams.set('cu', 'INR');
-  queryParams.set('url', callbackUrl);
 
   const delimiter = base.includes('?') ? '&' : '?';
   return `${base}${delimiter}${queryParams.toString()}`;
