@@ -75,8 +75,8 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'gpay',
     name: 'Google Pay (GPay)',
     shortName: 'GPay',
-    scheme: 'tez://upi/pay',
-    androidPackage: 'com.google.android.apps.npos',
+    scheme: 'upi://pay',
+    androidPackage: 'com.google.android.apps.nbu.paisa.user',
     iosScheme: 'gpay://',
     accentColor: '#1a73e8',
     badgeBg: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -87,7 +87,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'phonepe',
     name: 'PhonePe',
     shortName: 'PhonePe',
-    scheme: 'phonepe://pay',
+    scheme: 'upi://pay',
     androidPackage: 'com.phonepe.app',
     iosScheme: 'phonepe://',
     accentColor: '#5f259f',
@@ -99,7 +99,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'paytm',
     name: 'Paytm UPI',
     shortName: 'Paytm',
-    scheme: 'paytmmp://pay',
+    scheme: 'upi://pay',
     androidPackage: 'net.one97.paytm',
     iosScheme: 'paytmmp://',
     accentColor: '#00b9f5',
@@ -111,7 +111,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'bhim',
     name: 'BHIM UPI',
     shortName: 'BHIM',
-    scheme: 'bhim://pay',
+    scheme: 'upi://pay',
     androidPackage: 'in.org.npci.upiapp',
     iosScheme: 'bhim://',
     accentColor: '#00833e',
@@ -123,7 +123,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'cred',
     name: 'CRED UPI',
     shortName: 'CRED',
-    scheme: 'credpay://pay',
+    scheme: 'upi://pay',
     androidPackage: 'com.dreamplug.androidapp',
     iosScheme: 'cred://',
     accentColor: '#111827',
@@ -134,7 +134,7 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
     id: 'amazonpay',
     name: 'Amazon Pay',
     shortName: 'Amazon',
-    scheme: 'amazonpay://pay',
+    scheme: 'upi://pay',
     androidPackage: 'in.amazon.mShop.android.shopping',
     iosScheme: 'amazon://',
     accentColor: '#ff9900',
@@ -143,21 +143,25 @@ export const UPI_APP_OPTIONS: UpiAppOption[] = [
   },
   {
     id: 'generic',
-    name: 'Any UPI App (Universal / Default)',
-    shortName: 'All UPI Apps',
+    name: 'Any UPI App (Android Chooser)',
+    shortName: 'Choose Any App',
     scheme: 'upi://pay',
     accentColor: '#4f46e5',
     badgeBg: 'bg-indigo-50 text-indigo-800 border-indigo-200',
     iconBg: 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white',
+    popular: true,
   }
 ];
 
 /**
- * Generate standard NPCI compliant UPI Intent URI
+ * Generate standard NPCI compliant UPI Intent URI.
+ * If androidPackage is provided on mobile, uses Android Chrome Intent URI format
+ * so Chrome opens the exact targeted UPI app with the standard 'upi' scheme.
  */
 export function buildUpiIntentUrl(
   payload: UpiIntentPayload,
-  appScheme: string = 'upi://pay'
+  appScheme: string = 'upi://pay',
+  androidPackage?: string
 ): string {
   const { upiId, payeeName, amount, note, transactionRef } = payload;
   
@@ -167,30 +171,36 @@ export function buildUpiIntentUrl(
   const cleanNote = (note || `RonPay ${transactionRef}`).replace(/[^a-zA-Z0-9 ]/g, ' ').trim().substring(0, 40);
   const formattedAmount = Number(amount).toFixed(2);
 
-  // Parse target base scheme
+  // NPCI UPI Standard Query Parameters:
+  // pa = Payee VPA (Required)
+  // pn = Payee Name (Required)
+  // am = Transaction Amount (Required)
+  // cu = Currency (INR)
+  // tn = Transaction Note (Optional, clean alphanumeric)
+  const queryParams = new URLSearchParams();
+  queryParams.set('pa', cleanUpiId);
+  queryParams.set('pn', cleanPayee);
+  queryParams.set('am', formattedAmount);
+  queryParams.set('cu', 'INR');
+  queryParams.set('tn', cleanNote);
+
+  const queryString = queryParams.toString();
+
+  // If an Android package is specified (e.g. GPay or PhonePe), use the standard Android Chrome Intent
+  // syntax: intent://pay?<params>#Intent;scheme=upi;package=<pkg>;end
+  // This allows Android Chrome to target the exact app using standard NPCI 'upi' scheme.
+  if (androidPackage && isMobileDevice()) {
+    return `intent://pay?${queryString}#Intent;scheme=upi;package=${androidPackage};end`;
+  }
+
+  // Standard generic UPI scheme (upi://pay?...)
   let base = appScheme;
   if (!base.includes('://')) {
     base = 'upi://pay';
   }
 
-  // NPCI UPI Standard Query Parameters:
-  // pa = Payee VPA
-  // pn = Payee Name
-  // tr = Transaction Reference ID
-  // tn = Transaction Note
-  // am = Transaction Amount
-  // cu = Currency (INR)
-  // NOTE: 'url' parameter is strictly rejected by NPCI for P2P personal VPAs unless merchant-certified
-  const queryParams = new URLSearchParams();
-  queryParams.set('pa', cleanUpiId);
-  queryParams.set('pn', cleanPayee);
-  queryParams.set('tr', transactionRef);
-  queryParams.set('tn', cleanNote);
-  queryParams.set('am', formattedAmount);
-  queryParams.set('cu', 'INR');
-
   const delimiter = base.includes('?') ? '&' : '?';
-  return `${base}${delimiter}${queryParams.toString()}`;
+  return `${base}${delimiter}${queryString}`;
 }
 
 /**

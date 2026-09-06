@@ -12,7 +12,8 @@ import {
   Loader2,
   RefreshCw,
   ArrowRight,
-  Info
+  Info,
+  Download
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 import {
@@ -69,10 +70,10 @@ export function UPIIntentModal({
 }: UPIIntentModalProps) {
   const [selectedApp, setSelectedApp] = useState<UpiAppOption | null>(null);
   const [step, setStep] = useState<'select' | 'waiting' | 'error'>('select');
+  const [payMethodTab, setPayMethodTab] = useState<'qr' | 'apps'>('apps');
   const [txRef, setTxRef] = useState<string>(() => `RPAY-${Math.floor(100000 + Math.random() * 900000)}`);
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
-  const [showQrMode, setShowQrMode] = useState<boolean>(!isMobileDevice());
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrLoading, setQrLoading] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -173,13 +174,14 @@ export function UPIIntentModal({
         upiId: targetUpi,
         payeeName: payeeDisplayName,
         amount: totalPayable,
-        note: `RonPay:${campaign.id}:${txRef}`,
+        note: `RonPay ${txRef}`,
         transactionRef: txRef,
         campaignId: campaign.id,
         donorName: isAnonymous ? 'Anonymous' : donorName,
         donorPhone
       },
-      app.scheme
+      app.scheme,
+      app.androidPackage
     );
 
     // 3. Launch UPI intent deep link
@@ -192,7 +194,7 @@ export function UPIIntentModal({
           upiId: targetUpi,
           payeeName: payeeDisplayName,
           amount: totalPayable,
-          note: `RonPay:${campaign.id}:${txRef}`,
+          note: `RonPay ${txRef}`,
           transactionRef: txRef
         },
         'upi://pay'
@@ -351,43 +353,160 @@ export function UPIIntentModal({
                 <button
                   type="button"
                   onClick={() => copyToClipboard(targetUpi, 'upi')}
-                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[11px] font-bold flex items-center gap-1 shrink-0 transition cursor-pointer shadow-2xs"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition cursor-pointer shadow-xs active:scale-95"
                   title="Copy UPI ID"
                 >
-                  {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedId ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedId ? 'Copied!' : 'Copy'}</span>
                 </button>
               </div>
 
-              {/* Mode Toggle: Mobile UPI Apps vs On-Screen QR Code */}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <label className="text-xs font-black text-slate-900">
-                  Thlang Rawh: Khawi App Hmangin Nge I Pek Dawn?
-                </label>
+              {/* Copied Guide Notification */}
+              {copiedId && (
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 text-emerald-900 text-xs flex items-start gap-2 animate-fadeIn shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">UPI ID copy fel a ni ta!</p>
+                    <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
+                      I GPay emaw PhonePe hawng la, <b>"Pay to UPI ID"</b> (emaw <b>"To UPI ID"</b>)-ah paste la, <b>₹{totalPayable}</b> pe rawh le. I pek zawh veleh he tah let lehin <b>"Ka Pe Zo Tawh"</b> i hmet dawn nia.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Mode Selection Tabs */}
+              <div className="bg-slate-100 p-1 rounded-2xl flex gap-1 border border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setShowQrMode(!showQrMode)}
-                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                  onClick={() => setPayMethodTab('apps')}
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    payMethodTab === 'apps'
+                      ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>{showQrMode ? 'Hide QR Code' : 'Scan QR Code'}</span>
+                  <Smartphone className="w-4 h-4 text-indigo-600" />
+                  <span>Direct UPI Apps</span>
+                  <span className="bg-indigo-100 text-indigo-800 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tight">
+                    GPay / PhonePe
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPayMethodTab('qr')}
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    payMethodTab === 'qr'
+                      ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4 text-indigo-600" />
+                  <span>QR Code & Gallery</span>
                 </button>
               </div>
 
-              {/* QR Code Scan View for Desktop or direct phone camera scan */}
-              {showQrMode && (
-                <div className="bg-gradient-to-b from-indigo-50/70 to-slate-50 border border-indigo-200 rounded-2xl p-4 text-center space-y-3 animate-fadeIn">
+              {/* TAB 1: Direct UPI App Launch (Default) */}
+              {payMethodTab === 'apps' && (
+                <div className="space-y-3 animate-fadeIn">
+                  {/* Primary Universal App Launcher */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const genericApp = UPI_APP_OPTIONS.find((a) => a.id === 'generic') || UPI_APP_OPTIONS[0];
+                      handleLaunchUpiApp(genericApp);
+                    }}
+                    className="w-full p-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl flex items-center justify-between gap-3 shadow-md shadow-indigo-600/25 active:scale-98 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold">
+                        <Smartphone className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-black">Open UPI App Chooser</div>
+                        <div className="text-[11px] text-indigo-100">
+                          GPay, PhonePe, Paytm thlanna native popup a lo lang ang
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                      <ArrowRight className="w-4 h-4 text-white" />
+                    </div>
+                  </button>
+
+                  <div className="flex items-center gap-2 py-0.5">
+                    <div className="flex-1 h-px bg-slate-200" />
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Emaw App Hming Thlang Rawh
+                    </span>
+                    <div className="flex-1 h-px bg-slate-200" />
+                  </div>
+
+                  {/* UPI Apps Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {UPI_APP_OPTIONS.filter((a) => a.id !== 'generic').map((app) => (
+                      <button
+                        key={app.id}
+                        type="button"
+                        onClick={() => handleLaunchUpiApp(app)}
+                        className="p-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-2xl flex items-center justify-between gap-3 text-left transition duration-150 shadow-2xs hover:shadow-sm group cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-xl ${app.iconBg} flex items-center justify-center font-black text-xs shadow-2xs shrink-0 group-hover:scale-105 transition-transform`}>
+                            {app.shortName.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-black text-slate-900 group-hover:text-indigo-600 transition truncate">
+                                {app.name}
+                              </span>
+                              {app.popular && (
+                                <span className="text-[8.5px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.2 rounded-full">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-medium">
+                              Pay ₹{totalPayable.toLocaleString('en-IN')} directly
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-indigo-600 text-slate-500 group-hover:text-white flex items-center justify-center shrink-0 transition">
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Switch to QR helper */}
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPayMethodTab('qr')}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1.5 cursor-pointer py-1"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>QR Code scan emaw Gallery atanga pek i duh zawk em?</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: QR Code & Gallery Mode */}
+              {payMethodTab === 'qr' && (
+                <div className="bg-gradient-to-b from-indigo-50/60 via-white to-slate-50 border border-indigo-200 rounded-2xl p-4 text-center space-y-3.5 animate-fadeIn">
                   <div className="flex items-center justify-center">
-                    <div className="bg-white p-2.5 rounded-2xl border-2 border-indigo-300 shadow-md inline-block">
+                    <div className="bg-white p-3 rounded-2xl border-2 border-indigo-300 shadow-md inline-block">
                       {qrLoading ? (
-                        <div className="w-40 h-40 flex flex-col items-center justify-center text-indigo-600 gap-2">
-                          <Loader2 className="w-6 h-6 animate-spin" />
-                          <span className="text-[10px] font-bold">Generating QR...</span>
+                        <div className="w-44 h-44 flex flex-col items-center justify-center text-indigo-600 gap-2">
+                          <Loader2 className="w-7 h-7 animate-spin" />
+                          <span className="text-xs font-bold">Generating QR...</span>
                         </div>
                       ) : qrDataUrl ? (
-                        <img src={qrDataUrl} alt="UPI QR Code" className="w-40 h-40 object-contain rounded-lg" />
+                        <img src={qrDataUrl} alt="UPI QR Code" className="w-44 h-44 object-contain rounded-lg" />
                       ) : (
-                        <div className="w-40 h-40 flex items-center justify-center text-slate-400 text-xs">
+                        <div className="w-44 h-44 flex items-center justify-center text-slate-400 text-xs">
                           QR not available
                         </div>
                       )}
@@ -395,60 +514,89 @@ export function UPIIntentModal({
                   </div>
 
                   <div>
-                    <span className="text-xs font-black text-indigo-950 block">
-                      Phone atangin Google Pay / PhonePe / Paytm hmangin scan rawh
-                    </span>
-                    <span className="text-[11px] text-slate-600">
-                      Amount: <b className="text-indigo-900 font-bold">₹{totalPayable.toLocaleString('en-IN')}</b> • Auto-filled
-                    </span>
+                    <div className="text-sm font-black text-indigo-950">
+                      Amount: <span className="text-emerald-700 font-extrabold text-base">₹{totalPayable.toLocaleString('en-IN')}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Payee: <b>{payeeDisplayName}</b> ({targetUpi})
+                    </p>
                   </div>
+
+                  {/* Primary QR Action Buttons */}
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    {qrDataUrl && (
+                      <a
+                        href={qrDataUrl}
+                        download={`RonPay-QR-${txRef}.png`}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition"
+                      >
+                        <Download className="w-4 h-4" /> Download QR to Gallery
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(targetUpi, 'upi')}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs active:scale-95 transition cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedId ? 'Copied!' : 'Copy UPI'}</span>
+                    </button>
+                  </div>
+
+                  {/* Step-by-Step Instructions */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-left space-y-2 shadow-2xs">
+                    <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide">
+                      Awlsam taka pek dan (GPay / PhonePe):
+                    </p>
+                    <ol className="text-xs text-slate-700 space-y-1.5 list-decimal list-inside leading-relaxed">
+                      <li>
+                        A chunga <b>"Download QR"</b> button kha hmet la, i gallery-ah save rawh.
+                      </li>
+                      <li>
+                        <b>Google Pay</b> emaw <b>PhonePe</b> hawngin <b>QR Scanner</b> hmet la, <b>Gallery icon</b> atangin thlang la, ₹{totalPayable} pe rawh (100% tlang nghal ang).
+                      </li>
+                      <li>
+                        I pek zawh veleh a hnuai chiah ami <b>"Ka Pe Zo Tawh"</b> hmetin receipt la nghal rawh le.
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* UTR Optional Input */}
+                  <div className="text-left pt-1">
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Bank UTR / Ref No. (Optional):
+                    </label>
+                    <input
+                      type="text"
+                      value={utrInput}
+                      onChange={(e) => setUtrInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                      placeholder="e.g. 423589123456"
+                      maxLength={22}
+                      className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Confirm Payment Button right on QR tab */}
+                  <button
+                    type="button"
+                    onClick={handleConfirmSuccess}
+                    disabled={isConfirming}
+                    className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isConfirming ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Verifying & Generating Receipt...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Ka Pe Zo Tawh (Receipt La Rawh)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
-
-              {/* UPI Apps Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {UPI_APP_OPTIONS.map((app) => (
-                  <button
-                    key={app.id}
-                    type="button"
-                    onClick={() => handleLaunchUpiApp(app)}
-                    className="p-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-indigo-400 rounded-2xl flex items-center justify-between gap-3 text-left transition duration-150 shadow-2xs hover:shadow-sm group cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl ${app.iconBg} flex items-center justify-center font-black text-xs shadow-2xs shrink-0 group-hover:scale-105 transition-transform`}>
-                        {app.shortName.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-slate-900 group-hover:text-indigo-600 transition truncate">
-                            {app.name}
-                          </span>
-                          {app.popular && (
-                            <span className="text-[8.5px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.2 rounded-full">
-                              Popular
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          Pay ₹{totalPayable.toLocaleString('en-IN')} directly
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="w-7 h-7 rounded-full bg-slate-100 group-hover:bg-indigo-600 text-slate-500 group-hover:text-white flex items-center justify-center shrink-0 transition">
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Informational Tip */}
-              <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-2.5 flex items-start gap-2 text-[11px] text-indigo-950 leading-relaxed">
-                <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                <span>
-                  App i thlan hian i phone-a UPI app-ah a hruai lut nghal ang che a, pek zawh veleh RonPay-ah receipt a in-generate nghal ang.
-                </span>
-              </div>
             </>
           )}
 
@@ -487,6 +635,17 @@ export function UPIIntentModal({
                     <span className="text-slate-500 font-medium">Txn Reference:</span>
                     <span className="font-mono font-bold text-amber-700">{txRef}</span>
                   </div>
+                </div>
+
+                {/* Helpful Troubleshooting tip for GPay/PhonePe account visibility */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-left text-[11px] text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                    <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Bank Account a lang lo a nih chuan:</span>
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    Google Pay / PhonePe-in personal UPI ID direct link an block thin avangin i bank account a lan loh chuan: <b>"App Dang Thlang Rawh"</b> hmetin <b>Copy UPI ID</b> hmangin emaw, <b>Scan QR Code</b> hmangin direct-in pe rawh le.
+                  </p>
                 </div>
               </div>
 
