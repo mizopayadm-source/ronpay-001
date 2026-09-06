@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, Check, ArrowLeft, AlertCircle, Banknote, ShieldCheck, CheckCircle2, XCircle, UserCheck, Lock } from 'lucide-react';
+import { Clock, Check, ArrowLeft, AlertCircle, Banknote, ShieldCheck, CheckCircle2, XCircle, UserCheck, Lock, Fingerprint } from 'lucide-react';
 import { Transaction, Campaign, CreatorProfile } from '../types';
 import { approveCashTransaction, rejectCashTransaction, canApproveCashPayment, getTransactionCampaign } from '../utils/storage';
+import { BiometricAuthModal } from './BiometricAuthModal';
 
 interface CashPendingScreenProps {
   transaction: Transaction | null;
@@ -26,6 +27,10 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   const [isRejecting, setIsRejecting] = useState<boolean>(false);
   const [rejectionReason, setRejectionReason] = useState<string>('Cash pawisa dawn a ni lo');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  // Biometric Guard
+  const [isBiometricOpen, setIsBiometricOpen] = useState<boolean>(false);
+  const [pendingBiometricAction, setPendingBiometricAction] = useState<'approve' | 'reject' | null>(null);
 
   const targetCampaign = useMemo(() => {
     if (!currentTx) return undefined;
@@ -54,39 +59,51 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   const isApproved = currentTx.status === 'completed';
   const isRejected = currentTx.status === 'rejected';
 
-  const handleApprove = () => {
+  const handleStartApprove = () => {
     if (!authCheck.allowed) {
       setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi approve phalna i nei lo.'}`);
       return;
     }
-    const verifier = creatorProfile?.name || creatorName;
-    const updated = approveCashTransaction(currentTx.id, verifier, creatorProfile, campaigns);
-    if (updated) {
-      setCurrentTx(updated);
-      setActionMessage('Cash pekna hi hlawhtling takin pawm (Approved) a ni ta e!');
-      if (onApprove) {
-        setTimeout(() => {
-          onApprove(updated);
-        }, 1000);
-      }
-    }
+    setPendingBiometricAction('approve');
+    setIsBiometricOpen(true);
   };
 
-  const handleConfirmReject = () => {
+  const handleStartReject = () => {
     if (!authCheck.allowed) {
       setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi hnawl phalna i nei lo.'}`);
       return;
     }
+    setPendingBiometricAction('reject');
+    setIsBiometricOpen(true);
+  };
+
+  const handleBiometricSuccess = () => {
+    setIsBiometricOpen(false);
     const verifier = creatorProfile?.name || creatorName;
-    const updated = rejectCashTransaction(currentTx.id, verifier, rejectionReason, creatorProfile, campaigns);
-    if (updated) {
-      setCurrentTx(updated);
-      setIsRejecting(false);
-      setActionMessage('Cash pekna hi hnawl (Rejected) a ni.');
-      if (onReject) {
-        onReject(updated);
+
+    if (pendingBiometricAction === 'approve') {
+      const updated = approveCashTransaction(currentTx.id, verifier, creatorProfile, campaigns);
+      if (updated) {
+        setCurrentTx(updated);
+        setActionMessage('Cash pekna hi hlawhtling takin pawm (Approved) a ni ta e!');
+        if (onApprove) {
+          setTimeout(() => {
+            onApprove(updated);
+          }, 1000);
+        }
+      }
+    } else if (pendingBiometricAction === 'reject') {
+      const updated = rejectCashTransaction(currentTx.id, verifier, rejectionReason, creatorProfile, campaigns);
+      if (updated) {
+        setCurrentTx(updated);
+        setIsRejecting(false);
+        setActionMessage('Cash pekna hi hnawl (Rejected) a ni.');
+        if (onReject) {
+          onReject(updated);
+        }
       }
     }
+    setPendingBiometricAction(null);
   };
 
   return (
@@ -207,11 +224,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
             <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={handleApprove}
+                onClick={handleStartApprove}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
               >
-                <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                Pawisa Ka Dawng Fel (Approve Cash)
+                <Fingerprint className="w-4 h-4 text-slate-950" />
+                Pawisa Ka Dawng Fel (Biometric Approve)
               </button>
 
               {!isRejecting ? (
@@ -238,10 +255,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={handleConfirmReject}
-                      className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-2 rounded-lg text-xs cursor-pointer"
+                      onClick={handleStartReject}
+                      className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-2 rounded-lg text-xs cursor-pointer flex items-center justify-center gap-1"
                     >
-                      Hnawlna Nemnghet Rawh
+                      <Fingerprint className="w-3.5 h-3.5" />
+                      Hnawlna Nemnghet Rawh (Biometric)
                     </button>
                     <button
                       type="button"
@@ -292,6 +310,23 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           Back to Home
         </button>
       </div>
+
+      {/* Biometric Verification Guard */}
+      <BiometricAuthModal
+        isOpen={isBiometricOpen}
+        target="admin_action"
+        actionType={pendingBiometricAction || 'approve'}
+        title={pendingBiometricAction === 'reject' ? 'Cash Rejection Authorization' : 'Cash Approval Clearance'}
+        subtitle={`Cash payment ₹${Number(currentTx.amount || 0).toLocaleString('en-IN')} (${currentTx.id}) hi ${pendingBiometricAction === 'reject' ? 'hnawl (reject)' : 'pawm (approve)'} tur hian Biometric verify rawh le.`}
+        userName={creatorProfile?.name || creatorName}
+        userPhone={creatorProfile?.phone}
+        expectedPin={creatorProfile?.pin || creatorProfile?.password}
+        onClose={() => {
+          setIsBiometricOpen(false);
+          setPendingBiometricAction(null);
+        }}
+        onSuccess={handleBiometricSuccess}
+      />
     </div>
   );
 };

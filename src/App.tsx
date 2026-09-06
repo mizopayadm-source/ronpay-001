@@ -84,6 +84,7 @@ import { MemberRollPreviewModal, PreviewReportFormat } from './components/Member
 import { MismatchModal } from './components/MismatchModal';
 import { UpgradeModal } from './components/UpgradeModal';
 import { BiometricAuthModal } from './components/BiometricAuthModal';
+import { Fingerprint } from 'lucide-react';
 import { ExternalUPILandingModal } from './components/ExternalUPILandingModal';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
@@ -186,8 +187,11 @@ export default function App() {
   const [mismatchCategory, setMismatchCategory] = useState<BawmCategory | null>(null);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState<boolean>(false);
   const [isBiometricModalOpen, setIsBiometricModalOpen] = useState<boolean>(false);
-  const [biometricTarget, setBiometricTarget] = useState<'sulhnu' | 'profile' | 'general'>('general');
+  const [biometricTarget, setBiometricTarget] = useState<'sulhnu' | 'profile' | 'general' | 'creator_studio' | 'admin_action'>('general');
+  const [biometricTitle, setBiometricTitle] = useState<string | undefined>(undefined);
+  const [biometricSubtitle, setBiometricSubtitle] = useState<string | undefined>(undefined);
   const [biometricCallback, setBiometricCallback] = useState<(() => void) | null>(null);
+  const [isCreatorStudioUnlocked, setIsCreatorStudioUnlocked] = useState<boolean>(false);
   const [isExternalUPIOpen, setIsExternalUPIOpen] = useState<boolean>(false);
   const [externalUPICampaign, setExternalUPICampaign] = useState<Campaign | null>(null);
   const [imagePreviewData, setImagePreviewData] = useState<{
@@ -436,6 +440,28 @@ export default function App() {
 
   // Handlers for Navigation
   const handleNavigate = (screen: ScreenId) => {
+    // Biometric Security Gate for Creator Studio
+    if (screen === 'create_qr') {
+      if (!creatorProfile.isApproved || !creatorProfile.phone) {
+        handleNavigate('creator_reg');
+        return;
+      }
+
+      if (!isCreatorStudioUnlocked) {
+        setBiometricTarget('creator_studio');
+        setBiometricTitle('Creator Studio Security Access');
+        setBiometricSubtitle(`${creatorProfile.name || 'Creator'} Studio luh nan Fingerprint / Face ID emaw PIN hmangin verify rawh le.`);
+        setBiometricCallback(() => () => {
+          setIsCreatorStudioUnlocked(true);
+          setCurrentScreen('create_qr');
+          updateBrowserUrl('create_qr');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        setIsBiometricModalOpen(true);
+        return;
+      }
+    }
+
     setCurrentScreen(screen);
     if (screen === 'home') {
       setSelectedCampaign(null);
@@ -677,6 +703,7 @@ export default function App() {
   const handleLogout = () => {
     const guest = logoutCreator();
     setCreatorProfile(guest);
+    setIsCreatorStudioUnlocked(false);
     setIsProfileOpen(false);
     handleNavigate('home');
   };
@@ -690,7 +717,13 @@ export default function App() {
     if (targetScreen) {
       const validScreens: ScreenId[] = ['home', 'explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'cash_pending'];
       const matched = validScreens.find(s => s === targetScreen);
-      if (matched) setCurrentScreen(matched);
+      if (matched) {
+        if (matched === 'create_qr') {
+          handleNavigate('create_qr');
+        } else {
+          setCurrentScreen(matched);
+        }
+      }
     } else {
       setCurrentScreen('home');
     }
@@ -833,26 +866,80 @@ export default function App() {
           )}
 
           {currentScreen === 'create_qr' && (
-            <CreateQRScreen
-              creatorProfile={creatorProfile}
-              pricingConfig={pricingConfig}
-              announcement={announcement}
-              campaigns={campaigns}
-              transactions={transactions}
-              onBack={() => handleNavigate('home')}
-              onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
-              onGenerateQR={handleGenerateQR}
-              onLogout={handleLogout}
-              onSwitchAccount={() => handleNavigate('creator_reg')}
-              onUpdateCampaign={handleUpdateCampaign}
-              onDeleteCampaign={handleDeleteCampaign}
-              onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
-              onOpenMemberRoll={handleOpenMemberRoll}
-              onPreviewImage={handlePreviewImage}
-              language={language}
-              onSelectCampaign={handleSelectCampaign}
-              onUpdateCreatorProfile={handleUpdateCreator}
-            />
+            (!creatorProfile.isApproved || !creatorProfile.phone) ? (
+              <CreatorRegScreen
+                creatorProfile={creatorProfile}
+                onBack={() => handleNavigate('home')}
+                onSuccess={(profile, cat) => {
+                  loginCreator(profile);
+                  setCreatorProfile(profile);
+                  setSelectedCategory(cat);
+                  setIsCreatorStudioUnlocked(true);
+                  handleNavigate('create_qr');
+                }}
+                onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+                onRegisterCreator={(p) => {
+                  handleUpdateCreator(p);
+                }}
+              />
+            ) : !isCreatorStudioUnlocked ? (
+              <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-6 space-y-4 animate-fadeIn">
+                <div className="w-16 h-16 rounded-3xl bg-indigo-50 border-2 border-indigo-200 text-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-100 animate-pulse">
+                  <Fingerprint className="w-8 h-8" />
+                </div>
+                <div className="space-y-1 max-w-sm">
+                  <h3 className="text-base font-black text-slate-900">Creator Studio Security Lock</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Creator Studio luh nan WebAuthn Biometric verification (Fingerprint / Face ID) emaw PIN a ngai e.
+                  </p>
+                </div>
+                <div className="flex gap-2 w-full max-w-xs pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('home')}
+                    className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer transition"
+                  >
+                    Hawng Rawh (Home)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBiometricTarget('creator_studio');
+                      setBiometricTitle('Creator Studio Security Access');
+                      setBiometricSubtitle(`${creatorProfile.name || 'Creator'} Studio luh nan verify rawh le.`);
+                      setBiometricCallback(() => () => {
+                        setIsCreatorStudioUnlocked(true);
+                      });
+                      setIsBiometricModalOpen(true);
+                    }}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-200 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                  >
+                    <Fingerprint className="w-4 h-4" /> Verify Now
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <CreateQRScreen
+                creatorProfile={creatorProfile}
+                pricingConfig={pricingConfig}
+                announcement={announcement}
+                campaigns={campaigns}
+                transactions={transactions}
+                onBack={() => handleNavigate('home')}
+                onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+                onGenerateQR={handleGenerateQR}
+                onLogout={handleLogout}
+                onSwitchAccount={() => handleNavigate('creator_reg')}
+                onUpdateCampaign={handleUpdateCampaign}
+                onDeleteCampaign={handleDeleteCampaign}
+                onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+                onOpenMemberRoll={handleOpenMemberRoll}
+                onPreviewImage={handlePreviewImage}
+                language={language}
+                onSelectCampaign={handleSelectCampaign}
+                onUpdateCreatorProfile={handleUpdateCreator}
+              />
+            )
           )}
 
           {currentScreen === 'creator_reg' && (
@@ -1172,10 +1259,25 @@ export default function App() {
         <BiometricAuthModal
           isOpen={isBiometricModalOpen}
           target={biometricTarget}
-          onClose={() => setIsBiometricModalOpen(false)}
+          title={biometricTitle}
+          subtitle={biometricSubtitle}
+          userName={creatorProfile.name}
+          userPhone={creatorProfile.phone}
+          expectedPin={creatorProfile.pin || creatorProfile.password}
+          onClose={() => {
+            setIsBiometricModalOpen(false);
+            setBiometricCallback(null);
+            if (currentScreen === 'create_qr' && !isCreatorStudioUnlocked) {
+              handleNavigate('home');
+            }
+          }}
           onSuccess={() => {
             setIsBiometricModalOpen(false);
-            if (biometricCallback) biometricCallback();
+            if (biometricCallback) {
+              const cb = biometricCallback;
+              setBiometricCallback(null);
+              cb();
+            }
           }}
         />
 
@@ -1241,6 +1343,7 @@ export default function App() {
           onClose={() => setIsLoginModalOpen(false)}
           currentProfile={creatorProfile}
           biometricEnabled={biometricEnabled}
+          onToggleBiometric={handleToggleBiometric}
           onLoginSuccess={(newProfile) => {
             setCreatorProfile(newProfile);
             saveStoredCreatorProfile(newProfile);

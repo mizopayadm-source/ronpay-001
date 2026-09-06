@@ -132,6 +132,7 @@ import {
   canModerateContent,
   getRolePermissions
 } from '../utils/rbac';
+import { BiometricAuthModal } from './BiometricAuthModal';
 
 export type AdminTabId = 'campaigns' | 'creators' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'staff';
 
@@ -272,37 +273,72 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [rejectCashReason, setRejectCashReason] = useState<string>('Cash pawisa dawn a ni lo');
   const [cashActionFeedback, setCashActionFeedback] = useState<string | null>(null);
 
+  // Biometric Guard for Critical Admin Transactions & Approvals
+  const [isBiometricGuardOpen, setIsBiometricGuardOpen] = useState<boolean>(false);
+  const [biometricGuardActionType, setBiometricGuardActionType] = useState<'approve' | 'reject'>('approve');
+  const [biometricGuardTitle, setBiometricGuardTitle] = useState<string>('');
+  const [biometricGuardSubtitle, setBiometricGuardSubtitle] = useState<string>('');
+  const [biometricGuardCallback, setBiometricGuardCallback] = useState<(() => void) | null>(null);
+
+  const triggerAdminBiometricGuard = (
+    actionType: 'approve' | 'reject',
+    title: string,
+    subtitle: string,
+    action: () => void
+  ) => {
+    setBiometricGuardActionType(actionType);
+    setBiometricGuardTitle(title);
+    setBiometricGuardSubtitle(subtitle);
+    setBiometricGuardCallback(() => action);
+    setIsBiometricGuardOpen(true);
+  };
+
   const pendingCashTxList = useMemo(() => {
     return localTransactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
   }, [localTransactions]);
 
   const handleApproveCash = (txId: string) => {
-    const verifier = currentProfile?.name || 'Admin / Creator';
-    const updated = approveCashTransaction(txId, verifier, currentProfile, campaigns);
-    if (updated) {
-      setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
-      onUpdateTransaction?.(updated);
-      setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
-      setTimeout(() => setCashActionFeedback(null), 3500);
-    } else {
-      setCashActionFeedback(`⚠️ He cash hi approve phalna i nei lo.`);
-      setTimeout(() => setCashActionFeedback(null), 3500);
-    }
+    const targetTx = localTransactions.find(t => t.id === txId);
+    triggerAdminBiometricGuard(
+      'approve',
+      'Cash Payment Approval Clearance',
+      `Cash payment ₹${targetTx?.amount?.toLocaleString() || ''} (${txId}) hi pawm (Approve) tur hian Biometric verify rawh le.`,
+      () => {
+        const verifier = currentProfile?.name || 'Admin / Creator';
+        const updated = approveCashTransaction(txId, verifier, currentProfile, campaigns);
+        if (updated) {
+          setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+          onUpdateTransaction?.(updated);
+          setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
+          setTimeout(() => setCashActionFeedback(null), 3500);
+        } else {
+          setCashActionFeedback(`⚠️ He cash hi approve phalna i nei lo.`);
+          setTimeout(() => setCashActionFeedback(null), 3500);
+        }
+      }
+    );
   };
 
   const handleRejectCash = (txId: string, reason?: string) => {
-    const verifier = currentProfile?.name || 'Admin / Creator';
-    const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo', currentProfile, campaigns);
-    if (updated) {
-      setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
-      onUpdateTransaction?.(updated);
-      setRejectingCashId(null);
-      setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
-      setTimeout(() => setCashActionFeedback(null), 3500);
-    } else {
-      setCashActionFeedback(`⚠️ He cash hi hnawl phalna i nei lo.`);
-      setTimeout(() => setCashActionFeedback(null), 3500);
-    }
+    triggerAdminBiometricGuard(
+      'reject',
+      'Cash Payment Rejection Authorization',
+      `Cash payment (${txId}) hi hnawl (Reject) tur hian Biometric authorization a ngai e.`,
+      () => {
+        const verifier = currentProfile?.name || 'Admin / Creator';
+        const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo', currentProfile, campaigns);
+        if (updated) {
+          setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+          onUpdateTransaction?.(updated);
+          setRejectingCashId(null);
+          setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
+          setTimeout(() => setCashActionFeedback(null), 3500);
+        } else {
+          setCashActionFeedback(`⚠️ He cash hi hnawl phalna i nei lo.`);
+          setTimeout(() => setCashActionFeedback(null), 3500);
+        }
+      }
+    );
   };
   
   // Creators sub-filter
@@ -5661,6 +5697,30 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Biometric Guard for Critical Admin Approvals & Rejections */}
+        <BiometricAuthModal
+          isOpen={isBiometricGuardOpen}
+          target="admin_action"
+          actionType={biometricGuardActionType}
+          title={biometricGuardTitle}
+          subtitle={biometricGuardSubtitle}
+          userName={currentProfile?.name}
+          userPhone={currentProfile?.phone}
+          expectedPin={currentProfile?.pin || currentProfile?.password}
+          onClose={() => {
+            setIsBiometricGuardOpen(false);
+            setBiometricGuardCallback(null);
+          }}
+          onSuccess={() => {
+            setIsBiometricGuardOpen(false);
+            if (biometricGuardCallback) {
+              const cb = biometricGuardCallback;
+              setBiometricGuardCallback(null);
+              cb();
+            }
+          }}
+        />
 
       </div>
     </div>

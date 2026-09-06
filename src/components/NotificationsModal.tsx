@@ -32,6 +32,7 @@ import {
   getStoredUserPaidTxIds 
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
+import { BiometricAuthModal } from './BiometricAuthModal';
 
 export interface AppNotification {
   id: string;
@@ -117,6 +118,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return {};
   });
 
+  // Biometric Guard for Cash Approval / Rejection in Notifications
+  const [isBiometricOpen, setIsBiometricOpen] = useState<boolean>(false);
+  const [pendingBiometricAction, setPendingBiometricAction] = useState<'approve' | 'reject'>('approve');
+  const [pendingBiometricTx, setPendingBiometricTx] = useState<Transaction | null>(null);
+  const [pendingRejectReason, setPendingRejectReason] = useState<string>('Cash pawisa dawn a ni lo');
+
   // Handle cash approval
   const handleApproveCashInNotif = (tx: Transaction) => {
     const auth = canApproveCashPayment(tx, campaigns, creatorProfile);
@@ -126,16 +133,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       return;
     }
 
-    const verifier = creatorProfile?.name || (isAdmin ? 'Admin' : 'Bawm Creator');
-    const updated = approveCashTransaction(tx.id, verifier, creatorProfile, campaigns);
-    if (updated) {
-      onTransactionUpdated?.(updated);
-      setToastMessage(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
-      setTimeout(() => setToastMessage(null), 3500);
-    } else {
-      setToastMessage(`⚠️ Pawm theih a ni lo.`);
-      setTimeout(() => setToastMessage(null), 3500);
-    }
+    setPendingBiometricTx(tx);
+    setPendingBiometricAction('approve');
+    setIsBiometricOpen(true);
   };
 
   // Handle cash rejection
@@ -147,14 +147,39 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       return;
     }
 
+    setPendingBiometricTx(tx);
+    setPendingRejectReason(reason || 'Cash pawisa dawn a ni lo');
+    setPendingBiometricAction('reject');
+    setIsBiometricOpen(true);
+  };
+
+  const handleBiometricSuccess = () => {
+    setIsBiometricOpen(false);
+    if (!pendingBiometricTx) return;
+
     const verifier = creatorProfile?.name || (isAdmin ? 'Admin' : 'Bawm Creator');
-    const updated = rejectCashTransaction(tx.id, verifier, reason || 'Cash pawisa dawn a ni lo', creatorProfile, campaigns);
-    if (updated) {
-      onTransactionUpdated?.(updated);
-      setRejectingTxId(null);
-      setToastMessage(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
-      setTimeout(() => setToastMessage(null), 3500);
+
+    if (pendingBiometricAction === 'approve') {
+      const updated = approveCashTransaction(pendingBiometricTx.id, verifier, creatorProfile, campaigns);
+      if (updated) {
+        onTransactionUpdated?.(updated);
+        setToastMessage(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
+        setTimeout(() => setToastMessage(null), 3500);
+      } else {
+        setToastMessage(`⚠️ Pawm theih a ni lo.`);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } else {
+      const updated = rejectCashTransaction(pendingBiometricTx.id, verifier, pendingRejectReason, creatorProfile, campaigns);
+      if (updated) {
+        onTransactionUpdated?.(updated);
+        setRejectingTxId(null);
+        setToastMessage(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
     }
+
+    setPendingBiometricTx(null);
   };
 
   // Build role-scoped notifications
@@ -1031,6 +1056,23 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             Kharna
           </button>
         </div>
+
+        {/* Biometric Verification Guard */}
+        <BiometricAuthModal
+          isOpen={isBiometricOpen}
+          target="admin_action"
+          actionType={pendingBiometricAction}
+          title={pendingBiometricAction === 'reject' ? 'Cash Rejection Authorization' : 'Cash Approval Clearance'}
+          subtitle={`Cash payment ₹${Number(pendingBiometricTx?.amount || 0).toLocaleString('en-IN')} (${pendingBiometricTx?.id || ''}) hi ${pendingBiometricAction === 'reject' ? 'hnawl (reject)' : 'pawm (approve)'} tur hian Biometric verify rawh le.`}
+          userName={creatorProfile?.name || (isAdmin ? 'Admin' : 'Bawm Creator')}
+          userPhone={creatorProfile?.phone}
+          expectedPin={creatorProfile?.pin || creatorProfile?.password}
+          onClose={() => {
+            setIsBiometricOpen(false);
+            setPendingBiometricTx(null);
+          }}
+          onSuccess={handleBiometricSuccess}
+        />
       </div>
     </div>
   );
