@@ -177,14 +177,16 @@ export function buildUpiIntentUrl(
   // am = Transaction Amount (Required)
   // cu = Currency (INR)
   // tn = Transaction Note (Optional, clean alphanumeric)
-  const queryParams = new URLSearchParams();
-  queryParams.set('pa', cleanUpiId);
-  queryParams.set('pn', cleanPayee);
-  queryParams.set('am', formattedAmount);
-  queryParams.set('cu', 'INR');
-  queryParams.set('tn', cleanNote);
+  // Build standard RFC 3986 encoded query string with %20 instead of '+'
+  const queryParts = [
+    `pa=${encodeURIComponent(cleanUpiId)}`,
+    `pn=${encodeURIComponent(cleanPayee)}`,
+    `am=${formattedAmount}`,
+    `cu=INR`,
+    `tn=${encodeURIComponent(cleanNote)}`
+  ];
 
-  const queryString = queryParams.toString();
+  const queryString = queryParts.join('&');
 
   // If an Android package is specified (e.g. GPay or PhonePe), use the standard Android Chrome Intent
   // syntax: intent://pay?<params>#Intent;scheme=upi;package=<pkg>;end

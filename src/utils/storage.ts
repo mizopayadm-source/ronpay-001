@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, PaymentGatewayConfig } from '../types';
 import { getUserRole } from './rbac';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import {
@@ -2147,5 +2147,49 @@ export const rejectCashTransaction = (
   return updated;
 };
 
+const PG_CONFIG_KEY = 'ronpay_pg_config_v1';
 
+export const DEFAULT_PG_CONFIG: PaymentGatewayConfig = {
+  mode: 'direct_upi',
+  provider: 'phonepe_pg',
+  environment: 'sandbox',
+  merchantId: 'PGTEST_RONPAY_001',
+  keyId: 'M2306160483220674079460',
+  keySecret: '099eb0cd-02cf-4e2a-8aca-3e6c6aff0399',
+  webhookSecret: 'whsec_ronpay_verification_token',
+  webhookEndpoint: 'https://ais-dev-a3j73fwv24ssrienmthjhs-598177647982.asia-southeast1.run.app/api/pg/webhook',
+  isKycSubmitted: true,
+  kycStatus: 'verified',
+  businessPan: 'AABCR1234F',
+  businessGst: '15AABCR1234F1Z5',
+  settlementAccount: 'Direct Nodal Beneficiary Account',
+  settlementIfsc: 'SBIN0001539',
+  autoRefundDuplicateMinutes: 15
+};
 
+export const getStoredPGConfig = (): PaymentGatewayConfig => {
+  try {
+    const raw = localStorage.getItem(PG_CONFIG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_PG_CONFIG, ...parsed };
+    }
+  } catch (e) {
+    console.warn('Failed to load PG config, using default:', e);
+  }
+  return DEFAULT_PG_CONFIG;
+};
+
+export const saveStoredPGConfig = (config: PaymentGatewayConfig): void => {
+  try {
+    localStorage.setItem(PG_CONFIG_KEY, JSON.stringify(config));
+    recordAuditLog(
+      'PG Config Updated',
+      `Payment Gateway Mode set to ${config.mode.toUpperCase()} (${config.provider} - ${config.environment})`,
+      'system',
+      config.merchantId
+    );
+  } catch (e) {
+    console.error('Failed to save PG config:', e);
+  }
+};

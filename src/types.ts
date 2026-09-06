@@ -388,3 +388,29 @@ export interface AIHriatpuiVerificationReport {
   remarksInMizo: string;
 }
 
+export type PGProvider = 'phonepe_pg' | 'razorpay' | 'cashfree' | 'payu' | 'custom_upi' | 'phonepe' | 'custom';
+export type PGMode = 'direct_upi' | 'pg_merchant';
+export type PGEnvironment = 'sandbox' | 'production';
+
+export interface PaymentGatewayConfig {
+  mode: PGMode;
+  provider: PGProvider;
+  environment: PGEnvironment;
+  merchantId: string;
+  keyId: string;
+  keySecret: string;
+  saltKey?: string;
+  saltIndex?: string;
+  callbackUrl?: string;
+  webhookSecret: string;
+  webhookEndpoint: string;
+  isKycSubmitted: boolean;
+  kycStatus: 'draft' | 'under_review' | 'verified' | 'action_required';
+  businessPan?: string;
+  businessGst?: string;
+  settlementAccount?: string;
+  settlementIfsc?: string;
+  autoRefundDuplicateMinutes: number;
+  updatedAt?: string;
+}
+

@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
+import { PGComplianceModal } from './PGComplianceModal';
 
 interface RonPayWebsiteProps {
   onLaunchApp: (targetScreen?: string, targetCategory?: BawmCategory) => void;
@@ -98,6 +99,10 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   // Contact section: Email copy feedback & App Link copy feedback
   const [emailCopied, setEmailCopied] = useState<boolean>(false);
   const [appLinkCopied, setAppLinkCopied] = useState<boolean>(false);
+
+  // PG & Merchant Compliance Modal State
+  const [complianceModalOpen, setComplianceModalOpen] = useState<boolean>(false);
+  const [complianceInitialTab, setComplianceInitialTab] = useState<'architecture' | 'terms' | 'privacy' | 'refund' | 'grievance' | 'sandbox'>('architecture');
 
   // AIChat (RonPay Khual chhawn) State
   const [isAIChatOpen, setIsAIChatOpen] = useState<boolean>(false);
@@ -2528,6 +2533,92 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
           </div>
 
+          {/* Payment Gateway (PG) Compliance, RBI Norms & Mandatory Policies Bar */}
+          <div className="pt-6 border-t border-slate-800/80">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[11px]">
+              <div className="flex items-center gap-2 text-slate-400">
+                <span className="font-bold text-slate-300 uppercase tracking-wider text-[10px]">
+                  PG & Legal Policies:
+                </span>
+                <span className="text-slate-600">|</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('terms');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="hover:text-amber-300 transition cursor-pointer text-left"
+                >
+                  {isMizo ? 'Hman Dan Dan (Terms of Service)' : 'Terms of Service'}
+                </button>
+                <span className="text-slate-700">•</span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('privacy');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="hover:text-amber-300 transition cursor-pointer text-left"
+                >
+                  {isMizo ? 'Mimal Thuthang (Privacy Policy)' : 'Privacy Policy'}
+                </button>
+                <span className="text-slate-700">•</span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('refund');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="hover:text-amber-300 transition cursor-pointer text-left"
+                >
+                  {isMizo ? 'Pawisa Kirleh Dan (Refund & Cancellation)' : 'Refund & Cancellation Policy'}
+                </button>
+                <span className="text-slate-700">•</span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('grievance');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="hover:text-amber-300 transition cursor-pointer text-left"
+                >
+                  {isMizo ? 'Grievance Officer & Office' : 'Grievance Redressal'}
+                </button>
+                <span className="text-slate-700">•</span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('architecture');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="text-indigo-400 hover:text-indigo-300 font-bold transition cursor-pointer flex items-center gap-1"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{isMizo ? 'PG Audit & Merchant Kalphung' : 'Merchant Architecture (PG Audit)'}</span>
+                </button>
+                <span className="text-slate-700">•</span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComplianceInitialTab('sandbox');
+                    setComplianceModalOpen(true);
+                  }}
+                  className="text-amber-400 hover:text-amber-300 font-bold transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>⚙️ {isMizo ? 'PG Switch & Test Keys' : 'PG Switch & Sandbox'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Copyright line as strictly mandated */}
           <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
             <div>
@@ -2546,6 +2637,14 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
         </div>
       </footer>
+
+      {/* Payment Gateway Compliance & Policies Modal */}
+      <PGComplianceModal
+        isOpen={complianceModalOpen}
+        onClose={() => setComplianceModalOpen(false)}
+        initialTab={complianceInitialTab}
+        userLanguage={lang}
+      />
 
     </div>
   );

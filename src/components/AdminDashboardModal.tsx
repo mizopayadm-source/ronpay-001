@@ -83,7 +83,11 @@ import {
   AuditLog, 
   AnnouncementBanner,
   AnnouncementItem,
-  UserRole
+  UserRole,
+  PaymentGatewayConfig,
+  PGProvider,
+  PGMode,
+  PGEnvironment
 } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
@@ -103,8 +107,11 @@ import {
   saveStoredCreatorsList,
   saveStoredCreatorProfile,
   approveCashTransaction,
-  rejectCashTransaction
+  rejectCashTransaction,
+  getStoredPGConfig,
+  saveStoredPGConfig
 } from '../utils/storage';
+import { PGComplianceModal } from './PGComplianceModal';
 import { 
   pushAllLocalDataToFirestore,
   getFirestoreConnectionStatus,
@@ -251,6 +258,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [staffFilter, setStaffFilter] = useState<'all' | 'staff' | 'creators' | 'members' | 'blocked'>('all');
   const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
   const [roleUpdateNotice, setRoleUpdateNotice] = useState<string>('');
+
+  // PG & Merchant Compliance state
+  const [adminPGConfig, setAdminPGConfig] = useState<PaymentGatewayConfig>(() => getStoredPGConfig());
+  const [showPGComplianceModal, setShowPGComplianceModal] = useState<boolean>(false);
+  const [pgComplianceTab, setPGComplianceTab] = useState<'architecture' | 'terms' | 'privacy' | 'refund' | 'grievance' | 'sandbox'>('architecture');
+  const [pgSaveFeedback, setPgSaveFeedback] = useState<boolean>(false);
 
   // Auto-correct tab if role does not allow it
   useEffect(() => {
@@ -3968,31 +3981,344 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {/* TAB 8: GATEWAY & TSP CONFIG                               */}
               {/* ========================================================= */}
               {activeTab === 'gateway' && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 max-w-lg mx-auto text-xs">
-                  <h4 className="font-black text-slate-900 flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-purple-600" /> PhonePe PG V2 / TSP Configuration
-                  </h4>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Merchant ID (MID)</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value="PGTESTPAYUAT86"
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-mono text-slate-700"
-                      />
+                <div className="space-y-6 max-w-4xl mx-auto animate-fadeIn text-xs text-slate-700">
+                  {/* Header Banner */}
+                  <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-5 rounded-3xl border border-purple-700/60 shadow-lg space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300 shrink-0">
+                          <Smartphone className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-black text-white">Payment Gateway (PG) & Technology Service Provider (TSP)</h3>
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-400 text-purple-950">
+                              Production Ready
+                            </span>
+                          </div>
+                          <p className="text-xs text-purple-200/80 mt-0.5">
+                            Configure PhonePe PG V2 credentials, toggle non-custodial direct routing, and audit compliance policies.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('architecture');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition shrink-0"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-slate-950" />
+                        <span>Compliance & Policies Hub →</span>
+                      </button>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500">Salt Key Index</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value="1"
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-mono text-slate-700"
-                      />
+
+                    {/* Quick Mode Status Badge */}
+                    <div className="pt-3 border-t border-purple-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-300 font-bold">Active Engine:</span>
+                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase border ${
+                          adminPGConfig.mode === 'direct_upi'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                        }`}>
+                          {adminPGConfig.mode === 'direct_upi' ? 'Direct P2P / Dynamic QR (Non-Custodial)' : 'Merchant PG Aggregator'}
+                        </span>
+                        <span className="text-purple-400">•</span>
+                        <span className="text-purple-300 font-bold">Environment:</span>
+                        <span className="text-white font-mono uppercase bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
+                          {adminPGConfig.environment}
+                        </span>
+                      </div>
+                      <div className="text-slate-300 font-mono text-[10px]">
+                        Last Updated: {new Date(adminPGConfig.updatedAt).toLocaleDateString()}
+                      </div>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 font-medium">
-                      Status: <strong className="text-emerald-700">ONLINE (UAT Mode)</strong> with instant UPI intent routing.
+                  </div>
+
+                  {/* Feedback Banner */}
+                  {pgSaveFeedback && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Payment Gateway settings saved successfully to local storage!</span>
+                    </div>
+                  )}
+
+                  {/* Operational Mode Toggle Card */}
+                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <div>
+                      <h4 className="font-black text-slate-900 text-sm">Payment Architecture Mode</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Choose whether RonPay functions as a pure Non-Custodial Technology Service Provider (TSP) routing directly to creator VPA/QR, or as a Payment Gateway Merchant aggregating payments via PhonePe PG.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Direct UPI Option */}
+                      <button
+                        type="button"
+                        onClick={() => setAdminPGConfig(prev => ({ ...prev, mode: 'direct_upi' }))}
+                        className={`p-4 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                          adminPGConfig.mode === 'direct_upi'
+                            ? 'bg-emerald-50/70 border-emerald-500 shadow-xs'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100/60'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              Direct P2P Intent & Dynamic QR
+                            </span>
+                            {adminPGConfig.mode === 'direct_upi' && (
+                              <span className="text-[9px] font-black uppercase bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            <strong>100% Non-Custodial:</strong> Payments flow directly from donor/payer bank to the Creator's registered VPA via standard UPI deep links and dynamic QR. RonPay never touches funds.
+                          </p>
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-slate-200 text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> No RBI Intermediary Escrow required
+                        </div>
+                      </button>
+
+                      {/* PG Merchant Option */}
+                      <button
+                        type="button"
+                        onClick={() => setAdminPGConfig(prev => ({ ...prev, mode: 'pg_merchant' }))}
+                        className={`p-4 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                          adminPGConfig.mode === 'pg_merchant'
+                            ? 'bg-purple-50/70 border-purple-500 shadow-xs'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100/60'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-purple-600" />
+                              Payment Gateway (PhonePe PG V2)
+                            </span>
+                            {adminPGConfig.mode === 'pg_merchant' && (
+                              <span className="text-[9px] font-black uppercase bg-purple-600 text-white px-2 py-0.5 rounded-full">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            <strong>Merchant Routing:</strong> Routes through verified PhonePe Merchant ID (MID). Supports Credit/Debit Cards, NetBanking, and UPI Intent with automated server webhooks.
+                          </p>
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-slate-200 text-[10px] font-bold text-purple-700 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> Ideal once Merchant Onboarding is approved
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PG Credentials Configuration Card */}
+                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                      <div>
+                        <h4 className="font-black text-slate-900 text-sm">Gateway Provider & Credentials</h4>
+                        <p className="text-[11px] text-slate-500">
+                          Set your Merchant ID, API Salt Key, and Environment provided by the PG Onboarding team.
+                        </p>
+                      </div>
+
+                      {/* Environment Switcher */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setAdminPGConfig(prev => ({ ...prev, environment: 'sandbox' }))}
+                          className={`px-3 py-1 rounded-lg font-bold text-[10px] transition cursor-pointer ${
+                            adminPGConfig.environment === 'sandbox'
+                              ? 'bg-amber-400 text-slate-950 shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          SANDBOX (UAT)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdminPGConfig(prev => ({ ...prev, environment: 'production' }))}
+                          className={`px-3 py-1 rounded-lg font-bold text-[10px] transition cursor-pointer ${
+                            adminPGConfig.environment === 'production'
+                              ? 'bg-purple-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          PRODUCTION (LIVE)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Provider */}
+                      <div>
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Gateway Provider</label>
+                        <select
+                          value={adminPGConfig.provider}
+                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, provider: e.target.value as PGProvider }))}
+                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-purple-600"
+                        >
+                          <option value="phonepe">PhonePe PG (Default)</option>
+                          <option value="razorpay">Razorpay</option>
+                          <option value="payu">PayU</option>
+                          <option value="custom">Custom / Other</option>
+                        </select>
+                      </div>
+
+                      {/* Merchant ID */}
+                      <div>
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Merchant ID (MID)</label>
+                        <input
+                          type="text"
+                          value={adminPGConfig.merchantId}
+                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, merchantId: e.target.value }))}
+                          placeholder="e.g. PGTESTPAYUAT86 or RONPAYONLINE"
+                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
+                        />
+                      </div>
+
+                      {/* Salt Key */}
+                      <div>
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Salt Key / API Secret</label>
+                        <input
+                          type="password"
+                          value={adminPGConfig.saltKey}
+                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, saltKey: e.target.value }))}
+                          placeholder="Enter PG Salt Key"
+                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
+                        />
+                      </div>
+
+                      {/* Salt Index */}
+                      <div>
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Salt Key Index</label>
+                        <input
+                          type="text"
+                          value={adminPGConfig.saltIndex}
+                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, saltIndex: e.target.value }))}
+                          placeholder="1"
+                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
+                        />
+                      </div>
+
+                      {/* Callback URL */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Webhook / Callback URL</label>
+                        <input
+                          type="text"
+                          value={adminPGConfig.callbackUrl}
+                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, callbackUrl: e.target.value }))}
+                          placeholder="https://www.ronpay.app/api/pg/callback"
+                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('sandbox');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition"
+                      >
+                        <span>🧪 Launch PG Simulation Sandbox</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const configToSave: PaymentGatewayConfig = {
+                              ...adminPGConfig,
+                              updatedAt: new Date().toISOString()
+                            };
+                            saveStoredPGConfig(configToSave);
+                            setAdminPGConfig(configToSave);
+                            setPgSaveFeedback(true);
+                            setTimeout(() => setPgSaveFeedback(false), 3500);
+                          }}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-md transition"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Save Gateway Settings</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PG Auditor & Statutory Policy Links */}
+                  <div className="bg-slate-100 p-5 rounded-3xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-slate-600" />
+                        Statutory Compliance Documentation for PG Auditors
+                      </h4>
+                      <span className="text-[10px] text-slate-500 font-medium">RBI / NPCI Ready</span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600">
+                      Payment Gateway compliance teams (PhonePe/Razorpay) require public verification of these mandatory policies before issuing production MIDs:
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('architecture');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
+                      >
+                        <span className="font-bold text-slate-800 text-[11px] block">1. Architecture Note</span>
+                        <span className="text-[9.5px] text-slate-500 block">TSP Non-Custodial Model</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('terms');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
+                      >
+                        <span className="font-bold text-slate-800 text-[11px] block">2. Terms of Service</span>
+                        <span className="text-[9.5px] text-slate-500 block">Acceptable Use & Fees</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('refund');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
+                      >
+                        <span className="font-bold text-slate-800 text-[11px] block">3. Refund Policy</span>
+                        <span className="text-[9.5px] text-slate-500 block">T+2 Direct Creator Reversal</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPGComplianceTab('grievance');
+                          setShowPGComplianceModal(true);
+                        }}
+                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
+                      >
+                        <span className="font-bold text-slate-800 text-[11px] block">4. Grievance Redressal</span>
+                        <span className="text-[9.5px] text-slate-500 block">Officer Contact & Office</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -5720,6 +6046,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               cb();
             }
           }}
+        />
+
+        {/* PG Compliance & Audit Documentation Modal */}
+        <PGComplianceModal
+          isOpen={showPGComplianceModal}
+          onClose={() => setShowPGComplianceModal(false)}
+          initialTab={pgComplianceTab}
+          userLanguage="mizo"
         />
 
       </div>

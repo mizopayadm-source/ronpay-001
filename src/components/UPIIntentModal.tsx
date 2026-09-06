@@ -409,6 +409,22 @@ export function UPIIntentModal({
               {/* TAB 1: Direct UPI App Launch (Default) */}
               {payMethodTab === 'apps' && (
                 <div className="space-y-3 animate-fadeIn">
+                  {/* SBI & Bank Limit Advisory Notice */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
+                    <div className="flex items-start gap-2">
+                      <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block text-amber-950">
+                          SBI / Bank Thenkhat Hriattirna:
+                        </span>
+                        <p className="text-[11px] text-amber-900 leading-relaxed mt-0.5">
+                          SBI account hmangte tan, web link atanga personal UPI ID-a direct luh hi bank security-in <b>"Exceeded bank limit"</b> tiin a block thin a.
+                          Chutiang a lo nih chuan a piah <b>"QR Code & Gallery"</b> tab hmang la, <b>100% buaina awm loin a tlang nghal e.</b>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Primary Universal App Launcher */}
                   <button
                     type="button"
@@ -479,15 +495,15 @@ export function UPIIntentModal({
                     ))}
                   </div>
 
-                  {/* Switch to QR helper */}
-                  <div className="text-center pt-1">
+                  {/* Switch to QR helper button */}
+                  <div className="pt-2 text-center">
                     <button
                       type="button"
                       onClick={() => setPayMethodTab('qr')}
-                      className="text-xs text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1.5 cursor-pointer py-1"
+                      className="w-full py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer border border-indigo-200"
                     >
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>QR Code scan emaw Gallery atanga pek i duh zawk em?</span>
+                      <QrCode className="w-4 h-4 text-indigo-600" />
+                      <span>Bank Limit a awm chuan: QR Code & Gallery hmang rawh (100% Tlang)</span>
                     </button>
                   </div>
                 </div>
@@ -637,15 +653,26 @@ export function UPIIntentModal({
                   </div>
                 </div>
 
-                {/* Helpful Troubleshooting tip for GPay/PhonePe account visibility */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-left text-[11px] text-amber-900 space-y-1">
+                {/* Helpful Troubleshooting tip for GPay/PhonePe account visibility & bank limit */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-left text-[11px] text-amber-900 space-y-2">
                   <p className="font-bold flex items-center gap-1.5 text-amber-950">
                     <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>Bank Account a lang lo a nih chuan:</span>
+                    <span>"Exceeded Bank Limit" emaw Account a lan loh chuan:</span>
                   </p>
                   <p className="text-amber-800 leading-relaxed">
-                    Google Pay / PhonePe-in personal UPI ID direct link an block thin avangin i bank account a lan loh chuan: <b>"App Dang Thlang Rawh"</b> hmetin <b>Copy UPI ID</b> hmangin emaw, <b>Scan QR Code</b> hmangin direct-in pe rawh le.
+                    SBI leh bank thenkhat hian browser link atanga personal UPI a luh hi security vanga an block thin avangin, <b>QR Code Scan</b> hmangin pe rawh le. QR Code Scan hi chu 100% a tlang ngei ngei ang.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMethodTab('qr');
+                      setStep('select');
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>QR Code Scan & Gallery Hmang Rawh (100% Tlang)</span>
+                  </button>
                 </div>
               </div>
 
