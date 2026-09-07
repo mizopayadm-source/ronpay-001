@@ -1,7 +1,7 @@
 {
-  "name": "RonPay - Mizoram Bawm & Payments",
+  "name": "RonPay - A Digital Payment Platform",
   "short_name": "RonPay",
-  "description": "RonPay Community Bawm & UPI Payments Platform",
+  "description": "RonPay - A Digital Payment Platform (Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager)",
   "start_url": "/app?platform=android",
   "display": "standalone",
   "background_color": "#070f1e",
