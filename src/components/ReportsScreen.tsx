@@ -794,20 +794,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+          <div className="pt-2 flex items-center justify-center">
             <button
               onClick={onOpenLogin}
-              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
               Creator Login / Verify Account
-            </button>
-            <button
-              onClick={() => {
-                saveStoredCreatorProfile(DEFAULT_INITIAL_CREATOR);
-              }}
-              className="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-4 py-2.5 rounded-xl text-xs border border-amber-400/40 transition cursor-pointer"
-            >
-              ✨ Quick Login as Demo Creator (BCM Ebenezer)
             </button>
           </div>
         </div>
