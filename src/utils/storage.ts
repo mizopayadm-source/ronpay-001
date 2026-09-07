@@ -569,6 +569,14 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
+        // Strict Security Guard for Public & PG Auditor visits:
+        // If profile has administrative privileges, require active session auth
+        if (parsed.isAdmin || parsed.role === 'SUPER_ADMIN' || parsed.role === 'ADMIN' || parsed.role === 'MODERATOR') {
+          const hasSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ronpay_admin_auth') === 'true';
+          if (!hasSession) {
+            return GUEST_CREATOR_PROFILE;
+          }
+        }
         return parsed;
       }
     }
@@ -599,6 +607,8 @@ export const loginCreator = (profile: CreatorProfile): void => {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
     if (profile.isAdmin) {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
+    } else {
+      sessionStorage.removeItem('ronpay_admin_auth');
     }
     
     // Update or insert into registered creators list

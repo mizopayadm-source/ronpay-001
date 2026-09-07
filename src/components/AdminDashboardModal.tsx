@@ -237,7 +237,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('ronpay_admin_auth') === 'true' || isSuperAdmin || isOperationsAdmin || isModerator;
+      const hasSessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
+      const isPrivileged = Boolean(currentProfile?.isAdmin && (currentProfile.role === 'SUPER_ADMIN' || currentProfile.role === 'ADMIN' || currentProfile.role === 'MODERATOR'));
+      return hasSessionAuth && isPrivileged;
     } catch (e) {
       return false;
     }

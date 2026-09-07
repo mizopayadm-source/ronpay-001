@@ -443,8 +443,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Master Admin Console Trigger */}
-        {onOpenAdmin && (
+        {/* Master Admin Console Trigger - Only visible to authenticated administrators */}
+        {onOpenAdmin && creatorProfile.isAdmin && (
           <button
             onClick={() => {
               onClose();
@@ -457,7 +457,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               RonPay Admin Console
             </span>
             <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full font-black uppercase">
-              Admin Login
+              Admin Console
             </span>
           </button>
         )}

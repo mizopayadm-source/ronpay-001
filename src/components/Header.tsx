@@ -527,10 +527,10 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 id="header-smart-login-btn"
                 onClick={onOpenLogin}
-                title={creatorProfile?.isApproved ? `${creatorProfile.name} (${creatorProfile.designation || 'Creator'}) - Account Switcher` : 'Smart Login & Demo Switcher'}
+                title={creatorProfile?.phone ? `${creatorProfile.name} - Account` : 'Login / Account'}
                 className="h-7 sm:h-8 px-1.5 sm:px-2 bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 text-slate-200 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
               >
-                {creatorProfile?.avatarUrl ? (
+                {creatorProfile?.phone && creatorProfile?.avatarUrl ? (
                   <img 
                     src={creatorProfile.avatarUrl} 
                     alt={creatorProfile.name} 
@@ -540,9 +540,9 @@ export const Header: React.FC<HeaderProps> = ({
                   <User className="w-3.5 h-3.5 text-amber-400" />
                 )}
                 <span className="hidden sm:inline truncate max-w-[70px]">
-                  {creatorProfile?.name ? creatorProfile.name.split(' ')[0] : 'Login'}
+                  {creatorProfile?.phone ? creatorProfile.name.split(' ')[0] : 'Login'}
                 </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${creatorProfile?.phone ? 'bg-emerald-400' : 'bg-slate-500'}`} />
               </button>
             )}
 

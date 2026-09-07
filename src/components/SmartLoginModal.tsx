@@ -22,11 +22,12 @@ import {
   ArrowRight,
   Key,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Shield
 } from 'lucide-react';
 import { CreatorProfile, UserRole } from '../types';
 import { INITIAL_REGISTERED_CREATORS } from '../data/initialData';
-import { saveStoredCreatorProfile } from '../utils/storage';
+import { saveStoredCreatorProfile, GUEST_CREATOR_PROFILE } from '../utils/storage';
 import { 
   triggerRealBiometricAuth, 
   isPlatformBiometricAvailable, 
@@ -43,7 +44,7 @@ export interface SmartLoginModalProps {
   onToggleBiometric?: () => void;
 }
 
-export const DEMO_ACCOUNTS: {
+export interface DemoAccountItem {
   id: string;
   role: UserRole;
   roleTitle: string;
@@ -59,7 +60,67 @@ export const DEMO_ACCOUNTS: {
   avatarUrl: string;
   description: string;
   requiresMasterPasscode: boolean;
-}[] = [
+}
+
+// 1. PUBLIC DEMO ACCOUNTS (Exposed to visitors & PG Auditors)
+// Exactly 1 User Pangai (Member) and 1 Creator Pakhat (Verified Church Creator), plus Guest switch
+export const PUBLIC_DEMO_ACCOUNTS: DemoAccountItem[] = [
+  {
+    id: 'demo-member',
+    role: 'MEMBER',
+    roleTitle: 'General Member / Donor (User Pangai)',
+    roleBadge: 'USER DEMO',
+    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
+    name: 'Zonunmawia Pachuau',
+    orgName: 'Khatla Veng, Aizawl',
+    designation: 'Citizen Contributor & Donor',
+    phone: '8794009999',
+    mpin: '1234',
+    isAdmin: false,
+    isApproved: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+    description: 'User pangai demo: Bawm zawn chhuah, UPI pekna leh receipts (Sulhnu) fiahna.',
+    requiresMasterPasscode: false,
+  },
+  {
+    id: 'demo-creator',
+    role: 'CREATOR',
+    roleTitle: 'Verified Bawm Creator (Creator Pakhat)',
+    roleBadge: 'CREATOR DEMO',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    name: 'Rev. Dr. R. Zothansanga',
+    orgName: 'BCM Ebenezer, Zobawk Local Church',
+    designation: 'Pastor / Bawm Incharge',
+    phone: '9862599881',
+    mpin: '1234',
+    isAdmin: false,
+    isApproved: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+    description: 'Creator demo: Kohhran leh NGO tana Bawm siam, QR Code pekchhuah leh khawnkhawm enkawlna.',
+    requiresMasterPasscode: false,
+  },
+  {
+    id: 'demo-guest',
+    role: 'GUEST',
+    roleTitle: 'Khualmi (Guest User)',
+    roleBadge: 'GUEST MODE',
+    badgeColor: 'bg-slate-200 text-slate-700 border-slate-300',
+    name: 'Khualmi (Guest User)',
+    orgName: 'Public Visitor / PG Reviewer',
+    designation: 'Anonymous Visitor',
+    phone: '',
+    mpin: '',
+    isAdmin: false,
+    isApproved: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+    description: 'Login ngai lova khualmi nihna hmanga RonPay explore leh pekna fiahna.',
+    requiresMasterPasscode: false,
+  }
+];
+
+// 2. INTERNAL STAFF & ADMIN ACCOUNTS (Thukru / Hidden by default)
+// Only accessible via Master Passcode (9900) or direct phone/MPIN login
+export const STAFF_ADMIN_ACCOUNTS: DemoAccountItem[] = [
   {
     id: 'demo-super-admin',
     role: 'SUPER_ADMIN',
@@ -110,59 +171,10 @@ export const DEMO_ACCOUNTS: {
     avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
     description: 'Tier 3: Creator KYC verification, Bawm approval, and compliance check.',
     requiresMasterPasscode: true,
-  },
-  {
-    id: 'demo-creator',
-    role: 'CREATOR',
-    roleTitle: 'Verified Bawm Creator',
-    roleBadge: 'CREATOR',
-    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    name: 'Rev. Dr. R. Zothansanga',
-    orgName: 'BCM Ebenezer, Zobawk Local Church',
-    designation: 'Pastor / Secretary',
-    phone: '9862599881',
-    mpin: '1234',
-    isAdmin: false,
-    isApproved: true,
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-    description: 'Tier 4: Church / NGO Creator account for managing campaigns and collections.',
-    requiresMasterPasscode: false,
-  },
-  {
-    id: 'demo-member',
-    role: 'MEMBER',
-    roleTitle: 'General Member / Donor',
-    roleBadge: 'MEMBER',
-    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
-    name: 'Zonunmawia Pachuau',
-    orgName: 'Khatla Veng, Aizawl',
-    designation: 'Community Donor & Citizen',
-    phone: '8794009999',
-    mpin: '1234',
-    isAdmin: false,
-    isApproved: false,
-    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-    description: 'Tier 5: Standard donor/citizen. Scan & pay, wallet top-up, and giving receipts.',
-    requiresMasterPasscode: false,
-  },
-  {
-    id: 'demo-guest',
-    role: 'GUEST',
-    roleTitle: 'Unauthenticated Visitor',
-    roleBadge: 'GUEST',
-    badgeColor: 'bg-slate-200 text-slate-700 border-slate-300',
-    name: 'Guest Explorer',
-    orgName: 'Public Visitor',
-    designation: 'Anonymous Guest',
-    phone: '',
-    mpin: '',
-    isAdmin: false,
-    isApproved: false,
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
-    description: 'Tier 6: Public visitor exploring campaigns without login.',
-    requiresMasterPasscode: false,
   }
 ];
+
+export const DEMO_ACCOUNTS: DemoAccountItem[] = [...PUBLIC_DEMO_ACCOUNTS, ...STAFF_ADMIN_ACCOUNTS];
 
 export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   isOpen,
@@ -205,6 +217,12 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   const [masterPasscodeError, setMasterPasscodeError] = useState<string>('');
   const [showAdminPasscodeHint, setShowAdminPasscodeHint] = useState<boolean>(false);
 
+  // Staff Console Unlock (Discreet internal mode for developers & admins)
+  const [isStaffConsoleUnlocked, setIsStaffConsoleUnlocked] = useState<boolean>(false);
+  const [showStaffUnlockPrompt, setShowStaffUnlockPrompt] = useState<boolean>(false);
+  const [staffPasscodeInput, setStaffPasscodeInput] = useState<string>('');
+  const [staffPasscodeError, setStaffPasscodeError] = useState<string>('');
+
   // General Status states
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -226,6 +244,9 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       setPendingAdminDemo(null);
       setMasterPasscodeInput('');
       setMasterPasscodeError('');
+      setShowStaffUnlockPrompt(false);
+      setStaffPasscodeInput('');
+      setStaffPasscodeError('');
       setOtpSent(false);
 
       if (currentProfile?.phone && currentProfile.phone.trim() !== '') {
@@ -517,7 +538,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   };
 
   // 5. Select Demo Account
-  const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
+  const handleSelectDemoAccount = (demo: DemoAccountItem) => {
     setErrorMessage('');
     triggerHaptic();
 
@@ -536,22 +557,30 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       const isCreator = demo.role === 'CREATOR';
       const isGuest = demo.role === 'GUEST';
 
-      const profile: CreatorProfile = {
-        name: demo.name,
-        orgName: demo.orgName,
-        designation: demo.designation,
-        phone: demo.phone,
-        role: demo.role,
-        isAdmin: false,
-        isPhoneVerified: !isGuest,
-        isApproved: isCreator,
-        avatarUrl: demo.avatarUrl,
-        password: demo.mpin,
-        pin: demo.mpin,
-        approvedCategories: isCreator ? ['kumtluang', 'ralna', 'khawlsak'] : [],
-        createdQRsCount: isCreator ? 5 : 0,
-        registeredAt: new Date().toISOString()
-      };
+      let profile: CreatorProfile;
+      if (isGuest) {
+        profile = {
+          ...GUEST_CREATOR_PROFILE,
+          registeredAt: new Date().toISOString()
+        };
+      } else {
+        profile = {
+          name: demo.name,
+          orgName: demo.orgName,
+          designation: demo.designation,
+          phone: demo.phone,
+          role: demo.role,
+          isAdmin: false,
+          isPhoneVerified: true,
+          isApproved: isCreator,
+          avatarUrl: demo.avatarUrl,
+          password: demo.mpin,
+          pin: demo.mpin,
+          approvedCategories: isCreator ? ['kumtluang', 'ralna', 'khawlsak'] : [],
+          createdQRsCount: isCreator ? 5 : 0,
+          registeredAt: new Date().toISOString()
+        };
+      }
 
       saveStoredCreatorProfile(profile);
       try {
@@ -559,13 +588,30 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       } catch {}
 
       setIsLoading(false);
-      setSuccessNotice(`${demo.name} (${demo.roleBadge}) anga login fel a ni e!`);
+      setSuccessNotice(`${demo.name} (${demo.roleBadge}) anga luh fel a ni e!`);
       triggerHaptic();
       setTimeout(() => {
         onLoginSuccess(profile);
         onClose();
       }, 650);
     }, 400);
+  };
+
+  // Staff Console Unlock Handler
+  const handleStaffUnlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffPasscodeError('');
+    const validCodes = ['9900', '1234', 'ronpay2026', 'admin'];
+    if (validCodes.includes(staffPasscodeInput.trim().toLowerCase())) {
+      setIsStaffConsoleUnlocked(true);
+      setShowStaffUnlockPrompt(false);
+      setStaffPasscodeInput('');
+      setSuccessNotice('Staff & Admin Console hawn fel a ni e!');
+      triggerHaptic([40, 70]);
+    } else {
+      triggerHaptic([50, 100, 50]);
+      setStaffPasscodeError('Master Passcode dik lo! Phalna nei chauh tan a ni.');
+    }
   };
 
   // 6. Google 1-Tap Login
@@ -690,10 +736,10 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                 ? 'bg-white text-amber-900 shadow-xs border border-amber-300 font-black'
                 : 'text-slate-400 hover:text-slate-700 hover:bg-white/60'
             }`}
-            title="Tester accounts with Admin protection"
+            title="Interactive Demo Accounts (User & Creator)"
           >
-            <Lock className="w-3 h-3 text-amber-600" />
-            <span className="text-[10px]">Tester</span>
+            <Sparkles className="w-3 h-3 text-amber-600" />
+            <span className="text-[10px]">Demo</span>
           </button>
         </div>
 
@@ -1213,31 +1259,32 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 4: TESTER & DEV HUB (ADMIN PASSCODE PROTECTED) */}
+          {/* TAB 4: LIVE PRODUCT DEMO (PUBLIC AUDITOR & STAFF VIEW) */}
           {/* ========================================================= */}
           {activeMethod === 'demo' && (
             <div className="space-y-3 animate-fadeIn">
-              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 flex items-start gap-2">
-                <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              {/* Auditor & Visitor Welcome Box */}
+              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-black block text-amber-900">Developer & Tester Hub (Protected)</span>
+                  <span className="font-black block text-amber-900">RonPay Live Product Demo</span>
                   <span className="text-[11px] text-amber-800 leading-relaxed block mt-0.5">
-                    Tester-te tana siam a ni a. <strong>Super Admin leh Admin console erawh midangin an luh ruk loh nan Master Passcode hmanga ven a ni e.</strong>
+                    PG compliance auditor leh mikhualte tan account demo 2 chauh (User Pangai leh Creator Pakhat) chauh tarlan a ni.
                   </span>
                 </div>
               </div>
 
+              {/* Public Demo Accounts (User Pangai + Creator Pakhat + Khualmi) */}
               <div className="space-y-2">
-                {DEMO_ACCOUNTS.map((demo) => (
+                <div className="text-[10.5px] font-black text-slate-500 uppercase tracking-wider px-1">
+                  Public & Auditor Accounts
+                </div>
+                {PUBLIC_DEMO_ACCOUNTS.map((demo) => (
                   <button
                     key={demo.id}
                     onClick={() => handleSelectDemoAccount(demo)}
                     disabled={isLoading}
-                    className={`w-full text-left p-3 rounded-2xl border transition group cursor-pointer flex items-center justify-between gap-3 shadow-2xs active:scale-98 disabled:opacity-50 ${
-                      demo.requiresMasterPasscode
-                        ? 'border-purple-200 hover:border-purple-500 bg-purple-50/30 hover:bg-purple-50/70'
-                        : 'border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/40 bg-white'
-                    }`}
+                    className="w-full text-left p-3 rounded-2xl border transition group cursor-pointer flex items-center justify-between gap-3 shadow-2xs active:scale-98 disabled:opacity-50 border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/40 bg-white"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative shrink-0">
@@ -1246,11 +1293,6 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                           alt={demo.name}
                           className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100 group-hover:ring-indigo-400"
                         />
-                        {demo.requiresMasterPasscode && (
-                          <div className="absolute -top-1 -right-1 bg-purple-700 text-white rounded-full p-0.5 shadow-2xs" title="Passcode Required">
-                            <Lock className="w-2.5 h-2.5" />
-                          </div>
-                        )}
                       </div>
 
                       <div className="min-w-0">
@@ -1272,24 +1314,162 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                     </div>
 
                     <div className="shrink-0 flex items-center gap-1">
-                      {demo.requiresMasterPasscode ? (
-                        <div className="flex items-center gap-1 bg-purple-100 text-purple-900 group-hover:bg-purple-700 group-hover:text-white px-2.5 py-1.5 rounded-xl transition text-[10.5px] font-black">
-                          <Lock className="w-3 h-3" />
-                          <span>Unlock</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white px-2.5 py-1.5 rounded-xl transition text-[10.5px] font-bold text-slate-700">
-                          <span>Login</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1 bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white px-2.5 py-1.5 rounded-xl transition text-[10.5px] font-bold text-slate-700">
+                        <span>Lut Rawh</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </div>
                     </div>
                   </button>
                 ))}
               </div>
+
+              {/* Staff & Admin Section - Hidden unless unlocked */}
+              {isStaffConsoleUnlocked ? (
+                <div className="space-y-2 pt-2 border-t border-purple-200 animate-fadeIn">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-black text-purple-700 uppercase tracking-wider">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Staff & Management Console</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsStaffConsoleUnlocked(false)}
+                      className="text-[10px] text-purple-600 hover:text-purple-800 font-bold hover:underline cursor-pointer"
+                    >
+                      Thukru Leh Rawh (Lock)
+                    </button>
+                  </div>
+
+                  {STAFF_ADMIN_ACCOUNTS.map((demo) => (
+                    <button
+                      key={demo.id}
+                      onClick={() => handleSelectDemoAccount(demo)}
+                      disabled={isLoading}
+                      className="w-full text-left p-3 rounded-2xl border transition group cursor-pointer flex items-center justify-between gap-3 shadow-2xs active:scale-98 disabled:opacity-50 border-purple-200 hover:border-purple-500 bg-purple-50/40 hover:bg-purple-50/80"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative shrink-0">
+                          <img
+                            src={demo.avatarUrl}
+                            alt={demo.name}
+                            className="w-10 h-10 rounded-xl object-cover ring-2 ring-purple-100 group-hover:ring-purple-400"
+                          />
+                          <div className="absolute -top-1 -right-1 bg-purple-700 text-white rounded-full p-0.5 shadow-2xs">
+                            <Lock className="w-2.5 h-2.5" />
+                          </div>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {demo.name}
+                            </span>
+                            <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full border ${demo.badgeColor}`}>
+                              {demo.roleBadge}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-purple-900/80 font-medium truncate mt-0.5">
+                            {demo.orgName} • {demo.phone}
+                          </p>
+                          <p className="text-[9.5px] text-slate-500 truncate mt-0.5">
+                            {demo.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-1">
+                        <div className="flex items-center gap-1 bg-purple-100 text-purple-900 group-hover:bg-purple-700 group-hover:text-white px-2.5 py-1.5 rounded-xl transition text-[10.5px] font-black">
+                          <Lock className="w-3 h-3" />
+                          <span>Unlock</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                /* Discreet trigger for staff */
+                <div className="pt-3 text-center border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStaffUnlockPrompt(true);
+                      setStaffPasscodeInput('');
+                      setStaffPasscodeError('');
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-slate-600 transition cursor-pointer inline-flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-100/70"
+                  >
+                    <Lock className="w-3 h-3" />
+                    <span>RonPay Staff Console Access</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* Staff Console Unlock Modal Dialog */}
+        {showStaffUnlockPrompt && (
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white w-full max-w-xs rounded-3xl p-5 shadow-2xl border border-slate-200 text-center space-y-3 animate-scaleUp">
+              <div className="w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 mx-auto flex items-center justify-center shadow-xs">
+                <Shield className="w-5 h-5" />
+              </div>
+
+              <div>
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                  INTERNAL CONSOLE GUARD
+                </span>
+                <h3 className="text-sm font-black text-slate-900 mt-1.5">
+                  Staff Passcode Chhu Rawh
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Auditor leh khualmi lakah admin data thup a ni a, staff tan passcode a ngai e.
+                </p>
+              </div>
+
+              {staffPasscodeError && (
+                <div className="p-2 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-[11px] font-bold flex items-center gap-1.5 justify-center">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{staffPasscodeError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleStaffUnlockSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  value={staffPasscodeInput}
+                  onChange={(e) => setStaffPasscodeInput(e.target.value)}
+                  placeholder="Master Passcode"
+                  className="w-full text-center px-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-black tracking-widest text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-600"
+                  autoFocus
+                  required
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStaffUnlockPrompt(false);
+                      setStaffPasscodeInput('');
+                      setStaffPasscodeError('');
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-bold transition cursor-pointer"
+                  >
+                    Sut Leh Rawh
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-black transition cursor-pointer shadow-md flex items-center justify-center gap-1"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>Hawnna</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Master Passcode Prompt Dialog (Overlay inside modal when Admin is clicked) */}
         {pendingAdminDemo && (
@@ -1323,7 +1503,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                   type="password"
                   value={masterPasscodeInput}
                   onChange={(e) => setMasterPasscodeInput(e.target.value)}
-                  placeholder="Master Passcode (e.g. 9900)"
+                  placeholder="Master Passcode"
                   className="w-full text-center px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-black tracking-widest text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-600"
                   autoFocus
                   required
@@ -1352,23 +1532,6 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                   </button>
                 </div>
               </form>
-
-              {/* Master Passcode hint for owner */}
-              <div className="pt-2 border-t border-slate-100 text-[10.5px]">
-                {!showAdminPasscodeHint ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPasscodeHint(true)}
-                    className="text-slate-400 hover:text-slate-600 transition cursor-pointer flex items-center gap-1 mx-auto"
-                  >
-                    <HelpCircle className="w-3 h-3" /> Passcode theihnghilh em? (Admin Hint)
-                  </button>
-                ) : (
-                  <span className="text-purple-700 font-bold bg-purple-50 p-1.5 rounded-lg block">
-                    Admin Passcode: <strong>9900</strong> emaw <strong>1234</strong>
-                  </span>
-                )}
-              </div>
             </div>
           </div>
         )}
