@@ -505,7 +505,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-center">
           <p className="text-[10.5px] text-amber-950 font-bold">
-            RonPay Community Platform v2.5
+            RonPay Community Platform V1.0
           </p>
           <p className="text-[10px] text-amber-800">Protected with Biometrics & End-to-End Integrity</p>
         </div>

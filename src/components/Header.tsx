@@ -455,7 +455,7 @@ export const Header: React.FC<HeaderProps> = ({
                   Ron<span className="text-[#f97316]">Pay</span>
                 </span>
                 <span className="hidden sm:inline-flex bg-orange-500/15 text-orange-300 text-[8px] font-black px-1.5 py-0.5 rounded-full border border-orange-500/30 tracking-wider uppercase items-center gap-0.5 shrink-0 whitespace-nowrap">
-                  FINTECH
+                  FINTECH V1.0
                 </span>
                 {!isOnline && (
                   <span className="inline-flex items-center gap-0.5 bg-rose-500/20 text-rose-300 text-[7.5px] font-bold px-1.5 py-0.5 rounded-full border border-rose-400/40 uppercase tracking-wider shrink-0 whitespace-nowrap">

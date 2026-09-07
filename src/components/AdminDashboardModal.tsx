@@ -1137,6 +1137,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full uppercase shadow-xs ${roleMeta.badgeColor}`}>
                   {roleMeta.badge}
                 </span>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/15 text-indigo-100 border border-white/20">
+                  V1.0
+                </span>
               </div>
               <p className="text-xs text-indigo-100 font-medium">
                 {isModerator 

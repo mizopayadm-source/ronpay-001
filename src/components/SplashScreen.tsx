@@ -68,7 +68,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
         </span>
         <span className="flex items-center gap-1 text-orange-400/90 font-bold">
           <Zap className="w-3 h-3 text-orange-400 fill-orange-400" />
-          <span>v2.4 Live</span>
+          <span>V1.0 Live</span>
         </span>
       </div>
 
