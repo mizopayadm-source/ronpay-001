@@ -53,7 +53,18 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab);
-      setPgConfig(getStoredPGConfig());
+      const stored = getStoredPGConfig();
+      if (
+        !stored.webhookEndpoint ||
+        stored.webhookEndpoint.includes('run.app') ||
+        stored.webhookEndpoint.includes('ais-dev') ||
+        stored.webhookEndpoint.includes('ais-pre') ||
+        stored.webhookEndpoint.includes('localhost')
+      ) {
+        stored.webhookEndpoint = 'https://ronpay.app/api/pg/webhook';
+        saveStoredPGConfig(stored);
+      }
+      setPgConfig(stored);
       setSimulatedTxResult(null);
     }
   }, [isOpen, initialTab]);
@@ -696,40 +707,54 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     </button>
                   </div>
 
-                  {/* Quick Preset Domain Switchers */}
+                  {/* Quick Preset Domain Switchers & Warning */}
+                  {pgConfig.webhookEndpoint !== 'https://ronpay.app/api/pg/webhook' && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-300 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-amber-900">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span className="font-semibold text-[11px]">
+                          {isMizo 
+                            ? 'Warning: Dev sandbox container URL a in-set a nih hi. Live PG/PhonePe tan official URL thlak rawh le:' 
+                            : 'Notice: Non-production dev container URL detected. Switch to official domain:'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = { ...pgConfig, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' };
+                          setPgConfig(updated);
+                          saveStoredPGConfig(updated);
+                        }}
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isMizo ? 'Official Domain-ah Thlak Rawh (ronpay.app)' : 'Reset to Official Domain (ronpay.app)'}</span>
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-2 mt-2">
                     <button
                       type="button"
-                      onClick={() => setPgConfig(p => ({ ...p, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' }))}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer border ${
+                      onClick={() => {
+                        const updated = { ...pgConfig, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' };
+                        setPgConfig(updated);
+                        saveStoredPGConfig(updated);
+                      }}
+                      className={`text-[11px] px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border ${
                         pgConfig.webhookEndpoint === 'https://ronpay.app/api/pg/webhook'
-                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
-                          : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200'
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs ring-1 ring-emerald-500'
+                          : 'bg-white text-emerald-800 hover:bg-emerald-50 border-emerald-300'
                       }`}
                     >
-                      <span>🌐</span>
-                      <span>{isMizo ? 'Official Domain (ronpay.app)' : 'Official Domain (ronpay.app)'}</span>
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>{isMizo ? '🌐 Official Domain (https://ronpay.app/api/pg/webhook)' : '🌐 Official Production (https://ronpay.app/api/pg/webhook)'}</span>
                     </button>
-
-                    {typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('ronpay.app') && (
-                      <button
-                        type="button"
-                        onClick={() => setPgConfig(p => ({ ...p, webhookEndpoint: `${window.location.origin}/api/pg/webhook` }))}
-                        className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer border ${
-                          pgConfig.webhookEndpoint === `${window.location.origin}/api/pg/webhook`
-                            ? 'bg-slate-800 text-white border-slate-900 shadow-2xs'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300'
-                        }`}
-                      >
-                        <span>⚡</span>
-                        <span>{isMizo ? 'Current Dev Container' : 'Current Dev Preview'}</span>
-                      </button>
-                    )}
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
                     {isMizo 
-                      ? '💡 PhonePe / Razorpay / NPCI hnuaia live merchant onboarding i tih dawn chuan official domain https://ronpay.app/api/pg/webhook hi hman tur a ni a, an approve rang fe zawk ang. Dev container URL chu he workspace chhunga sandbox simulation atan chauh a ni.'
-                      : '💡 For production onboarding with PhonePe/Razorpay, always submit the official https://ronpay.app/api/pg/webhook registered domain. The dev container URL is only for sandbox simulations.'}
+                      ? '💡 PhonePe / Razorpay / NPCI hnuaia merchant onboarding i tih dawn chuan official domain https://ronpay.app/api/pg/webhook hi hman tur a ni a, an approve rang fe zawk ang. Dev container URL chauh ni lovin official registered domain hian bank compliance a tlin a ni.'
+                      : '💡 For merchant onboarding with PhonePe/Razorpay, always submit the official https://ronpay.app/api/pg/webhook registered domain for full RBI and NPCI compliance.'}
                   </p>
                 </div>
               </div>

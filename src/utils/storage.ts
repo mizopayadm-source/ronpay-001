@@ -2192,9 +2192,20 @@ export const getStoredPGConfig = (): PaymentGatewayConfig => {
     const raw = localStorage.getItem(PG_CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Migrate old hardcoded stale preview URL to official ronpay.app domain
-      if (parsed.webhookEndpoint && parsed.webhookEndpoint.includes('ais-dev-a3j73fwv24ssrienmthjhs')) {
+      // Migrate any old dev container / cloud run sandbox URLs to official ronpay.app domain
+      if (
+        !parsed.webhookEndpoint ||
+        parsed.webhookEndpoint.includes('run.app') ||
+        parsed.webhookEndpoint.includes('ais-dev') ||
+        parsed.webhookEndpoint.includes('ais-pre') ||
+        parsed.webhookEndpoint.includes('localhost') ||
+        parsed.webhookEndpoint.includes('ais-dev-a3j73fwv24ssrienmthjhs') ||
+        parsed.webhookEndpoint.includes('ais-dev-aurigq73fhh5a7ck4exy2a')
+      ) {
         parsed.webhookEndpoint = 'https://ronpay.app/api/pg/webhook';
+        try {
+          localStorage.setItem(PG_CONFIG_KEY, JSON.stringify({ ...DEFAULT_PG_CONFIG, ...parsed }));
+        } catch (_) {}
       }
       return { ...DEFAULT_PG_CONFIG, ...parsed };
     }
