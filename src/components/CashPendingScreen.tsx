@@ -58,10 +58,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   const isPending = currentTx.status === 'pending_verification';
   const isApproved = currentTx.status === 'completed';
   const isRejected = currentTx.status === 'rejected';
+  const isOnline = currentTx.paymentMethod === 'online' || !!currentTx.utrRef;
 
   const handleStartApprove = () => {
     if (!authCheck.allowed) {
-      setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi approve phalna i nei lo.'}`);
+      setActionMessage(`⚠️ ${authCheck.reason || 'He payment hi approve phalna i nei lo.'}`);
       return;
     }
     setPendingBiometricAction('approve');
@@ -70,7 +71,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
 
   const handleStartReject = () => {
     if (!authCheck.allowed) {
-      setActionMessage(`⚠️ ${authCheck.reason || 'He cash pekna hi hnawl phalna i nei lo.'}`);
+      setActionMessage(`⚠️ ${authCheck.reason || 'He payment hi hnawl phalna i nei lo.'}`);
       return;
     }
     setPendingBiometricAction('reject');
@@ -85,7 +86,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       const updated = approveCashTransaction(currentTx.id, verifier, creatorProfile, campaigns);
       if (updated) {
         setCurrentTx(updated);
-        setActionMessage('Cash pekna hi hlawhtling takin pawm (Approved) a ni ta e!');
+        setActionMessage(`${isOnline ? 'UPI' : 'Cash'} pekna hi hlawhtling takin pawm (Approved) a ni ta e!`);
         if (onApprove) {
           setTimeout(() => {
             onApprove(updated);
@@ -97,7 +98,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       if (updated) {
         setCurrentTx(updated);
         setIsRejecting(false);
-        setActionMessage('Cash pekna hi hnawl (Rejected) a ni.');
+        setActionMessage(`${isOnline ? 'UPI' : 'Cash'} pekna hi hnawl (Rejected) a ni.`);
         if (onReject) {
           onReject(updated);
         }
@@ -125,13 +126,19 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
 
       <div className="space-y-1">
         <h2 className="text-lg font-black text-slate-900">
-          {isApproved ? 'Cash Verified & Approved!' : isRejected ? 'Cash Rejected' : 'Cash Entry Submitted!'}
+          {isApproved 
+            ? `${isOnline ? 'UPI Online Payment' : 'Cash'} Verified & Approved!` 
+            : isRejected 
+            ? `${isOnline ? 'UPI Payment' : 'Cash'} Rejected` 
+            : `${isOnline ? 'UPI Payment Verification Awaiting' : 'Cash Entry Submitted!'}`}
         </h2>
         <p className="text-xs text-slate-500 px-4 font-medium leading-relaxed">
           {isApproved
-            ? `He cash pekna hi ${currentTx.verifiedBy || 'Creator'}-in a dawng fel tih nemngheh a ni tawh e.`
+            ? `He pekna hi ${currentTx.verifiedBy || 'Creator'}-in a dawng fel tih nemngheh a ni tawh e.`
             : isRejected
-            ? `He cash pekna hi hnawl a ni. Chhan: ${currentTx.rejectionReason || 'Dawng lo'}`
+            ? `He pekna hi hnawl a ni. Chhan: ${currentTx.rejectionReason || 'Pawisa a lut lo'}`
+            : isOnline
+            ? `I UPI payment (UTR: ${currentTx.utrRef || currentTx.id}) hi Bawm Siamtu / Admin hian an bank statement-ah a lut ngei em tih an lo enfiah (verify) mek a ni. An pawm hnuah chauh official receipt a chhuak ang.`
             : 'I cash pek luh hi Bawm Siamtu / Admin hian verification a la kalpui dawn a ni.'}
         </p>
       </div>
@@ -148,11 +155,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           <span className="text-slate-500 font-medium">Status:</span>
           {isApproved ? (
             <span className="font-extrabold text-emerald-900 bg-emerald-200/90 px-2 py-0.5 rounded text-[10px] border border-emerald-300 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-emerald-700" /> CASH APPROVED
+              <CheckCircle2 className="w-3 h-3 text-emerald-700" /> {isOnline ? 'UPI APPROVED' : 'CASH APPROVED'}
             </span>
           ) : isRejected ? (
             <span className="font-extrabold text-rose-900 bg-rose-200/90 px-2 py-0.5 rounded text-[10px] border border-rose-300 flex items-center gap-1">
-              <XCircle className="w-3 h-3 text-rose-700" /> CASH REJECTED
+              <XCircle className="w-3 h-3 text-rose-700" /> {isOnline ? 'UPI REJECTED' : 'CASH REJECTED'}
             </span>
           ) : (
             <span className="font-extrabold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded text-[10px] border border-amber-300 flex items-center gap-1">
@@ -160,6 +167,20 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
             </span>
           )}
         </div>
+
+        <div className="flex justify-between items-center">
+          <span className="text-slate-500 font-medium">Payment Mode:</span>
+          <span className="font-bold text-slate-800">
+            {isOnline ? 'Direct UPI (Online Transfer)' : 'Cash Slip'}
+          </span>
+        </div>
+
+        {currentTx.utrRef && (
+          <div className="flex justify-between items-center bg-white/80 p-2 rounded-lg border border-amber-200">
+            <span className="text-slate-600 font-bold text-[11px]">Bank UTR / Ref:</span>
+            <span className="font-mono font-black text-indigo-900 text-xs tracking-wide">{currentTx.utrRef}</span>
+          </div>
+        )}
 
         <div className="flex justify-between items-center">
           <span className="text-slate-500 font-medium">Bawm / Campaign:</span>
@@ -183,7 +204,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         )}
 
         <div className="flex justify-between items-center">
-          <span className="text-slate-500 font-medium">Cash Amount:</span>
+          <span className="text-slate-500 font-medium">{isOnline ? 'UPI Amount:' : 'Cash Amount:'}</span>
           <span className="font-black text-slate-900 text-base">
             ₹{(Number(currentTx.amount) || 0).toLocaleString('en-IN')}
           </span>
@@ -212,10 +233,12 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-black text-amber-300 tracking-wide uppercase">
-                  {creatorProfile?.isAdmin ? 'Admin / Super Admin Approval' : `${targetCreatorDisplayName} (Bawm Siamtu Approval)`}
+                  {creatorProfile?.isAdmin ? 'Admin / Super Admin Verification' : `${targetCreatorDisplayName} (Bawm Siamtu Verification)`}
                 </h4>
                 <p className="text-[11px] text-slate-300 leading-tight">
-                  He cash pekna hi i enkawl bawm a mi a ni a. Pawisa i dawn fel tawh chuan pawm (Approve) rawh le.
+                  {isOnline 
+                    ? `He UPI pekna (UTR: ${currentTx.utrRef || currentTx.id}) hi i enkawl bawm a mi a ni a. I bank account-ah a luh tawh chuan pawm (Approve) rawh le.`
+                    : 'He cash pekna hi i enkawl bawm a mi a ni a. Pawisa i dawn fel tawh chuan pawm (Approve) rawh le.'}
                 </p>
               </div>
             </div>
@@ -228,7 +251,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-md cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <Fingerprint className="w-4 h-4 text-slate-950" />
-                Pawisa Ka Dawng Fel (Biometric Approve)
+                {isOnline ? 'Bank Account-ah A Lut Fel (Biometric Approve)' : 'Pawisa Ka Dawng Fel (Biometric Approve)'}
               </button>
 
               {!isRejecting ? (
@@ -238,7 +261,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
                   className="w-full bg-slate-800/80 hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 font-bold py-2 rounded-xl transition text-[11px] cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                  Pawisa Dawn A Ni Lo / Hnawl (Reject)
+                  {isOnline ? 'Bank-ah A Lut Lo / Hnawl (Reject)' : 'Pawisa Dawn A Ni Lo / Hnawl (Reject)'}
                 </button>
               ) : (
                 <div className="bg-rose-950/80 border border-rose-500/50 p-3 rounded-xl space-y-2 animate-fadeIn text-xs">
@@ -250,7 +273,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                     className="w-full bg-slate-900 border border-rose-400/60 rounded-lg p-2 text-white text-xs"
-                    placeholder="Chhan ziak rawh (e.g. Cash a lo thleng lo)"
+                    placeholder={isOnline ? "Chhan (e.g. Bank statement-ah a lang lo / UTR lem)" : "Chhan ziak rawh (e.g. Cash a lo thleng lo)"}
                   />
                   <div className="flex gap-2">
                     <button
@@ -281,16 +304,18 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-black text-amber-300">
-                  Creator & Admin Clearance Only
+                  Creator & Admin Verification Only
                 </h4>
                 <p className="text-[10.5px] text-slate-400 leading-tight">
-                  Cash payment receipt hi he bawm siamtu (Creator) leh Admin chauhin an approve thei.
+                  {isOnline 
+                    ? 'UPI payment hi Bawm Siamtu (Creator) leh Admin chauhin an bank statement an check hnuah an approve thei.'
+                    : 'Cash payment receipt hi he bawm siamtu (Creator) leh Admin chauhin an approve thei.'}
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800">
-              I thehluh cash ₹<b>{(Number(currentTx.amount) || 0).toLocaleString('en-IN')}</b> hi Bawm Siamtu (<b>{targetCreatorDisplayName}</b>) emaw Admin-in an lo enfiah a, pawisa an dawn fel veleh official receipt i dawng nghal dawn a ni.
+              I thehluh {isOnline ? 'UPI payment' : 'cash'} ₹<b>{(Number(currentTx.amount) || 0).toLocaleString('en-IN')}</b>{isOnline && currentTx.utrRef ? ` (UTR: ${currentTx.utrRef})` : ''} hi Bawm Siamtu (<b>{targetCreatorDisplayName}</b>) emaw Admin-in an lo enfiah a, pawisa a luh ngei tih an verify veleh official receipt i dawng nghal dawn a ni.
             </p>
 
             <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
@@ -316,8 +341,8 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         isOpen={isBiometricOpen}
         target="admin_action"
         actionType={pendingBiometricAction || 'approve'}
-        title={pendingBiometricAction === 'reject' ? 'Cash Rejection Authorization' : 'Cash Approval Clearance'}
-        subtitle={`Cash payment ₹${Number(currentTx.amount || 0).toLocaleString('en-IN')} (${currentTx.id}) hi ${pendingBiometricAction === 'reject' ? 'hnawl (reject)' : 'pawm (approve)'} tur hian Biometric verify rawh le.`}
+        title={pendingBiometricAction === 'reject' ? `${isOnline ? 'UPI' : 'Cash'} Rejection Authorization` : `${isOnline ? 'UPI' : 'Cash'} Approval Clearance`}
+        subtitle={`${isOnline ? 'UPI Online payment' : 'Cash payment'} ₹${Number(currentTx.amount || 0).toLocaleString('en-IN')} (${currentTx.id}${currentTx.utrRef ? `, UTR: ${currentTx.utrRef}` : ''}) hi ${pendingBiometricAction === 'reject' ? 'hnawl (reject)' : 'pawm (approve)'} tur hian Biometric verify rawh le.`}
         userName={creatorProfile?.name || creatorName}
         userPhone={creatorProfile?.phone}
         expectedPin={creatorProfile?.pin || creatorProfile?.password}

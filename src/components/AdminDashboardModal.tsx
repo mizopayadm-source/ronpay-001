@@ -309,15 +309,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   };
 
   const pendingCashTxList = useMemo(() => {
-    return localTransactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
+    return localTransactions.filter(t => t.status === 'pending_verification');
   }, [localTransactions]);
 
   const handleApproveCash = (txId: string) => {
     const targetTx = localTransactions.find(t => t.id === txId);
+    const isOnline = targetTx?.paymentMethod === 'online' || !!targetTx?.utrRef;
     triggerAdminBiometricGuard(
       'approve',
-      'Cash Payment Approval Clearance',
-      `Cash payment ₹${targetTx?.amount?.toLocaleString() || ''} (${txId}) hi pawm (Approve) tur hian Biometric verify rawh le.`,
+      `${isOnline ? 'UPI Payment' : 'Cash Payment'} Approval Clearance`,
+      `${isOnline ? 'UPI payment' : 'Cash payment'} ₹${targetTx?.amount?.toLocaleString() || ''} (${txId}${targetTx?.utrRef ? `, UTR: ${targetTx.utrRef}` : ''}) hi pawm (Approve) tur hian Biometric verify rawh le.`,
       () => {
         const verifier = currentProfile?.name || 'Admin / Creator';
         const updated = approveCashTransaction(txId, verifier, currentProfile, campaigns);
@@ -327,7 +328,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
           setTimeout(() => setCashActionFeedback(null), 3500);
         } else {
-          setCashActionFeedback(`⚠️ He cash hi approve phalna i nei lo.`);
+          setCashActionFeedback(`⚠️ He payment hi approve phalna i nei lo.`);
           setTimeout(() => setCashActionFeedback(null), 3500);
         }
       }
@@ -335,13 +336,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   };
 
   const handleRejectCash = (txId: string, reason?: string) => {
+    const targetTx = localTransactions.find(t => t.id === txId);
+    const isOnline = targetTx?.paymentMethod === 'online' || !!targetTx?.utrRef;
     triggerAdminBiometricGuard(
       'reject',
-      'Cash Payment Rejection Authorization',
-      `Cash payment (${txId}) hi hnawl (Reject) tur hian Biometric authorization a ngai e.`,
+      `${isOnline ? 'UPI Payment' : 'Cash Payment'} Rejection Authorization`,
+      `${isOnline ? 'UPI payment' : 'Cash payment'} (${txId}) hi hnawl (Reject) tur hian Biometric authorization a ngai e.`,
       () => {
         const verifier = currentProfile?.name || 'Admin / Creator';
-        const updated = rejectCashTransaction(txId, verifier, reason || 'Cash pawisa dawn a ni lo', currentProfile, campaigns);
+        const updated = rejectCashTransaction(txId, verifier, reason || (isOnline ? 'Bank statement-ah a lang lo' : 'Cash pawisa dawn a ni lo'), currentProfile, campaigns);
         if (updated) {
           setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
           onUpdateTransaction?.(updated);
@@ -349,7 +352,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
           setTimeout(() => setCashActionFeedback(null), 3500);
         } else {
-          setCashActionFeedback(`⚠️ He cash hi hnawl phalna i nei lo.`);
+          setCashActionFeedback(`⚠️ He payment hi hnawl phalna i nei lo.`);
           setTimeout(() => setCashActionFeedback(null), 3500);
         }
       }
@@ -1342,10 +1345,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
                   badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white'
                 },
-                // 3. Cash Approvals & Verification: Super Admin, Admin, Moderator
+                // 3. Cash & UPI Approvals & Verification: Super Admin, Admin, Moderator
                 (isSuperAdmin || isOperationsAdmin || isModerator) && { 
                   id: 'cash_approvals' as AdminTabId, 
-                  label: 'Cash Approvals & Fiahna', 
+                  label: 'Approvals & Fiahna', 
                   icon: Banknote,
                   badge: pendingCashTxList.length > 0 ? pendingCashTxList.length : undefined,
                   badgeColor: 'bg-amber-500 text-slate-950 font-black animate-pulse'
@@ -2244,16 +2247,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               )}
 
               {/* ========================================================= */}
-              {/* TAB: CASH APPROVALS & VERIFICATION                        */}
+              {/* TAB: CASH & UPI APPROVALS & VERIFICATION                   */}
               {/* ========================================================= */}
               {activeTab === 'cash_approvals' && (() => {
-                const allCashList = localTransactions.filter(t => t.paymentMethod === 'cash');
-                const pendingList = allCashList.filter(t => t.status === 'pending_verification');
-                const completedList = allCashList.filter(t => t.status === 'completed');
-                const rejectedList = allCashList.filter(t => t.status === 'rejected');
-                const totalCashReceived = completedList.reduce((sum, t) => sum + t.amount, 0);
+                const allApprovalList = localTransactions.filter(t => 
+                  t.paymentMethod === 'cash' || 
+                  t.status === 'pending_verification' || 
+                  (t.paymentMethod === 'online' && (t.status === 'rejected' || !!t.verifiedBy || !!t.utrRef))
+                );
+                const pendingList = allApprovalList.filter(t => t.status === 'pending_verification');
+                const completedList = allApprovalList.filter(t => t.status === 'completed');
+                const rejectedList = allApprovalList.filter(t => t.status === 'rejected');
+                const totalCashReceived = completedList.filter(t => t.paymentMethod === 'cash').reduce((sum, t) => sum + t.amount, 0);
+                const totalOnlineApproved = completedList.filter(t => t.paymentMethod === 'online').reduce((sum, t) => sum + t.amount, 0);
 
-                const displayedCash = allCashList.filter(t => {
+                const displayedList = allApprovalList.filter(t => {
                   if (cashFilter === 'pending' && t.status !== 'pending_verification') return false;
                   if (cashFilter === 'completed' && t.status !== 'completed') return false;
                   if (cashFilter === 'rejected' && t.status !== 'rejected') return false;
@@ -2264,7 +2272,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     const id = (t.id || '').toLowerCase();
                     const camp = (t.campaignTitle || t.campaignId || '').toLowerCase();
                     const veng = (t.donorVeng || '').toLowerCase();
-                    if (!name.includes(q) && !phone.includes(q) && !id.includes(q) && !camp.includes(q) && !veng.includes(q)) {
+                    const utr = (t.utrRef || '').toLowerCase();
+                    if (!name.includes(q) && !phone.includes(q) && !id.includes(q) && !camp.includes(q) && !veng.includes(q) && !utr.includes(q)) {
                       return false;
                     }
                   }
@@ -2290,16 +2299,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                       <div className="p-3.5 bg-amber-50/80 border border-amber-300/80 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-amber-900">Pending Verification</p>
+                          <p className="text-[11px] font-extrabold text-amber-900">Pending Fiahna</p>
                           <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
                         </div>
                         <p className="text-2xl font-black text-amber-950 mt-1">{pendingList.length}</p>
-                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">Pawisa fiah nghak mek</p>
+                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">UPI & Cash fiah nghak</p>
                       </div>
 
                       <div className="p-3.5 bg-emerald-50/80 border border-emerald-300/80 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-emerald-900">Approved & Dawng Fel</p>
+                          <p className="text-[11px] font-extrabold text-emerald-900">Approved (Dawng Fel)</p>
                           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                         </div>
                         <p className="text-2xl font-black text-emerald-950 mt-1">{completedList.length}</p>
@@ -2317,11 +2326,11 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                       <div className="p-3.5 bg-indigo-50/80 border border-indigo-300/80 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-indigo-900">Total Cash Received</p>
-                          <Banknote className="w-4 h-4 text-indigo-600" />
+                          <p className="text-[11px] font-extrabold text-indigo-900">Total Verified Sum</p>
+                          <ShieldCheck className="w-4 h-4 text-indigo-600" />
                         </div>
-                        <p className="text-2xl font-black text-indigo-950 mt-1">₹{totalCashReceived.toLocaleString('en-IN')}</p>
-                        <p className="text-[10px] text-indigo-700 font-medium mt-0.5">Cash sum tlingkhawm</p>
+                        <p className="text-2xl font-black text-indigo-950 mt-1">₹{(totalCashReceived + totalOnlineApproved).toLocaleString('en-IN')}</p>
+                        <p className="text-[10px] text-indigo-700 font-medium mt-0.5">Cash: ₹{totalCashReceived.toLocaleString('en-IN')} | UPI: ₹{totalOnlineApproved.toLocaleString('en-IN')}</p>
                       </div>
                     </div>
 
@@ -2329,7 +2338,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
                       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                         {[
-                          { key: 'all', label: `All Cash (${allCashList.length})` },
+                          { key: 'all', label: `All Entries (${allApprovalList.length})` },
                           { key: 'pending', label: `Pending Fiahna (${pendingList.length})`, alert: pendingList.length > 0 },
                           { key: 'completed', label: `Approved (${completedList.length})` },
                           { key: 'rejected', label: `Rejected (${rejectedList.length})` },
@@ -2359,7 +2368,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           type="text"
                           value={cashSearch}
                           onChange={(e) => setCashSearch(e.target.value)}
-                          placeholder="Hming, phone, receipt id..."
+                          placeholder="Hming, phone, UTR, token id..."
                           className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                         />
                         {cashSearch && (
@@ -2373,28 +2382,29 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
                     </div>
 
-                    {/* List of Cash Transactions */}
-                    {displayedCash.length === 0 ? (
+                    {/* List of Transactions needing approval */}
+                    {displayedList.length === 0 ? (
                       <div className="text-center py-14 px-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-2">
                         <div className="w-12 h-12 rounded-2xl bg-slate-200 mx-auto flex items-center justify-center text-slate-400">
-                          <Banknote className="w-6 h-6" />
+                          <ShieldCheck className="w-6 h-6" />
                         </div>
-                        <p className="text-sm font-black text-slate-700">Cash transaction hmuh a ni lo</p>
-                        <p className="text-xs text-slate-500">I thlan filter leh search hnuaiah hian cash transaction a la awm lo e.</p>
+                        <p className="text-sm font-black text-slate-700">Transaction hmuh a ni lo</p>
+                        <p className="text-xs text-slate-500">I thlan filter leh search hnuaiah hian transaction a la awm lo e.</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {displayedCash.map(tx => {
+                        {displayedList.map(tx => {
                           const isPending = tx.status === 'pending_verification';
                           const isCompleted = tx.status === 'completed';
                           const isRejected = tx.status === 'rejected';
+                          const isOnline = tx.paymentMethod === 'online' || !!tx.utrRef;
 
                           return (
                             <div
                               key={tx.id}
                               className={`p-4 rounded-2xl border transition-all ${
                                 isPending
-                                  ? 'bg-amber-50/40 border-2 border-amber-400/90 shadow-sm'
+                                  ? 'bg-amber-50/50 border-2 border-amber-400 shadow-sm'
                                   : isCompleted
                                   ? 'bg-white border-slate-200 hover:border-emerald-300'
                                   : 'bg-slate-50/80 border-slate-200 opacity-80'
@@ -2417,6 +2427,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                         📍 {tx.donorVeng}
                                       </span>
                                     )}
+                                    
+                                    {/* Payment Method Badge */}
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                                      isOnline ? 'bg-indigo-100 text-indigo-900' : 'bg-amber-100 text-amber-900'
+                                    }`}>
+                                      {isOnline ? '⚡ Direct UPI' : '💵 Cash'}
+                                    </span>
+
                                     {/* Status Badge */}
                                     <span
                                       className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
@@ -2434,6 +2452,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                         : '✕ Rejected'}
                                     </span>
                                   </div>
+
+                                  {/* UTR Reference if Online */}
+                                  {tx.utrRef && (
+                                    <div className="bg-white/90 border border-indigo-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-2 text-xs font-mono">
+                                      <span className="text-slate-500 font-sans font-bold text-[10.5px]">Bank UTR:</span>
+                                      <span className="font-black text-indigo-950 select-all">{tx.utrRef}</span>
+                                    </div>
+                                  )}
 
                                   <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
                                     <span>
@@ -2479,7 +2505,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 {/* Right Side: Amount & Controls */}
                                 <div className="flex flex-col items-start sm:items-end justify-between gap-3 shrink-0">
                                   <div className="sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cash Amount</p>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{isOnline ? 'UPI Amount' : 'Cash Amount'}</p>
                                     <p className="text-2xl font-black text-slate-900">
                                       ₹{tx.amount.toLocaleString('en-IN')}
                                     </p>
@@ -2494,8 +2520,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                             type="text"
                                             value={rejectCashReason}
                                             onChange={(e) => setRejectCashReason(e.target.value)}
-                                            placeholder="Hnawl chhan ziak rawh..."
-                                            className="bg-white border border-rose-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 w-48"
+                                            placeholder={isOnline ? "Hnawl chhan (e.g. Bank statement-ah a lang lo)..." : "Hnawl chhan ziak rawh..."}
+                                            className="bg-white border border-rose-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 w-52"
                                           />
                                           <div className="flex gap-1.5">
                                             <button
@@ -2520,7 +2546,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                             className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95"
                                           >
                                             <CheckCircle2 className="w-4 h-4 text-white" />
-                                            <span>Pawisa Ka Dawng Fel (Approve)</span>
+                                            <span>{isOnline ? 'Bank-ah A Lut Fel (Approve)' : 'Pawisa Ka Dawng Fel (Approve)'}</span>
                                           </button>
 
                                           <button
@@ -2529,7 +2555,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                             className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
                                           >
                                             <XCircle className="w-3.5 h-3.5" />
-                                            <span>Hnawl</span>
+                                            <span>{isOnline ? 'Bank-ah A Lut Lo (Reject)' : 'Hnawl'}</span>
                                           </button>
                                         </>
                                       )

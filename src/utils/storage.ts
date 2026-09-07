@@ -2023,7 +2023,7 @@ export const canApproveCashPayment = (
 
   const role = getUserRole(creatorProfile);
 
-  // 1. Super Admin & Admin can approve any cash payment
+  // 1. Super Admin & Admin can approve any cash/UPI payment
   if (role === 'SUPER_ADMIN' || role === 'ADMIN' || creatorProfile.isAdmin) {
     return { allowed: true };
   }
@@ -2036,24 +2036,26 @@ export const canApproveCashPayment = (
     }
     return { 
       allowed: false, 
-      reason: 'Bawm siamtu (Creator) amah ngei emaw Admin chauhvin he bawma cash lo kal hi an approve thei. Ama siam loh bawm a mi chu approve theih a ni lo.' 
+      reason: 'Bawm siamtu (Creator) amah ngei emaw Admin chauhvin he bawma sum lo lut hi an approve thei. Ama siam loh bawm a mi chu approve theih a ni lo.' 
     };
   }
 
-  // 3. Moderator is restricted to content/campaign/KYC reviews, not cash handling
+  // 3. Moderator is restricted to content/campaign/KYC reviews, not cash/funds handling
   if (role === 'MODERATOR') {
     return { 
       allowed: false, 
-      reason: 'Moderator chuan Cash pawisa a approve thei lo. Bawm Siamtu (Creator) emaw Admin chauhvin an approve thei.' 
+      reason: 'Moderator chuan Pawisa a approve thei lo. Bawm Siamtu (Creator) emaw Admin chauhvin an approve thei.' 
     };
   }
 
   // 4. Member / Donor / Guest
   return { 
     allowed: false, 
-    reason: 'He Cash payment receipt hi Creator leh Admin chauhin an approve thei.' 
+    reason: 'He payment receipt hi Creator leh Admin chauhin an approve thei.' 
   };
 };
+
+export const canApprovePayment = canApproveCashPayment;
 
 export const approveCashTransaction = (
   transactionId: string, 
@@ -2071,17 +2073,21 @@ export const approveCashTransaction = (
   if (creatorProfile) {
     const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
     if (!auth.allowed) {
-      console.warn('Unauthorized cash approval attempt:', auth.reason);
+      console.warn('Unauthorized approval attempt:', auth.reason);
       return null;
     }
   }
+
+  const isOnline = current.paymentMethod === 'online' || !!current.utrRef;
 
   const updated: Transaction = {
     ...current,
     status: 'completed',
     verifiedBy: verifierName,
     verifiedAt: new Date().toISOString(),
-    remark: current.remark ? `${current.remark} (Cash Approved by ${verifierName})` : `Cash Approved by ${verifierName}`
+    remark: current.remark 
+      ? `${current.remark} (${isOnline ? 'UPI Verified' : 'Cash Approved'} by ${verifierName})` 
+      : `${isOnline ? 'UPI Verified & Approved' : 'Cash Approved'} by ${verifierName}`
   };
 
   all[index] = updated;
@@ -2090,8 +2096,10 @@ export const approveCashTransaction = (
 
   // Record audit log
   recordAuditLog(
-    'Cash Approved',
-    `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was APPROVED/VERIFIED by ${verifierName}`,
+    isOnline ? 'UPI Payment Approved' : 'Cash Approved',
+    isOnline 
+      ? `UPI Payment ₹${updated.amount} (UTR: ${updated.utrRef || updated.id}) for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was VERIFIED/APPROVED by ${verifierName}`
+      : `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was APPROVED/VERIFIED by ${verifierName}`,
     'transaction',
     updated.id
   );
@@ -2099,21 +2107,25 @@ export const approveCashTransaction = (
   // Add Notification
   addStoredNotification({
     type: 'personal',
-    title: `Cash Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}`,
-    message: `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian a dawng fel ta e. (Txn: ${updated.id})`,
+    title: isOnline ? `UPI Payment Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}` : `Cash Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}`,
+    message: isOnline
+      ? `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} UPI pek (UTR: ${updated.utrRef || updated.id}) ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian an bank account-ah an verify fel ta e. (Txn: ${updated.id})`
+      : `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian a dawng fel ta e. (Txn: ${updated.id})`,
     amount: updated.amount,
     transactionId: updated.id,
     campaignId: updated.campaignId,
-    tag: 'Cash Approved'
+    tag: isOnline ? 'UPI Payment Approved' : 'Cash Approved'
   });
 
   return updated;
 };
 
+export const approvePendingTransaction = approveCashTransaction;
+
 export const rejectCashTransaction = (
   transactionId: string, 
   rejectorName: string = 'Admin / Creator',
-  reason: string = 'Cash pawisa dawn a ni lo',
+  reason: string = 'Pawisa dawn a ni lo',
   creatorProfile?: CreatorProfile | null,
   campaignsList?: Campaign[]
 ): Transaction | null => {
@@ -2127,10 +2139,12 @@ export const rejectCashTransaction = (
   if (creatorProfile) {
     const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
     if (!auth.allowed) {
-      console.warn('Unauthorized cash rejection attempt:', auth.reason);
+      console.warn('Unauthorized rejection attempt:', auth.reason);
       return null;
     }
   }
+
+  const isOnline = current.paymentMethod === 'online' || !!current.utrRef;
 
   const updated: Transaction = {
     ...current,
@@ -2138,7 +2152,9 @@ export const rejectCashTransaction = (
     rejectedBy: rejectorName,
     rejectedAt: new Date().toISOString(),
     rejectionReason: reason,
-    remark: current.remark ? `${current.remark} (Cash Rejected: ${reason})` : `Cash Rejected: ${reason}`
+    remark: current.remark 
+      ? `${current.remark} (${isOnline ? 'UPI Rejected' : 'Cash Rejected'}: ${reason})` 
+      : `${isOnline ? 'UPI Rejected' : 'Cash Rejected'}: ${reason}`
   };
 
   all[index] = updated;
@@ -2147,8 +2163,10 @@ export const rejectCashTransaction = (
 
   // Record audit log
   recordAuditLog(
-    'Cash Rejected',
-    `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`,
+    isOnline ? 'UPI Payment Rejected' : 'Cash Rejected',
+    isOnline
+      ? `UPI Payment ₹${updated.amount} (UTR: ${updated.utrRef || updated.id}) for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`
+      : `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`,
     'transaction',
     updated.id
   );
@@ -2156,16 +2174,20 @@ export const rejectCashTransaction = (
   // Add Notification
   addStoredNotification({
     type: 'personal',
-    title: `Cash Hnawl: ₹${updated.amount.toLocaleString('en-IN')}`,
-    message: `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`,
+    title: isOnline ? `UPI Payment Hnawl: ₹${updated.amount.toLocaleString('en-IN')}` : `Cash Hnawl: ₹${updated.amount.toLocaleString('en-IN')}`,
+    message: isOnline
+      ? `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} UPI pek (UTR: ${updated.utrRef || updated.id}) ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`
+      : `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`,
     amount: updated.amount,
     transactionId: updated.id,
     campaignId: updated.campaignId,
-    tag: 'Cash Rejected'
+    tag: isOnline ? 'UPI Payment Rejected' : 'Cash Rejected'
   });
 
   return updated;
 };
+
+export const rejectPendingTransaction = rejectCashTransaction;
 
 const PG_CONFIG_KEY = 'ronpay_pg_config_v1';
 

@@ -1803,7 +1803,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           remark={remark.trim() || undefined}
           onPaymentSuccess={(tx) => {
             setIsUPIIntentOpen(false);
-            onPaymentSuccess(tx);
+            if (tx.status === 'pending_verification') {
+              onCashPending(tx);
+            } else {
+              onPaymentSuccess(tx);
+            }
           }}
         />
       )}
