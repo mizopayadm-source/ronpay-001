@@ -1,5 +1,5 @@
 {
-  "name": "RonPay - QR Bawm & Member Roll Manager",
+  "name": "RonPay - A Digital Payment Platform",
   "description": "RonPay - Mizoram Community Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
