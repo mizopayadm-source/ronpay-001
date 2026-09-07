@@ -1118,8 +1118,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         {/* Top Header */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-850 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-700/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-md font-black">
-              <ShieldCheck className="w-5 h-5 text-slate-950" />
+            <div className="w-10 h-10 rounded-2xl overflow-hidden border border-indigo-400/40 shadow-md shrink-0">
+              <img 
+                src="/ronpay-logo.png" 
+                alt="RonPay Logo" 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1172,8 +1177,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         {/* Auth Guard Screen */}
         {!isAuthenticated ? (
           <div className="p-6 sm:p-10 flex-1 overflow-y-auto flex flex-col items-center justify-center text-center space-y-5">
-            <div className="w-16 h-16 rounded-3xl bg-indigo-50 border-2 border-indigo-200 text-indigo-600 flex items-center justify-center shadow-lg">
-              <KeyRound className="w-8 h-8" />
+            <div className="w-16 h-16 rounded-3xl overflow-hidden border-2 border-indigo-200 shadow-lg">
+              <img 
+                src="/ronpay-logo.png" 
+                alt="RonPay Logo" 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+              />
             </div>
 
             <div className="space-y-1 max-w-sm">

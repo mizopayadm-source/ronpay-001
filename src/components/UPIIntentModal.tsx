@@ -268,9 +268,9 @@ export function UPIIntentModal({
           </button>
 
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <Smartphone className="w-3 h-3 text-amber-300" />
-              UPI Instant Payment
+            <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full flex items-center gap-1.5">
+              <img src="/ronpay-logo.png" alt="RonPay" className="w-3.5 h-3.5 rounded object-cover" referrerPolicy="no-referrer" />
+              RonPay Instant Payment
             </span>
             <span className="text-[10px] font-bold text-slate-300">
               Ref: <span className="text-amber-300 font-mono">{txRef}</span>

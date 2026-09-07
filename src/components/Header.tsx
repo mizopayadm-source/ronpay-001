@@ -437,23 +437,13 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {/* Logo Squircle */}
             <div className="relative shrink-0">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-[1.5px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md group-hover:scale-105 transition-transform duration-200 border border-[#2b5191]/50">
-                <div className="w-full h-full bg-[#081224] rounded-[10px] flex items-center justify-center relative overflow-hidden">
-                  <svg viewBox="0 0 100 100" className="w-5 h-5 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="headerOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#FB923C" />
-                        <stop offset="50%" stopColor="#F97316" />
-                        <stop offset="100%" stopColor="#EA580C" />
-                      </linearGradient>
-                    </defs>
-                    <rect x="20" y="18" width="12" height="64" rx="3" fill="url(#headerOrange)" />
-                    <rect x="20" y="26" width="34" height="8" rx="2.5" fill="url(#headerOrange)" />
-                    <rect x="20" y="42" width="28" height="7" rx="2" fill="url(#headerOrange)" />
-                    <path d="M32 18H56C69 18 78 27 78 39C78 51 69 60 56 60H32V48H54C60 48 65 44 65 39C65 34 60 30 54 30H32V18Z" fill="url(#headerOrange)" />
-                    <path d="M32 50L60 82H76L46 50H32Z" fill="#ffffff" />
-                  </svg>
-                </div>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-[1px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md group-hover:scale-105 transition-transform duration-200 border border-[#2b5191]/50 overflow-hidden">
+                <img 
+                  src="/ronpay-logo.png" 
+                  alt="RonPay Logo" 
+                  className="w-full h-full object-cover rounded-[10px]" 
+                  referrerPolicy="no-referrer"
+                />
               </div>
               <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-slate-950 shadow-xs ${isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-ping'}`} />
             </div>

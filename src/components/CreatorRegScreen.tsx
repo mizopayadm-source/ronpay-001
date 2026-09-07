@@ -495,8 +495,13 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       {authMode === 'login' && (
         <form onSubmit={handleLoginSubmit} className="bg-white p-4.5 rounded-2xl border border-slate-200/90 space-y-4 shadow-xs text-xs">
           <div className="text-center py-1">
-            <div className="w-12 h-12 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto text-xl mb-1.5 shadow-xs border border-indigo-200">
-              <Lock className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-2xl overflow-hidden mx-auto mb-1.5 shadow-xs border border-slate-200">
+              <img 
+                src="/ronpay-logo.png" 
+                alt="RonPay Logo" 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <h3 className="font-black text-slate-900 text-sm">QR Creator Account Login</h3>
             <p className="text-[10.5px] text-slate-500 mt-0.5">

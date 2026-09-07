@@ -780,8 +780,13 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             className="flex items-center gap-3 cursor-pointer group"
             title="RonPay Security Module"
           >
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/90 text-white flex items-center justify-center shadow-md border border-indigo-400/40 group-active:scale-95 transition-transform">
-              <ShieldCheck className="w-5 h-5 text-indigo-100" />
+            <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-md border border-indigo-400/40 group-active:scale-95 transition-transform shrink-0">
+              <img 
+                src="/ronpay-logo.png" 
+                alt="RonPay Logo" 
+                className="w-full h-full object-cover" 
+                referrerPolicy="no-referrer" 
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">

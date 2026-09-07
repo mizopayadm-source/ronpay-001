@@ -596,12 +596,13 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             className="flex items-center gap-1.5 sm:gap-2.5 cursor-pointer shrink-0" 
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-orange-500 p-0.5 shadow-sm flex items-center justify-center shrink-0">
-              <div className={`w-full h-full ${eyeComfortMode ? 'bg-white' : 'bg-slate-950'} rounded-[9px] sm:rounded-[10px] flex items-center justify-center transition-colors`}>
-                <span className="font-black text-base sm:text-lg text-transparent bg-clip-text bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500">
-                  R
-                </span>
-              </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl p-[1px] bg-gradient-to-b from-[#1e3a6b] to-[#0d1d38] shadow-md flex items-center justify-center shrink-0 border border-[#2b5191]/50 overflow-hidden">
+              <img 
+                src="/ronpay-logo.png" 
+                alt="RonPay Logo" 
+                className="w-full h-full object-cover rounded-[10px]" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div className="shrink-0">
               <div className="flex items-center gap-1 leading-none">
@@ -2488,8 +2489,13 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             {/* Brand */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-orange-500 text-white font-black flex items-center justify-center text-sm">
-                  R
+                <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-700 shrink-0">
+                  <img 
+                    src="/ronpay-logo.png" 
+                    alt="RonPay Logo" 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <span className="text-lg font-black text-white">
                   Ron<span className="text-orange-500">Pay</span>
