@@ -510,7 +510,79 @@ export async function askAIHriatpui(
     console.warn('AI Ask API error:', err);
   }
 
-  // 3. Official Knowledge Base Match (Q1 to Q15)
+  // 3. Official Knowledge Base Match (PhonePe, BBPS, Bawm 5, Q1 to Q15)
+
+  // PhonePe Partnership & Thawhdun Dan
+  if (q.includes('phonepe') && (q.includes('thawh') || q.includes('partner') || q.includes('engtin') || q.includes('engvanga') || q.includes('zawm') || q.includes('tsp') || q.includes('pg') || q.includes('nen'))) {
+    return {
+      answer: `🤝 **PhonePe & RonPay Thawhdun Dan (Official Technology Partner):**
+
+RonPay hi India rama digital payment platform lian ber **PhonePe** Technology Service Provider (TSP) leh **Payment Gateway (PG V2)** architecture rintlak tak hmanga duanchhuah a ni.
+
+* **Direct Bank Settlement (In Bank Account-ah a lut nghal):** PhonePe banking rails hmangin Bawm-a thawhlawm leh sum lut reng reng creator/organization bank account-ah direct-in second tlemte chhungin a lut nghal a, RonPay-in pawisa a kawl lo.
+* **BBPS Utility Engine:** PhonePe BBPS gateway kaltlangin Mizoram chhung leh India ram pum huapa **Electric Bill (P&ED), Tui Bill (PHED), FASTag, Municipal Tax, School Fees, leh Mobile Topup** te awlsam takin a pek theih.
+* **Fake Screenshot Laka Himna 100%:** PhonePe payment verification server nen real-time-a a in-sync avangin fake screenshot leh transaction lem lakah a him 100% a ni.
+* **UPI App Zawng Zawng Support:** PhonePe rails a hman avangin PhonePe chauh ni lovin **GPay, Paytm, BHIM, leh Bank UPI app** zawng zawng atangin a scan-in a pek theih vek bawk.`
+    };
+  }
+
+  // EBill & Tui Bill Pek Dan (BBPS Services)
+  if (q.includes('ebill') || q.includes('electric') || q.includes('tui bill') || q.includes('water bill') || (q.includes('bill') && (q.includes('pek') || q.includes('dan') || q.includes('engtin') || q.includes('phed') || q.includes('p&ed')))) {
+    return {
+      answer: `💡 **EBill (Electric) & Tui Bill Pek Dan (BBPS Services):**
+
+RonPay Web App hmangin Mizoram Power & Electricity Dept (P&ED) leh Public Health Engineering Dept (PHED) bill-te awlsam takin second reiloté chhungin a pek theih e:
+
+1. **Bill Service (BBPS) Hawng Rawh:** App home screen emaw menu atangin **"⚡ Bill Service (BBPS)"** hmet rawh le. *(Login kher a ngai lo, Guest User angin a lut tlang theih).*
+2. **Biller / Service Thlang Rawh:**
+   * **Electric Bill (EBill):** *Power & Electricity Department Mizoram (P&ED)* thlang rawh.
+   * **Tui Bill (Water Bill):** *PHED Mizoram Water Bill* thlang rawh.
+3. **Consumer Details Chhu Lut Rawh:** I bill lehkhaa Consumer Number / Account ID / Meter No awm kha chhu lut rawh.
+4. **Bill Zat A Lo Lang Nghal Ang:** "Fetch Bill" i hmeh hnuah i bill zat, consumer hming, leh due date a lo lang nghal ang.
+5. **Pawisa Pe Rawh:** "Pay Now" hmet la, PhonePe, GPay, Paytm emaw UPI engpawh hmangin second 5 chhungin pe la, official BBPS receipt (sulhnu) download nghal rawh.`
+    };
+  }
+
+  // Bawm Chi 5-te (Bawm Categories)
+  if ((q.includes('bawm') && (q.includes('5') || q.includes('nga') || q.includes('chi') || q.includes('category') || q.includes('hrang'))) || q.includes('bawm 5')) {
+    return {
+      answer: `📦 **RonPay Bawm Chi 5-te (Community Bawm Categories):**
+
+1. **Ralna Bawm:** Chhiatni, mitthi vuina, leh ralna sum thawhkhawm nan. Ni 1 aṭanga thla 1 chhung validity a nei a, donor-ten condolences chibai bukna thuchah an thawn tel thei.
+2. **Khawlsak Bawm:** Riangvai, fahrah, mi chhumchhia, leh damlo tanpuina atana target siama sum lakkhawm leh record vawn that nan.
+3. **Rikrum Bawm:** Kangmei, tuilian, leimin, leh emergency khuarel chhiatna thleng thut tanpuina rang taka lakkhawm zung zung nan.
+4. **Kumtluang Bawm:** Kohhran thawhlawm, Branch YMA, Welfare permanent collection, Member Roll, Faith Promise leh thlakipa thawh dan chhui na bawm.
+5. **Vantlang / Khawtlang Bawm (Special Projects):** Branch YMA Hall sak, Community Playground, Veng chhung hmasawnna, Sports, leh project lian tham thawh nan.`
+    };
+  }
+
+  // Khualmi (Guest User) angin luh dan
+  if (q.includes('khualmi') || (q.includes('guest') && (q.includes('luh') || q.includes('user') || q.includes('lut') || q.includes('dan')))) {
+    return {
+      answer: `👤 **Khualmi (Guest User) Anga Luh Dan:**
+
+RonPay-ah hian mipui nawlpui tana awlsam ber turin registration buaithlak paltlang kher ngai lovin **Guest User (Khualmi)** nihnain a luh nghal theih:
+
+1. **www.ronpay.app/app** i browser-ah hawng la, khualmi nihnain Home screen-ah i lut tlang nghal ang.
+2. Veng chhung leh pawl hrang hrang bawm zawn chhuah nan, sum thawh nan, leh BBPS bill pek nan account login a ngai lo.
+3. QR Code siamtu leh bawm enkawltu (Creator) nih duh chauhvin **"Creator Login / Verify Account"** an hmet ang.`
+    };
+  }
+
+  // www.ronpay.app/app ah engte nge awm?
+  if (q.includes('ronpay.app') || q.includes('app ah engte') || q.includes('portal ah') || q.includes('app chhung')) {
+    return {
+      answer: `🌐 **www.ronpay.app/app Chhunga Thil Awmte:**
+
+* **Home Dashboard:** Bawm hrang hrang lanna, PhonePe official partner badge, leh quick shortcuts.
+* **Bawm Explorer:** Mizoram chhung veng leh pawl hrang hrang bawm zawn chhuahna leh donate na.
+* **Bill Service (BBPS):** Electric (P&ED), Tui (PHED), FASTag, School Fees, Municipal Tax, leh Mobile Topup.
+* **QR Scanner:** RonPay QR emaw UPI QR scan-a sum thawn zung zungna.
+* **Pekna Sulhnu (Receipt):** I sum thawh tawh leh bill pek tawh receipt enlet leh download theihna.
+* **Creator Studio:** QR Code thar siam, validity pawtsei, donation history en, leh accounting ledger print-na.`
+    };
+  }
+
   // Q1: RonPay chu engnge?
   if (q.includes('ronpay chu engnge') || q.includes('ronpay hi engnge') || q.includes('engnge ronpay') || q.includes('what is ronpay')) {
     return { answer: `📌 **RonPay Nih Phung (Q1):**\n${RONPAY_KNOWLEDGE_BASE_Q1_TO_Q15[0].answer}` };
@@ -576,8 +648,8 @@ export async function askAIHriatpui(
     return { answer: `⚡ **UPI Lite Support (Q13):**\n${RONPAY_KNOWLEDGE_BASE_Q1_TO_Q15[12].answer}` };
   }
 
-  // Q14: GPay leh RonPay danglamna
-  if (q.includes('gpay') || q.includes('phonepe') || q.includes('danglamna') || q.includes('difference')) {
+  // Q14: GPay leh RonPay danglamna (Only trigger when comparing GPay with RonPay)
+  if ((q.includes('gpay') && (q.includes('danglam') || q.includes('difference') || q.includes('ronpay'))) || (q.includes('danglamna') && q.includes('ronpay'))) {
     return { answer: `📱 **GPay leh RonPay Danglamna (Q14):**\n${RONPAY_KNOWLEDGE_BASE_Q1_TO_Q15[13].answer}` };
   }
 
@@ -587,7 +659,7 @@ export async function askAIHriatpui(
   }
 
   // Out of scope check
-  if (!q.includes('ronpay') && !q.includes('bawm') && !q.includes('qr') && !q.includes('upi') && !q.includes('creator') && !q.includes('chhiatni') && !q.includes('tanpui')) {
+  if (!q.includes('ronpay') && !q.includes('bawm') && !q.includes('qr') && !q.includes('upi') && !q.includes('creator') && !q.includes('chhiatni') && !q.includes('tanpui') && !q.includes('phonepe') && !q.includes('bill') && !q.includes('electric') && !q.includes('tui') && !q.includes('bbps') && !q.includes('guest') && !q.includes('khualmi') && !q.includes('partner')) {
     return {
       answer: 'Ka hre lo tlat mai... RonPay kaihhruaina leh hman dan (User Guide) chungchang chauh ka hrilhfiah thei a che. RonPay Bawm hman dan, QR Code, emaw Creator registration chungchang zawt leh zawk rawh le.'
     };
@@ -595,14 +667,17 @@ export async function askAIHriatpui(
 
   // Default overview
   return {
-    answer: `🤖 **RonPay AI Assistant & User Guide (Q1-Q15):**
-RonPay Bawm Category 4 leh Kaihhruaina:
-1. **Ralna Bawm (Q9)** - Chhiatni & Ralna atan (Ni 1 - Thla 1)
-2. **Khawlsak Bawm (Q10)** - Riangvai & Damlo Tanpuina atan
-3. **Rikrum Bawm (Q11)** - Emergency & Chhiatrup thleng thut tan
-4. **Kumtluang Bawm (Q12)** - Kohhran & Pawl Welfare tan
+    answer: `🤖 **RonPay Khual Chhawn (AI Assistant):**
+RonPay Bawm Category leh Khawtlang Services:
+1. **Ralna Bawm** - Chhiatni & Ralna atan (Ni 1 - Thla 1)
+2. **Khawlsak Bawm** - Riangvai & Damlo Tanpuina atan
+3. **Rikrum Bawm** - Emergency & Chhiatrup thleng thut tan
+4. **Kumtluang Bawm** - Kohhran & Pawl Welfare tan
+5. **Vantlang Bawm** - Hall sak, Playground & Khawtlang Projects atan
 
-💡 *Tips: Chat box-ah hian "Creator Dilna Form min siam sak rawh" emaw "Hriatpuina Lehkha generate rawh" i tih chuan lehkha fel fai tak a rawn generate nghal zung zung thei bawk e!*`
+⚡ **BBPS Bill Services:** Electric Bill (P&ED) leh Tui Bill (PHED) awlsam takin www.ronpay.app/app atangin a pek theih.
+
+💡 *Tips: "Creator Dilna Form min siam sak rawh" i tih chuan official lehkha fel fai tak a generate nghal zung zung bawk e!*`
   };
 }
 

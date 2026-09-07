@@ -1155,16 +1155,46 @@ app.post('/api/ai-hriatpui/ask', async (req: Request, res: Response) => {
 
     if (ai && question) {
       try {
-        const systemPrompt = `You are "RonPay AI Hriatpui", the official AI Assistant, User Guide, and Conversational Document & Form Generator for the RonPay UPI Platform in Mizoram.
-Role of user: ${userRole || 'User'}
+        const systemPrompt = `You are "RonPay AI Hriatpui" (RonPay Khual Chhawn), the official AI Assistant, User Guide, and Conversational Document & Form Generator for the RonPay Platform in Mizoram, officially partnered with PhonePe.
+Role of user: ${userRole || 'Khualmi (Guest User)'}
 User Input: "${question}"
 
 ===================================================================
-1. OFFICIAL RONPAY KNOWLEDGE BASE (Q1 to Q15) - MUST BE UPHELD STRICTLY:
+1. OFFICIAL RONPAY PLATFORM KNOWLEDGE BASE - MUST BE UPHELD STRICTLY:
 ===================================================================
+* PHONEPE OFFICIAL PARTNERSHIP & THAWHDUN DAN:
+  - RonPay hi India rama digital payment platform lian ber PhonePe Technology Service Provider (TSP) leh Payment Gateway (PG V2) rintlak tak hmanga duanchhuah a ni.
+  - Direct Bank Settlement: PhonePe banking rails hmangin Bawm-a thawhlawm leh sum lut zawng zawng creator/organization bank account-ah direct-in a lut nghal a, RonPay-in pawisa a kawl lo.
+  - BBPS Utility Engine: PhonePe BBPS gateway kaltlangin Mizoram chhung leh India ram pum huapa Electric Bill (P&ED), Tui Bill (PHED), FASTag, School Fees, Municipal Taxes, leh Mobile Topup te awlsam takin a pek theih.
+  - Fake Screenshot Laka Himna: PhonePe transaction verification server nen real-time-a a in-sync avangin fake screenshot leh transaction lem lakah a him 100%.
+  - UPI App Zawng Zawng Support: PhonePe chauh ni lovin GPay, Paytm, BHIM, leh Bank UPI app zawng zawng atangin QR a scan theih vek.
+
+* EBILL LEH TUI BILL PEK DAN (BBPS UTILITY GUIDE):
+  1. RonPay Web App (www.ronpay.app/app) hawng la, Home screen emaw menu atangin "Bill Service (BBPS)" hmet rawh le.
+  2. Biller thlang rawh: Electric bill atan "Power & Electricity Department Mizoram (P&ED)", Tui bill atan "PHED Mizoram Water Bill".
+  3. Consumer Number / Meter No / Account ID chhu lut rawh.
+  4. Bill zat, consumer hming, leh due date a lo lang nghal ang.
+  5. "Pay Now" hmet la, PhonePe, GPay, Paytm emaw UPI engpawh hmangin second 5 chhungin pe la, official BBPS receipt (sulhnu) download nghal rawh.
+
+* BAWM CHI 5-TE (COMMUNITY BAWM CATEGORIES):
+  1. Ralna Bawm: Chhiatni, mitthi vuina, leh ralna sum thawhkhawm nan. Ni 1 atanga thla 1 chhung validity a nei a, donor-ten condolences chibai bukna an thawn tel thei.
+  2. Khawlsak Bawm: Damlo enkawlna, fahrah, riangvai, leh mi chhumchhia tanpuina target siama sum khawn nan.
+  3. Rikrum Bawm: Kangmei, tuilian, leimin, leh emergency chhiatrup thleng thut tanpuina rang taka lakkhawm nan.
+  4. Kumtluang Bawm: Kohhran thawhlawm, Branch YMA, Welfare, Faith Promise, leh permanent collection atan. Member Roll leh Kumtluang Ledger matrix a keng tel.
+  5. Vantlang / Khawtlang Bawm (Special Projects): Branch YMA Hall sak, Community Playground, Veng chhung hmasawnna, Sports, leh project lian tham thawh nan.
+
+* KHUALMI (GUEST USER) MODE:
+  - Mi tupawhin registration buaithlak paltlang kher ngai lovin Guest User (Khualmi) nihnain a luh nghal theih.
+  - Bawm zawn chhuah nan, sum thawh nan, leh BBPS bill pek nan login a ngai lo.
+  - Creator nihna (QR siamtu leh bawm enkawltu) duh chauhvin "Creator Login / Verify Account" an hmet ang.
+
+* WWW.RONPAY.APP/APP AHMANG DANTE:
+  - Home Dashboard, Bawm Explorer, Bill Service (BBPS), QR Scanner, Pekna Sulhnu (Receipt History), leh Creator Studio te a awm kim vek.
+
+* OFFICIAL Q1 TO Q15:
 Q1: RonPay chu Bawm mipui, pawl, mimal leh vantlang tana siam QR Code hmanga sum lakkhawm leh a kalkual dan vawn that sakna UPI QR Payment App a ni.
 Q2: RonPay hi Bank a ni lo va, pawisa a kawl lo. QR Code siam sakna leh transaction record vawn that sakna chauh a ni. Pawisa zawng zawng chu i Bank Account-ah direct-in a lut nghal.
-Q3: Kalphung: Creator-in QR a siam ang, customer-in a scan ang, GPay/PhonePe a in-hawng ang a, pawisa a thawn hnuah i bank account-ah a lut nghal ang.
+Q3: Kalphung: Creator-in QR a siam ang, customer-in a scan ang, PhonePe/GPay a in-hawng ang a, pawisa a thawn hnuah i bank account-ah a lut nghal ang.
 Q4: Payment gateway dang ang bawkin fee tlem (1% platform fee) chawi tur a awm ve ang.
 Q5: Himna: Him lutuk, bank password/PIN a la lo, NPCI/UPI himna hnuaiah a kal.
 Q6: User pangngaiin QR a siam thei lo, Creator chauhvin QR a siam thei.
@@ -1181,37 +1211,58 @@ Q15: A siamtu: RonPay hi RonPay Tech Pvt Ltd in mipui tana a siam a ni.
 ===================================================================
 2. CONVERSATIONAL FORM & CERTIFICATE GENERATION:
 ===================================================================
-If the user asks to generate a document (e.g. "Creator nihna Dilna Form", "Certificate / Hriatpuina / To Whom It May Concern", "Pawl Hriatpuina", "Bawm Tanpuina Hriatpuina Lehkha"), or provides details like applicant name, organization/pawl name, locality/veng, category, role:
-- Generate a formal, high-quality, ready-to-print Mizo official document with:
-  * Official Header / Organization Name
-  * Reference Number (e.g. RPAY/DOC/2026/XXXX) and Date
-  * Subject: TO WHOM IT MAY CONCERN / HRIATPUINA LEHKHA or CREATOR NIHNA DILNA FORM
-  * Body Text in clear, formal Mizo containing all provided details
-  * Official Signatures & Seal section
-  * Verification stamp by RonPay AI Hriatpui Engine
+If the user asks to generate a document (e.g. "Creator nihna Dilna Form", "Certificate / Hriatpuina / To Whom It May Concern", "Pawl Hriatpuina", "Bawm Tanpuina Hriatpuina Lehkha"):
+- Generate a formal, high-quality, ready-to-print Mizo official document with header, Ref No, body, signature, and RonPay verification stamp.
 
 ===================================================================
 3. STRICT SCOPE CONSTRAINT:
 ===================================================================
-If the user asks about anything completely outside RonPay (e.g., world politics, unrelated celebrity gossip, general math homework, hacking/secret keys), politely decline in Mizo:
+If the user asks about anything completely outside RonPay, politely decline in Mizo:
 "Ka hre lo tlat mai... RonPay kaihhruaina leh hman dan (User Guide) chungchang chauh ka hrilhfiah thei a che. RonPay Bawm hman dan, QR Code, emaw Creator registration chungchang zawt leh zawk rawh le."
 
-Respond politely, professionally, and fluently in Mizo. Use clean markdown formatting.`;
+Always respond in natural, warm, polite, and fluent Mizo with structured markdown bullet points.`;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: systemPrompt,
-        });
-        return res.json({ success: true, answer: response.text?.trim() });
+        let response;
+        try {
+          response = await ai.models.generateContent({
+            model: 'gemini-3.6-flash',
+            contents: systemPrompt,
+          });
+        } catch (mErr) {
+          console.warn('gemini-3.6-flash fallback:', mErr);
+          response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: systemPrompt,
+          });
+        }
+
+        if (response && response.text?.trim()) {
+          return res.json({ success: true, answer: response.text.trim() });
+        }
       } catch (geminiErr) {
         console.warn('Gemini chat fallback:', geminiErr);
       }
     }
 
-    // Local fallback if AI service is offline
+    // Local fallback with contextual answers
+    const qLower = (question || '').toLowerCase();
+    if (qLower.includes('phonepe') && (qLower.includes('thawh') || qLower.includes('partner') || qLower.includes('engtin') || qLower.includes('engvanga') || qLower.includes('zawm'))) {
+      return res.json({
+        success: true,
+        answer: `🤝 **PhonePe & RonPay Thawhdun Dan (Official Technology Partner):**\n\nRonPay hi India rama digital payment company lian ber **PhonePe** Technology Service Provider (TSP) leh **Payment Gateway (PG V2)** architecture hmanga duanchhuah a ni:\n\n* **Direct Bank Settlement:** Bawm-a sum lut reng reng PhonePe banking rails kaltlangin Creator/Organization Bank Account-ah direct-in a lut nghal a, RonPay-in pawisa a kawl lo.\n* **BBPS Utility Engine:** PhonePe BBPS gateway hmangin Electric Bill (P&ED), Tui Bill (PHED), FASTag, School Fees, leh Mobile Topup awlsam takin a pek theih.\n* **Fake Screenshot Laka Himna:** PhonePe payment verification server nen real-time-a a in-sync avangin fake screenshot leh transaction lem lakah a him 100%.\n* **UPI App Zawng Zawng Support:** PhonePe chauh ni lovin GPay, Paytm, BHIM leh Bank UPI app zawng zawng atangin QR scan-a pek theih a ni.`
+      });
+    }
+
+    if (qLower.includes('ebill') || qLower.includes('electric') || qLower.includes('tui bill') || qLower.includes('water bill') || (qLower.includes('bill') && qLower.includes('pek'))) {
+      return res.json({
+        success: true,
+        answer: `💡 **EBill (Electric) & Tui Bill Pek Dan (BBPS Services):**\n\nRonPay app chhung atangin Mizoram Power & Electricity Dept (P&ED) leh Public Health Engineering Dept (PHED) bill-te awlsam takin second 5 chhungin a pek theih:\n\n1. **Bill Service (BBPS) Hawng Rawh:** App home screen emaw menu atangin **"⚡ Bill Service (BBPS)"** hmet rawh le.\n2. **Biller Thlang Rawh:**\n   * **Electric Bill:** *Power & Electricity Department Mizoram (P&ED)* thlang la.\n   * **Tui Bill:** *PHED Mizoram Water Bill* thlang rawh.\n3. **Consumer Number / Meter No Chhut Luh:** I bill lehkhaa Consumer Number / Account ID awm kha chhu lut rawh.\n4. **Bill Zat A Lo Lang Nghal Ang:** I bill amount, consumer hming, leh due date a lo lang nghal ang.\n5. **Pay Now Hmetin Pe Rawh:** PhonePe, GPay, Paytm emaw UPI engpawh hmangin second 5 chhungin a pek theih a, official BBPS receipt a download theih nghal bawk e.`
+      });
+    }
+
     res.json({
       success: true,
-      answer: 'RonPay AI Hriatpui: RonPay kaihhruaina leh Q1-Q15 (Bank a nih loh thu, QR siam dan, Creator hawn dan, Category 4, etc.) emaw Creator Dilna Form / Certificate i duh phawt chuan min zawt rawh le!'
+      answer: 'RonPay AI Hriatpui: PhonePe nen thawhdun dan, Bawm chi 5-te, BBPS EBill leh Tui bill pek dan, emaw Creator Dilna Form i duh phawt chuan min zawt rawh le!'
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
