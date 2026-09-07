@@ -245,7 +245,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     }
   });
   const [adminUserId, setAdminUserId] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('ronpay2026');
+  const [adminPassword, setAdminPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
@@ -532,7 +532,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setIsBiometricScanning(true);
     setLoginError('');
     
-    // Simulate biometric check with feedback
+    // Check if this device has been previously verified by Admin Master Password
+    const isDeviceEnrolled = localStorage.getItem('ronpay_admin_device_enrolled') === 'true';
+    if (!isDeviceEnrolled) {
+      setTimeout(() => {
+        setIsBiometricScanning(false);
+        setLoginError('He device-ah hian Biometrics a la in-enroll lo. Master Password chhu lut hmasa rawh.');
+      }, 500);
+      return;
+    }
+
+    // Authenticate verified enrolled device
     setTimeout(() => {
       setIsBiometricScanning(false);
       setIsAuthenticated(true);
@@ -541,28 +551,29 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       } catch (e) {
         // ignore
       }
-      recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics (Fingerprint/FaceID).', 'system');
+      recordAuditLog('Admin Biometric Login', 'Administrator authenticated via enrolled device Biometrics.', 'system');
       setLogsList(getStoredAuditLogs());
-    }, 850);
+    }, 700);
   };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (
       (adminUserId.trim().toLowerCase() === 'admin' || adminUserId.trim().toLowerCase() === 'admin@ronpay.mizoram.gov.in') &&
-      (adminPassword === 'admin' || adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
+      (adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
     ) {
       setIsAuthenticated(true);
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
+        localStorage.setItem('ronpay_admin_device_enrolled', 'true');
       } catch (e) {
         // ignore
       }
       recordAuditLog('Admin Password Login', 'Administrator authenticated via Master Credentials.', 'system');
       setLogsList(getStoredAuditLogs());
     } else {
-      setLoginError('User ID emaw Password a dik lo. (Default: admin / ronpay2026)');
+      setLoginError('User ID emaw Password a dik lo. Khawngaihin chhu nawn rawh.');
     }
   };
 
@@ -1209,7 +1220,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="ronpay2026"
+                    placeholder="••••••••••••"
                   />
                 </div>
 

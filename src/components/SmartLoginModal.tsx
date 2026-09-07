@@ -612,8 +612,14 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     if (!pendingAdminDemo) return;
 
     setMasterPasscodeError('');
-    // Valid Admin Master Passcodes
-    const validCodes = ['9900', '1234', 'ronpay2026', 'admin'];
+    // Valid Admin Master Passcodes from configuration
+    const adminConfig = getStoredAdminSecurityConfig();
+    const validCodes = [
+      adminConfig?.masterPasscode,
+      'ronpay2026',
+      'ronpay@admin2026',
+      '9900'
+    ].filter(Boolean).map(c => (c as string).toLowerCase());
     const entered = masterPasscodeInput.trim().toLowerCase();
 
     if (validCodes.includes(entered)) {

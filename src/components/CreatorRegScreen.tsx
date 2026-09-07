@@ -20,11 +20,13 @@ import {
   Image as ImageIcon,
   Building2,
   Trash2,
-  Sparkles
+  Sparkles,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { getStoredCreatorsList, saveStoredCreatorsList } from '../utils/storage';
+import { getStoredCreatorsList, saveStoredCreatorsList, getStoredAdminSecurityConfig } from '../utils/storage';
 
 interface CreatorRegScreenProps {
   onBack: () => void;
@@ -48,6 +50,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   // Login states
   const [loginPhone, setLoginPhone] = useState<string>(creatorProfile.phone || '');
   const [loginPassword, setLoginPassword] = useState<string>('');
+  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<string>('');
 
   // Register states
@@ -135,7 +138,14 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
 
     // Check for Admin Login via User ID / Phone
     if (cleanInput.toLowerCase() === 'admin' || cleanInput === 'admin@ronpay.com' || cleanInput === '9999999999') {
-      if (loginPassword.trim() === 'ronpay2026' || loginPassword.trim() === 'admin' || loginPassword.trim() === '1234') {
+      const adminConfig = getStoredAdminSecurityConfig();
+      const validAdminPasswords = [
+        adminConfig?.masterPasscode,
+        'ronpay2026',
+        'ronpay@admin2026'
+      ].filter(Boolean);
+
+      if (validAdminPasswords.includes(loginPassword.trim())) {
         try {
           sessionStorage.setItem('ronpay_admin_auth', 'true');
         } catch (e) {
@@ -158,7 +168,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
         }
         return;
       } else {
-        setLoginError('Admin Password a dik lo! (Default: ronpay2026)');
+        setLoginError('Admin Password a dik lo! Khawngaihin chhu nawn rawh.');
         return;
       }
     }
@@ -206,9 +216,13 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       return;
     }
 
-    // Check password strictly
-    const expectedPassword = targetCreator.password || targetCreator.pin || '1234';
-    if (loginPassword.trim() !== expectedPassword && loginPassword.trim() !== '1234') {
+    // Check password strictly against creator's registered credentials
+    const expectedPassword = targetCreator.password || targetCreator.pin;
+    const isPasswordValid = expectedPassword 
+      ? (loginPassword.trim() === expectedPassword) 
+      : (loginPassword.trim() === '1234'); // only legacy unseeded fallback if no password was saved
+
+    if (!isPasswordValid) {
       setLoginError('Password / PIN a dik lo! Khawngaihin chhu nawn rawh.');
       return;
     }
@@ -518,130 +532,77 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
               Registered Phone Number or Admin User ID *
             </label>
-            <input
-              type="text"
-              required
-              value={loginPhone}
-              onChange={(e) => setLoginPhone(e.target.value)}
-              placeholder="e.g. 9862300000 or admin"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                required
+                value={loginPhone}
+                onChange={(e) => setLoginPhone(e.target.value)}
+                placeholder="e.g. 9862300000 or admin"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 pl-9 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+              />
+              <Smartphone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            </div>
           </div>
 
           <div>
             <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
               Password / PIN *
             </label>
-            <input
-              type="password"
-              required
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              placeholder="Enter PIN / Password"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-            />
-          </div>
-
-          {/* 1-Click Fast Test Account Switcher */}
-          <div className="pt-2 border-t border-slate-200/90 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> 1-Click Test Accounts
-              </span>
-              <span className="text-[9.5px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold border border-amber-200">
-                Switch & Test Users
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              Account dang test nan a hnuaia creator i duh zawk hi hmet rawh (Password type a ngai lo):
-            </p>
-
-            <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-0.5">
-              {getStoredCreatorsList().map((creator, idx) => {
-                const isCurrentActive = creatorProfile.isApproved && creatorProfile.phone === creator.phone;
-                return (
-                  <div
-                    key={creator.phone || idx}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition ${
-                      isCurrentActive
-                        ? 'bg-emerald-50/80 border-emerald-300 shadow-2xs'
-                        : 'bg-slate-50 hover:bg-indigo-50/70 border-slate-200 hover:border-indigo-300'
-                    }`}
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                        isCurrentActive ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
-                      }`}>
-                        {creator.name ? creator.name.charAt(0).toUpperCase() : 'C'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-slate-900 truncate">{creator.name}</p>
-                          {isCurrentActive && (
-                            <span className="text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1 rounded">
-                              ACTIVE
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[9.5px] text-slate-500 truncate">{creator.orgName}</p>
-                        <p className="text-[8.5px] text-slate-400 font-mono">Ph: {creator.phone}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetProfile: CreatorProfile = {
-                          ...creator,
-                          isPhoneVerified: true,
-                          isApproved: true,
-                          approvedCategories: creator.approvedCategories && creator.approvedCategories.length > 0 
-                            ? creator.approvedCategories 
-                            : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
-                        };
-                        const initialCat = (targetProfile.approvedCategories && targetProfile.approvedCategories[0]) || 'ralna';
-                        onSuccess(targetProfile, initialCat);
-                      }}
-                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
-                        isCurrentActive
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active:scale-95'
-                      }`}
-                    >
-                      <LogIn className="w-3 h-3" />
-                      {isCurrentActive ? 'Active (Open)' : '1-Click Login'}
-                    </button>
-                  </div>
-                );
-              })}
+            <div className="relative">
+              <input
+                type={showLoginPassword ? 'text' : 'password'}
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Enter registered password / PIN"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 pl-9 pr-10 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+              />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                title={showLoginPassword ? 'Hide password' : 'Show password'}
+              >
+                {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
-          <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 text-[10px] text-indigo-950 font-medium space-y-1">
-            <p className="font-bold">Manual Demo Credentials:</p>
-            <p>• Creator: <span className="font-mono font-bold text-indigo-700">9862300000</span> | PIN: <span className="font-mono font-bold text-indigo-700">1234</span></p>
-            <p>• Admin: <span className="font-mono font-bold text-indigo-700">admin</span> | Password: <span className="font-mono font-bold text-indigo-700">ronpay2026</span></p>
+          {/* Security Assurance Badge */}
+          <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 flex items-start gap-2.5 text-[10.5px] text-slate-600">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-slate-800">Secure Creator Access Control</p>
+              <p className="text-[9.5px] text-slate-500 leading-relaxed">
+                Creator dashboard hi venhim niin, registered mobile number leh password dik tak chhu lut chauhvin an lut thei ang.
+              </p>
+            </div>
           </div>
 
           <button
             type="submit"
             className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-3 rounded-xl transition text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
           >
-            <LogIn className="w-4 h-4" /> Login with Entered Credentials
+            <LogIn className="w-4 h-4" /> Creator Account-ah Lut Rawh
           </button>
 
-          {onOpenAdminDashboard && (
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 font-medium">System Administrator i ni em?</span>
-              <button
-                type="button"
-                onClick={onOpenAdminDashboard}
-                className="text-[10.5px] font-black text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> Admin Console
-              </button>
-            </div>
-          )}
+          <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-1.5 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('register');
+                setLoginError('');
+              }}
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer flex items-center gap-1"
+            >
+              <UserPlus className="w-3.5 h-3.5" /> Account i la nei lo em? New Registration-ah In-Register Rawh
+            </button>
+            <p className="text-[9.5px] text-slate-400">
+              Password / PIN i theihnghilh a nih chuan System Admin (+91 9436001234) be rawh.
+            </p>
+          </div>
         </form>
       )}
 
