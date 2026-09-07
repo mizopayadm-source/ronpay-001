@@ -89,14 +89,14 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
       <div 
-        className="bg-white text-slate-900 w-full max-w-4xl h-[92vh] max-h-[850px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200"
+        className="bg-white text-slate-900 w-full max-w-5xl h-[92vh] max-h-[850px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200"
         role="dialog"
         aria-modal="true"
       >
         {/* MODAL HEADER */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/30 flex items-center justify-center text-orange-400 font-black">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/30 flex items-center justify-center text-orange-400 font-black shrink-0">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
@@ -148,84 +148,84 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
           </div>
         </div>
 
-        {/* NAVIGATION TABS */}
-        <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 text-xs font-bold">
+        {/* NAVIGATION TABS - FLEX-WRAP SO ALL TABS ARE 100% VISIBLE WITHOUT CLIPPING */}
+        <div className="bg-slate-100/90 border-b border-slate-200 px-3 sm:px-4 py-2 sm:py-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveTab('architecture')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'architecture'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
+                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
             }`}
           >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>{isMizo ? '1. Merchant Kalphung (Architecture)' : '1. Merchant Architecture'}</span>
+            <Building2 className="w-3.5 h-3.5 shrink-0" />
+            <span>{isMizo ? '1. Merchant Kalphung' : '1. Merchant Architecture'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('terms')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'terms'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
+                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>{isMizo ? '2. Hman Dan Dan (Terms)' : '2. Terms & Conditions'}</span>
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>{isMizo ? '2. Hman Dan (Terms)' : '2. Terms & Conditions'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('privacy')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'privacy'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
+                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
             }`}
           >
-            <Lock className="w-3.5 h-3.5" />
+            <Lock className="w-3.5 h-3.5 shrink-0" />
             <span>{isMizo ? '3. Privacy & Security' : '3. Privacy Policy'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('refund')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'refund'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
+                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
             }`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
             <span>{isMizo ? '4. Refund & Cancellation' : '4. Refund Policy'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('grievance')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'grievance'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
+                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
             }`}
           >
-            <PhoneCall className="w-3.5 h-3.5" />
+            <PhoneCall className="w-3.5 h-3.5 shrink-0" />
             <span>{isMizo ? '5. Grievance & Office' : '5. Contact & Grievance'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('sandbox')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'sandbox'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
+                ? 'bg-amber-600 text-white shadow-xs ring-1 ring-amber-500'
+                : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 shadow-2xs'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5 text-amber-700" />
-            <span>{isMizo ? '⚙️ PG Switch & Test Keys' : '⚙️ PG Switch & Sandbox'}</span>
+            <Sliders className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span>{isMizo ? '6. ⚙️ PG Switch & Sandbox' : '6. ⚙️ PG Switch & Sandbox'}</span>
           </button>
         </div>
 

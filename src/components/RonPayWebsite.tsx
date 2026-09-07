@@ -589,7 +589,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
       {/* 2. MAIN STICKY NAVIGATION HEADER */}
       <header className={`sticky top-0 z-50 w-full ${eyeComfortMode ? 'bg-white/95 border-b border-slate-200/90 text-slate-800 shadow-xs' : 'bg-slate-950/95 border-b border-slate-800/80 text-white'} backdrop-blur-md transition-all`}>
-        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-4">
+        <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-3">
           
           {/* Brand Logo with FinTech Tag */}
           <div 
@@ -618,8 +618,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </div>
           </div>
 
-          {/* Center Navigation Links (Desktop) */}
-          <nav className={`hidden lg:flex items-center ${eyeComfortMode ? 'bg-slate-100/90 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800/80 text-slate-300'} border rounded-full p-1 text-xs font-semibold shadow-xs transition-colors`}>
+          {/* Center Navigation Links (Desktop XL+) */}
+          <nav className={`hidden xl:flex items-center ${eyeComfortMode ? 'bg-slate-100/90 border-slate-200 text-slate-700' : 'bg-slate-900/90 border-slate-800/80 text-slate-300'} border rounded-full p-1 text-xs font-semibold shadow-xs transition-colors`}>
             <a href="#hero" className={`px-3 py-1.5 rounded-full ${eyeComfortMode ? 'hover:text-slate-950 hover:bg-white' : 'hover:text-white hover:bg-slate-800/60'} transition`}>
               {isMizo ? 'Kawtchhuah' : 'Home'}
             </a>
@@ -655,28 +655,23 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {/* Eye-Comfort Theme Toggle Button (Mit Tihahdam Theme) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
+            {/* Eye-Comfort Theme Toggle Button (Mit Tihahdam Theme) - Compact and unclipped */}
             <button
               type="button"
               onClick={() => setEyeComfortMode(!eyeComfortMode)}
-              className={`w-7 h-7 sm:w-auto sm:h-auto p-1 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 flex items-center justify-center ${
+              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 flex items-center justify-center ${
                 eyeComfortMode 
                   ? 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 shadow-xs' 
                   : 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
               }`}
               title={eyeComfortMode ? 'Mit Tihahdam Theme (Active) - Switch to Dark' : 'Switch to Mit Tihahdam Theme'}
+              aria-label="Toggle eye comfort theme"
             >
               {eyeComfortMode ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="hidden xl:inline text-[10.5px] ml-1">Mit Tihahdam</span>
-                </>
+                <Sun className="w-4 h-4 text-amber-600 shrink-0" />
               ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                  <span className="hidden xl:inline text-[10.5px] ml-1">Thim Chhum</span>
-                </>
+                <Moon className="w-4 h-4 text-slate-300 shrink-0" />
               )}
             </button>
 
@@ -706,11 +701,11 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </button>
             </div>
 
-            {/* AI Khual Chhawn Trigger Button (Desktop / Tablet) */}
+            {/* AI Khual Chhawn Trigger Button (Desktop 2XL only - Floating widget already handles all screens) */}
             <button
               type="button"
               onClick={() => setIsAIChatOpen(true)}
-              className={`hidden md:flex items-center gap-1.5 ${
+              className={`hidden 2xl:flex items-center gap-1.5 ${
                 eyeComfortMode 
                   ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200' 
                   : 'bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 text-indigo-300 hover:text-white border-indigo-700/60'
@@ -720,23 +715,23 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <span className="truncate">AIChat</span>
             </button>
 
-            {/* Launch App Main CTA ("App Lut Rawh") - Always 100% visible and unclipped */}
+            {/* Launch App Main CTA ("App Lut Rawh") - Always 100% visible, fully padded and unclipped */}
             <button
               type="button"
               onClick={() => onLaunchApp('home')}
-              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-[11px] sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-xs transition cursor-pointer border border-amber-300 shrink-0 whitespace-nowrap"
+              className="bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-xs transition cursor-pointer border border-amber-300 shrink-0 whitespace-nowrap min-w-max"
               title="Launch www.ronpay.app/app as Guest User"
             >
               <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 shrink-0" />
-              <span>{isMizo ? 'App Lut Rawh' : 'Launch App'}</span>
+              <span className="whitespace-nowrap">{isMizo ? 'App Lut Rawh' : 'Launch App'}</span>
               <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 hidden xs:inline" />
             </button>
 
-            {/* Mobile Hamburger Menu Toggle ("Page luhna thlanna") - 100% visible & high contrast */}
+            {/* Mobile/Tablet Hamburger Menu Toggle ("Page luhna thlanna") - Visible on < XL screens */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`lg:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl shrink-0 flex items-center justify-center transition border cursor-pointer active:scale-95 ${
+              className={`xl:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl shrink-0 flex items-center justify-center transition border cursor-pointer active:scale-95 ${
                 eyeComfortMode 
                   ? mobileMenuOpen 
                     ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs' 
@@ -755,7 +750,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
 
         {/* Mobile Dropdown Menu ("Page Luhna Thlanna") */}
         {mobileMenuOpen && (
-          <div className={`lg:hidden ${
+          <div className={`xl:hidden ${
             eyeComfortMode 
               ? 'bg-white/98 border-b border-slate-200 text-slate-850 shadow-xl' 
               : 'bg-slate-950/98 border-b border-slate-800 text-white'
