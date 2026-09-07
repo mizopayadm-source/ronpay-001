@@ -1910,8 +1910,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </h2>
             <p className={`text-sm sm:text-base ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed`}>
               {isMizo 
-                ? 'RonPay Khual Chhawn (AI Chat) biain zawhna zawt la, emaw kan official email ronpay@gmail.com leh WhatsApp hmangin min be pawh rawh le.' 
-                : 'Interact with AIChat (RonPay Khual chhawn) for instant answers, or reach us directly via ronpay@gmail.com and WhatsApp.'}
+                ? 'RonPay Khual Chhawn (AI Chat) biain zawhna zawt la, emaw kan official email ronpay.adm@gmail.com leh WhatsApp hmangin min be pawh rawh le.' 
+                : 'Interact with AIChat (RonPay Khual chhawn) for instant answers, or reach us directly via ronpay.adm@gmail.com and WhatsApp.'}
             </p>
           </div>
 
@@ -1946,7 +1946,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </button>
             </div>
 
-            {/* Card 2: Official Email (ronpay@gmail.com) */}
+            {/* Card 2: Official Email (ronpay.adm@gmail.com) */}
             <div className={`${eyeComfortMode ? 'bg-white border-2 border-slate-200 shadow-sm hover:border-purple-300' : 'bg-slate-900/90 border-2 border-slate-800 shadow-xl hover:border-purple-500/70'} p-6 rounded-3xl space-y-4 flex flex-col justify-between group transition`}>
               <div>
                 <div className={`w-12 h-12 rounded-2xl ${eyeComfortMode ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-purple-600/20 text-purple-300 border-purple-500/40'} flex items-center justify-center border mb-3 group-hover:scale-110 transition-transform`}>
@@ -1956,7 +1956,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   Official Email Support
                 </span>
                 <h3 className={`text-lg font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'} mt-1`}>
-                  ronpay@gmail.com
+                  ronpay.adm@gmail.com
                 </h3>
                 <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} leading-relaxed mt-2`}>
                   {isMizo 
@@ -1968,7 +1968,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => copyToClipboard('ronpay@gmail.com', 'email')}
+                  onClick={() => copyToClipboard('ronpay.adm@gmail.com', 'email')}
                   className={`w-full ${eyeComfortMode ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200' : 'bg-slate-800 hover:bg-slate-750 text-white border-slate-700'} font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border transition cursor-pointer`}
                 >
                   {emailCopied ? (
@@ -1979,13 +1979,13 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   ) : (
                     <>
                       <Copy className={`w-4 h-4 ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'}`} />
-                      <span>Copy Email (ronpay@gmail.com)</span>
+                      <span>Copy Email (ronpay.adm@gmail.com)</span>
                     </>
                   )}
                 </button>
 
                 <a
-                  href="mailto:ronpay@gmail.com?subject=RonPay%20Inquiry"
+                  href="mailto:ronpay.adm@gmail.com?subject=RonPay%20Inquiry"
                   className={`w-full ${eyeComfortMode ? 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200' : 'bg-purple-950 hover:bg-purple-900 text-purple-200 border-purple-800/80'} font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 border transition cursor-pointer`}
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -2510,7 +2510,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   : "Mizoram's premier digital community bawm platform in partnership with PhonePe"}
               </p>
               <div className="text-[11px] text-slate-400 flex items-center gap-2 pt-1">
-                <span>Email: <strong className="text-slate-200">ronpay@gmail.com</strong></span>
+                <span>Email: <strong className="text-slate-200">ronpay.adm@gmail.com</strong></span>
                 <span>•</span>
                 <span>App Link: <strong className="text-amber-300 font-mono">www.ronpay.app/app</strong></span>
               </div>
