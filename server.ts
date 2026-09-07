@@ -1225,13 +1225,13 @@ Always respond in natural, warm, polite, and fluent Mizo with structured markdow
         let response;
         try {
           response = await ai.models.generateContent({
-            model: 'gemini-3.6-flash',
+            model: 'gemini-3.8-flash',
             contents: systemPrompt,
           });
         } catch (mErr) {
-          console.warn('gemini-3.6-flash fallback:', mErr);
+          console.warn('gemini-3.8-flash fallback:', mErr);
           response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-flash-latest',
             contents: systemPrompt,
           });
         }

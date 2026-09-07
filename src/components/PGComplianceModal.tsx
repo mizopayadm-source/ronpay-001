@@ -494,11 +494,11 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'RonPay Office Hmunpui' : 'Registered Office Address'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-600 text-xs">
-                    <p className="font-bold text-slate-900">RonPay Technologies Private Limited</p>
-                    <p>FinTech Innovation Wing, Treasury Square</p>
-                    <p>Aizawl, Mizoram - 796001, India</p>
+                    <p className="font-bold text-slate-900">RonPay Technologies</p>
+                    <p>FinTech Innovation Wing,</p>
+                    <p>Shillong, Meghalaya- 793014, India</p>
                     <p className="pt-1">Support Email: <strong className="text-indigo-600">support@ronpay.app</strong></p>
-                    <p>Helpline: <strong className="text-slate-900">+91 94361 50000</strong> (10 AM - 5 PM IST)</p>
+                    <p>Helpline: <strong className="text-slate-900">+91 7005304643</strong> (10 AM - 5 PM IST)</p>
                   </div>
                 </div>
 
@@ -509,9 +509,9 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'Designated Grievance Officer' : 'Statutory Grievance Officer'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-700 text-xs">
-                    <p className="font-bold text-slate-900">Mr. Lalbiakzuala</p>
+                    <p className="font-bold text-slate-900">Mr. Nathanael</p>
                     <p className="text-slate-600">Head of Regulatory Compliance & Risk</p>
-                    <p>RonPay Technologies, Aizawl</p>
+                    <p>RonPay Technologies, Shillong</p>
                     <p className="pt-1">Grievance Email: <strong className="text-indigo-700">grievance@ronpay.app</strong></p>
                     <p className="text-[11px] text-slate-500 pt-1">
                       <em>TAT: Grievance acknowledgment within 24 hours; resolution within 15 working days.</em>
@@ -523,7 +523,7 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
               {/* Live Support hours */}
               <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs">
                 <span className="text-slate-600">
-                  {isMizo ? 'Customer Care & Help Desk: Isnin atanga Inrinni, Zing dar 9:00 - Tlai dar 6:00' : 'Customer Care Operating Hours: Monday to Saturday, 9:00 AM to 6:00 PM IST'}
+                  {isMizo ? 'Customer Care & Help Desk: Thawhtanni atanga Inrinni, Zing dar 9:00 - Tlai dar 6:00' : 'Customer Care Operating Hours: Monday to Saturday, 9:00 AM to 6:00 PM IST'}
                 </span>
                 <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                   ACTIVE & MONITORED
