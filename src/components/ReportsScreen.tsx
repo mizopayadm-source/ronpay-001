@@ -75,8 +75,6 @@ import {
   isCampaignCreator, 
   saveTransaction, 
   deleteStoredTransaction, 
-  DEFAULT_INITIAL_CREATOR, 
-  saveStoredCreatorProfile,
   updateDonorTransactions,
   saveMultipleTransactions,
   deleteMultipleTransactions
