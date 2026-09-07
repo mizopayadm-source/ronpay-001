@@ -409,22 +409,6 @@ export function UPIIntentModal({
               {/* TAB 1: Direct UPI App Launch (Default) */}
               {payMethodTab === 'apps' && (
                 <div className="space-y-3 animate-fadeIn">
-                  {/* SBI & Bank Limit Advisory Notice */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
-                    <div className="flex items-start gap-2">
-                      <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold block text-amber-950">
-                          SBI / Bank Thenkhat Hriattirna:
-                        </span>
-                        <p className="text-[11px] text-amber-900 leading-relaxed mt-0.5">
-                          SBI account hmangte tan, web link atanga personal UPI ID-a direct luh hi bank security-in <b>"Exceeded bank limit"</b> tiin a block thin a.
-                          Chutiang a lo nih chuan a piah <b>"QR Code & Gallery"</b> tab hmang la, <b>100% buaina awm loin a tlang nghal e.</b>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Primary Universal App Launcher */}
                   <button
                     type="button"
