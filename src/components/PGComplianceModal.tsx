@@ -670,15 +670,21 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
 
                 {/* Webhook Endpoint */}
                 <div className="pt-2">
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    {isMizo ? 'RonPay Webhook Callback Endpoint (PG in an ping na tur):' : 'Webhook Callback Endpoint (For PG Server-to-Server callbacks):'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-600">
+                      {isMizo ? 'RonPay Webhook Callback Endpoint (PG in an ping na tur):' : 'Webhook Callback Endpoint (For PG Server-to-Server callbacks):'}
+                    </label>
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Official Domain Recommended
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      readOnly
                       value={pgConfig.webhookEndpoint}
-                      className="flex-1 p-2 rounded-lg border border-slate-300 bg-slate-50 font-mono text-xs text-slate-700"
+                      onChange={(e) => setPgConfig(p => ({ ...p, webhookEndpoint: e.target.value }))}
+                      className="flex-1 p-2 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                      placeholder="https://ronpay.app/api/pg/webhook"
                     />
                     <button
                       type="button"
@@ -689,6 +695,42 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                       <span>{copiedKey === 'webhook' ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
+
+                  {/* Quick Preset Domain Switchers */}
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setPgConfig(p => ({ ...p, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' }))}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer border ${
+                        pgConfig.webhookEndpoint === 'https://ronpay.app/api/pg/webhook'
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                          : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200'
+                      }`}
+                    >
+                      <span>🌐</span>
+                      <span>{isMizo ? 'Official Domain (ronpay.app)' : 'Official Domain (ronpay.app)'}</span>
+                    </button>
+
+                    {typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('ronpay.app') && (
+                      <button
+                        type="button"
+                        onClick={() => setPgConfig(p => ({ ...p, webhookEndpoint: `${window.location.origin}/api/pg/webhook` }))}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer border ${
+                          pgConfig.webhookEndpoint === `${window.location.origin}/api/pg/webhook`
+                            ? 'bg-slate-800 text-white border-slate-900 shadow-2xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300'
+                        }`}
+                      >
+                        <span>⚡</span>
+                        <span>{isMizo ? 'Current Dev Container' : 'Current Dev Preview'}</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
+                    {isMizo 
+                      ? '💡 PhonePe / Razorpay / NPCI hnuaia live merchant onboarding i tih dawn chuan official domain https://ronpay.app/api/pg/webhook hi hman tur a ni a, an approve rang fe zawk ang. Dev container URL chu he workspace chhunga sandbox simulation atan chauh a ni.'
+                      : '💡 For production onboarding with PhonePe/Razorpay, always submit the official https://ronpay.app/api/pg/webhook registered domain. The dev container URL is only for sandbox simulations.'}
+                  </p>
                 </div>
               </div>
 

@@ -1,4 +1,5 @@
 import { UserRole, RolePermissions, CreatorProfile } from '../types';
+import { getStoredAdminSecurityConfig } from './storage';
 
 /**
  * Role Hierarchy Numerical Weights
@@ -237,8 +238,15 @@ export const getUserRole = (profile?: CreatorProfile | null): UserRole => {
 
   // Fallback checks from legacy fields
   if (profile.isAdmin) {
+    const adminConfig = getStoredAdminSecurityConfig();
     // If designated as Platform HQ or phone is system admin phone, consider SUPER_ADMIN
-    if (profile.phone === '9436001234' || profile.orgName?.includes('HQ') || profile.orgName?.includes('Master Console')) {
+    if (
+      profile.phone === adminConfig.primarySuperAdminPhone ||
+      adminConfig.adminPhoneList?.includes(profile.phone || '') ||
+      profile.phone === '9436001234' || 
+      profile.orgName?.includes('HQ') || 
+      profile.orgName?.includes('Master Console')
+    ) {
       return 'SUPER_ADMIN';
     }
     return 'ADMIN';

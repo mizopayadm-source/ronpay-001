@@ -286,22 +286,25 @@ app.post('/api/phonepe/split-settlement', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API 6: Webhook Callback Receiver
+// API 6: Webhook Callback Receiver (Universal for /api/pg/webhook and /api/phonepe/webhook)
 // -------------------------------------------------------------
-app.post('/api/phonepe/webhook', (req: Request, res: Response) => {
+app.all(['/api/pg/webhook', '/api/phonepe/webhook'], (req: Request, res: Response) => {
   const eventId = 'EVT_' + Date.now();
   webhookLogStore.unshift({
     id: eventId,
     receivedAt: new Date().toISOString(),
-    payload: req.body
+    payload: req.body || {}
   });
 
   // Limit log store to 50 entries
   if (webhookLogStore.length > 50) webhookLogStore.pop();
 
-  res.json({
+  res.status(200).json({
     success: true,
-    message: 'PhonePe webhook notification received and recorded successfully.'
+    status: 'SUCCESS',
+    code: 'WEBHOOK_ACK',
+    message: 'RonPay PG webhook notification received and recorded successfully.',
+    eventId
   });
 });
 

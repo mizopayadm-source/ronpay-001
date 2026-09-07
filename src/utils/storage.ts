@@ -559,8 +559,27 @@ export const DEFAULT_INITIAL_CREATOR: CreatorProfile = {
   createdQRsCount: 5,
 };
 
+export const USER_AUTHENTICATED_KEY = 'ronpay_user_authenticated';
+
 export const getStoredCreatorProfile = (): CreatorProfile => {
   try {
+    // If URL has explicit guest parameter, enforce guest mode
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('guest') === 'true' || searchParams.get('logout') === 'true') {
+        localStorage.removeItem(USER_AUTHENTICATED_KEY);
+        localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
+        sessionStorage.removeItem('ronpay_admin_auth');
+        return GUEST_CREATOR_PROFILE;
+      }
+    }
+
+    // Auto-Guest Default: If user has not actively authenticated, always default to clean Guest User (Khualmi)
+    const isAuthenticated = typeof window !== 'undefined' && localStorage.getItem(USER_AUTHENTICATED_KEY) === 'true';
+    if (!isAuthenticated) {
+      return GUEST_CREATOR_PROFILE;
+    }
+
     const raw = localStorage.getItem(CREATOR_PROFILE_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
@@ -569,14 +588,6 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
-        // Strict Security Guard for Public & PG Auditor visits:
-        // If profile has administrative privileges, require active session auth
-        if (parsed.isAdmin || parsed.role === 'SUPER_ADMIN' || parsed.role === 'ADMIN' || parsed.role === 'MODERATOR') {
-          const hasSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ronpay_admin_auth') === 'true';
-          if (!hasSession) {
-            return GUEST_CREATOR_PROFILE;
-          }
-        }
         return parsed;
       }
     }
@@ -584,12 +595,12 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
     console.error('Failed to parse creator profile', e);
   }
   // Default entry in RonPay App: Guest User / (Khualmi)
-  saveStoredCreatorProfile(GUEST_CREATOR_PROFILE);
   return GUEST_CREATOR_PROFILE;
 };
 
 export const logoutCreator = (): CreatorProfile => {
   try {
+    localStorage.removeItem(USER_AUTHENTICATED_KEY);
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
     sessionStorage.removeItem('ronpay_admin_auth');
     if (typeof window !== 'undefined') {
@@ -604,11 +615,10 @@ export const logoutCreator = (): CreatorProfile => {
 
 export const loginCreator = (profile: CreatorProfile): void => {
   try {
+    localStorage.setItem(USER_AUTHENTICATED_KEY, 'true');
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
     if (profile.isAdmin) {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
-    } else {
-      sessionStorage.removeItem('ronpay_admin_auth');
     }
     
     // Update or insert into registered creators list
@@ -2167,7 +2177,7 @@ export const DEFAULT_PG_CONFIG: PaymentGatewayConfig = {
   keyId: 'M2306160483220674079460',
   keySecret: '099eb0cd-02cf-4e2a-8aca-3e6c6aff0399',
   webhookSecret: 'whsec_ronpay_verification_token',
-  webhookEndpoint: 'https://ais-dev-a3j73fwv24ssrienmthjhs-598177647982.asia-southeast1.run.app/api/pg/webhook',
+  webhookEndpoint: 'https://ronpay.app/api/pg/webhook',
   isKycSubmitted: true,
   kycStatus: 'verified',
   businessPan: 'AABCR1234F',
@@ -2182,6 +2192,10 @@ export const getStoredPGConfig = (): PaymentGatewayConfig => {
     const raw = localStorage.getItem(PG_CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Migrate old hardcoded stale preview URL to official ronpay.app domain
+      if (parsed.webhookEndpoint && parsed.webhookEndpoint.includes('ais-dev-a3j73fwv24ssrienmthjhs')) {
+        parsed.webhookEndpoint = 'https://ronpay.app/api/pg/webhook';
+      }
       return { ...DEFAULT_PG_CONFIG, ...parsed };
     }
   } catch (e) {
@@ -2203,3 +2217,66 @@ export const saveStoredPGConfig = (config: PaymentGatewayConfig): void => {
     console.error('Failed to save PG config:', e);
   }
 };
+
+/* ========================================================================== */
+/* ADMIN SECURITY & MASTER CREDENTIAL CONFIGURATION                          */
+/* ========================================================================== */
+
+export interface AdminSecurityConfig {
+  primarySuperAdminPhone: string;
+  adminPhoneList: string[];
+  masterPasscode: string;
+  enableSecretTesterTab: boolean;
+  updatedAt?: string;
+}
+
+export const DEFAULT_ADMIN_SECURITY_CONFIG: AdminSecurityConfig = {
+  primarySuperAdminPhone: '9436001234',
+  adminPhoneList: ['9436001234', '7005153902', '9436154321'],
+  masterPasscode: '7777',
+  enableSecretTesterTab: false,
+};
+
+const ADMIN_SECURITY_KEY = 'ronpay_admin_security_config_v1';
+
+export const getStoredAdminSecurityConfig = (): AdminSecurityConfig => {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(ADMIN_SECURITY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...DEFAULT_ADMIN_SECURITY_CONFIG,
+            ...parsed,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load admin security config:', e);
+  }
+  return DEFAULT_ADMIN_SECURITY_CONFIG;
+};
+
+export const saveStoredAdminSecurityConfig = (config: AdminSecurityConfig): void => {
+  try {
+    if (typeof window !== 'undefined') {
+      const payload = {
+        ...config,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(ADMIN_SECURITY_KEY, JSON.stringify(payload));
+      window.dispatchEvent(new CustomEvent('ronpay_admin_security_updated', { detail: payload }));
+      recordAuditLog(
+        'Admin Security Updated',
+        `Super Admin phone set to +91 ${config.primarySuperAdminPhone}, Tester Tab: ${config.enableSecretTesterTab ? 'Enabled' : 'Hidden'}`,
+        'system',
+        config.primarySuperAdminPhone
+      );
+    }
+  } catch (e) {
+    console.error('Failed to save admin security config:', e);
+  }
+};
+

@@ -443,8 +443,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Master Admin Console Trigger - Only visible to authenticated administrators */}
-        {onOpenAdmin && creatorProfile.isAdmin && (
+        {/* Master Admin Console Trigger (Only visible to verified Administrators) */}
+        {onOpenAdmin && Boolean(creatorProfile.isAdmin) && (
           <button
             onClick={() => {
               onClose();
@@ -457,7 +457,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               RonPay Admin Console
             </span>
             <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full font-black uppercase">
-              Admin Console
+              Admin
             </span>
           </button>
         )}
@@ -473,7 +473,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 }}
                 className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer shadow-2xs"
               >
-                <Sparkles className="w-4 h-4 text-indigo-600" /> Switch Account / Test User Dang
+                <Sparkles className="w-4 h-4 text-indigo-600" /> Profile Dang / Switch Account
               </button>
             )}
 
@@ -485,7 +485,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 }}
                 className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer"
               >
-                <LogOut className="w-4 h-4 text-rose-600" /> Creator Logout (Standard User-ah let rawh)
+                <LogOut className="w-4 h-4 text-rose-600" /> Logout (Khualmi / Guest User-ah let rawh)
               </button>
             )}
           </div>
@@ -498,7 +498,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               }}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer active:scale-[0.99]"
             >
-              <LogIn className="w-4 h-4" /> Creator Login / Test Account Switcher
+              <LogIn className="w-4 h-4" /> Citizen & Member Login
             </button>
           )
         )}
@@ -515,7 +515,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             onClick={onResetData}
             className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Reset Demo
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh App Data
           </button>
           <button
             onClick={onClose}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   QrCode, 
   FileDown, 
@@ -385,6 +385,40 @@ export const Header: React.FC<HeaderProps> = ({
     }
   }, [triggerLiveGPS]);
 
+  // Secret 5-tap detector for Internal Team / Developer Console
+  const secretLogoTapRef = useRef<number>(0);
+  const secretLogoTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleBrandLogoClick = () => {
+    onNavigate('home');
+    if (secretLogoTimerRef.current) {
+      clearTimeout(secretLogoTimerRef.current);
+    }
+    secretLogoTapRef.current += 1;
+    if (secretLogoTapRef.current >= 5) {
+      const isAlreadyUnlocked = typeof window !== 'undefined' && localStorage.getItem('ronpay_dev_mode_unlocked') === 'true';
+      const next = !isAlreadyUnlocked;
+      if (typeof window !== 'undefined') {
+        if (next) {
+          localStorage.setItem('ronpay_dev_mode_unlocked', 'true');
+        } else {
+          localStorage.removeItem('ronpay_dev_mode_unlocked');
+        }
+      }
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate([40, 60, 40, 60, 100]); } catch {}
+      }
+      if (onOpenLogin) {
+        onOpenLogin();
+      }
+      secretLogoTapRef.current = 0;
+    } else {
+      secretLogoTimerRef.current = setTimeout(() => {
+        secretLogoTapRef.current = 0;
+      }, 2500);
+    }
+  };
+
   return (
     <header className="Header-wrapper bg-slate-950 text-white shadow-xl relative shrink-0 border-b border-slate-800 sticky top-0 z-30 transition-all overflow-hidden">
       {/* Subtle glowing ambient lighting */}
@@ -397,8 +431,9 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Brand Logo & Title */}
           <button 
             type="button"
-            onClick={() => onNavigate('home')}
+            onClick={handleBrandLogoClick}
             className="flex items-center gap-2 group transition cursor-pointer shrink-0 focus:outline-none text-left"
+            title="RonPay Fintech Platform"
           >
             {/* Logo Squircle */}
             <div className="relative shrink-0">
@@ -527,10 +562,12 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 id="header-smart-login-btn"
                 onClick={onOpenLogin}
-                title={creatorProfile?.phone ? `${creatorProfile.name} - Account` : 'Login / Account'}
+                title={creatorProfile?.isApproved && creatorProfile?.name && creatorProfile.name !== 'Khualmi (Guest User)' 
+                  ? `${creatorProfile.name} (${creatorProfile.designation || 'Creator'})` 
+                  : 'Citizen & Member Login'}
                 className="h-7 sm:h-8 px-1.5 sm:px-2 bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 text-slate-200 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
               >
-                {creatorProfile?.phone && creatorProfile?.avatarUrl ? (
+                {creatorProfile?.avatarUrl && creatorProfile?.isApproved ? (
                   <img 
                     src={creatorProfile.avatarUrl} 
                     alt={creatorProfile.name} 
@@ -540,9 +577,11 @@ export const Header: React.FC<HeaderProps> = ({
                   <User className="w-3.5 h-3.5 text-amber-400" />
                 )}
                 <span className="hidden sm:inline truncate max-w-[70px]">
-                  {creatorProfile?.phone ? creatorProfile.name.split(' ')[0] : 'Login'}
+                  {creatorProfile?.isApproved && creatorProfile?.name && creatorProfile.name !== 'Khualmi (Guest User)' 
+                    ? creatorProfile.name.split(' ')[0] 
+                    : 'Login'}
                 </span>
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${creatorProfile?.phone ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               </button>
             )}
 
