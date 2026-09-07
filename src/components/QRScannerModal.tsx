@@ -298,10 +298,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const isScanningRef = useRef<boolean>(false);
+  const isProcessingRef = useRef<boolean>(false);
+  const lastScanTimeRef = useRef<number>(0);
+  const frameCountRef = useRef<number>(0);
 
   // Stop camera stream safely
   const stopCamera = useCallback(() => {
     isScanningRef.current = false;
+    isProcessingRef.current = false;
     if (animFrameIdRef.current) {
       cancelAnimationFrame(animFrameIdRef.current);
       animFrameIdRef.current = null;
@@ -330,6 +334,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // Stop camera immediately upon detection
     stopCamera();
     setLastScannedText(rawText);
+
+    // Haptic feedback on mobile if supported
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(60);
+      } catch (e) {
+        // ignore
+      }
+    }
 
     // Reset file inputs so subsequent uploads start fresh
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -385,69 +398,112 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   }, []);
 
-  // Continuous QR scan loop using BarcodeDetector + jsQR
+  // Continuous QR scan loop using Hardware BarcodeDetector + High-speed Optimized jsQR
   const tickScan = useCallback(async () => {
     if (!isScanningRef.current) return;
 
-    if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2 || video.videoWidth === 0) {
       animFrameIdRef.current = requestAnimationFrame(tickScan);
       return;
     }
 
-    const video = videoRef.current;
+    // Concurrency guard: never process multiple frames in parallel
+    if (isProcessingRef.current) {
+      animFrameIdRef.current = requestAnimationFrame(tickScan);
+      return;
+    }
 
-    // 1. Try Hardware-Accelerated Native BarcodeDetector directly on Video element
-    if (barcodeDetectorRef.current) {
-      try {
-        const barcodes = await barcodeDetectorRef.current.detect(video);
-        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-          handleRawDecodedData(barcodes[0].rawValue);
+    // Frame pacing: scan every ~50ms (~20 scans/second) to keep camera preview buttery smooth at 60fps
+    const now = performance.now();
+    if (now - lastScanTimeRef.current < 50) {
+      animFrameIdRef.current = requestAnimationFrame(tickScan);
+      return;
+    }
+    lastScanTimeRef.current = now;
+    frameCountRef.current = (frameCountRef.current + 1) % 60;
+    const currentFrame = frameCountRef.current;
+
+    isProcessingRef.current = true;
+
+    try {
+      // 1. Try Hardware-Accelerated Native BarcodeDetector directly on Video element (Chrome/Android)
+      if (barcodeDetectorRef.current) {
+        try {
+          const barcodes = await barcodeDetectorRef.current.detect(video);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            handleRawDecodedData(barcodes[0].rawValue);
+            return;
+          }
+        } catch (e) {
+          // Fallback to jsQR
+        }
+      }
+
+      // 2. High-Performance Canvas Pass with Viewfinder Center-Crop Priority
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement('canvas');
+      }
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+
+        // Pass 2A: Viewfinder Center Box Crop (Where the user points the camera)
+        // Crop the central 65% of the video frame and scale to 360x360.
+        // 360x360 = 129,600 pixels. jsQR evaluates this in ~6-8ms!
+        const cropSize = Math.min(vw, vh) * 0.65;
+        const sx = (vw - cropSize) / 2;
+        const sy = (vh - cropSize) / 2;
+        const targetCropDim = 360;
+
+        if (canvas.width !== targetCropDim || canvas.height !== targetCropDim) {
+          canvas.width = targetCropDim;
+          canvas.height = targetCropDim;
+        }
+
+        ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, targetCropDim, targetCropDim);
+        const centerImgData = ctx.getImageData(0, 0, targetCropDim, targetCropDim);
+
+        // Try standard QR detection (inversion every 4th frame)
+        let code = jsQR(centerImgData.data, centerImgData.width, centerImgData.height, {
+          inversionAttempts: currentFrame % 4 === 0 ? 'attemptBoth' : 'dontInvert',
+        });
+
+        if (code && code.data && code.data.trim()) {
+          handleRawDecodedData(code.data);
           return;
         }
-      } catch (e) {
-        // Fallback to canvas/jsQR
+
+        // Pass 2B: Full Frame Scan (downscaled to 480px width for fast full-field coverage)
+        // If center crop didn't find the code (e.g. held near edge), scan full frame downscaled
+        const fullScale = Math.min(1, 480 / vw);
+        const fullW = Math.round(vw * fullScale);
+        const fullH = Math.round(vh * fullScale);
+
+        if (canvas.width !== fullW || canvas.height !== fullH) {
+          canvas.width = fullW;
+          canvas.height = fullH;
+        }
+
+        ctx.drawImage(video, 0, 0, fullW, fullH);
+        const fullImgData = ctx.getImageData(0, 0, fullW, fullH);
+
+        code = jsQR(fullImgData.data, fullImgData.width, fullImgData.height, {
+          inversionAttempts: currentFrame % 4 === 0 ? 'attemptBoth' : 'dontInvert',
+        });
+
+        if (code && code.data && code.data.trim()) {
+          handleRawDecodedData(code.data);
+          return;
+        }
       }
-    }
-
-    // 2. High performance Canvas + jsQR pass
-    if (!canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
-    }
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
-      // Optimal resolution for jsQR (around 800px width)
-      const scale = Math.min(1, 800 / video.videoWidth);
-      canvas.width = Math.round(video.videoWidth * scale);
-      canvas.height = Math.round(video.videoHeight * scale);
-      
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth',
-      });
-
-      if (code && code.data && code.data.trim()) {
-        handleRawDecodedData(code.data);
-        return;
-      }
-
-      // If full frame didn't find, try center-box crop (zoomed center 70%)
-      const cropW = Math.round(canvas.width * 0.7);
-      const cropH = Math.round(canvas.height * 0.7);
-      const cropX = Math.round((canvas.width - cropW) / 2);
-      const cropY = Math.round((canvas.height - cropH) / 2);
-      const cropData = ctx.getImageData(cropX, cropY, cropW, cropH);
-      const cropCode = jsQR(cropData.data, cropData.width, cropData.height, {
-        inversionAttempts: 'attemptBoth'
-      });
-
-      if (cropCode && cropCode.data && cropCode.data.trim()) {
-        handleRawDecodedData(cropCode.data);
-        return;
-      }
+    } catch (err) {
+      console.warn('Frame scan error:', err);
+    } finally {
+      isProcessingRef.current = false;
     }
 
     if (isScanningRef.current) {
@@ -472,13 +528,17 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         video: {
           facingMode: { ideal: mode },
           width: { ideal: 1280 },
-          height: { ideal: 720 }
+          height: { ideal: 720 },
+          // @ts-ignore
+          focusMode: { ideal: 'continuous' }
         },
         audio: false
       },
       {
         video: {
-          facingMode: { ideal: mode }
+          facingMode: { ideal: mode },
+          // @ts-ignore
+          focusMode: { ideal: 'continuous' }
         },
         audio: false
       },
@@ -536,11 +596,22 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         setIsStartingCamera(false);
         isScanningRef.current = true;
 
-        // Check torch capability
+        // Check torch & continuous autofocus capability
         const track = stream.getVideoTracks()[0];
         const capabilities = track?.getCapabilities?.() as any;
-        if (capabilities && 'torch' in capabilities) {
-          setHasTorch(true);
+        if (capabilities) {
+          if ('torch' in capabilities) {
+            setHasTorch(true);
+          }
+          if ('focusMode' in capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
+            try {
+              await (track as any).applyConstraints({
+                advanced: [{ focusMode: 'continuous' }]
+              });
+            } catch (e) {
+              // ignore
+            }
+          }
         }
 
         // Start scanning loop

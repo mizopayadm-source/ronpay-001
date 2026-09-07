@@ -68,7 +68,7 @@ export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
     isActive: true,
     type: 'urgent',
     title: 'Mizoram State-wide Community Notice',
-    message: 'RonPay V1.0 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
+    message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
     linkText: 'Bawm Explorer En Rawh',
     linkAction: 'explore_bawm',
     badge: 'URGENT',
@@ -119,7 +119,7 @@ export const DEFAULT_ANNOUNCEMENT: AnnouncementBanner = {
   isActive: true,
   type: 'urgent',
   title: 'Mizoram State-wide Community Notice',
-  message: 'RonPay V1.0 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
+  message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
   linkText: 'Bawm Explorer En Rawh',
   linkAction: 'explore_bawm',
   animationStyle: 'slide',
@@ -133,7 +133,7 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
   {
     id: 'log-1',
     action: 'System Initialized',
-    details: 'RonPay Community Platform V1.0 security and moderation subsystem online.',
+    details: 'RonPay Community Platform v2.5 security and moderation subsystem online.',
     targetType: 'system',
     performedBy: 'System Administrator',
     timestamp: new Date(Date.now() - 3600000 * 24).toISOString()
@@ -1229,7 +1229,7 @@ export interface RonPayBackupPackage {
 
 export const exportFullDatabaseBackup = (): string => {
   const backup: RonPayBackupPackage = {
-    version: '1.0.0',
+    version: '2.5.0',
     exportedAt: new Date().toISOString(),
     app: 'RonPay Community Platform',
     data: {
