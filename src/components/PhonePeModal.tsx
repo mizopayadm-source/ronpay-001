@@ -615,9 +615,7 @@ We have enabled and verified the PhonePe Payment Gateway (PG V2 Standard Checkou
 
 1. End-to-End Test Transactions:
    - We have verified the transaction flow (Success, Pending, and Failure states).
-   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking):
-     Direct UAT Checkout Link: https://ronpay.app/?phonepe=true
-     Portal Homepage: https://ronpay.app
+   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking).
 
 2. TSP Header Implementation:
    - Merchant ID (X-MERCHANT-ID): TSPMIZOPAYUAT
@@ -638,7 +636,7 @@ Best regards,
 RonPay Tech & Partnership Team`}
                 </div>
                 <button
-                  onClick={() => copyToClipboard(`Hi Swati,\n\nThank you for your follow-up email.\n\nWe have enabled and verified the PhonePe Payment Gateway (PG V2 Standard Checkout) on our platform. Here are the implementation and validation details for your UAT sign-off:\n\n1. End-to-End Test Transactions:\n   - We have verified the transaction flow (Success, Pending, and Failure states).\n   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking):\n     Direct UAT Checkout Link: https://ronpay.app/?phonepe=true\n     Portal Homepage: https://ronpay.app\n\n2. TSP Header Implementation:\n   - Merchant ID (X-MERCHANT-ID): TSPMIZOPAYUAT\n   - Authorization: Bearer <TSP_OAUTH_TOKEN>\n   - Client ID: TSPMIZOPAYUAT_2608171706\n   - Client Version: 1\n\n3. Webhook Configuration & Payment Confirmation:\n   - Webhook URL: https://ronpay.app/api/phonepe/webhook\n   - Server handles base64 decoded PG V2 payloads and verifies the X-VERIFY HMAC-SHA256 signature.\n   - Status confirmation API (/pg/v1/status) and browser redirect callback (/api/phonepe/callback) are fully operational.\n\nWe have also prepared a video screen recording showing the complete payment checkout flow, from initiation to instant receipt generation.\n\nCould you please confirm if this satisfies the requirements for UAT sign-off, or let us know a suitable time for a quick review call?\n\nBest regards,\nRonPay Tech & Partnership Team`, 'swatiReply')}
+                  onClick={() => copyToClipboard(`Hi Swati,\n\nThank you for your follow-up email.\n\nWe have enabled and verified the PhonePe Payment Gateway (PG V2 Standard Checkout) on our platform. Here are the implementation and validation details for your UAT sign-off:\n\n1. End-to-End Test Transactions:\n   - We have verified the transaction flow (Success, Pending, and Failure states).\n   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking).\n\n2. TSP Header Implementation:\n   - Merchant ID (X-MERCHANT-ID): TSPMIZOPAYUAT\n   - Authorization: Bearer <TSP_OAUTH_TOKEN>\n   - Client ID: TSPMIZOPAYUAT_2608171706\n   - Client Version: 1\n\n3. Webhook Configuration & Payment Confirmation:\n   - Webhook URL: https://ronpay.app/api/phonepe/webhook\n   - Server handles base64 decoded PG V2 payloads and verifies the X-VERIFY HMAC-SHA256 signature.\n   - Status confirmation API (/pg/v1/status) and browser redirect callback (/api/phonepe/callback) are fully operational.\n\nWe have also prepared a video screen recording showing the complete payment checkout flow, from initiation to instant receipt generation.\n\nCould you please confirm if this satisfies the requirements for UAT sign-off, or let us know a suitable time for a quick review call?\n\nBest regards,\nRonPay Tech & Partnership Team`, 'swatiReply')}
                   className="w-full bg-[#5f259f] hover:bg-[#511e89] text-white font-bold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   {copiedKey === 'swatiReply' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

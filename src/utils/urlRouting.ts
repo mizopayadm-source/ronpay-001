@@ -14,6 +14,7 @@ export interface ParsedRoute {
   memberRollCampaignId?: string;
   isAdminOpen?: boolean;
   isWalletOpen?: boolean;
+  isPhonePeOpen?: boolean;
 }
 
 /**
@@ -85,22 +86,23 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const sulhnuParam = searchParams.get('sulhnu') || searchParams.get('history');
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
+    const phonepeParam = searchParams.get('phonepe') || searchParams.get('uat') || searchParams.get('pg');
 
-    // 0. PhonePe PG UAT & Checkout Direct Deep-link
-    const phonePeParam = searchParams.get('phonepe') || searchParams.get('uat') || searchParams.get('pg');
-    if (phonePeParam === 'true' || phonePeParam === 'checkout' || phonePeParam === '1' || searchParams.get('checkout') === 'phonepe') {
+    // 0. If PhonePe UAT / PG parameter is present: Route directly to checkout & open PhonePe portal
+    if (phonepeParam) {
       const allCampaigns = [
         ...(campaignsList || []),
         ...getStoredCampaigns(),
         ...INITIAL_CAMPAIGNS
       ];
-      const defaultCamp = allCampaigns[0];
+      const defaultCamp = allCampaigns[0] || INITIAL_CAMPAIGNS[0];
       return {
         view: 'app',
         screen: 'checkout',
-        campaignId: defaultCamp?.id || 'cmp-ralna-default',
+        campaignId: defaultCamp?.id,
         campaign: defaultCamp,
-        category: defaultCamp?.category || 'ralna',
+        category: defaultCamp?.category,
+        isPhonePeOpen: true,
       };
     }
 

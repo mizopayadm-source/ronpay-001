@@ -56,8 +56,6 @@ interface RonPayWebsiteProps {
   onOpenCreateQR?: () => void;
   onOpenRegister?: () => void;
   onOpenBBPS?: (serviceId?: string) => void;
-  onOpenPhonePeCheckout?: () => void;
-  onOpenPhonePePortal?: () => void;
   initialLanguage?: 'mizo' | 'english';
 }
 
@@ -73,8 +71,6 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   onOpenCreateQR,
   onOpenRegister,
   onOpenBBPS,
-  onOpenPhonePeCheckout,
-  onOpenPhonePePortal,
   initialLanguage = 'mizo',
 }) => {
   const [lang, setLang] = useState<'mizo' | 'english'>(initialLanguage);
@@ -744,17 +740,6 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <span className="truncate">AIChat</span>
             </button>
 
-            {/* PhonePe PG Test Checkout Direct Trigger */}
-            <button
-              type="button"
-              onClick={onOpenPhonePeCheckout}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 shadow-xs transition cursor-pointer border border-purple-400 shrink-0 whitespace-nowrap"
-              title="Open PhonePe PG Checkout Test Flow"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-              <span className="whitespace-nowrap">PhonePe Test</span>
-            </button>
-
             {/* Launch App Main CTA ("App Lut Rawh") - Always 100% visible, fully padded and unclipped */}
             <button
               type="button"
@@ -1265,87 +1250,6 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               </div>
             </div>
 
-          </div>
-
-          {/* Interactive PhonePe PG UAT & Checkout Card */}
-          <div className="mt-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 text-white border border-purple-500/40 shadow-xl space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="bg-purple-500/30 text-purple-200 border border-purple-400/40 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    UAT Live Review Portal
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black px-2 py-0.5 rounded-full">
-                    PG V2 Standard Checkout Ready
-                  </span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  PhonePe Payment Gateway Checkout & End-to-End Testing
-                </h3>
-                <p className="text-xs sm:text-sm text-purple-200/80 max-w-2xl leading-relaxed">
-                  Initiate complete live PG V2 transactions using simulated cards, UPI intents, or netbanking. Verified for Merchant ID <code className="bg-purple-900/60 px-1.5 py-0.5 rounded text-amber-300 font-mono font-bold">TSPMIZOPAYUAT</code> with real-time webhook callback processing.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={onOpenPhonePeCheckout}
-                  className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs sm:text-sm shadow-lg flex items-center gap-2 transition cursor-pointer active:scale-95"
-                >
-                  <Zap className="w-4 h-4 text-slate-950 fill-slate-950" />
-                  <span>Launch PhonePe Checkout</span>
-                </button>
-
-                {onOpenPhonePePortal && (
-                  <button
-                    type="button"
-                    onClick={onOpenPhonePePortal}
-                    className="bg-purple-800/80 hover:bg-purple-700 text-white font-bold px-4 py-3 rounded-2xl text-xs border border-purple-400/50 flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Shield className="w-4 h-4 text-purple-300" />
-                    <span>Developer TSP Console</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Test Parameters Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-purple-800/50 text-[11px]">
-              <div className="bg-purple-900/40 p-3 rounded-xl border border-purple-800/40">
-                <span className="text-purple-300 font-bold block mb-0.5">Test UPI VPA:</span>
-                <code className="text-white font-mono font-bold">testuser@phonepe</code>
-              </div>
-              <div className="bg-purple-900/40 p-3 rounded-xl border border-purple-800/40">
-                <span className="text-purple-300 font-bold block mb-0.5">Test Card Number:</span>
-                <code className="text-white font-mono font-bold">4012 8888 9999 1881</code> (CVV: 789)
-              </div>
-              <div className="bg-purple-900/40 p-3 rounded-xl border border-purple-800/40">
-                <span className="text-purple-300 font-bold block mb-0.5">Webhook Endpoint:</span>
-                <code className="text-emerald-300 font-mono font-bold">/api/phonepe/webhook</code>
-              </div>
-            </div>
-
-            {/* Official Production & UAT Link Banner */}
-            <div className="bg-purple-950/70 border border-purple-600/40 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="space-y-0.5 min-w-0 flex-1">
-                <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Official PhonePe UAT Review & Checkout URL:
-                </span>
-                <code className="text-amber-300 font-mono text-xs sm:text-sm font-bold truncate block select-all">
-                  https://ronpay.app/?phonepe=true
-                </code>
-              </div>
-              <button
-                type="button"
-                onClick={() => copyToClipboard('https://ronpay.app/?phonepe=true', 'applink')}
-                className="bg-purple-800 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border border-purple-500/50 flex items-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95"
-              >
-                {appLinkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{appLinkCopied ? 'Copied Link!' : 'Copy Official Link'}</span>
-              </button>
-            </div>
           </div>
 
         </div>

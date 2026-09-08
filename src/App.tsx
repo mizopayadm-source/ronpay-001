@@ -12,7 +12,6 @@ import {
   BillService,
 } from './types';
 import { Language } from './utils/translations';
-import { INITIAL_CAMPAIGNS } from './data/initialData';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
 import {
   getStoredCampaigns,
@@ -169,7 +168,7 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
-  const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
+  const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(() => initialRoute?.isPhonePeOpen || false);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
@@ -408,6 +407,9 @@ export default function App() {
     }
     if (route.isWalletOpen) {
       setIsWalletOpen(true);
+    }
+    if (route.isPhonePeOpen) {
+      setIsPhonePeOpen(true);
     }
   }, []);
 
@@ -762,19 +764,6 @@ export default function App() {
           onOpenBBPS={(serviceId) => {
             handleLaunchApp('home');
             setIsBillModalOpen(true);
-          }}
-          onOpenPhonePeCheckout={() => {
-            const firstCamp = campaigns[0] || INITIAL_CAMPAIGNS[0];
-            setSelectedCampaign(firstCamp);
-            setSelectedCategory(firstCamp.category);
-            setCurrentScreen('checkout');
-            setAppView('app');
-            updateBrowserView('app');
-          }}
-          onOpenPhonePePortal={() => {
-            setAppView('app');
-            updateBrowserView('app');
-            setIsPhonePeOpen(true);
           }}
           initialLanguage={language}
         />
