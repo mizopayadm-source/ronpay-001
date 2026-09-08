@@ -58,6 +58,25 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [pdfSuccessResult, setPdfSuccessResult] = useState<PDFExportResult | null>(null);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [waToast, setWaToast] = useState<string>('');
+  const [showHintBanner, setShowHintBanner] = useState<boolean>(true);
+
+  // Clean, smart parsing of document title & subtitle for mobile headers
+  const parsedTitle = useMemo(() => {
+    if (!modalData?.docTitle) {
+      return { main: 'RonPay Statement', sub: 'Print & PDF Statement' };
+    }
+    const parts = modalData.docTitle.split(/\s*[-•–]\s*/);
+    if (parts.length >= 2) {
+      return {
+        main: parts[0].trim(),
+        sub: parts.slice(1).join(' • ').trim(),
+      };
+    }
+    return {
+      main: modalData.docTitle,
+      sub: 'Print & PDF Statement',
+    };
+  }, [modalData?.docTitle]);
   
   // Container & Sheet Dimensions for responsive scaling
   // Standard A4 base width: Portrait = 794px, Landscape = 1123px
@@ -558,34 +577,35 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       )}
 
       {/* 1. TOP NAVIGATION / ACTION BAR (NO-PRINT) */}
-      <header className="no-print w-full bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 shrink-0 shadow-md text-slate-100 z-20">
+      <header className="no-print w-full bg-slate-900 border-b border-slate-800 px-2.5 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 shrink-0 shadow-md text-slate-100 z-20">
         
         {/* Left Side: Prominent Back (Kirleh) Button */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             id="print-preview-back-btn"
             onClick={handleClose}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-extrabold text-xs rounded-xl border border-slate-700 shadow-xs cursor-pointer transition shrink-0"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-xs rounded-xl border border-slate-700 shadow-xs cursor-pointer transition shrink-0"
             title="Kirleh / Hnunglam"
           >
             <ArrowLeft className="w-4 h-4 text-indigo-400" />
-            <span className="font-black">Kirleh</span>
+            <span>Kirleh</span>
           </button>
 
+          {/* Document Identity: Name & Subtitle */}
           <div className="min-w-0 flex-1">
             <h1 className="text-xs sm:text-sm font-black text-white truncate leading-snug" title={modalData.docTitle}>
-              {modalData.docTitle}
+              {parsedTitle.main}
             </h1>
             <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Print & PDF Statement</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+              <span className="truncate">{parsedTitle.sub}</span>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Desktop Quick Actions + Always-Visible Close X */}
+        {/* Right Side: Quick Actions + Always-Visible Kharna / Close Button */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Desktop-only Action Buttons (On Mobile, these live prominently in the fixed bottom action bar) */}
+          {/* Desktop-only Action Buttons */}
           <div className="hidden md:flex items-center gap-1.5">
             <button
               onClick={handleShareToWhatsApp}
@@ -617,139 +637,155 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             </button>
           </div>
 
-          {/* Close X button - ALWAYS visible on all screen sizes */}
+          {/* Close X (Kharna) Button - High contrast, clearly visible on all screen sizes */}
           <button
             onClick={handleClose}
-            className="p-1.5 sm:p-2 text-slate-300 hover:text-white rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition cursor-pointer active:scale-95"
-            title="Kharna (Close)"
-            aria-label="Close Preview"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-slate-200 hover:text-white rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/90 shadow-xs transition cursor-pointer active:scale-95 text-xs font-bold shrink-0"
+            title="Kharna (Close Preview)"
+            aria-label="Kharna (Close Preview)"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 text-rose-400" />
+            <span className="hidden xs:inline">Kharna</span>
           </button>
         </div>
       </header>
 
-      {/* 2. FORMAT & VIEW CONTROLS TOOLBAR (NO-PRINT): Clean, mobile-optimized, horizontal scroll if narrow */}
-      <div className="no-print w-full bg-slate-950/95 border-b border-slate-800/80 px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-2 shrink-0 z-10 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-2 min-w-max">
+      {/* 2. FORMAT & VIEW CONTROLS TOOLBAR (NO-PRINT): Perfectly proportioned for mobile, no overflow */}
+      <div className="no-print w-full bg-slate-950/95 border-b border-slate-800/80 px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 shrink-0 z-10 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0">
           
           {/* View Mode Switcher: Phone vs A4 Paper */}
-          <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs">
+          <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
             <button
               onClick={() => setViewMode('phone-flow')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-black flex items-center gap-1 sm:gap-1.5 transition cursor-pointer whitespace-nowrap ${
                 viewMode === 'phone-flow'
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Phone View: Responsive easy reading mode for mobile screens"
             >
-              <Smartphone className="w-3.5 h-3.5 text-indigo-300" />
+              <Smartphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-300" />
               <span>Phone</span>
             </button>
 
             <button
               onClick={() => setViewMode('a4-sheet')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-black flex items-center gap-1 sm:gap-1.5 transition cursor-pointer whitespace-nowrap ${
                 viewMode === 'a4-sheet'
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="A4 Paper View: Exact printable sheet with zoom controls"
             >
-              <Layers className="w-3.5 h-3.5 text-emerald-300" />
+              <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
               <span>A4 Paper</span>
             </button>
           </div>
 
-          {/* Orientation Switcher: Ding (Portrait) vs Phek (Landscape) */}
-          <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs">
-            <button
-              onClick={() => setPageOrientation('portrait')}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                pageOrientation === 'portrait'
-                  ? 'bg-slate-800 text-indigo-300 shadow-xs border border-indigo-500/40'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="Ding (Portrait A4)"
-            >
-              <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Ding</span>
-            </button>
-
-            <button
-              onClick={() => setPageOrientation('landscape')}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                pageOrientation === 'landscape'
-                  ? 'bg-emerald-700 text-white shadow-xs border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="Phek (Landscape A4 - Wide table / Multi-category matrix)"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-300" />
-              <span>Phek (Wide)</span>
-            </button>
-          </div>
-
-          {/* Zoom Controls (Active in A4 Sheet mode) */}
+          {/* In A4 Paper Mode: Orientation & Compact Zoom Controls (Fits comfortably without cutting off) */}
           {viewMode === 'a4-sheet' && (
-            <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs">
-              <button
-                onClick={() => {
-                  const nextZoom = Math.max(30, (fitMode === 'custom' ? zoomLevel : displayPercent) - 15);
-                  setFitMode('custom');
-                  setZoomLevel(nextZoom);
-                }}
-                className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
-                title="Zoom Out (-)"
-              >
-                <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              </button>
-              <span className="text-[10px] font-mono font-bold px-1.5 text-slate-300 min-w-[36px] text-center">
-                {displayPercent}%
-              </span>
-              <button
-                onClick={() => {
-                  const nextZoom = Math.min(220, (fitMode === 'custom' ? zoomLevel : displayPercent) + 15);
-                  setFitMode('custom');
-                  setZoomLevel(nextZoom);
-                }}
-                className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
-                title="Zoom In (+)"
-              >
-                <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              </button>
+            <>
+              {/* Orientation Switcher: Ding (Portrait) vs Phek (Landscape) */}
+              <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
+                <button
+                  onClick={() => setPageOrientation('portrait')}
+                  className={`px-1.5 sm:px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 transition cursor-pointer whitespace-nowrap ${
+                    pageOrientation === 'portrait'
+                      ? 'bg-slate-800 text-indigo-300 shadow-xs border border-indigo-500/40'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Ding (Portrait A4)"
+                >
+                  <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-400" />
+                  <span>Ding</span>
+                </button>
+
+                <button
+                  onClick={() => setPageOrientation('landscape')}
+                  className={`px-1.5 sm:px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 transition cursor-pointer whitespace-nowrap ${
+                    pageOrientation === 'landscape'
+                      ? 'bg-emerald-700 text-white shadow-xs border border-emerald-500/40'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Phek (Landscape A4)"
+                >
+                  <SlidersHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
+                  <span>Phek</span>
+                </button>
+              </div>
+
+              {/* Compact Zoom Controls */}
+              <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
+                <button
+                  onClick={() => {
+                    const nextZoom = Math.max(30, (fitMode === 'custom' ? zoomLevel : displayPercent) - 15);
+                    setFitMode('custom');
+                    setZoomLevel(nextZoom);
+                  }}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                  title="Zoom Out (-)"
+                >
+                  <ZoomOut className="w-3 h-3" />
+                </button>
+                <span className="text-[10px] font-mono font-bold px-1 text-slate-300 min-w-[32px] text-center">
+                  {displayPercent}%
+                </span>
+                <button
+                  onClick={() => {
+                    const nextZoom = Math.min(220, (fitMode === 'custom' ? zoomLevel : displayPercent) + 15);
+                    setFitMode('custom');
+                    setZoomLevel(nextZoom);
+                  }}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                  title="Zoom In (+)"
+                >
+                  <ZoomIn className="w-3 h-3" />
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* In Phone Flow Mode: Informational Badge */}
+          {viewMode === 'phone-flow' && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-indigo-950/60 border border-indigo-500/30 rounded-lg text-[10px] text-indigo-300 font-bold shrink-0">
+              <Smartphone className="w-3 h-3 text-indigo-400" />
+              <span>Mobile Reading Mode</span>
             </div>
           )}
         </div>
 
         {/* Right side toast message */}
         {waToast && (
-          <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-md border border-emerald-500/40 text-[10.5px] animate-fadeIn shrink-0">
-            {waToast}
-          </span>
-        )}
-      </div>
-
-      {/* 2. SUB-BANNER / WHATSAPP TOAST & HOW-TO GUIDE (NO-PRINT) */}
-      <div className="no-print w-full bg-slate-900 border-b border-slate-800 px-3 py-1.5 text-[10.5px] sm:text-xs text-slate-300 flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Eye className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-          <span className="truncate">
-            {viewMode === 'phone-flow' ? (
-              <span><b>📱 Phone View:</b> Mobile screen-ah a lang rem chang vek e. Table scroll phei theih a ni.</span>
-            ) : (
-              <span><b>📄 A4 Paper View:</b> Exact print preview. Zoom (+) / (-) emaw pinch-zoom hmang rawh.</span>
-            )}
-          </span>
-        </div>
-
-        {waToast && (
           <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/40 text-[10px] animate-fadeIn shrink-0">
             {waToast}
           </span>
         )}
       </div>
+
+      {/* 3. SUB-BANNER / HOW-TO GUIDE (NO-PRINT): Slim, clear & dismissible */}
+      {showHintBanner && (
+        <div className="no-print w-full bg-slate-900/95 border-b border-slate-800 px-2.5 sm:px-4 py-1 text-[10px] sm:text-xs text-slate-300 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Eye className="w-3 h-3 text-indigo-400 shrink-0" />
+            <span className="truncate">
+              {viewMode === 'phone-flow' ? (
+                <span><b>📱 Phone View:</b> Mobile screen-ah a lang rem chang vek e. Table scroll phei theih a ni.</span>
+              ) : (
+                <span><b>📄 A4 Paper View:</b> Exact print preview. Zoom (+) / (-) emaw pinch-zoom hmang rawh.</span>
+              )}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setShowHintBanner(false)}
+            className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer shrink-0"
+            title="Hide hint"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* 3. MAIN PREVIEW CANVAS / VIEWPORT */}
       <main 
@@ -880,11 +916,11 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       )}
 
       {/* 5. BOTTOM ACTION BAR (NO-PRINT): Clean, comfortable on narrow mobile screens */}
-      <footer className="no-print w-full bg-slate-900 border-t border-slate-800 px-2.5 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 text-xs text-slate-400 shrink-0 z-20">
+      <footer className="no-print w-full bg-slate-900 border-t border-slate-800 px-2.5 sm:px-4 py-2 flex items-center justify-between gap-1.5 text-xs text-slate-400 shrink-0 z-20">
         <div className="flex items-center">
           <button
             onClick={handleClose}
-            className="flex items-center gap-1 text-slate-200 hover:text-white font-black cursor-pointer py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition active:scale-95 text-xs shrink-0"
+            className="flex items-center gap-1 text-slate-200 hover:text-white font-black cursor-pointer py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition active:scale-95 text-xs shrink-0 whitespace-nowrap"
             title="Kirleh / Hnunglam"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
@@ -896,7 +932,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           {/* WhatsApp Direct Share Button */}
           <button
             onClick={handleShareToWhatsApp}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-emerald-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-emerald-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
             title="Share via WhatsApp"
           >
             <MessageCircle className="w-3.5 h-3.5" />
@@ -907,22 +943,22 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           <button
             onClick={handleSaveAsPDF}
             disabled={isGeneratingPdf}
-            className="bg-rose-600 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-rose-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0"
+            className="bg-rose-600 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-rose-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
             title="Download PDF File"
           >
             {isGeneratingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            <span>PDF<span className="hidden xs:inline"> Save</span></span>
+            <span>Save PDF</span>
           </button>
 
           {/* System Print */}
           <button
             onClick={handlePrint}
             disabled={isPrinting}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-indigo-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-indigo-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
             title="System Print / Spooler"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Print</span>
+            <span>Print</span>
           </button>
         </div>
       </footer>
