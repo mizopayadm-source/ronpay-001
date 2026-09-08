@@ -86,6 +86,24 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
 
+    // 0. PhonePe PG UAT & Checkout Direct Deep-link
+    const phonePeParam = searchParams.get('phonepe') || searchParams.get('uat') || searchParams.get('pg');
+    if (phonePeParam === 'true' || phonePeParam === 'checkout' || phonePeParam === '1' || searchParams.get('checkout') === 'phonepe') {
+      const allCampaigns = [
+        ...(campaignsList || []),
+        ...getStoredCampaigns(),
+        ...INITIAL_CAMPAIGNS
+      ];
+      const defaultCamp = allCampaigns[0];
+      return {
+        view: 'app',
+        screen: 'checkout',
+        campaignId: defaultCamp?.id || 'cmp-ralna-default',
+        campaign: defaultCamp,
+        category: defaultCamp?.category || 'ralna',
+      };
+    }
+
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {
       const cleanId = decodeURIComponent(campaignId).trim();

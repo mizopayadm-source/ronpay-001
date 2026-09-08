@@ -12,6 +12,7 @@ import {
   BillService,
 } from './types';
 import { Language } from './utils/translations';
+import { INITIAL_CAMPAIGNS } from './data/initialData';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
 import {
   getStoredCampaigns,
@@ -761,6 +762,19 @@ export default function App() {
           onOpenBBPS={(serviceId) => {
             handleLaunchApp('home');
             setIsBillModalOpen(true);
+          }}
+          onOpenPhonePeCheckout={() => {
+            const firstCamp = campaigns[0] || INITIAL_CAMPAIGNS[0];
+            setSelectedCampaign(firstCamp);
+            setSelectedCategory(firstCamp.category);
+            setCurrentScreen('checkout');
+            setAppView('app');
+            updateBrowserView('app');
+          }}
+          onOpenPhonePePortal={() => {
+            setAppView('app');
+            updateBrowserView('app');
+            setIsPhonePeOpen(true);
           }}
           initialLanguage={language}
         />

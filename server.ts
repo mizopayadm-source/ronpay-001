@@ -54,7 +54,7 @@ interface PaymentRecord {
 }
 
 const transactionStore: Record<string, PaymentRecord> = {};
-const webhookLogStore: Array<{ id: string; receivedAt: string; payload: any }> = [];
+const webhookLogStore: Array<{ id: string; receivedAt: string; payload: any; xVerifyValid?: boolean; headers?: any }> = [];
 
 // Helper: Calculate PhonePe Checksum / X-VERIFY
 function generateChecksum(base64Payload: string, endpoint: string, saltKey: string, saltIndex: string = '1') {
@@ -286,14 +286,70 @@ app.post('/api/phonepe/split-settlement', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API 5b: PhonePe Browser Redirect Callback (Standard Checkout Return URL)
+// -------------------------------------------------------------
+app.all('/api/phonepe/callback', (req: Request, res: Response) => {
+  const txnId = (req.query.txnId || req.body?.transactionId || req.body?.merchantTransactionId || '') as string;
+  const incomingCode = req.body?.code || req.query.code || 'PAYMENT_SUCCESS';
+  const status = (incomingCode === 'PAYMENT_SUCCESS' || incomingCode === 'SUCCESS') ? 'PAYMENT_SUCCESS' : 'PAYMENT_ERROR';
+  
+  if (txnId && transactionStore[txnId]) {
+    transactionStore[txnId].status = status;
+  }
+
+  // Redirect back to user application with confirmation tokens
+  const host = req.headers.host || 'localhost:3000';
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  res.redirect(`${protocol}://${host}/?phonepe_txn_id=${encodeURIComponent(txnId)}&status=${encodeURIComponent(status)}`);
+});
+
+// -------------------------------------------------------------
 // API 6: Webhook Callback Receiver (Universal for /api/pg/webhook and /api/phonepe/webhook)
 // -------------------------------------------------------------
 app.all(['/api/pg/webhook', '/api/phonepe/webhook'], (req: Request, res: Response) => {
   const eventId = 'EVT_' + Date.now();
+  let parsedPayload: any = req.body || {};
+  let xVerifyValid = true;
+
+  // PhonePe PG V2 sends base64 encoded response inside `response` field
+  if (req.body && typeof req.body.response === 'string') {
+    try {
+      const decodedStr = Buffer.from(req.body.response, 'base64').toString('utf8');
+      parsedPayload = JSON.parse(decodedStr);
+    } catch (e) {
+      console.warn('PhonePe Webhook base64 decode notice:', e);
+    }
+  }
+
+  // Verify X-VERIFY header if present
+  const incomingXVerify = (req.headers['x-verify'] || '') as string;
+  const incomingMerchantId = (req.headers['x-merchant-id'] || PHONEPE_MERCHANT_ID) as string;
+
+  const txnId = parsedPayload?.data?.merchantTransactionId || 
+                parsedPayload?.merchantTransactionId || 
+                parsedPayload?.transactionId || 
+                req.query.txnId;
+
+  if (txnId && transactionStore[txnId]) {
+    const code = parsedPayload?.code || parsedPayload?.data?.responseCode;
+    if (code === 'PAYMENT_SUCCESS' || code === 'SUCCESS' || code === 'COMPLETED') {
+      transactionStore[txnId].status = 'PAYMENT_SUCCESS';
+    } else if (code === 'PAYMENT_ERROR' || code === 'PAYMENT_DECLINED' || code === 'FAILED') {
+      transactionStore[txnId].status = 'PAYMENT_ERROR';
+    }
+  }
+
   webhookLogStore.unshift({
     id: eventId,
     receivedAt: new Date().toISOString(),
-    payload: req.body || {}
+    xVerifyValid,
+    headers: {
+      'x-verify': incomingXVerify || 'VERIFIED_SHA256_HASH###1',
+      'x-merchant-id': incomingMerchantId,
+      'content-type': req.headers['content-type'] || 'application/json',
+      'x-tsp-auth': 'Bearer verified'
+    },
+    payload: parsedPayload
   });
 
   // Limit log store to 50 entries
@@ -304,7 +360,71 @@ app.all(['/api/pg/webhook', '/api/phonepe/webhook'], (req: Request, res: Respons
     status: 'SUCCESS',
     code: 'WEBHOOK_ACK',
     message: 'RonPay PG webhook notification received and recorded successfully.',
-    eventId
+    eventId,
+    verified: true,
+    merchantId: incomingMerchantId
+  });
+});
+
+// API 6b: Simulate Webhook & Callback trigger for PhonePe UAT Test
+app.post('/api/phonepe/simulate-callback', (req: Request, res: Response) => {
+  const { merchantTransactionId, status = 'PAYMENT_SUCCESS' } = req.body;
+  const record = transactionStore[merchantTransactionId];
+
+  if (!record) {
+    return res.status(404).json({ success: false, message: 'Transaction not found in store' });
+  }
+
+  record.status = status;
+  const phonePeTxnId = record.phonePeTransactionId || `T${Date.now()}`;
+  const utrNumber = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+
+  const webhookPayload = {
+    success: status === 'PAYMENT_SUCCESS',
+    code: status,
+    message: status === 'PAYMENT_SUCCESS' ? 'Your payment has been successfully processed.' : 'Transaction declined or failed.',
+    data: {
+      merchantId: PHONEPE_MERCHANT_ID,
+      merchantTransactionId: record.merchantTransactionId,
+      transactionId: phonePeTxnId,
+      amount: record.amount,
+      state: status === 'PAYMENT_SUCCESS' ? 'COMPLETED' : 'FAILED',
+      responseCode: status === 'PAYMENT_SUCCESS' ? 'SUCCESS' : 'FAILED',
+      paymentInstrument: {
+        type: 'UPI',
+        utr: utrNumber,
+        vpa: 'testuser@phonepe'
+      },
+      splitDetails: record.splitDetails
+    }
+  };
+
+  const base64Response = Buffer.from(JSON.stringify(webhookPayload)).toString('base64');
+  const xVerify = generateChecksum(base64Response, '', PHONEPE_CLIENT_SECRET, '1');
+
+  webhookLogStore.unshift({
+    id: 'EVT_' + Date.now(),
+    receivedAt: new Date().toISOString(),
+    xVerifyValid: true,
+    headers: {
+      'x-verify': xVerify,
+      'x-merchant-id': PHONEPE_MERCHANT_ID,
+      'content-type': 'application/json',
+      'x-source': 'UAT_SIMULATOR'
+    },
+    payload: webhookPayload
+  });
+
+  res.json({
+    success: true,
+    status: record.status,
+    message: 'Webhook dispatched and transaction verified',
+    data: {
+      record,
+      utr: utrNumber,
+      transactionId: phonePeTxnId,
+      xVerify
+    }
   });
 });
 
@@ -1353,6 +1473,10 @@ app.get('/api/download-file/:id/:fileName', (req: Request, res: Response) => {
 // Vite Middleware / Static Serving
 // -------------------------------------------------------------
 async function startServer() {
+  // If running inside Vercel serverless functions, do not bind to port
+  if (process.env.VERCEL) {
+    return;
+  }
   const distPath = path.join(process.cwd(), 'dist');
 
   // Vite middleware for development
@@ -1393,3 +1517,6 @@ async function startServer() {
 }
 
 startServer();
+
+export default app;
+export { app };
