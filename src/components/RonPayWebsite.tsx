@@ -45,7 +45,8 @@ import {
   Sun,
   Moon,
   BookOpen,
-  ArrowUp
+  ArrowUp,
+  Info
 } from 'lucide-react';
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
@@ -56,6 +57,8 @@ interface RonPayWebsiteProps {
   onOpenCreateQR?: () => void;
   onOpenRegister?: () => void;
   onOpenBBPS?: (serviceId?: string) => void;
+  onOpenPhonePeCheckout?: (amount?: number) => void;
+  onOpenPhonePePortal?: () => void;
   initialLanguage?: 'mizo' | 'english';
 }
 
@@ -71,6 +74,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   onOpenCreateQR,
   onOpenRegister,
   onOpenBBPS,
+  onOpenPhonePeCheckout,
+  onOpenPhonePePortal,
   initialLanguage = 'mizo',
 }) => {
   const [lang, setLang] = useState<'mizo' | 'english'>(initialLanguage);
@@ -78,6 +83,8 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [soundboxPlaying, setSoundboxPlaying] = useState<boolean>(false);
   const [simulatorCategory, setSimulatorCategory] = useState<BawmCategory>('ralna');
   const [simulatorAmount, setSimulatorAmount] = useState<number>(500);
+  const [phonePeUatAmount, setPhonePeUatAmount] = useState<number>(100);
+  const [copiedPhonePeLink, setCopiedPhonePeLink] = useState<boolean>(false);
   const [showSimulatedReceipt, setShowSimulatedReceipt] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   // Eye Comfort Theme (Mit Tihahdam Theme) - true = soothing warm light, false = muted dark
@@ -740,6 +747,21 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <span className="truncate">AIChat</span>
             </button>
 
+            {/* PhonePe PG Checkout Direct Button (UAT Review) */}
+            {onOpenPhonePeCheckout && (
+              <button
+                type="button"
+                id="website-phonepe-checkout-nav-btn"
+                onClick={() => onOpenPhonePeCheckout(100)}
+                className="bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] active:scale-95 text-white font-black text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-md transition cursor-pointer border border-purple-400/50 shrink-0 whitespace-nowrap min-w-max"
+                title="Open PhonePe PG Standard Checkout Page (UAT Review)"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300 shrink-0" />
+                <span className="whitespace-nowrap">PhonePe Checkout</span>
+                <span className="hidden sm:inline-block text-[9px] bg-white/20 text-white font-bold px-1 rounded">UAT</span>
+              </button>
+            )}
+
             {/* Launch App Main CTA ("App Lut Rawh") - Always 100% visible, fully padded and unclipped */}
             <button
               type="button"
@@ -987,6 +1009,20 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   <span>{isMizo ? 'RonPay Web App Hawng Rawh' : 'Launch RonPay App'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
+
+                {onOpenPhonePeCheckout && (
+                  <button
+                    type="button"
+                    id="hero-phonepe-checkout-btn"
+                    onClick={() => onOpenPhonePeCheckout(100)}
+                    className="bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#511e89] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg hover:shadow-purple-900/40 transition cursor-pointer border border-purple-400/40 active:scale-95 shrink-0"
+                    title="Open PhonePe PG V2 Standard Checkout Page"
+                  >
+                    <Zap className="w-5 h-5 text-amber-300 fill-amber-300" />
+                    <span>{isMizo ? '⚡ PhonePe PG Checkout En Rawh' : '⚡ Test PhonePe Checkout'}</span>
+                    <span className="text-[10px] bg-white/20 text-white font-bold px-1.5 py-0.5 rounded-md">UAT</span>
+                  </button>
+                )}
 
                 <a
                   href="#services"
@@ -1248,6 +1284,210 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>All UPI Apps Compatible</span>
               </div>
+            </div>
+
+          </div>
+
+          {/* UAT & Reviewer Testing Hub: Direct Access to PhonePe PG V2 Checkout Flow */}
+          <div className={`mt-10 rounded-3xl border ${eyeComfortMode ? 'bg-white border-purple-200 shadow-md' : 'bg-slate-900/90 border-purple-800/60 shadow-2xl'} p-6 sm:p-8 space-y-6`}>
+            
+            {/* Header / Intro */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-purple-100 dark:border-purple-900/40">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#5f259f] to-[#7b2cbf] text-white flex items-center justify-center shadow-md">
+                  <Zap className="w-7 h-7 text-amber-300 fill-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-lg sm:text-xl font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                      PhonePe PG V2 UAT & End-to-End Testing Portal
+                    </h3>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 px-2 py-0.5 rounded-full font-extrabold uppercase">
+                      Live Sandbox
+                    </span>
+                  </div>
+                  <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-300'} mt-0.5`}>
+                    Dedicated UAT validation interface for PhonePe integration review team (Merchant: <b className="font-mono text-purple-600 dark:text-purple-300">TSPMIZOPAYUAT</b>)
+                  </p>
+                </div>
+              </div>
+
+              {/* Direct Deep Link & Copy */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('https://www.ronpay.app/?phonepe=true');
+                    setCopiedPhonePeLink(true);
+                    setTimeout(() => setCopiedPhonePeLink(false), 2000);
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
+                    copiedPhonePeLink
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : eyeComfortMode
+                      ? 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
+                      : 'bg-slate-800 text-purple-200 border-slate-700 hover:bg-slate-750'
+                  }`}
+                  title="Copy Direct PhonePe Checkout URL"
+                >
+                  {copiedPhonePeLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedPhonePeLink ? 'Copied Direct Link!' : 'Copy Direct UAT Link'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 3 Step Validation Cards (Matching PhonePe Review Checklist) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* Point 1: Initiate Test Payments */}
+              <div className={`p-4 rounded-2xl border flex flex-col justify-between ${eyeComfortMode ? 'bg-purple-50/50 border-purple-200' : 'bg-slate-950/60 border-purple-900/40'}`}>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-2 py-0.5 rounded-full">
+                      Step 1 • Payment Flow
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-500">PG V2</span>
+                  </div>
+                  <h4 className={`text-sm font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                    Initiate Test Transactions
+                  </h4>
+                  <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'} leading-relaxed`}>
+                    Validate full end-to-end checkout flow across UPI, Cards, NetBanking, and Wallets.
+                  </p>
+                  
+                  {/* Preset Amount Selectors */}
+                  <div className="pt-2">
+                    <label className={`block text-[10px] font-extrabold uppercase ${eyeComfortMode ? 'text-slate-700' : 'text-slate-400'} mb-1.5`}>
+                      Select Test Amount:
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[10, 100, 500, 1000].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setPhonePeUatAmount(amt)}
+                          className={`py-1 px-1.5 text-xs font-bold rounded-lg border transition cursor-pointer text-center ${
+                            phonePeUatAmount === amt
+                              ? 'bg-[#5f259f] text-white border-[#5f259f] shadow-xs'
+                              : eyeComfortMode
+                              ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                          }`}
+                        >
+                          ₹{amt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => onOpenPhonePeCheckout?.(phonePeUatAmount)}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                    <span>Launch Checkout (₹{phonePeUatAmount})</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Point 2: TSP Headers & Webhooks */}
+              <div className={`p-4 rounded-2xl border flex flex-col justify-between ${eyeComfortMode ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-950/60 border-indigo-900/40'}`}>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 rounded-full">
+                      Step 2 • Technical Spec
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-500">Headers & S2S</span>
+                  </div>
+                  <h4 className={`text-sm font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                    TSP Headers & Webhooks
+                  </h4>
+                  <div className="space-y-1 text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                    <p className="flex items-center gap-1">
+                      <span className="text-emerald-500">✔</span>
+                      <span>Auth: Bearer &lt;TSP Token&gt;</span>
+                    </p>
+                    <p className="flex items-center gap-1">
+                      <span className="text-emerald-500">✔</span>
+                      <span>X-MERCHANT-ID: TSPMIZOPAYUAT</span>
+                    </p>
+                    <p className="flex items-center gap-1">
+                      <span className="text-emerald-500">✔</span>
+                      <span>X-SOURCE: WEB (v1.0)</span>
+                    </p>
+                    <p className="flex items-center gap-1">
+                      <span className="text-emerald-500">✔</span>
+                      <span>Webhook: /api/phonepe/webhook</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={onOpenPhonePePortal}
+                    className="w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Inspect Headers & Logs</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Point 3: Payment Confirmation */}
+              <div className={`p-4 rounded-2xl border flex flex-col justify-between ${eyeComfortMode ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-950/60 border-emerald-900/40'}`}>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                      Step 3 • Verification
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-500">Receipt</span>
+                  </div>
+                  <h4 className={`text-sm font-black ${eyeComfortMode ? 'text-slate-900' : 'text-white'}`}>
+                    Payment Confirmation
+                  </h4>
+                  <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'} leading-relaxed`}>
+                    Instant server-side status check, UTR generation, and official tamper-proof digital receipt with verified QR watermark.
+                  </p>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                    <p>Status API: GET /api/phonepe/status/:id</p>
+                    <p>Checksum: SHA256 + Salt Key (Index 1)</p>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => onOpenPhonePeCheckout?.(100)}
+                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Run Verification Flow</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Direct URL Note */}
+            <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs ${eyeComfortMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-purple-600 shrink-0" />
+                <span className={eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}>
+                  <b>PhonePe UAT Direct Link:</b> Use <code className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 font-mono text-purple-900 dark:text-purple-200 font-bold">https://ronpay.app/?phonepe=true</code> to open the PG checkout page instantly without manual navigation.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenPhonePeCheckout?.(100)}
+                className="px-3 py-1.5 bg-[#5f259f] text-white font-bold text-xs rounded-xl shadow-xs hover:bg-[#511e89] transition cursor-pointer shrink-0"
+              >
+                Open Checkout Screen Now
+              </button>
             </div>
 
           </div>

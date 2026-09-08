@@ -53,6 +53,8 @@ interface CheckoutScreenProps {
   onOpenPhonePePortal?: () => void;
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
   language?: Language;
+  initialOpenPhonePeCheckout?: boolean;
+  initialAmount?: number;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -65,11 +67,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   onOpenPhonePePortal,
   onPreviewImage,
   language = 'mizo',
+  initialOpenPhonePeCheckout = false,
+  initialAmount,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
-  const [standardAmount, setStandardAmount] = useState<number>(500);
-  const [donorName, setDonorName] = useState<string>('');
-  const [remark, setRemark] = useState<string>('');
+  const [standardAmount, setStandardAmount] = useState<number>(() => initialAmount || (campaign?.customAmount && campaign.customAmount > 0 ? campaign.customAmount : 100));
+  const [donorName, setDonorName] = useState<string>(() => initialOpenPhonePeCheckout ? 'PhonePe UAT Reviewer' : '');
+  const [remark, setRemark] = useState<string>(() => initialOpenPhonePeCheckout ? 'UAT End-to-End Test Transaction' : '');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
@@ -142,7 +146,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const [isUPIIntentOpen, setIsUPIIntentOpen] = useState<boolean>(false);
-  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(false);
+  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => initialOpenPhonePeCheckout);
   const [pendingDonorDetails, setPendingDonorDetails] = useState<{
     donorName: string;
     donorPhone?: string;
@@ -151,7 +155,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     subId?: string;
     isDependent?: boolean;
   }>({
-    donorName: 'Valued Donor'
+    donorName: initialOpenPhonePeCheckout ? 'PhonePe UAT Reviewer' : 'Valued Donor',
+    donorPhone: initialOpenPhonePeCheckout ? '9862300000' : undefined,
+    donorVeng: initialOpenPhonePeCheckout ? 'Aizawl' : undefined
   });
 
   const config = BAWM_CONFIG[category];

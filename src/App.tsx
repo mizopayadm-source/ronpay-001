@@ -168,7 +168,9 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
-  const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(() => initialRoute?.isPhonePeOpen || false);
+  const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
+  const [autoOpenPhonePeCheckout, setAutoOpenPhonePeCheckout] = useState<boolean>(() => !!initialRoute?.isPhonePeOpen);
+  const [phonePeCheckoutAmount, setPhonePeCheckoutAmount] = useState<number>(100);
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
@@ -409,7 +411,16 @@ export default function App() {
       setIsWalletOpen(true);
     }
     if (route.isPhonePeOpen) {
-      setIsPhonePeOpen(true);
+      const stored = getStoredCampaigns();
+      const targetCamp = stored[0];
+      if (targetCamp) {
+        setSelectedCampaign(targetCamp);
+        setSelectedCategory(targetCamp.category);
+      }
+      setAutoOpenPhonePeCheckout(true);
+      setPhonePeCheckoutAmount(100);
+      setCurrentScreen('checkout');
+      setAppView('app');
     }
   }, []);
 
@@ -742,6 +753,19 @@ export default function App() {
     updateBrowserView('website');
   };
 
+  const handleOpenPhonePeCheckout = (amount: number = 100) => {
+    const targetCamp = campaigns[0] || getStoredCampaigns()[0];
+    if (targetCamp) {
+      setSelectedCampaign(targetCamp);
+      setSelectedCategory(targetCamp.category);
+    }
+    setPhonePeCheckoutAmount(amount);
+    setAutoOpenPhonePeCheckout(true);
+    setCurrentScreen('checkout');
+    setAppView('app');
+    updateBrowserView('app', 'checkout');
+  };
+
   // Filter transactions for Sulhnu History
   const userVisibleTransactions = getUserOrCreatorVisibleTransactions(
     transactions,
@@ -764,6 +788,12 @@ export default function App() {
           onOpenBBPS={(serviceId) => {
             handleLaunchApp('home');
             setIsBillModalOpen(true);
+          }}
+          onOpenPhonePeCheckout={handleOpenPhonePeCheckout}
+          onOpenPhonePePortal={() => {
+            setAppView('app');
+            updateBrowserView('app');
+            setIsPhonePeOpen(true);
           }}
           initialLanguage={language}
         />
@@ -859,12 +889,20 @@ export default function App() {
               category={selectedCategory}
               campaign={selectedCampaign}
               pricingConfig={pricingConfig}
-              onBack={() => handleNavigate('explorer')}
-              onPaymentSuccess={handlePaymentSuccess}
+              onBack={() => {
+                setAutoOpenPhonePeCheckout(false);
+                handleNavigate('explorer');
+              }}
+              onPaymentSuccess={(tx) => {
+                setAutoOpenPhonePeCheckout(false);
+                handlePaymentSuccess(tx);
+              }}
               onCashPending={handleCashPending}
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onPreviewImage={handlePreviewImage}
               language={language}
+              initialOpenPhonePeCheckout={autoOpenPhonePeCheckout}
+              initialAmount={phonePeCheckoutAmount}
             />
           )}
 
