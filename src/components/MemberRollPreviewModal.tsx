@@ -297,8 +297,21 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
               .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
               .header-left { display: flex; align-items: center; gap: 12px; }
               @media print {
-                thead { display: table-row-group !important; }
-                tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+                html, body {
+                  width: 100% !important;
+                  height: auto !important;
+                  min-height: 0 !important;
+                  max-height: none !important;
+                  overflow: visible !important;
+                  overflow-x: visible !important;
+                  overflow-y: visible !important;
+                  position: static !important;
+                }
+                thead { display: table-header-group !important; }
+                tbody { display: table-row-group !important; }
+                tfoot { display: table-footer-group !important; }
+                tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
+                .header, .footer { page-break-inside: avoid !important; break-inside: avoid !important; }
               }
             </style>
           </head>

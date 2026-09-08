@@ -1383,16 +1383,27 @@ export const generateTransactionsPDFHtml = (
   const sharedPrintStyles = `
     @page { 
       size: auto; 
-      margin: 12mm 10mm 12mm 10mm; 
+      margin: 10mm 10mm 10mm 10mm; 
     }
     * { box-sizing: border-box; }
+    html, body {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      overflow-x: visible !important;
+      overflow-y: visible !important;
+      position: static !important;
+      background: #ffffff !important;
+      color: #1e293b !important;
+    }
     body { 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-      color: #1e293b; 
       margin: 0; 
       padding: 16px; 
       font-size: 11px; 
-      background: #ffffff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -1539,16 +1550,23 @@ export const generateTransactionsPDFHtml = (
       font-weight: 900;
     }
 
-    /* Prevent header row repeating on subsequent pages */
+    /* Clean multi-page table structure */
     thead {
+      display: table-header-group !important;
+    }
+    tbody {
       display: table-row-group !important;
+    }
+    tfoot {
+      display: table-footer-group !important;
     }
     tr {
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
-    tfoot {
-      display: table-row-group !important;
+    th, td {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     /* Signature Blocks */
@@ -1611,9 +1629,52 @@ export const generateTransactionsPDFHtml = (
     }
 
     @media print {
-      body { padding: 0; }
-      .header-banner { margin-top: 0; }
-      thead { display: table-row-group !important; }
+      html, body {
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .header-banner { 
+        margin-top: 0;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .summary-bar,
+      .target-bar {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      thead { display: table-header-group !important; }
+      tbody { display: table-row-group !important; }
+      tfoot { display: table-footer-group !important; }
+      tr, th, td {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .sign-grid, .footer, .report-footer {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .page-break, .break-before-page {
+        page-break-before: always !important;
+        break-before: page !important;
+      }
+      .page-break-after {
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .no-print { display: none !important; }
     }
   `;
 
@@ -2116,8 +2177,21 @@ export const generateMasterLedgerPrintHtml = (
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
           .header-left { display: flex; align-items: center; }
           @media print {
-            thead { display: table-row-group !important; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+            html, body {
+              width: 100% !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
+              position: static !important;
+            }
+            thead { display: table-header-group !important; }
+            tbody { display: table-row-group !important; }
+            tfoot { display: table-footer-group !important; }
+            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
+            .header, .footer { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>
@@ -2247,8 +2321,21 @@ export const generateMemberCategoryMatrixPrintHtml = (
           th { background: #1e293b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
           .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; background: #f8fafc; }
           @media print {
-            thead { display: table-row-group !important; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+            html, body {
+              width: 100% !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
+              position: static !important;
+            }
+            thead { display: table-header-group !important; }
+            tbody { display: table-row-group !important; }
+            tfoot { display: table-footer-group !important; }
+            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
+            .card { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>
@@ -2386,8 +2473,21 @@ export const generateMemberPassbookVerticalPrintHtml = (
           th { background: #1e293b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
           .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #f8fafc; }
           @media print {
-            thead { display: table-row-group !important; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+            html, body {
+              width: 100% !important;
+              height: auto !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
+              overflow-x: visible !important;
+              overflow-y: visible !important;
+              position: static !important;
+            }
+            thead { display: table-header-group !important; }
+            tbody { display: table-row-group !important; }
+            tfoot { display: table-footer-group !important; }
+            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
+            .card { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>

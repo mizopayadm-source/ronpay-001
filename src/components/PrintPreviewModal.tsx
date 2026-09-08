@@ -496,45 +496,163 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           margin: ${pageOrientation === 'landscape' ? '8mm' : '10mm'};
         }
         @media print {
-          html, body {
-            background: #ffffff !important;
-            color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #ronpay-printable-preview-root, #ronpay-printable-preview-root * {
-            visibility: visible !important;
-          }
-          #ronpay-printable-preview-root {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          /* 1. Global Multi-Page Paging Reset for Android WebView & Chromium */
+          html, body, #root {
             width: 100% !important;
             max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            overflow-x: visible !important;
+            overflow-y: visible !important;
+            position: static !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            display: block !important;
+          }
+
+          /* Hide all UI elements without breaking DOM layout */
+          .no-print,
+          header.no-print,
+          footer.no-print {
+            display: none !important;
+            height: 0 !important;
+            visibility: hidden !important;
+          }
+
+          /* Unset modal fixed viewport box so it flows naturally across Page 1, Page 2, etc. */
+          #ronpay-print-preview-modal {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            inset: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            z-index: auto !important;
+          }
+
+          #ronpay-print-preview-modal > main {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          #ronpay-print-preview-modal > main > div {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            transform: none !important;
+          }
+
+          /* Printable Root in in-flow normal block layout (NEVER absolute in @media print) */
+          #ronpay-printable-preview-root {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: 0 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #0f172a !important;
             box-shadow: none !important;
             border: none !important;
+            border-radius: 0 !important;
             transform: none !important;
           }
-          #ronpay-printable-preview-root table {
+
+          /* Table and Page Break Pagination Rules */
+          table {
             display: table !important;
             width: 100% !important;
             max-width: 100% !important;
             table-layout: auto !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
           }
-          .sign-grid {
+
+          thead {
+            display: table-header-group !important;
+          }
+
+          tbody {
+            display: table-row-group !important;
+          }
+
+          tfoot {
+            display: table-footer-group !important;
+          }
+
+          tr {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
-          .no-print {
-            display: none !important;
+
+          th, td {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .header-banner {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .summary-bar,
+          .target-bar {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+
+          .sign-grid,
+          .footer,
+          .report-footer {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .page-break,
+          .break-before-page,
+          .print-page-break {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+
+          .page-break-after {
+            page-break-after: always !important;
+            break-after: page !important;
           }
         }
 

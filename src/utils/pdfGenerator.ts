@@ -120,6 +120,14 @@ export async function exportElementToPDF(
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
+    // Calculate full natural content height across all pages
+    const measuredHeight = Math.max(
+      element.scrollHeight || 0,
+      element.offsetHeight || 0,
+      element.clientHeight || 0,
+      1400
+    );
+
     let canvas: HTMLCanvasElement;
     try {
       canvas = await html2canvas(element, {
@@ -129,14 +137,44 @@ export async function exportElementToPDF(
         logging: false,
         backgroundColor: '#ffffff',
         width: targetWidth,
+        height: measuredHeight,
         windowWidth: targetWidth + 40,
+        windowHeight: measuredHeight + 300,
+        scrollY: 0,
+        scrollX: 0,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+
+          // 1. Unconstrain cloned document & body so WebView doesn't clip multi-page height
+          clonedDoc.documentElement.style.overflow = 'visible';
+          clonedDoc.documentElement.style.height = 'auto';
+          clonedDoc.documentElement.style.maxHeight = 'none';
+
+          clonedDoc.body.style.overflow = 'visible';
+          clonedDoc.body.style.height = 'auto';
+          clonedDoc.body.style.maxHeight = 'none';
+          clonedDoc.body.style.position = 'static';
+
           if (clonedEl) {
+            // 2. Unconstrain all ancestors of the printable element
+            let parent = clonedEl.parentElement;
+            while (parent && parent !== clonedDoc.body) {
+              parent.style.overflow = 'visible';
+              parent.style.height = 'auto';
+              parent.style.minHeight = '0';
+              parent.style.maxHeight = 'none';
+              parent.style.position = 'static';
+              parent.style.transform = 'none';
+              parent = parent.parentElement;
+            }
+
             clonedEl.classList.remove('mobile-phone-flow');
             clonedEl.style.width = `${targetWidth}px`;
             clonedEl.style.maxWidth = `${targetWidth}px`;
             clonedEl.style.minWidth = `${targetWidth}px`;
+            clonedEl.style.height = 'auto';
+            clonedEl.style.minHeight = '0';
+            clonedEl.style.maxHeight = 'none';
             clonedEl.style.boxSizing = 'border-box';
             clonedEl.style.overflow = 'visible';
             clonedEl.style.position = 'relative';
@@ -162,14 +200,42 @@ export async function exportElementToPDF(
         logging: false,
         backgroundColor: '#ffffff',
         width: targetWidth,
+        height: measuredHeight,
         windowWidth: targetWidth + 40,
+        windowHeight: measuredHeight + 300,
+        scrollY: 0,
+        scrollX: 0,
         onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
           sanitizeClonedDocumentStyles(clonedDoc, clonedEl);
+
+          clonedDoc.documentElement.style.overflow = 'visible';
+          clonedDoc.documentElement.style.height = 'auto';
+          clonedDoc.documentElement.style.maxHeight = 'none';
+
+          clonedDoc.body.style.overflow = 'visible';
+          clonedDoc.body.style.height = 'auto';
+          clonedDoc.body.style.maxHeight = 'none';
+          clonedDoc.body.style.position = 'static';
+
           if (clonedEl) {
+            let parent = clonedEl.parentElement;
+            while (parent && parent !== clonedDoc.body) {
+              parent.style.overflow = 'visible';
+              parent.style.height = 'auto';
+              parent.style.minHeight = '0';
+              parent.style.maxHeight = 'none';
+              parent.style.position = 'static';
+              parent.style.transform = 'none';
+              parent = parent.parentElement;
+            }
+
             clonedEl.classList.remove('mobile-phone-flow');
             clonedEl.style.width = `${targetWidth}px`;
             clonedEl.style.maxWidth = `${targetWidth}px`;
             clonedEl.style.minWidth = `${targetWidth}px`;
+            clonedEl.style.height = 'auto';
+            clonedEl.style.minHeight = '0';
+            clonedEl.style.maxHeight = 'none';
             clonedEl.style.boxSizing = 'border-box';
             clonedEl.style.overflow = 'visible';
             clonedEl.style.position = 'relative';
@@ -246,9 +312,9 @@ export async function exportElementToPDF(
     blocks.sort((a, b) => a.topPx - b.topPx);
 
     // Smart single-page fit threshold:
-    // If the canvas height is slightly larger than 1 page (up to 20% overflow, such as ~25-28 rows + signatures),
-    // scale it cleanly so the entire statement fits on ONE pristine page!
-    if (canvasHeight <= pageMaxHeightPx * 1.20) {
+    // Only scale down if the canvas height is virtually 1 page (up to 4% tiny overflow, e.g. 1-2 trailing lines).
+    // If it is a multi-page document (such as 2 full pages of transactions), preserve all pages!
+    if (canvasHeight <= pageMaxHeightPx * 1.04) {
       const fitScale = Math.min(1, pageMaxHeightPx / canvasHeight);
       const scaledWidth = contentWidth * fitScale;
       const scaledHeight = (canvasHeight * scaledWidth) / canvasWidth;
@@ -441,7 +507,8 @@ export function executePrintSafely(
     frame.style.left = '-9999px';
     frame.style.top = '0';
     frame.style.width = isLandscape ? '1123px' : '794px';
-    frame.style.height = isLandscape ? '794px' : '1123px';
+    frame.style.height = 'auto';
+    frame.style.minHeight = '100%';
     frame.style.border = '0';
     frame.style.opacity = '0';
     frame.style.pointerEvents = 'none';
@@ -451,7 +518,62 @@ export function executePrintSafely(
     if (frameDoc) {
       frameDoc.open();
       
-      const pageCss = `@page { size: ${isLandscape ? 'landscape' : 'portrait'}; margin: 8mm; }`;
+      const multiPagePrintCss = `
+        @page { 
+          size: ${isLandscape ? 'A4 landscape' : 'A4 portrait'}; 
+          margin: 8mm; 
+        }
+        html, body {
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+          overflow-x: visible !important;
+          overflow-y: visible !important;
+          position: static !important;
+          margin: 0 !important;
+          padding: 8px !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+        table {
+          width: 100% !important;
+          max-width: 100% !important;
+          border-collapse: collapse !important;
+          table-layout: auto !important;
+          page-break-inside: auto !important;
+          break-inside: auto !important;
+        }
+        thead { display: table-header-group !important; }
+        tbody { display: table-row-group !important; }
+        tfoot { display: table-footer-group !important; }
+        tr, th, td {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        .header-banner {
+          page-break-after: avoid !important;
+          break-after: avoid !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        .sign-grid, .footer, .report-footer {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        .page-break, .break-before-page {
+          page-break-before: always !important;
+          break-before: page !important;
+        }
+        @media print {
+          body { padding: 0 !important; }
+          .no-print { display: none !important; }
+        }
+      `;
+
       let completeHtml = htmlContent;
       
       if (!htmlContent.includes('<!DOCTYPE') && !htmlContent.includes('<html')) {
@@ -462,13 +584,7 @@ export function executePrintSafely(
               <meta charset="utf-8">
               <title>${docTitle || 'RonPay Document'}</title>
               <style>
-                ${pageCss}
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 10px; color: #0f172a; background: #ffffff; }
-                table { width: 100%; border-collapse: collapse; }
-                @media print {
-                  body { padding: 0; }
-                  .no-print { display: none !important; }
-                }
+                ${multiPagePrintCss}
               </style>
             </head>
             <body>
@@ -476,8 +592,13 @@ export function executePrintSafely(
             </body>
           </html>
         `;
-      } else if (!completeHtml.includes('@page')) {
-        completeHtml = completeHtml.replace('</head>', `<style>${pageCss}</style></head>`);
+      } else {
+        // Inject multi-page print stylesheet before </head>
+        if (completeHtml.includes('</head>')) {
+          completeHtml = completeHtml.replace('</head>', `<style>${multiPagePrintCss}</style></head>`);
+        } else {
+          completeHtml = `<style>${multiPagePrintCss}</style>` + completeHtml;
+        }
       }
 
       frameDoc.write(completeHtml);
