@@ -1325,6 +1325,27 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <code className="text-emerald-300 font-mono font-bold">/api/phonepe/webhook</code>
               </div>
             </div>
+
+            {/* Official Production & UAT Link Banner */}
+            <div className="bg-purple-950/70 border border-purple-600/40 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 min-w-0 flex-1">
+                <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Official PhonePe UAT Review & Checkout URL:
+                </span>
+                <code className="text-amber-300 font-mono text-xs sm:text-sm font-bold truncate block select-all">
+                  https://ronpay.app/?phonepe=true
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={() => copyToClipboard('https://ronpay.app/?phonepe=true', 'applink')}
+                className="bg-purple-800 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border border-purple-500/50 flex items-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95"
+              >
+                {appLinkCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{appLinkCopied ? 'Copied Link!' : 'Copy Official Link'}</span>
+              </button>
+            </div>
           </div>
 
         </div>
