@@ -94,9 +94,11 @@ export const printHtmlSafely = (html: string, docTitle: string = 'Print Document
 
 /**
  * Universal File Download & Share helper:
- * 1. Checks if Web Share API (navigator.share) is available with files on Mobile / Android WebViews.
- * 2. Fallback to standard Blob URL & <a> download click.
- * 3. Fallback to Base64 Data URI for WebViews without Blob download support.
+ * 1. Checks if Android Native Bridge (RonPayBridge / AndroidBlobDownloader) is present (Mobile APK).
+ *    If yes, passes Base64 directly to Android Java for writing to the phone's public Downloads directory.
+ * 2. Prepares server-backed stream via /api/prepare-download for mobile WebViews & browsers
+ *    (receives HTTP Content-Disposition: attachment so Android Download Manager catches it).
+ * 3. Fallback to standard Blob URL & Base64 Data URI anchor click.
  */
 export const downloadFileUniversal = async (
   content: string | Blob,
@@ -111,7 +113,86 @@ export const downloadFileUniversal = async (
 
     const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
 
-    // Step 1: Standard Blob Object URL with direct anchor download
+    // Convert Blob to Base64 data URI helper
+    const readBlobAsDataUri = (): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result && typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Failed to read blob'));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    };
+
+    let base64Uri = '';
+    try {
+      base64Uri = await readBlobAsDataUri();
+    } catch (e) {
+      console.warn('Base64 conversion failed:', e);
+    }
+
+    // =========================================================================
+    // TIER 1: Native Android Bridge (RonPay APK / Android WebView)
+    // =========================================================================
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      const nativeBridge = w.RonPayBridge || w.AndroidBlobDownloader || w.AndroidDownloader;
+      if (nativeBridge && typeof nativeBridge.getBase64FromBlobData === 'function') {
+        try {
+          if (base64Uri) {
+            nativeBridge.getBase64FromBlobData(base64Uri, mimeType, fileName);
+            return true;
+          }
+        } catch (bridgeErr) {
+          console.warn('Native bridge execution failed, falling back to stream:', bridgeErr);
+        }
+      }
+    }
+
+    // =========================================================================
+    // TIER 2: Server-Streamed HTTP Download (Directly triggers phone Download Manager)
+    // =========================================================================
+    if (base64Uri) {
+      try {
+        const resp = await fetch('/api/prepare-download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName,
+            mimeType,
+            base64Data: base64Uri,
+          }),
+        });
+        if (resp.ok) {
+          const resData = await resp.json();
+          if (resData.success && resData.downloadUrl) {
+            const serverAnchor = document.createElement('a');
+            serverAnchor.href = resData.downloadUrl;
+            serverAnchor.download = fileName;
+            serverAnchor.target = '_self';
+            serverAnchor.style.display = 'none';
+            document.body.appendChild(serverAnchor);
+            serverAnchor.click();
+
+            setTimeout(() => {
+              try { document.body.removeChild(serverAnchor); } catch {}
+            }, 2000);
+            return true;
+          }
+        }
+      } catch (streamErr) {
+        console.warn('Server download stream failed, falling back to local blob:', streamErr);
+      }
+    }
+
+    // =========================================================================
+    // TIER 3: Client-side Blob Object URL anchor download
+    // =========================================================================
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -124,45 +205,23 @@ export const downloadFileUniversal = async (
       try {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      } catch (e) {
-        // ignore cleanup error
-      }
+      } catch (e) {}
     }, 2500);
 
-    // Step 2: Base64 Data URI fallback for Android WebViews that restrict Blob downloads
-    if (typeof content === 'string') {
+    // =========================================================================
+    // TIER 4: Base64 Data URI anchor fallback for mobile WebViews
+    // =========================================================================
+    if (base64Uri && isMobile) {
       try {
-        const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
         const fallbackA = document.createElement('a');
-        fallbackA.href = dataUri;
+        fallbackA.href = base64Uri;
         fallbackA.download = fileName;
         fallbackA.style.display = 'none';
         document.body.appendChild(fallbackA);
         fallbackA.click();
         setTimeout(() => {
-          try {
-            document.body.removeChild(fallbackA);
-          } catch (e) {}
-        }, 1200);
-      } catch (e) {}
-    } else if (blob instanceof Blob && isMobile) {
-      // For binary blobs (like PDF) in Android WebViews:
-      try {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (reader.result && typeof reader.result === 'string') {
-            const fbLink = document.createElement('a');
-            fbLink.href = reader.result;
-            fbLink.download = fileName;
-            fbLink.style.display = 'none';
-            document.body.appendChild(fbLink);
-            fbLink.click();
-            setTimeout(() => {
-              try { document.body.removeChild(fbLink); } catch {}
-            }, 1200);
-          }
-        };
-        reader.readAsDataURL(blob);
+          try { document.body.removeChild(fallbackA); } catch {}
+        }, 1500);
       } catch (e) {}
     }
 

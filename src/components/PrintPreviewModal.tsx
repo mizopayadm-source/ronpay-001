@@ -267,7 +267,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   // Open generated PDF or re-download on mobile
   const handleOpenPdfBlob = () => {
-    if (pdfSuccessResult?.blobUrl) {
+    if (pdfSuccessResult?.blob) {
+      downloadFileUniversal(
+        pdfSuccessResult.blob,
+        pdfSuccessResult.fileName,
+        'application/pdf',
+        modalData?.docTitle || 'RonPay Statement PDF'
+      );
+    } else if (pdfSuccessResult?.blobUrl) {
       try {
         window.open(pdfSuccessResult.blobUrl, '_blank');
       } catch {}

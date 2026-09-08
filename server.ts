@@ -1270,6 +1270,86 @@ Always respond in natural, warm, polite, and fluent Mizo with structured markdow
 });
 
 // -------------------------------------------------------------
+// Universal Mobile & WebView Report Download Endpoints
+// Allows Android WebView, iOS & mobile browsers to reliably stream
+// reports with Content-Disposition: attachment directly into phone downloads
+// -------------------------------------------------------------
+interface TempDownloadRecord {
+  data: Buffer;
+  mimeType: string;
+  fileName: string;
+  createdAt: number;
+}
+const tempDownloadStorage = new Map<string, TempDownloadRecord>();
+
+// Clean up expired temp downloads every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of tempDownloadStorage.entries()) {
+    if (now - val.createdAt > 10 * 60 * 1000) {
+      tempDownloadStorage.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+app.post('/api/prepare-download', (req: Request, res: Response) => {
+  try {
+    const { fileName, mimeType, base64Data, textContent } = req.body;
+    if (!fileName || (!base64Data && !textContent)) {
+      return res.status(400).json({ success: false, error: 'Missing fileName or file content' });
+    }
+
+    const downloadId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    let fileBuffer: Buffer;
+
+    if (base64Data) {
+      const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+      fileBuffer = Buffer.from(cleanBase64, 'base64');
+    } else {
+      fileBuffer = Buffer.from(textContent, 'utf-8');
+    }
+
+    tempDownloadStorage.set(downloadId, {
+      data: fileBuffer,
+      mimeType: mimeType || 'application/octet-stream',
+      fileName: fileName,
+      createdAt: Date.now(),
+    });
+
+    const cleanSafeFileName = encodeURIComponent(fileName.replace(/[^\w.-]/g, '_'));
+    return res.json({
+      success: true,
+      downloadUrl: `/api/download-file/${downloadId}/${cleanSafeFileName}`
+    });
+  } catch (err: any) {
+    console.error('Error preparing report download:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/download-file/:id/:fileName', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const record = tempDownloadStorage.get(id);
+
+    if (!record) {
+      return res.status(404).send('Download link expired or not found. Please click export in the app again.');
+    }
+
+    const sanitizedName = record.fileName.replace(/["\r\n]/g, '_');
+    res.setHeader('Content-Type', record.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitizedName}"; filename*=UTF-8''${encodeURIComponent(sanitizedName)}`);
+    res.setHeader('Content-Length', record.data.length);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+    return res.end(record.data);
+  } catch (err: any) {
+    console.error('Error downloading report file:', err);
+    return res.status(500).send('Download error occurred on server');
+  }
+});
+
+// -------------------------------------------------------------
 // Vite Middleware / Static Serving
 // -------------------------------------------------------------
 async function startServer() {

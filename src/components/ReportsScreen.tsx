@@ -524,7 +524,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   const showExportSuccessToast = (type: string, count: number) => {
     setExportFeedback({
-      message: `${type} export hlawhtling ta! (${count} records saved)`,
+      message: `📥 ${type} download fel a ni! (${count} records - Phone Downloads / Files-ah a lut e)`,
       count,
     });
     setTimeout(() => {

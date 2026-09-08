@@ -1,20 +1,28 @@
 package com.ronpay.app;
 
 import android.Manifest;
+import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.KeyEvent;
 import android.view.View;
+import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -33,6 +41,7 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -65,6 +74,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Register WebViewClient for UPI deeplinks (GPay, PhonePe, Paytm, WhatsApp)
         setupWebViewClient();
+
+        // Setup DownloadListener for direct HTTP / HTTPS report streams
+        setupDownloadListener();
 
         // Attach JavaScript Bridge for PDF downloads & WhatsApp sharing
         RonPayNativeBridge bridge = new RonPayNativeBridge(this);
@@ -214,6 +226,37 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // Setup DownloadListener for direct HTTP / HTTPS report streams
+    private void setupDownloadListener() {
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+                try {
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimeType != null ? mimeType : "application/octet-stream");
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    if (cookies != null) {
+                        request.addRequestHeader("cookie", cookies);
+                    }
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setDescription("RonPay Report download mek a ni...");
+                    String guessFileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                    request.setTitle(guessFileName);
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, guessFileName);
+
+                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    if (dm != null) {
+                        dm.enqueue(request);
+                        Toast.makeText(MainActivity.this, "Download tan a ni: " + guessFileName, Toast.LENGTH_SHORT).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Download error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
     // Handle file chooser activity result
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -308,41 +351,123 @@ public class MainActivity extends AppCompatActivity {
                     pureBase64 = base64Data.substring(base64Data.indexOf(",") + 1);
                 }
 
-                byte[] pdfAsBytes = Base64.decode(pureBase64, Base64.DEFAULT);
+                byte[] fileBytes = Base64.decode(pureBase64, Base64.DEFAULT);
 
-                // Save to app external cache or public directory
-                File outputDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                if (outputDir == null) {
-                    outputDir = context.getCacheDir();
+                // Ensure clean filename
+                String cleanName = (fileName != null && !fileName.trim().isEmpty())
+                        ? fileName.trim()
+                        : "RonPay_Report_" + System.currentTimeMillis();
+
+                Uri targetUri = null;
+                File targetFile = null;
+
+                // 1. Android 10+ (API 29+): Save directly to Public MediaStore Downloads folder
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        ContentValues values = new ContentValues();
+                        values.put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName);
+                        values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType != null ? mimeType : "application/octet-stream");
+                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+
+                        ContentResolver resolver = context.getContentResolver();
+                        targetUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+
+                        if (targetUri != null) {
+                            OutputStream os = resolver.openOutputStream(targetUri);
+                            if (os != null) {
+                                os.write(fileBytes);
+                                os.flush();
+                                os.close();
+                            }
+                        }
+                    } catch (Exception qEx) {
+                        targetUri = null;
+                    }
                 }
 
-                File pdfFile = new File(outputDir, fileName);
-                FileOutputStream os = new FileOutputStream(pdfFile, false);
-                os.write(pdfAsBytes);
-                os.flush();
-                os.close();
+                // 2. Android 9 and older: Save to public external Downloads directory
+                if (targetUri == null) {
+                    try {
+                        File publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                        if (publicDownloads != null) {
+                            if (!publicDownloads.exists()) {
+                                publicDownloads.mkdirs();
+                            }
+                            targetFile = new File(publicDownloads, cleanName);
+                            FileOutputStream os = new FileOutputStream(targetFile, false);
+                            os.write(fileBytes);
+                            os.flush();
+                            os.close();
+
+                            // Register with Android MediaScanner so file appears immediately in Files/Downloads app
+                            MediaScannerConnection.scanFile(
+                                    context,
+                                    new String[]{targetFile.getAbsolutePath()},
+                                    new String[]{mimeType},
+                                    null
+                            );
+                        }
+                    } catch (Exception legacyEx) {
+                        targetFile = null;
+                    }
+                }
+
+                // 3. Fallback: Save to App's external downloads directory if public storage is restricted
+                if (targetUri == null && targetFile == null) {
+                    File outputDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    if (outputDir == null) {
+                        outputDir = context.getCacheDir();
+                    }
+                    targetFile = new File(outputDir, cleanName);
+                    FileOutputStream os = new FileOutputStream(targetFile, false);
+                    os.write(fileBytes);
+                    os.flush();
+                    os.close();
+                }
+
+                // 4. Also keep a cache copy so FileProvider can always safely open/view/share the file
+                File cacheFile = new File(context.getCacheDir(), cleanName);
+                FileOutputStream cacheOs = new FileOutputStream(cacheFile, false);
+                cacheOs.write(fileBytes);
+                cacheOs.flush();
+                cacheOs.close();
+
+                final Uri finalTargetUri = targetUri;
+                final File finalTargetFile = targetFile;
 
                 runOnUiThread(() -> {
-                    Toast.makeText(context, "PDF File download fel a ni: " + fileName, Toast.LENGTH_LONG).show();
-                    // Open the downloaded PDF
+                    Toast.makeText(
+                            context,
+                            "Report download fel a ni! (Phone > Downloads > " + cleanName + ")",
+                            Toast.LENGTH_LONG
+                    ).show();
+
+                    // Automatically attempt to open the file with the default PDF/Spreadsheet viewer
                     try {
-                        Uri contentUri = FileProvider.getUriForFile(
-                                context,
-                                context.getPackageName() + ".fileprovider",
-                                pdfFile
-                        );
+                        Uri openUri;
+                        if (finalTargetUri != null) {
+                            openUri = finalTargetUri;
+                        } else {
+                            File fToOpen = finalTargetFile != null ? finalTargetFile : cacheFile;
+                            openUri = FileProvider.getUriForFile(
+                                    context,
+                                    context.getPackageName() + ".fileprovider",
+                                    fToOpen
+                            );
+                        }
+
                         Intent openIntent = new Intent(Intent.ACTION_VIEW);
-                        openIntent.setDataAndType(contentUri, mimeType);
+                        openIntent.setDataAndType(openUri, mimeType);
                         openIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         context.startActivity(openIntent);
                     } catch (Exception ex) {
-                        // PDF viewer not found, file still safely saved
+                        // Viewer app not installed; file is still safely in Phone Downloads
                     }
                 });
 
-            } catch (IOException e) {
-                runOnUiThread(() -> Toast.makeText(context, "PDF Save theih loh: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(context, "Report Save theih loh: " + e.getMessage(), Toast.LENGTH_SHORT).show());
             }
         }
 

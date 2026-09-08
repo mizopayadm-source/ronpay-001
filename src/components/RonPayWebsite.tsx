@@ -44,7 +44,8 @@ import {
   Shield,
   Sun,
   Moon,
-  BookOpen
+  BookOpen,
+  ArrowUp
 } from 'lucide-react';
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
@@ -119,6 +120,29 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
     }
   ]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll to Top state & handler
+  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (typeof window !== 'undefined') {
+        setShowScrollTop(window.scrollY > 250);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    }
+  };
 
   useEffect(() => {
     if (isAIChatOpen && chatEndRef.current) {
@@ -2480,6 +2504,29 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
         <span className="hidden sm:inline text-xs font-black">AIChat (Khual Chhawn)</span>
       </button>
 
+      {/* Floating Scroll to Top Action Button (Smooth Scroll to Header) */}
+      {showScrollTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          id="website-scroll-to-top-btn"
+          className={`fixed bottom-20 right-5 z-40 p-3 sm:px-3.5 sm:py-2.5 rounded-full shadow-2xl transition-all duration-300 flex items-center gap-1.5 cursor-pointer border ${
+            eyeComfortMode
+              ? 'bg-white/95 hover:bg-amber-50 text-slate-800 border-amber-400/60 shadow-amber-900/10'
+              : 'bg-slate-900/95 hover:bg-slate-800 text-white border-amber-500/50 shadow-black/40'
+          } hover:-translate-y-1 active:scale-95 group backdrop-blur-md`}
+          title={isMizo ? 'A chunglamah chhohna (Scroll to Top)' : 'Back to top'}
+          aria-label="Scroll to top"
+        >
+          <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors">
+            <ArrowUp className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-xs font-black tracking-tight">
+            {isMizo ? 'A Chungah' : 'Top'}
+          </span>
+        </button>
+      )}
+
       {/* 11. FOOTER: Professional FinTech Branding & Information */}
       <footer className={`${eyeComfortMode ? 'bg-slate-900 border-t border-slate-800 text-slate-400' : 'bg-slate-950 border-t border-slate-900 text-slate-400'} py-12 text-xs transition-colors`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -2529,6 +2576,16 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 className="text-amber-400 hover:text-amber-300 font-black cursor-pointer"
               >
                 {isMizo ? 'App Lut Rawh (Khualmi) →' : 'Launch App →'}
+              </button>
+              <button
+                type="button"
+                onClick={scrollToTop}
+                id="footer-quick-back-to-top"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700 font-bold transition cursor-pointer shadow-xs active:scale-95"
+                title={isMizo ? 'A chunglamah chhohna' : 'Scroll to top'}
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+                <span>{isMizo ? 'A Chunglamah Chhohna ↑' : 'Back to Top ↑'}</span>
               </button>
             </div>
 
@@ -2626,11 +2683,21 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               Developed & Maintained by © 2026 RonPay Technologies. All rights reserved.
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <span className="flex items-center gap-1 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 PhonePe TSP Live • All Systems Operational
               </span>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={scrollToTop}
+                id="footer-bottom-scroll-top-btn"
+                className="hover:text-amber-300 text-slate-300 transition cursor-pointer flex items-center gap-1 font-semibold hover:underline"
+              >
+                <ArrowUp className="w-3 h-3 text-amber-400" />
+                <span>{isMizo ? 'Chunglamah Chhohna' : 'Back to Top'}</span>
+              </button>
               <span>•</span>
               <span className="text-slate-400">NPCI / BBPS Protocol</span>
             </div>
