@@ -497,12 +497,18 @@ public class MainActivity extends AppCompatActivity {
 
                 runOnUiThread(() -> {
                     Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                    shareIntent.setType(mimeType);
+                    shareIntent.setType(mimeType != null && !mimeType.isEmpty() ? mimeType : "application/pdf");
                     shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
                     if (summaryText != null && !summaryText.isEmpty()) {
                         shareIntent.putExtra(Intent.EXTRA_TEXT, summaryText);
                     }
                     shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                    try {
+                        context.grantUriPermission("com.whatsapp", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        context.grantUriPermission("com.whatsapp.w4b", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (Exception ignored) {}
 
                     // Try direct WhatsApp package first
                     shareIntent.setPackage("com.whatsapp");
@@ -516,7 +522,9 @@ public class MainActivity extends AppCompatActivity {
                         } catch (ActivityNotFoundException e2) {
                             // Fallback to standard system share chooser
                             shareIntent.setPackage(null);
-                            context.startActivity(Intent.createChooser(shareIntent, "Share Receipt via"));
+                            Intent chooser = Intent.createChooser(shareIntent, "Share Report via");
+                            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            context.startActivity(chooser);
                         }
                     }
                 });

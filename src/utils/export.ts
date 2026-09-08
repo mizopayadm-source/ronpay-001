@@ -232,6 +232,137 @@ export const downloadFileUniversal = async (
   }
 };
 
+export interface WhatsAppSharePayload {
+  content?: Blob | string;
+  base64Data?: string;
+  fileName: string;
+  mimeType?: string;
+  summaryText?: string;
+  title?: string;
+}
+
+/**
+ * Universal WhatsApp PDF & Document Share:
+ * 1. Priority 1 (Android APK Native Bridge):
+ *    Directly invokes window.RonPayBridge.shareFileToWhatsApp(base64Data, mimeType, fileName, summaryText).
+ *    This allows WhatsApp to open natively with the generated PDF attached directly as a document!
+ * 2. Priority 2 (Mobile Web Share API):
+ *    Uses navigator.share({ files: [file], text: summaryText, title }) if supported.
+ * 3. Priority 3 (Browser Fallback):
+ *    Downloads the PDF file automatically and launches WhatsApp with pre-filled summary text.
+ */
+export const shareFileToWhatsAppUniversal = async ({
+  content,
+  base64Data,
+  fileName,
+  mimeType = 'application/pdf',
+  summaryText = '',
+  title = 'RonPay Report'
+}: WhatsAppSharePayload): Promise<{ success: boolean; method: 'native_bridge' | 'web_share' | 'wa_url_fallback' }> => {
+  try {
+    // 1. Ensure clean base64 data string
+    let pureBase64 = base64Data || '';
+
+    if (!pureBase64 && content) {
+      const blob = content instanceof Blob
+        ? content
+        : new Blob([content], { type: mimeType });
+
+      pureBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result && typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Failed to convert blob to base64'));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // =========================================================================
+    // TIER 1: Native Android Bridge (window.RonPayBridge.shareFileToWhatsApp)
+    // =========================================================================
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      const nativeBridge = w.RonPayBridge || w.AndroidBlobDownloader || w.AndroidDownloader;
+      if (nativeBridge && typeof nativeBridge.shareFileToWhatsApp === 'function') {
+        try {
+          nativeBridge.shareFileToWhatsApp(pureBase64, mimeType, fileName, summaryText);
+          return { success: true, method: 'native_bridge' };
+        } catch (bridgeErr) {
+          console.warn('RonPayBridge.shareFileToWhatsApp failed, falling back:', bridgeErr);
+        }
+      }
+    }
+
+    // =========================================================================
+    // TIER 2: Native Web Share API with File
+    // =========================================================================
+    const blobToShare = content instanceof Blob 
+      ? content 
+      : (pureBase64 ? await (await fetch(pureBase64)).blob() : null);
+
+    if (blobToShare && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+      try {
+        const file = new File([blobToShare], fileName, { type: mimeType });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title,
+            text: summaryText,
+            files: [file],
+          });
+          return { success: true, method: 'web_share' };
+        }
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') {
+          return { success: true, method: 'web_share' };
+        }
+        console.warn('navigator.share failed:', shareErr);
+      }
+    }
+
+    // =========================================================================
+    // TIER 3: Universal Web Fallback (Download PDF + Open WhatsApp)
+    // =========================================================================
+    // Copy summary text to clipboard
+    if (typeof navigator !== 'undefined' && navigator.clipboard && summaryText) {
+      try {
+        await navigator.clipboard.writeText(summaryText);
+      } catch {}
+    }
+
+    // Ensure PDF file is saved/downloaded
+    if (blobToShare) {
+      try {
+        await downloadFileUniversal(blobToShare, fileName, mimeType, title);
+      } catch (dlErr) {
+        console.warn('PDF download fallback failed:', dlErr);
+      }
+    }
+
+    // Open WhatsApp Web or App
+    const encoded = encodeURIComponent(summaryText);
+    const waUrl = `https://wa.me/?text=${encoded}`;
+    const waLink = document.createElement('a');
+    waLink.href = waUrl;
+    waLink.target = '_blank';
+    waLink.rel = 'noopener noreferrer';
+    document.body.appendChild(waLink);
+    waLink.click();
+    setTimeout(() => {
+      try { document.body.removeChild(waLink); } catch {}
+    }, 1000);
+
+    return { success: true, method: 'wa_url_fallback' };
+  } catch (err) {
+    console.error('shareFileToWhatsAppUniversal failed:', err);
+    return { success: false, method: 'wa_url_fallback' };
+  }
+};
+
 /**
  * Returns the ordered array of month abbreviations for a given From - Upto month configuration.
  */

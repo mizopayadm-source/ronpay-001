@@ -414,3 +414,17 @@ export interface PaymentGatewayConfig {
   updatedAt?: string;
 }
 
+export interface RonPayNativeBridge {
+  getBase64FromBlobData?: (base64Data: string, mimeType: string, fileName: string) => void;
+  shareFileToWhatsApp?: (base64Data: string, mimeType: string, fileName: string, summaryText: string) => void;
+}
+
+declare global {
+  interface Window {
+    RonPayBridge?: RonPayNativeBridge;
+    AndroidBlobDownloader?: RonPayNativeBridge;
+    AndroidDownloader?: RonPayNativeBridge;
+  }
+}
+
+
