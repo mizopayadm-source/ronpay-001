@@ -18,6 +18,7 @@ import {
   Sparkles,
   Zap,
   Printer,
+  ChevronLeft,
   ChevronRight,
   Info,
   Layers,
@@ -61,6 +62,69 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
   if (!isOpen) return null;
 
   const isMizo = lang === 'mizo';
+
+  const COMPLIANCE_TABS = [
+    {
+      id: 'architecture' as const,
+      icon: Building2,
+      num: '1',
+      shortMizo: '1. Kalphung',
+      shortEng: '1. Architecture',
+      fullMizo: '1. Merchant Kalphung (Architecture)',
+      fullEng: '1. Merchant Architecture',
+    },
+    {
+      id: 'terms' as const,
+      icon: FileText,
+      num: '2',
+      shortMizo: '2. Terms',
+      shortEng: '2. Terms',
+      fullMizo: '2. Hman Dan Dan (Terms)',
+      fullEng: '2. Terms & Conditions',
+    },
+    {
+      id: 'privacy' as const,
+      icon: Lock,
+      num: '3',
+      shortMizo: '3. Privacy',
+      shortEng: '3. Privacy',
+      fullMizo: '3. Privacy & Security Policy',
+      fullEng: '3. Privacy Policy',
+    },
+    {
+      id: 'refund' as const,
+      icon: RotateCcw,
+      num: '4',
+      shortMizo: '4. Refund',
+      shortEng: '4. Refund',
+      fullMizo: '4. Refund & Cancellation',
+      fullEng: '4. Refund Policy',
+    },
+    {
+      id: 'grievance' as const,
+      icon: PhoneCall,
+      num: '5',
+      shortMizo: '5. Grievance',
+      shortEng: '5. Grievance',
+      fullMizo: '5. Grievance & Office',
+      fullEng: '5. Contact & Grievance',
+    },
+    {
+      id: 'sandbox' as const,
+      icon: Sliders,
+      num: '6',
+      shortMizo: '6. PG Keys',
+      shortEng: '6. PG Keys',
+      fullMizo: '⚙️ PG Switch & Test Keys',
+      fullEng: '⚙️ PG Switch & Sandbox',
+      accent: 'amber' as const,
+    },
+  ];
+
+  const currentTabIdx = COMPLIANCE_TABS.findIndex(t => t.id === activeTab);
+  const currentTab = COMPLIANCE_TABS[currentTabIdx] || COMPLIANCE_TABS[0];
+  const prevTab = currentTabIdx > 0 ? COMPLIANCE_TABS[currentTabIdx - 1] : null;
+  const nextTab = currentTabIdx < COMPLIANCE_TABS.length - 1 ? COMPLIANCE_TABS[currentTabIdx + 1] : null;
 
   const copyToClipboard = (text: string, keyName: string) => {
     navigator.clipboard.writeText(text);
@@ -148,85 +212,78 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
           </div>
         </div>
 
-        {/* NAVIGATION TABS */}
-        <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('architecture')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'architecture'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>{isMizo ? '1. Merchant Kalphung (Architecture)' : '1. Merchant Architecture'}</span>
-          </button>
+        {/* NAVIGATION TABS (RESPONSIVE) */}
+        {/* MOBILE VIEW (< sm): 3-column grid displaying all 6 tabs simultaneously */}
+        <div className="sm:hidden bg-slate-100 border-b border-slate-200 p-2 space-y-1.5 shrink-0">
+          <div className="grid grid-cols-3 gap-1.5">
+            {COMPLIANCE_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  id={`pg-compliance-tab-m-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2 px-1 rounded-xl transition flex flex-col items-center justify-center gap-1 text-center cursor-pointer select-none active:scale-95 ${
+                    isActive
+                      ? tab.accent === 'amber'
+                        ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-400/60 font-black'
+                        : 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400/60 font-black'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/90 shadow-2xs font-semibold'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : tab.accent === 'amber' ? 'text-amber-600' : 'text-slate-500'}`} />
+                  <span className="text-[11px] leading-tight truncate w-full tracking-tight">
+                    {isMizo ? tab.shortMizo : tab.shortEng}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('terms')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'terms'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>{isMizo ? '2. Hman Dan Dan (Terms)' : '2. Terms & Conditions'}</span>
-          </button>
+          {/* Active Tab Subtitle Indicator */}
+          <div className="flex items-center justify-between px-2 py-1 bg-white/90 rounded-lg border border-slate-200 text-[11px]">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0">
+                {isMizo ? 'En Mek:' : 'Viewing:'}
+              </span>
+              <span className="font-bold text-slate-800 truncate">
+                {isMizo ? currentTab.fullMizo : currentTab.fullEng}
+              </span>
+            </div>
+            <span className="text-[10px] font-bold font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 shrink-0">
+              {currentTabIdx + 1} / 6
+            </span>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('privacy')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'privacy'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>{isMizo ? '3. Privacy & Security' : '3. Privacy Policy'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('refund')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'refund'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
-            }`}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>{isMizo ? '4. Refund & Cancellation' : '4. Refund Policy'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('grievance')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'grievance'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
-            }`}
-          >
-            <PhoneCall className="w-3.5 h-3.5" />
-            <span>{isMizo ? '5. Grievance & Office' : '5. Contact & Grievance'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('sandbox')}
-            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'sandbox'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5 text-amber-700" />
-            <span>{isMizo ? '⚙️ PG Switch & Test Keys' : '⚙️ PG Switch & Sandbox'}</span>
-          </button>
+        {/* DESKTOP & TABLET VIEW (>= sm): Full Horizontal Tab Bar */}
+        <div className="hidden sm:flex bg-slate-50 border-b border-slate-200 px-3 py-2 items-center gap-1.5 overflow-x-auto shrink-0 text-xs font-bold">
+          {COMPLIANCE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                id={`pg-compliance-tab-d-${tab.id}`}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
+                  isActive
+                    ? tab.accent === 'amber'
+                      ? 'bg-amber-600 text-white shadow-xs font-black'
+                      : 'bg-indigo-600 text-white shadow-xs font-black'
+                    : tab.accent === 'amber'
+                      ? 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-semibold'
+                      : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200 font-semibold'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{isMizo ? tab.fullMizo : tab.fullEng}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* MODAL BODY */}
@@ -773,21 +830,50 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
         </div>
 
         {/* MODAL FOOTER */}
-        <div className="bg-slate-50 border-t border-slate-200 p-3 sm:p-4 flex items-center justify-between text-xs text-slate-500 shrink-0">
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-slate-700">RonPay Compliance Ver: 2026.9</span>
-            <span>•</span>
-            <span>NPCI / RBI Intermediary Norms</span>
+        <div className="bg-slate-50 border-t border-slate-200 p-2.5 sm:p-4 flex items-center justify-between text-xs text-slate-500 shrink-0 gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] truncate">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="font-semibold text-slate-700 truncate">RonPay Compliance 2026.9</span>
+            <span className="hidden sm:inline">•</span>
+            <span className="hidden sm:inline">NPCI / RBI Intermediary</span>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer"
-          >
-            {isMizo ? 'Khar Rawh' : 'Close'}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {prevTab && (
+              <button
+                type="button"
+                id="pg-compliance-prev-btn"
+                onClick={() => setActiveTab(prevTab.id)}
+                className="px-2 sm:px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] sm:text-xs transition flex items-center gap-1 cursor-pointer"
+                title={isMizo ? prevTab.fullMizo : prevTab.fullEng}
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>{isMizo ? 'Hmasa' : 'Prev'}</span>
+              </button>
+            )}
+
+            {nextTab && (
+              <button
+                type="button"
+                id="pg-compliance-next-btn"
+                onClick={() => setActiveTab(nextTab.id)}
+                className="px-2 sm:px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-[11px] sm:text-xs transition flex items-center gap-1 cursor-pointer"
+                title={isMizo ? nextTab.fullMizo : nextTab.fullEng}
+              >
+                <span>{isMizo ? 'Dawttu' : 'Next'}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              id="pg-compliance-close-btn"
+              onClick={onClose}
+              className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] sm:text-xs transition cursor-pointer shrink-0"
+            >
+              {isMizo ? 'Khar Rawh' : 'Close'}
+            </button>
+          </div>
         </div>
 
       </div>
