@@ -161,7 +161,7 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
     const merchantTransactionId = `RPAY_TXN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const merchantUserId = `USER_${(customerPhone || '9862000000').replace(/\D/g, '')}`;
 
-    const effectiveOrigin = (req.headers.origin && !req.headers.origin.includes('run.app'))
+    const effectiveOrigin = (req.headers.origin && !req.headers.origin.includes('run.app') && !req.headers.origin.includes('ais-') && !req.headers.origin.includes('localhost') && !req.headers.origin.includes('127.0.0.1'))
       ? req.headers.origin
       : 'https://ronpay.app';
 
@@ -347,9 +347,12 @@ app.all([
   }
 
   // Redirect back to user application with confirmation tokens (ensures receipt view is shown directly)
-  const host = req.headers.host || 'localhost:3000';
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  res.redirect(`${protocol}://${host}/?view=app&screen=success&receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=${encodeURIComponent(status)}`);
+  const rawHost = req.headers.host || '';
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+  const effectiveBase = (rawHost && !rawHost.includes('run.app') && !rawHost.includes('ais-') && !rawHost.includes('localhost') && !rawHost.includes('127.0.0.1'))
+    ? `${protocol}://${rawHost}`
+    : 'https://ronpay.app';
+  res.redirect(`${effectiveBase}/?view=app&screen=success&receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=${encodeURIComponent(status)}`);
 });
 
 // -------------------------------------------------------------
