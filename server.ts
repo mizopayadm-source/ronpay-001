@@ -239,8 +239,8 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // API 4: Check Transaction Status (PG V2 Status API)
 // -------------------------------------------------------------
-app.get('/api/phonepe/status/:merchantTransactionId', (req: Request, res: Response) => {
-  const { merchantTransactionId } = req.params;
+app.get(['/api/phonepe/status', '/api/phonepe/status/', '/api/phonepe/status/:merchantTransactionId'], (req: Request, res: Response) => {
+  const merchantTransactionId = req.params.merchantTransactionId || (req.query.id as string) || (req.query.txnId as string) || 'RPAY_TXN_UAT_CHECK';
   let record = transactionStore[merchantTransactionId];
 
   // If record is not in memory (e.g. server restart or direct lookup), dynamically create it for UAT
