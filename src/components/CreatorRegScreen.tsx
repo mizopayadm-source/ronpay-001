@@ -168,7 +168,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
 
     // Check for Admin Login via User ID / Phone
     if (cleanInput.toLowerCase() === 'admin' || cleanInput === 'admin@ronpay.com' || cleanInput === '9999999999') {
-      if (loginPassword.trim() === 'ronpay2026' || loginPassword.trim() === 'admin' || loginPassword.trim() === '1234') {
+      if (loginPassword.trim() === 'ronpay2026') {
         try {
           sessionStorage.setItem('ronpay_admin_auth', 'true');
         } catch (e) {
@@ -176,7 +176,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
         }
         const adminProfile: CreatorProfile = {
           name: 'RonPay System Administrator',
-          orgName: 'BCM Ebenezer',
+          orgName: 'RonPay Master Desk',
           designation: 'Finance & Accounts',
           phone: 'admin',
           isPhoneVerified: true,
@@ -191,7 +191,7 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
         }
         return;
       } else {
-        setLoginError('Admin Password a dik lo! (Default: ronpay2026)');
+        setLoginError('Admin Password a dik lo. Khawngaihin enfiah nawn rawh.');
         return;
       }
     }
@@ -444,19 +444,6 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
                 Home-ah Kir Rawh
               </button>
             </div>
-
-            {onOpenAdminDashboard && (
-              <div className="pt-2 border-t border-amber-200 flex items-center justify-between">
-                <span className="text-[10px] text-amber-900 font-bold">System Admin i ni em?</span>
-                <button
-                  type="button"
-                  onClick={onOpenAdminDashboard}
-                  className="text-[11px] font-black text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 border border-indigo-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> Open Admin Console
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -712,19 +699,6 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
           >
             <LogIn className="w-4 h-4" /> Login with Entered Credentials
           </button>
-
-          {onOpenAdminDashboard && (
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 font-medium">System Administrator i ni em?</span>
-              <button
-                type="button"
-                onClick={onOpenAdminDashboard}
-                className="text-[10.5px] font-black text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> Admin Console
-              </button>
-            </div>
-          )}
         </form>
       )}
 

@@ -166,7 +166,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successNotice, setSuccessNotice] = useState<string>('');
-  const [googleCustomEmail, setGoogleCustomEmail] = useState<string>('smartcabs2019@gmail.com');
+  const [googleCustomEmail, setGoogleCustomEmail] = useState<string>('');
   const [googleCustomName, setGoogleCustomName] = useState<string>('');
   const [googleCustomPhone, setGoogleCustomPhone] = useState<string>('');
   const [googleIsNewUser, setGoogleIsNewUser] = useState<boolean>(false);
@@ -430,6 +430,16 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
 
   // 2. One-click Demo Login
   const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
+    // Protected admin roles strictly require entering credentials
+    if (demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN') {
+      setActiveMethod('credentials');
+      setUserInput(demo.userId);
+      setPasswordInput('');
+      setErrorMessage(`Master Passcode mamawh a ni (${demo.roleTitle}). Khawngaihin password chhu lut rawh.`);
+      triggerHaptic();
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
     triggerHaptic();
@@ -441,26 +451,18 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         designation: demo.designation,
         phone: demo.phone,
         role: demo.role,
-        isAdmin: demo.isAdmin,
+        isAdmin: false,
         isPhoneVerified: true,
-        isApproved: true,
+        isApproved: demo.role === 'CREATOR' || demo.role === 'MODERATOR',
         avatarUrl: demo.avatarUrl,
         password: demo.mpin,
         pin: demo.mpin,
-        approvedCategories: demo.isAdmin 
-          ? ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others']
-          : demo.id === 'demo-treasurer'
+        approvedCategories: demo.id === 'demo-treasurer'
           ? ['kumtluang', 'ralna']
           : ['ralna', 'rikrum'],
-        createdQRsCount: demo.isAdmin ? 12 : demo.id === 'demo-treasurer' ? 5 : 2,
+        createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 2,
         registeredAt: new Date().toISOString()
       };
-
-      if (demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN' || demo.role === 'MODERATOR') {
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
-      }
 
       saveStoredCreatorProfile(profile);
       setIsLoading(false);
@@ -475,36 +477,42 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
 
   // 3. Google 1-Tap Login / Registration
   const handleGoogleLogin = () => {
+    const trimmedEmail = googleCustomEmail.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Khawngaihin Google Email account type rawh.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage('');
     triggerHaptic();
 
     setTimeout(() => {
-      const isSystemAdmin = googleCustomEmail === 'smartcabs2019@gmail.com' || (currentProfile?.isAdmin && !googleIsNewUser);
-      const displayName = googleCustomName.trim() || (googleIsNewUser ? 'New RonPay User' : (currentProfile?.name || 'Smart Cabs Admin'));
-      const displayPhone = googleCustomPhone.replace(/\D/g, '') || (currentProfile?.phone || '9436001234');
+      // Standard member registration / login - STRICTLY NON-ADMIN
+      const displayName = googleCustomName.trim() || (googleIsNewUser ? 'RonPay Member' : (currentProfile?.name || trimmedEmail.split('@')[0]));
+      const displayPhone = googleCustomPhone.replace(/\D/g, '') || (currentProfile?.phone || '');
 
       const profile: CreatorProfile = {
         name: displayName,
-        orgName: googleIsNewUser ? 'Mizoram Community Member' : (currentProfile?.orgName || 'Mizoram FinTech Community'),
-        designation: isSystemAdmin ? 'Chief Administrator & Reviewer' : 'Verified Google Account Member',
+        orgName: googleIsNewUser ? 'RonPay Community' : (currentProfile?.orgName || 'RonPay Community Member'),
+        designation: 'Verified Member (Google)',
         phone: displayPhone,
-        role: isSystemAdmin ? 'SUPER_ADMIN' : 'MEMBER',
-        isAdmin: isSystemAdmin,
+        role: 'MEMBER',
+        isAdmin: false,
         isPhoneVerified: true,
-        isApproved: true,
+        isApproved: false,
         avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName || 'RonPay')}`,
-        password: '1234',
-        pin: '1234',
-        approvedCategories: isSystemAdmin ? ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'] : ['ralna', 'khawlsak', 'rikrum'],
+        password: '',
+        pin: '',
+        approvedCategories: ['ralna', 'khawlsak', 'rikrum'],
         registeredAt: new Date().toISOString()
       };
 
       saveStoredCreatorProfile(profile);
       setIsLoading(false);
       setSuccessNotice(googleIsNewUser 
-        ? `Google Account (${googleCustomEmail}) hmangin Account thar siam fel a ni e!` 
-        : `Google Account (${googleCustomEmail}) hmanga login a hlawhtling e!`);
+        ? `Google Account (${trimmedEmail}) hmangin Member Account thar siam fel a ni e!` 
+        : `Google Account (${trimmedEmail}) hmanga login a hlawhtling e!`);
       triggerHaptic();
       setTimeout(() => {
         onLoginSuccess(profile);

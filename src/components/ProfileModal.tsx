@@ -427,8 +427,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Master Admin & RBAC Console Trigger */}
-        {onOpenAdmin && (
+        {/* Master Admin & RBAC Console Trigger - Strictly restricted to authenticated Administrators */}
+        {onOpenAdmin && (creatorProfile.isAdmin === true || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') && (
           <button
             id="profile-admin-console-btn"
             onClick={() => {

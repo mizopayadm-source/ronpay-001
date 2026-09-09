@@ -187,15 +187,22 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('ronpay_admin_auth') === 'true';
+      const sessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
+      if (!sessionAuth) return false;
+      // If currentProfile is explicitly a non-admin guest or standard member, require re-auth
+      if (currentProfile && !currentProfile.isAdmin && currentProfile.role === 'MEMBER') {
+        sessionStorage.removeItem('ronpay_admin_auth');
+        return false;
+      }
+      return true;
     } catch (e) {
       return false;
     }
   });
   const [currentRole, setCurrentRole] = useState<UserRole>(userRole || 'SUPER_ADMIN');
   const [staffList, setStaffList] = useState<StaffAccount[]>(() => getStoredStaffAccounts());
-  const [adminUserId, setAdminUserId] = useState<string>('superadmin');
-  const [adminPassword, setAdminPassword] = useState<string>('ronpay2026');
+  const [adminUserId, setAdminUserId] = useState<string>('');
+  const [adminPassword, setAdminPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
@@ -370,22 +377,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   }, [isOpen]);
 
   // Biometric Login handler for Admin
+  // Biometric Login handler for Admin - Restricted to enrolled administrators
   const handleAdminBiometricLogin = () => {
     setIsBiometricScanning(true);
     setLoginError('');
     
-    // Simulate biometric check with feedback
     setTimeout(() => {
       setIsBiometricScanning(false);
-      setIsAuthenticated(true);
-      try {
-        sessionStorage.setItem('ronpay_admin_auth', 'true');
-      } catch (e) {
-        // ignore
+      const isEnrolledAdmin = currentProfile?.isAdmin === true && (currentProfile.role === 'SUPER_ADMIN' || currentProfile.role === 'ADMIN');
+      const hasStoredAdminToken = localStorage.getItem('ronpay_admin_biometric_enrolled') === 'true';
+
+      if (isEnrolledAdmin || hasStoredAdminToken) {
+        setIsAuthenticated(true);
+        const targetRole: UserRole = currentProfile?.role === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
+        setCurrentRole(targetRole);
+        try {
+          sessionStorage.setItem('ronpay_admin_auth', 'true');
+        } catch (e) {
+          // ignore
+        }
+        recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics.', 'system');
+        setLogsList(getStoredAuditLogs());
+      } else {
+        setLoginError('Biometric admin verification is not enrolled on this device. Khawngaihin Master Credentials hmangin lut rawh.');
       }
-      recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics (Fingerprint/FaceID).', 'system');
-      setLogsList(getStoredAuditLogs());
-    }, 850);
+    }, 650);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -402,6 +418,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
+        localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
       } catch (e) {
         // ignore
       }
@@ -422,6 +439,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
+        localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
       } catch (e) {
         // ignore
       }
@@ -430,22 +448,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       return;
     }
 
-    // Quick role test accounts
-    if (uid === 'admin_ops' && (adminPassword === 'admin' || adminPassword === 'ronpay2026')) {
-      setCurrentRole('ADMIN');
-      setIsAuthenticated(true);
-      setLoginError('');
-      return;
-    }
-
-    if (uid === 'moderator' && (adminPassword === 'moderator' || adminPassword === 'ronpay2026')) {
-      setCurrentRole('MODERATOR');
-      setIsAuthenticated(true);
-      setLoginError('');
-      return;
-    }
-
-    setLoginError('User ID emaw Password a dik lo. (Default: superadmin / ronpay2026)');
+    setLoginError('User ID emaw Password a dik lo. Khawngaihin enfiah nawn rawh.');
   };
 
   const handleLogout = () => {
@@ -455,7 +458,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     } catch (e) {
       // ignore
     }
-    setAdminUserId('admin');
+    setAdminUserId('');
     setAdminPassword('');
   };
 
@@ -1055,7 +1058,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
               >
                 <Fingerprint className={`w-5 h-5 ${isBiometricScanning ? 'animate-pulse text-amber-300' : ''}`} />
-                {isBiometricScanning ? 'Scanning Admin Biometrics...' : 'Admin Biometric Login (Instant)'}
+                {isBiometricScanning ? 'Scanning Admin Biometrics...' : 'Admin Biometric Login (Enrolled Device)'}
               </button>
 
               <div className="flex items-center gap-2 text-slate-300 my-2">
@@ -1073,7 +1076,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminUserId}
                     onChange={(e) => setAdminUserId(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="admin"
+                    placeholder="Enter Admin Username"
                   />
                 </div>
                 <div>
@@ -1083,7 +1086,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="ronpay2026"
+                    placeholder="••••••••"
                   />
                 </div>
 

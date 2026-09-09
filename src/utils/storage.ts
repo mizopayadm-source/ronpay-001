@@ -518,6 +518,14 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
+        if (parsed.isAdmin && (parsed.name === 'Smart Cabs Admin' || parsed.name === 'New RonPay User' || parsed.name === 'RonPay Member' || !parsed.phone || parsed.phone === '9436001234')) {
+          parsed.isAdmin = false;
+          parsed.role = 'MEMBER';
+          saveStoredCreatorProfile(parsed);
+          try {
+            sessionStorage.removeItem('ronpay_admin_auth');
+          } catch {}
+        }
         return parsed;
       }
     }
