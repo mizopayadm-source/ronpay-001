@@ -540,11 +540,11 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'RonPay Office Hmunpui' : 'Registered Office Address'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-600 text-xs">
-                    <p className="font-bold text-slate-900">RonPay Technologies Private Limited</p>
-                    <p>FinTech Innovation Wing, Treasury Square</p>
-                    <p>Aizawl, Mizoram - 796001, India</p>
-                    <p className="pt-1">Support Email: <strong className="text-indigo-600">support@ronpay.app</strong></p>
-                    <p>Helpline: <strong className="text-slate-900">+91 94361 50000</strong> (10 AM - 5 PM IST)</p>
+                    <p className="font-bold text-slate-900">RonPay Technologies</p>
+                    <p>FinTech Innovation Wing,</p>
+                    <p>Shillong, Meghalaya - 793014, India</p>
+                    <p className="pt-1">Support Email: <strong className="text-indigo-600">ronpay.adm@gmail.com</strong></p>
+                    <p>Helpline: <strong className="text-slate-900">+91 7005304643</strong> (10 AM - 5 PM IST)</p>
                   </div>
                 </div>
 
@@ -555,10 +555,10 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'Designated Grievance Officer' : 'Statutory Grievance Officer'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-700 text-xs">
-                    <p className="font-bold text-slate-900">Mr. Lalbiakzuala</p>
+                    <p className="font-bold text-slate-900">Mr. Nathanael</p>
                     <p className="text-slate-600">Head of Regulatory Compliance & Risk</p>
-                    <p>RonPay Technologies, Aizawl</p>
-                    <p className="pt-1">Grievance Email: <strong className="text-indigo-700">grievance@ronpay.app</strong></p>
+                    <p>RonPay Technologies, Shillong</p>
+                    <p className="pt-1">Grievance Email: <strong className="text-indigo-700">ronpay.adm@gmail.com</strong></p>
                     <p className="text-[11px] text-slate-500 pt-1">
                       <em>TAT: Grievance acknowledgment within 24 hours; resolution within 15 working days.</em>
                     </p>
