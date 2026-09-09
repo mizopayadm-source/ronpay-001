@@ -327,7 +327,16 @@ app.post('/api/phonepe/split-settlement', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // API 5b: PhonePe Browser Redirect Callback (Standard Checkout Return URL)
 // -------------------------------------------------------------
-app.all('/api/phonepe/callback', (req: Request, res: Response) => {
+app.all([
+  '/api/phonepe/callback',
+  '/api/phonepe/callback/',
+  '/api/pg/callback',
+  '/api/pg/callback/',
+  '/api/callback/phonepe',
+  '/api/callback/phonepe/',
+  '/api/callbacks/phonepe',
+  '/api/callbacks/phonepe/'
+], (req: Request, res: Response) => {
   const txnId = (req.query.txnId || req.body?.transactionId || req.body?.merchantTransactionId || '') as string;
   const incomingCode = req.body?.code || req.query.code || 'PAYMENT_SUCCESS';
   const status = (incomingCode === 'PAYMENT_SUCCESS' || incomingCode === 'SUCCESS') ? 'PAYMENT_SUCCESS' : 'PAYMENT_ERROR';
@@ -344,9 +353,22 @@ app.all('/api/phonepe/callback', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API 6: Webhook Callback Receiver (Universal for /api/pg/webhook and /api/phonepe/webhook)
+// API 6: Webhook Callback Receiver (Universal for /api/pg/webhook, /api/phonepe/webhook, /api/webhooks/phonepe, etc.)
 // -------------------------------------------------------------
-app.all(['/api/pg/webhook', '/api/phonepe/webhook'], (req: Request, res: Response) => {
+app.all([
+  '/api/pg/webhook',
+  '/api/pg/webhook/',
+  '/api/phonepe/webhook',
+  '/api/phonepe/webhook/',
+  '/api/phonepe/webhooks',
+  '/api/phonepe/webhooks/',
+  '/api/webhooks/phonepe',
+  '/api/webhooks/phonepe/',
+  '/api/webhook/phonepe',
+  '/api/webhook/phonepe/',
+  '/api/webhook',
+  '/api/webhooks'
+], (req: Request, res: Response) => {
   const eventId = 'EVT_' + Date.now();
   let parsedPayload: any = req.body || {};
   let xVerifyValid = true;
