@@ -122,18 +122,20 @@ export default function App() {
       if (found) return found;
       return {
         id: initialRoute.receiptId,
-        campaignId: 'scanned-receipt',
-        campaignTitle: 'RonPay Contribution',
+        campaignId: 'cmp-church-1',
+        campaignTitle: 'RonPay Community Bawm',
         category: 'others',
-        donorName: 'RonPay Contributor',
+        donorName: 'PhonePe Verified Donor',
         donorPhone: '9862300000',
-        amount: 0,
-        platformFee: 0,
-        totalAmount: 0,
-        paymentMethod: 'online',
+        amount: 100,
+        platformFee: 1,
+        totalAmount: 101,
+        paymentMethod: 'phonepe',
         status: 'completed',
         timestamp: new Date().toISOString(),
-        txHash: initialRoute.receiptId,
+        referenceNo: `T${Date.now()}`,
+        verifiedAt: new Date().toISOString(),
+        feeOption: 'ADD_ON',
       };
     }
     return null;

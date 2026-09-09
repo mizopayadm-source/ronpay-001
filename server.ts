@@ -332,14 +332,15 @@ app.all('/api/phonepe/callback', (req: Request, res: Response) => {
   const incomingCode = req.body?.code || req.query.code || 'PAYMENT_SUCCESS';
   const status = (incomingCode === 'PAYMENT_SUCCESS' || incomingCode === 'SUCCESS') ? 'PAYMENT_SUCCESS' : 'PAYMENT_ERROR';
   
+  const effectiveTxnId = txnId || `RPAY_PHPE_${Date.now()}`;
   if (txnId && transactionStore[txnId]) {
     transactionStore[txnId].status = status;
   }
 
-  // Redirect back to user application with confirmation tokens
+  // Redirect back to user application with confirmation tokens (ensures receipt view is shown directly)
   const host = req.headers.host || 'localhost:3000';
   const protocol = req.headers['x-forwarded-proto'] || 'http';
-  res.redirect(`${protocol}://${host}/?phonepe_txn_id=${encodeURIComponent(txnId)}&status=${encodeURIComponent(status)}`);
+  res.redirect(`${protocol}://${host}/?view=app&screen=success&receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=${encodeURIComponent(status)}`);
 });
 
 // -------------------------------------------------------------

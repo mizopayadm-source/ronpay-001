@@ -61,18 +61,24 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
                        searchParams.get('post') ||
                        searchParams.get('p');
 
-    const receiptId = searchParams.get('receipt') || 
-                      searchParams.get('tx') || 
-                      searchParams.get('txn') || 
-                      searchParams.get('receiptId') ||
-                      searchParams.get('phonepe_txn_id');
+    const screenParam = searchParams.get('screen') || searchParams.get('page');
+    const viewParam = searchParams.get('view');
+    const statusParam = searchParams.get('status');
+
+    let receiptId = searchParams.get('receipt') || 
+                    searchParams.get('tx') || 
+                    searchParams.get('txn') || 
+                    searchParams.get('receiptId') ||
+                    searchParams.get('phonepe_txn_id');
+
+    // If status is PAYMENT_SUCCESS or phonepe_txn_id query param exists (even if empty)
+    if ((!receiptId || receiptId.trim() === '') && (statusParam === 'PAYMENT_SUCCESS' || searchParams.has('phonepe_txn_id'))) {
+      receiptId = `RPAY_TXN_${Date.now()}`;
+    }
 
     const rollId = searchParams.get('roll') || 
                    searchParams.get('member_roll') || 
                    searchParams.get('memberRoll');
-
-    const screenParam = searchParams.get('screen') || searchParams.get('page');
-    const viewParam = searchParams.get('view');
     const phonepeParam = searchParams.get('phonepe') || 
                          searchParams.get('pg') || 
                          searchParams.get('phonepe_checkout') || 
@@ -155,10 +161,11 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     }
 
     // 2. If Receipt ID is present
-    if (receiptId) {
+    if (receiptId && receiptId.trim() !== '') {
       return {
         screen: 'success',
         receiptId: decodeURIComponent(receiptId).trim(),
+        view: 'app',
       };
     }
 
