@@ -34,7 +34,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'credentials' | 'simulator' | 'split' | 'webhooks' | 'guide'>('simulator');
+  const [activeTab, setActiveTab] = useState<'credentials' | 'simulator' | 'split' | 'webhooks'>('simulator');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState<boolean>(false);
 
@@ -51,6 +51,19 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
   const [testWebhookSending, setTestWebhookSending] = useState<boolean>(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Split API States (Option for 100+1 Donor Pays Extra vs 99+1 Deducted from Donation)
+  const [splitMode, setSplitMode] = useState<'donor_pays' | 'deduct'>('donor_pays');
+  const [splitDonationAmount, setSplitDonationAmount] = useState<number>(100);
+  const [splitFeePercent, setSplitFeePercent] = useState<number>(1.0);
+
+  const showNotification = (text: string, type: 'success' | 'error' = 'success') => {
+    setFeedbackMsg({ type, text });
+    setTimeout(() => {
+      setFeedbackMsg(null);
+    }, 4500);
+  };
 
   const credentials = {
     merchantId: 'TSPMIZOPAYUAT',
@@ -119,9 +132,9 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         })
       });
       await fetchWebhookLogs();
-      alert('✅ Test webhook event sent and recorded successfully!');
+      showNotification('✅ Test webhook event sent and recorded successfully!', 'success');
     } catch (e: any) {
-      alert('Error sending webhook: ' + e.message);
+      showNotification('Error sending webhook: ' + e.message, 'error');
     } finally {
       setTestWebhookSending(false);
     }
@@ -136,9 +149,10 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
       if (data.success) {
         setAuthToken(data.data.access_token);
         setApiResponse(data);
+        showNotification('✅ PhonePe OAuth Token generated successfully!', 'success');
       }
     } catch (e: any) {
-      alert('Error fetching token: ' + e.message);
+      showNotification('Error fetching token: ' + e.message, 'error');
     } finally {
       setTokenLoading(false);
     }
@@ -161,8 +175,9 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
       });
       const data = await res.json();
       setApiResponse(data);
+      showNotification('✅ Payment initiation API executed! Base64 payload & Checksum generated.', 'success');
     } catch (e: any) {
-      alert('API Error: ' + e.message);
+      showNotification('API Error: ' + e.message, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -199,6 +214,18 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           </button>
         </div>
 
+        {/* Dynamic Toast / Status Banner */}
+        {feedbackMsg && (
+          <div className={`p-3 rounded-2xl text-xs font-bold border flex items-center gap-2 animate-fadeIn ${
+            feedbackMsg.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-rose-50 text-rose-800 border-rose-300'
+          }`}>
+            <Sparkles className={`w-4 h-4 shrink-0 ${feedbackMsg.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`} />
+            <span className="flex-1">{feedbackMsg.text}</span>
+          </div>
+        )}
+
         {/* Tab Navigation */}
         <div className="flex bg-slate-100 p-1 rounded-xl text-[10.5px] font-bold text-slate-600">
           <button
@@ -233,14 +260,6 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
             }`}
           >
             Split API
-          </button>
-          <button
-            onClick={() => setActiveTab('guide')}
-            className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer ${
-              activeTab === 'guide' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
-            }`}
-          >
-            Swati Mail Reply
           </button>
         </div>
 
@@ -515,136 +534,234 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           )}
 
           {/* TAB 3: SPLIT SETTLEMENT */}
-          {activeTab === 'split' && (
-            <div className="space-y-3 animate-fadeIn">
-              <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-3.5 space-y-2">
-                <h4 className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-indigo-600" />
-                  Split Settlement API for RonPay
-                </h4>
-                <p className="text-[10.5px] text-indigo-900/80 leading-relaxed font-medium">
-                  RonPay-ah hian miin Ralna/Khawlsak sum an thawh apiangin PhonePe-in auto-split a ti thei a, Bawm neitu bank account-ah 99% a lut nghal a, 1% platform fee chu RonPay account-ah a in-credit hrang thlap dawn a ni.
-                </p>
-              </div>
+          {activeTab === 'split' && (() => {
+            const calculatedFee = Math.max(1, Math.round((splitDonationAmount * splitFeePercent) / 100));
+            const totalDonorPays = splitMode === 'donor_pays' ? splitDonationAmount + calculatedFee : splitDonationAmount;
+            const beneficiaryReceives = splitMode === 'donor_pays' ? splitDonationAmount : splitDonationAmount - calculatedFee;
+            const ronPayFee = calculatedFee;
 
-              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2.5">
-                <div className="flex justify-between items-center text-xs border-b border-slate-100 pb-2">
-                  <span className="text-slate-500 font-medium">Sample Donation:</span>
-                  <span className="font-black text-slate-900">₹1,000.00</span>
+            const splitPayloadSample = {
+              merchantId: 'TSPMIZOPAYUAT',
+              merchantTransactionId: `TXN_SPLIT_${Date.now().toString().slice(-6)}`,
+              amount: totalDonorPays * 100, // in paise
+              splitRule: splitMode === 'donor_pays' ? 'DONOR_SURCHARGE_100_PLUS_1' : 'DONATION_DEDUCTED_99_PLUS_1',
+              split: [
+                {
+                  merchantId: 'BENEFICIARY_RALNA_MID',
+                  amount: beneficiaryReceives * 100, // in paise
+                  description: '100% Direct to Bereaved Family / Church Bawm'
+                },
+                {
+                  merchantId: 'TSPMIZOPAYUAT_RONPAY_FEE',
+                  amount: ronPayFee * 100, // in paise
+                  description: 'RonPay 1% Technology & Platform Fee'
+                }
+              ]
+            };
+
+            return (
+              <div className="space-y-3 animate-fadeIn text-xs">
+                {/* Header Explainer */}
+                <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-indigo-600" />
+                      PhonePe Split Settlement API (100+1 vs 99+1)
+                    </h4>
+                    <span className="text-[9px] font-bold bg-indigo-200/80 text-indigo-950 px-2 py-0.5 rounded-full">
+                      Auto Settlement
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-indigo-900/85 leading-relaxed font-medium">
+                    PhonePe Split API hmangin sum thawh apiangin automatic multi-split a ti thei a, Bawm neitu bank account leh RonPay platform fee account-ah second reilote chhungin a in-credit hrang thlap thin a ni.
+                  </p>
                 </div>
 
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between items-center p-2 rounded-xl bg-emerald-50 border border-emerald-200">
-                    <div>
-                      <p className="font-extrabold text-emerald-950 text-[11px]">Bawm Beneficiary (99%)</p>
-                      <p className="text-[9.5px] text-emerald-700 font-mono">ralna.family@axl</p>
+                {/* Mode Selector (100+1 vs 99+1) */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-700 flex items-center justify-between">
+                    <span>1% Fee Khawi Atanga Kal Tur?</span>
+                    <span className="text-[10px] text-indigo-600 font-bold">
+                      {splitMode === 'donor_pays' ? '✓ 100 + 1 Mode Active' : '✓ 99 + 1 Mode Active'}
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('donor_pays')}
+                      className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                        splitMode === 'donor_pays'
+                          ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-500 shadow-xs ring-2 ring-indigo-400/20'
+                          : 'bg-white border-slate-200 hover:bg-slate-50 opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-slate-900 text-xs">100 + 1 (Donor-in a pe belh)</span>
+                        <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded">Thlanawm</span>
+                      </div>
+                      <p className="text-[10px] text-slate-600 mt-1">
+                        Donor-in 1% extra a pe a, Bawm/Chhungkuain ₹100 an dawng tling thlap ang (0% loss).
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSplitMode('deduct')}
+                      className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                        splitMode === 'deduct'
+                          ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-500 shadow-xs ring-2 ring-indigo-400/20'
+                          : 'bg-white border-slate-200 hover:bg-slate-50 opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-slate-900 text-xs">99 + 1 (Donation atanga paih)</span>
+                        <span className="text-[9px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded">Standard</span>
+                      </div>
+                      <p className="text-[10px] text-slate-600 mt-1">
+                        Donation tlangpui atangin 1% a in-cut a, Beneficiary-in ₹99 an dawng ang.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount Configuration */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600 font-bold text-xs">Donation Amount Test:</span>
+                    <div className="flex items-center gap-1">
+                      {[100, 500, 1000, 5000].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setSplitDonationAmount(amt)}
+                          className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                            splitDonationAmount === amt
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          ₹{amt.toLocaleString('en-IN')}
+                        </button>
+                      ))}
                     </div>
-                    <span className="font-black text-emerald-800 text-sm">₹990.00</span>
                   </div>
 
-                  <div className="flex justify-between items-center p-2 rounded-xl bg-purple-50 border border-purple-200">
-                    <div>
-                      <p className="font-extrabold text-purple-950 text-[11px]">RonPay Platform Fee (1%)</p>
-                      <p className="text-[9.5px] text-purple-700 font-mono">ronpay.tech@ybl</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                      <input
+                        type="number"
+                        min="10"
+                        max="100000"
+                        value={splitDonationAmount || ''}
+                        onChange={(e) => setSplitDonationAmount(Math.max(1, Number(e.target.value) || 0))}
+                        className="w-full pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Enter amount"
+                      />
                     </div>
-                    <span className="font-black text-purple-800 text-sm">₹10.00</span>
+                    <span className="text-[10.5px] text-slate-400 font-medium whitespace-nowrap">
+                      Fee: <b>1%</b> (₹{calculatedFee.toLocaleString('en-IN')})
+                    </span>
+                  </div>
+
+                  {/* Visual Split Cards */}
+                  <div className="space-y-1.5 pt-1">
+                    {/* Total Donor Pays */}
+                    <div className="flex justify-between items-center p-2 rounded-xl bg-slate-100/90 border border-slate-200">
+                      <div>
+                        <p className="font-extrabold text-slate-900 text-[11px]">
+                          {splitMode === 'donor_pays' ? 'Total Paid by Donor (100 + 1)' : 'Total Paid by Donor (99 + 1)'}
+                        </p>
+                        <p className="text-[9.5px] text-slate-500">
+                          {splitMode === 'donor_pays' 
+                            ? `Donation ₹${splitDonationAmount.toLocaleString('en-IN')} + Fee ₹${calculatedFee.toLocaleString('en-IN')}`
+                            : `Donation ₹${splitDonationAmount.toLocaleString('en-IN')} (Fee included)`}
+                        </p>
+                      </div>
+                      <span className="font-black text-slate-950 text-sm">
+                        ₹{totalDonorPays.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Beneficiary Split */}
+                    <div className="flex justify-between items-center p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <div>
+                        <p className="font-extrabold text-emerald-950 text-[11px] flex items-center gap-1">
+                          <span>Bawm Beneficiary</span>
+                          <span className="text-[9px] bg-emerald-200 text-emerald-900 font-bold px-1 rounded">
+                            {splitMode === 'donor_pays' ? '100% Full' : '99% Net'}
+                          </span>
+                        </p>
+                        <p className="text-[9.5px] text-emerald-700 font-mono">ralna.family@axl • Instant direct credit</p>
+                      </div>
+                      <span className="font-black text-emerald-800 text-sm">
+                        ₹{beneficiaryReceives.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* RonPay Fee Split */}
+                    <div className="flex justify-between items-center p-2 rounded-xl bg-purple-50 border border-purple-200">
+                      <div>
+                        <p className="font-extrabold text-purple-950 text-[11px] flex items-center gap-1">
+                          <span>RonPay Platform Fee</span>
+                          <span className="text-[9px] bg-purple-200 text-purple-900 font-bold px-1 rounded">1%</span>
+                        </p>
+                        <p className="text-[9.5px] text-purple-700 font-mono">ronpay.tech@ybl • Technology & maintenance</p>
+                      </div>
+                      <span className="font-black text-purple-800 text-sm">
+                        ₹{ronPayFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PhonePe API JSON Payload Preview */}
+                <div className="bg-slate-900 text-slate-100 p-3 rounded-2xl border border-slate-800 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                      PhonePe PG V2 Split Settlement Payload (Live)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(splitPayloadSample, null, 2), 'splitPayload')}
+                      className="text-[10px] text-indigo-300 hover:text-white font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKey === 'splitPayload' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'splitPayload' ? 'Copied' : 'Copy JSON'}</span>
+                    </button>
+                  </div>
+                  <pre className="text-[9.5px] font-mono bg-slate-950/70 p-2.5 rounded-xl overflow-x-auto text-emerald-300 border border-slate-800">
+{JSON.stringify(splitPayloadSample, null, 2)}
+                  </pre>
+                </div>
+
+                {/* Doc Links */}
+                <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 text-[10px] text-slate-600 flex items-center justify-between">
+                  <span className="font-bold text-slate-800">PhonePe Official Docs:</span>
+                  <div className="flex gap-2">
+                    <a 
+                      href="https://developer.phonepe.com/settlement" 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-indigo-600 hover:underline flex items-center gap-0.5"
+                    >
+                      Settlement API <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                    <span>•</span>
+                    <a 
+                      href="https://developer.phonepe.com/split-settlement" 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-indigo-600 hover:underline flex items-center gap-0.5"
+                    >
+                      Split Settlement API <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
                   </div>
                 </div>
               </div>
-
-              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[10px] text-slate-600 space-y-1">
-                <p className="font-bold text-slate-800">PhonePe Doc Links:</p>
-                <div className="flex gap-2">
-                  <a 
-                    href="https://developer.phonepe.com/settlement" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-indigo-600 hover:underline flex items-center gap-0.5"
-                  >
-                    Settlement API <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                  <span>•</span>
-                  <a 
-                    href="https://developer.phonepe.com/split-settlement" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-indigo-600 hover:underline flex items-center gap-0.5"
-                  >
-                    Split Settlement API <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: MIZO GUIDE & SWATI REPLY */}
-          {activeTab === 'guide' && (
-            <div className="space-y-3 animate-fadeIn text-[11px]">
-              <div className="bg-purple-50/90 border border-purple-200 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-black text-purple-950 text-xs flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-purple-700" />
-                    PhonePe UAT Sign-off Checklist (Swati Lenka)
-                  </h4>
-                  <span className="text-[9px] bg-purple-200 text-purple-950 font-bold px-2 py-0.5 rounded">
-                    Action Plan
-                  </span>
-                </div>
-                <div className="space-y-1.5 text-purple-900/90 leading-relaxed font-medium">
-                  <p>Swati Lenka (PhonePe tech team)-in a rawn dil 3-te hi kan peih fel thlap e:</p>
-                  <ul className="list-disc list-inside space-y-1 pl-1">
-                    <li><b>1. Test Payments:</b> PhonePe PG Checkout Modal hmangin SUCCESS, PENDING leh FAILURE flows kan simulate vek thei.</li>
-                    <li><b>2. TSP Headers & Webhook:</b> <code className="bg-white px-1 py-0.5 rounded border border-purple-200 font-mono text-[9.5px]">X-MERCHANT-ID: TSPMIZOPAYUAT</code> leh Webhook (<code className="bg-white px-1 py-0.5 rounded border border-purple-200 font-mono text-[9.5px]">/api/phonepe/webhook</code>) HMAC-SHA256 signature verification nen ready.</li>
-                    <li><b>3. Payment Confirmation:</b> Webhook callback leh status API hmanga confirmation tihfel a ni.</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Ready-to-Send Email Reply */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                <div className="flex justify-between items-center">
-                  <p className="font-bold text-slate-800 text-xs">Direct Email Reply to Swati Lenka:</p>
-                  <span className="text-[10px] text-slate-500 font-medium">Click copy below</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-[10.5px] text-slate-800 font-mono space-y-2 leading-relaxed whitespace-pre-wrap">
-{`Hi Swati,
-
-Thank you for your follow-up email.
-
-We have enabled and verified the PhonePe Payment Gateway (PG V2 Standard Checkout) on our platform. Here are the implementation and validation details for your UAT sign-off:
-
-1. End-to-End Test Transactions:
-   - We have verified the transaction flow (Success, Pending, and Failure states).
-   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking).
-
-2. TSP Header Implementation:
-   - Merchant ID (X-MERCHANT-ID): TSPMIZOPAYUAT
-   - Authorization: Bearer <TSP_OAUTH_TOKEN>
-   - Client ID: TSPMIZOPAYUAT_2608171706
-   - Client Version: 1
-
-3. Webhook Configuration & Payment Confirmation:
-   - Webhook URL: https://ronpay.app/api/phonepe/webhook
-   - Server handles base64 decoded PG V2 payloads and verifies the X-VERIFY HMAC-SHA256 signature.
-   - Status confirmation API (/pg/v1/status) and browser redirect callback (/api/phonepe/callback) are fully operational.
-
-We have also prepared a video screen recording showing the complete payment checkout flow, from initiation to instant receipt generation.
-
-Could you please confirm if this satisfies the requirements for UAT sign-off, or let us know a suitable time for a quick review call?
-
-Best regards,
-RonPay Tech & Partnership Team`}
-                </div>
-                <button
-                  onClick={() => copyToClipboard(`Hi Swati,\n\nThank you for your follow-up email.\n\nWe have enabled and verified the PhonePe Payment Gateway (PG V2 Standard Checkout) on our platform. Here are the implementation and validation details for your UAT sign-off:\n\n1. End-to-End Test Transactions:\n   - We have verified the transaction flow (Success, Pending, and Failure states).\n   - The PhonePe PG checkout page is live on our platform with direct payment options (Cards, UPI, NetBanking).\n\n2. TSP Header Implementation:\n   - Merchant ID (X-MERCHANT-ID): TSPMIZOPAYUAT\n   - Authorization: Bearer <TSP_OAUTH_TOKEN>\n   - Client ID: TSPMIZOPAYUAT_2608171706\n   - Client Version: 1\n\n3. Webhook Configuration & Payment Confirmation:\n   - Webhook URL: https://ronpay.app/api/phonepe/webhook\n   - Server handles base64 decoded PG V2 payloads and verifies the X-VERIFY HMAC-SHA256 signature.\n   - Status confirmation API (/pg/v1/status) and browser redirect callback (/api/phonepe/callback) are fully operational.\n\nWe have also prepared a video screen recording showing the complete payment checkout flow, from initiation to instant receipt generation.\n\nCould you please confirm if this satisfies the requirements for UAT sign-off, or let us know a suitable time for a quick review call?\n\nBest regards,\nRonPay Tech & Partnership Team`, 'swatiReply')}
-                  className="w-full bg-[#5f259f] hover:bg-[#511e89] text-white font-bold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  {copiedKey === 'swatiReply' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  Copy Swati Lenka Reply Email
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
         </div>
 
@@ -674,7 +791,7 @@ RonPay Tech & Partnership Team`}
           onPaymentSuccess={(tx) => {
             setIsCheckoutModalOpen(false);
             fetchWebhookLogs();
-            alert(`🎉 Test payment completed successfully! Ref: ${tx.id}`);
+            showNotification(`🎉 Test payment completed successfully! Ref: ${tx.id}`, 'success');
           }}
         />
       )}

@@ -53,18 +53,7 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab);
-      const stored = getStoredPGConfig();
-      if (
-        !stored.webhookEndpoint ||
-        stored.webhookEndpoint.includes('run.app') ||
-        stored.webhookEndpoint.includes('ais-dev') ||
-        stored.webhookEndpoint.includes('ais-pre') ||
-        stored.webhookEndpoint.includes('localhost')
-      ) {
-        stored.webhookEndpoint = 'https://ronpay.app/api/pg/webhook';
-        saveStoredPGConfig(stored);
-      }
-      setPgConfig(stored);
+      setPgConfig(getStoredPGConfig());
       setSimulatedTxResult(null);
     }
   }, [isOpen, initialTab]);
@@ -100,14 +89,14 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
       <div 
-        className="bg-white text-slate-900 w-full max-w-5xl h-[92vh] max-h-[850px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200"
+        className="bg-white text-slate-900 w-full max-w-4xl h-[92vh] max-h-[850px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200"
         role="dialog"
         aria-modal="true"
       >
         {/* MODAL HEADER */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/30 flex items-center justify-center text-orange-400 font-black shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/30 flex items-center justify-center text-orange-400 font-black">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
@@ -159,84 +148,84 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
           </div>
         </div>
 
-        {/* NAVIGATION TABS - FLEX-WRAP SO ALL TABS ARE 100% VISIBLE WITHOUT CLIPPING */}
-        <div className="bg-slate-100/90 border-b border-slate-200 px-3 sm:px-4 py-2 sm:py-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 text-xs font-bold">
+        {/* NAVIGATION TABS */}
+        <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveTab('architecture')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'architecture'
-                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
-                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
             }`}
           >
-            <Building2 className="w-3.5 h-3.5 shrink-0" />
-            <span>{isMizo ? '1. Merchant Kalphung' : '1. Merchant Architecture'}</span>
+            <Building2 className="w-3.5 h-3.5" />
+            <span>{isMizo ? '1. Merchant Kalphung (Architecture)' : '1. Merchant Architecture'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('terms')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'terms'
-                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
-                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
             }`}
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
-            <span>{isMizo ? '2. Hman Dan (Terms)' : '2. Terms & Conditions'}</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>{isMizo ? '2. Hman Dan Dan (Terms)' : '2. Terms & Conditions'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('privacy')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'privacy'
-                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
-                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
             }`}
           >
-            <Lock className="w-3.5 h-3.5 shrink-0" />
+            <Lock className="w-3.5 h-3.5" />
             <span>{isMizo ? '3. Privacy & Security' : '3. Privacy Policy'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('refund')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'refund'
-                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
-                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
             }`}
           >
-            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+            <RotateCcw className="w-3.5 h-3.5" />
             <span>{isMizo ? '4. Refund & Cancellation' : '4. Refund Policy'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('grievance')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'grievance'
-                ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-500'
-                : 'bg-white text-slate-700 hover:bg-slate-200/70 border border-slate-300/80 shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'
             }`}
           >
-            <PhoneCall className="w-3.5 h-3.5 shrink-0" />
+            <PhoneCall className="w-3.5 h-3.5" />
             <span>{isMizo ? '5. Grievance & Office' : '5. Contact & Grievance'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('sandbox')}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'sandbox'
-                ? 'bg-amber-600 text-white shadow-xs ring-1 ring-amber-500'
-                : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300 shadow-2xs'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-            <span>{isMizo ? '6. ⚙️ PG Switch & Sandbox' : '6. ⚙️ PG Switch & Sandbox'}</span>
+            <Sliders className="w-3.5 h-3.5 text-amber-700" />
+            <span>{isMizo ? '⚙️ PG Switch & Test Keys' : '⚙️ PG Switch & Sandbox'}</span>
           </button>
         </div>
 
@@ -494,11 +483,11 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'RonPay Office Hmunpui' : 'Registered Office Address'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-600 text-xs">
-                    <p className="font-bold text-slate-900">RonPay Technologies</p>
-                    <p>FinTech Innovation Wing,</p>
-                    <p>Shillong, Meghalaya- 793014, India</p>
+                    <p className="font-bold text-slate-900">RonPay Technologies Private Limited</p>
+                    <p>FinTech Innovation Wing, Treasury Square</p>
+                    <p>Aizawl, Mizoram - 796001, India</p>
                     <p className="pt-1">Support Email: <strong className="text-indigo-600">support@ronpay.app</strong></p>
-                    <p>Helpline: <strong className="text-slate-900">+91 7005304643</strong> (10 AM - 5 PM IST)</p>
+                    <p>Helpline: <strong className="text-slate-900">+91 94361 50000</strong> (10 AM - 5 PM IST)</p>
                   </div>
                 </div>
 
@@ -509,9 +498,9 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                     <span>{isMizo ? 'Designated Grievance Officer' : 'Statutory Grievance Officer'}</span>
                   </h5>
                   <div className="space-y-1 text-slate-700 text-xs">
-                    <p className="font-bold text-slate-900">Mr. Nathanael</p>
+                    <p className="font-bold text-slate-900">Mr. Lalbiakzuala</p>
                     <p className="text-slate-600">Head of Regulatory Compliance & Risk</p>
-                    <p>RonPay Technologies, Shillong</p>
+                    <p>RonPay Technologies, Aizawl</p>
                     <p className="pt-1">Grievance Email: <strong className="text-indigo-700">grievance@ronpay.app</strong></p>
                     <p className="text-[11px] text-slate-500 pt-1">
                       <em>TAT: Grievance acknowledgment within 24 hours; resolution within 15 working days.</em>
@@ -523,7 +512,7 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
               {/* Live Support hours */}
               <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs">
                 <span className="text-slate-600">
-                  {isMizo ? 'Customer Care & Help Desk: Thawhtanni atanga Inrinni, Zing dar 9:00 - Tlai dar 6:00' : 'Customer Care Operating Hours: Monday to Saturday, 9:00 AM to 6:00 PM IST'}
+                  {isMizo ? 'Customer Care & Help Desk: Isnin atanga Inrinni, Zing dar 9:00 - Tlai dar 6:00' : 'Customer Care Operating Hours: Monday to Saturday, 9:00 AM to 6:00 PM IST'}
                 </span>
                 <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                   ACTIVE & MONITORED
@@ -681,21 +670,15 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
 
                 {/* Webhook Endpoint */}
                 <div className="pt-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-slate-600">
-                      {isMizo ? 'RonPay Webhook Callback Endpoint (PG in an ping na tur):' : 'Webhook Callback Endpoint (For PG Server-to-Server callbacks):'}
-                    </label>
-                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Official Domain Recommended
-                    </span>
-                  </div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    {isMizo ? 'RonPay Webhook Callback Endpoint (PG in an ping na tur):' : 'Webhook Callback Endpoint (For PG Server-to-Server callbacks):'}
+                  </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
+                      readOnly
                       value={pgConfig.webhookEndpoint}
-                      onChange={(e) => setPgConfig(p => ({ ...p, webhookEndpoint: e.target.value }))}
-                      className="flex-1 p-2 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                      placeholder="https://ronpay.app/api/pg/webhook"
+                      className="flex-1 p-2 rounded-lg border border-slate-300 bg-slate-50 font-mono text-xs text-slate-700"
                     />
                     <button
                       type="button"
@@ -706,56 +689,6 @@ export const PGComplianceModal: React.FC<PGComplianceModalProps> = ({
                       <span>{copiedKey === 'webhook' ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
-
-                  {/* Quick Preset Domain Switchers & Warning */}
-                  {pgConfig.webhookEndpoint !== 'https://ronpay.app/api/pg/webhook' && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-300 flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2 text-amber-900">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span className="font-semibold text-[11px]">
-                          {isMizo 
-                            ? 'Warning: Dev sandbox container URL a in-set a nih hi. Live PG/PhonePe tan official URL thlak rawh le:' 
-                            : 'Notice: Non-production dev container URL detected. Switch to official domain:'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = { ...pgConfig, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' };
-                          setPgConfig(updated);
-                          saveStoredPGConfig(updated);
-                        }}
-                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition shadow-2xs cursor-pointer flex items-center gap-1"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{isMizo ? 'Official Domain-ah Thlak Rawh (ronpay.app)' : 'Reset to Official Domain (ronpay.app)'}</span>
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const updated = { ...pgConfig, webhookEndpoint: 'https://ronpay.app/api/pg/webhook' };
-                        setPgConfig(updated);
-                        saveStoredPGConfig(updated);
-                      }}
-                      className={`text-[11px] px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer border ${
-                        pgConfig.webhookEndpoint === 'https://ronpay.app/api/pg/webhook'
-                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs ring-1 ring-emerald-500'
-                          : 'bg-white text-emerald-800 hover:bg-emerald-50 border-emerald-300'
-                      }`}
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>{isMizo ? '🌐 Official Domain (https://ronpay.app/api/pg/webhook)' : '🌐 Official Production (https://ronpay.app/api/pg/webhook)'}</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
-                    {isMizo 
-                      ? '💡 PhonePe / Razorpay / NPCI hnuaia merchant onboarding i tih dawn chuan official domain https://ronpay.app/api/pg/webhook hi hman tur a ni a, an approve rang fe zawk ang. Dev container URL chauh ni lovin official registered domain hian bank compliance a tlin a ni.'
-                      : '💡 For merchant onboarding with PhonePe/Razorpay, always submit the official https://ronpay.app/api/pg/webhook registered domain for full RBI and NPCI compliance.'}
-                  </p>
                 </div>
               </div>
 

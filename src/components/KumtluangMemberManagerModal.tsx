@@ -8,7 +8,6 @@ import {
   CreditCard, 
   Users, 
   PlusCircle, 
-  Edit2,
   Edit3, 
   Trash2, 
   CheckCircle2, 
@@ -31,26 +30,14 @@ import {
   Lock
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { 
-  getMembers, 
-  addOrUpdateMember, 
-  deleteMember, 
-  deleteMemberWithTransactions,
-  saveTransaction, 
-  deleteStoredTransaction, 
-  isCampaignCreator,
-  getStoredTransactions,
-  saveStoredTransactions
-} from '../utils/storage';
+import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
 import { 
   exportMasterLedgerPrint, 
   exportMemberCategoryMatrixPrint, 
   exportMemberPassbookVerticalPrint,
   printTransactionsPDF,
   exportFormattedExcel,
-  exportKumtluangMatrixToCSV,
-  ALL_MONTH_NAMES_SHORT,
-  MonthRangeConfig
+  exportKumtluangMatrixToCSV
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -83,49 +70,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
   // Calculate scoped campaigns strictly owned/created by this creator (or all if admin)
-  // Kumtluang / Organization member-based campaigns should be prioritized; 
-  // only Kumtluang category campaigns genuinely manage member rolls.
   const allowedCampaigns = useMemo(() => {
-    const baseList = creatorProfile.isAdmin
-      ? campaigns
-      : campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-
-    // Filter to Kumtluang category campaigns first if any exist, or campaigns having members/orgCodes
-    const kumtluangList = baseList.filter(c => c.category === 'kumtluang');
-    const targetList = kumtluangList.length > 0 ? kumtluangList : baseList;
-
-    return [...targetList].sort((a, b) => {
-      const isKumA = a.category === 'kumtluang' ? 1 : 0;
-      const isKumB = b.category === 'kumtluang' ? 1 : 0;
-      if (isKumA !== isKumB) return isKumB - isKumA;
-
-      const actA = a.status === 'active' ? 1 : 0;
-      const actB = b.status === 'active' ? 1 : 0;
-      if (actA !== actB) return actB - actA;
-
-      return (a.title || '').localeCompare(b.title || '');
-    });
-  }, [campaigns, creatorProfile]);
-
-  // Helper to format campaign label clearly showing Bawm Creator / Bawm Pui Hming (no individual member names)
-  const formatCampaignOptionLabel = useCallback((camp: Campaign, count?: number) => {
-    const prefix = camp.orgCode || 'QR';
-    const isKum = camp.category === 'kumtluang';
-    const icon = isKum ? '🏛️' : '📁';
-    const title = (camp.title || '').trim();
-    const org = (camp.orgName || '').trim();
-    const creator = (camp.creatorName || '').trim();
-    
-    let mainName = title;
-    if (org && org.toLowerCase() !== title.toLowerCase()) {
-      mainName = `${title} • ${org}`;
-    } else if (creator && creator.toLowerCase() !== title.toLowerCase()) {
-      mainName = `${title} (${creator})`;
+    if (creatorProfile.isAdmin) {
+      return campaigns;
     }
-
-    const countSuffix = typeof count === 'number' ? ` — ${count} Members` : '';
-    return `${icon} [${prefix}] ${mainName}${countSuffix}`;
-  }, []);
+    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+  }, [campaigns, creatorProfile]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
@@ -164,78 +114,17 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
-  // Local synchronized transactions list for zero-latency UI updates
-  const [localTxList, setLocalTxList] = useState<Transaction[]>(() => getStoredTransactions());
-
-  useEffect(() => {
-    setLocalTxList(getStoredTransactions());
-  }, [transactions, isOpen]);
-
-  useEffect(() => {
-    const handleSync = (e: Event) => {
-      const custom = e as CustomEvent<Transaction[]>;
-      if (custom.detail && Array.isArray(custom.detail)) {
-        setLocalTxList(custom.detail);
-      } else {
-        setLocalTxList(getStoredTransactions());
-      }
-    };
-    window.addEventListener('ronpay_transactions_updated', handleSync);
-    window.addEventListener('ronpay-transactions-updated', handleSync);
-    return () => {
-      window.removeEventListener('ronpay_transactions_updated', handleSync);
-      window.removeEventListener('ronpay-transactions-updated', handleSync);
-    };
-  }, []);
-
-  // Dynamic current date calculations
-  const monthsList = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const now = new Date();
-  const currentMonthIdx = now.getMonth();
-  const currentMonthName = monthsList[currentMonthIdx] || 'September';
-  const currentYearNum = now.getFullYear();
-  const currentYearStr = String(currentYearNum);
-  const selectableYears = [
-    String(currentYearNum - 4), // 2022
-    String(currentYearNum - 3), // 2023
-    String(currentYearNum - 2), // 2024
-    String(currentYearNum - 1), // 2025
-    currentYearStr,             // 2026 (Current)
-    String(currentYearNum + 1), // 2027
-    String(currentYearNum + 2), // 2028
-    String(currentYearNum + 3), // 2029
-  ];
-
-  // Quick Entry State (Defaults to Current Month & Year)
+  // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthName);
-  const [selectedYear, setSelectedYear] = useState<string>(() => currentYearStr);
+  const [selectedMonth, setSelectedMonth] = useState<string>('August');
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
   const [entryAmount, setEntryAmount] = useState<string>('500');
-  const [entryPaymentMethod, setEntryPaymentMethod] = useState<'cash' | 'online'>('cash');
-  const [entryTxRef, setEntryTxRef] = useState<string>('');
   const [entryRemark, setEntryRemark] = useState<string>('');
   const [entrySuccess, setEntrySuccess] = useState<string | null>(null);
-  const [entryFilterType, setEntryFilterType] = useState<'all' | 'cash' | 'online'>('all');
-  const [entrySearchQuery, setEntrySearchQuery] = useState<string>('');
-
-  // Edit / Delete Transaction State (inside Kumtluang modal)
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
-  const [editTxDonorName, setEditTxDonorName] = useState<string>('');
-  const [editTxAmount, setEditTxAmount] = useState<string>('');
-  const [editTxCategory, setEditTxCategory] = useState<string>('Pathian Ram Zauna');
-  const [editTxMonth, setEditTxMonth] = useState<string>(() => currentMonthName);
-  const [editTxYear, setEditTxYear] = useState<string>(() => currentYearStr);
-  const [editTxPaymentMethod, setEditTxPaymentMethod] = useState<'cash' | 'online'>('cash');
-  const [editTxRemark, setEditTxRemark] = useState<string>('');
-  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
 
   // New Member Registration State
   const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
@@ -250,12 +139,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [depRelInput, setDepRelInput] = useState<string>('Fa');
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
-  const [existingDuplicateMatch, setExistingDuplicateMatch] = useState<MemberRecord | null>(null);
-  const [duplicateModalTarget, setDuplicateModalTarget] = useState<{
-    existingMember: MemberRecord;
-    newDraft: MemberRecord;
-    reason: string;
-  } | null>(null);
 
   // Editing Member State
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
@@ -279,14 +162,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [printOrgScope, setPrintOrgScope] = useState<string>('cmp-kumtluang-1');
   const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
   const [printMemberId, setPrintMemberId] = useState<string>('');
-  const [printYear, setPrintYear] = useState<string>(() => currentYearStr);
+  const [printYear, setPrintYear] = useState<string>('2026');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
-  const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
-  const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
+
+  const monthsList = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const defaultCategories = ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
 
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
@@ -407,14 +295,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
     ? activeScopedCampaign.subCategories
-    : [];
-
-  const hasCampaignSections = useMemo(() => {
-    if (selectedCampaignId === 'all') {
-      return Boolean(allowedCampaigns.some(c => c.definedSections && c.definedSections.length > 0));
-    }
-    return Boolean(activeScopedCampaign?.definedSections && activeScopedCampaign.definedSections.length > 0);
-  }, [selectedCampaignId, allowedCampaigns, activeScopedCampaign]);
+    : defaultCategories;
 
   const resolvedOrgTitle = activeScopedCampaign?.orgName || activeScopedCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
   const resolvedLogoUrl = activeScopedCampaign?.imageUrl || creatorProfile.logoUrl;
@@ -483,12 +364,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
 
     const targetCampaign = campaigns.find(c => c.id === quickEntryCampaignId) || activeScopedCampaign;
-    const modeLabel = entryPaymentMethod === 'cash' ? 'Cash' : 'Direct UPI';
-    const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] [${modeLabel}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
-
-    const refPrefix = entryPaymentMethod === 'cash' ? 'CASH' : 'UPI';
-    const generatedRef = `${refPrefix}-${payerId}-${Date.now().toString().slice(-6)}`;
-    const finalRef = entryPaymentMethod === 'online' && entryTxRef.trim() ? entryTxRef.trim() : generatedRef;
+    const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
 
     const newTx: Transaction = {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -503,97 +379,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       platformFee: 0,
       totalAmount: amt,
       timestamp: new Date().toISOString(),
-      txHash: finalRef,
+      txHash: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
       status: 'completed',
-      paymentMethod: entryPaymentMethod,
-      referenceNo: finalRef,
+      paymentMethod: 'cash',
+      referenceNo: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
       remark: txRemark,
       isSynced: true,
       createdAt: new Date().toISOString(),
       subCategory: selectedCategory,
-      subCategoryBreakdown: { [selectedCategory]: amt },
-      periodType: 'monthly',
       periodMonth: selectedMonth,
       periodYear: selectedYear,
-      periodLabel: `${selectedMonth} ${selectedYear}`,
       platformFeeBearer: 'org_paid'
     };
 
     saveTransaction(newTx);
-    const refreshed = getStoredTransactions();
-    setLocalTxList(refreshed);
-    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin [${modeLabel}] record fel a ni ta!`);
+    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin record fel a ni ta!`);
     onDataUpdated();
     setTimeout(() => {
       setEntrySuccess(null);
       setEntryRemark('');
-      setEntryTxRef('');
     }, 4000);
-  };
-
-  const handleOpenEditTx = (tx: Transaction) => {
-    setEditingTx(tx);
-    setEditTxDonorName(tx.donorName || '');
-    setEditTxAmount(String(tx.amount || 0));
-    setEditTxCategory(tx.subCategory || tx.category || 'Pathian Ram Zauna');
-    setEditTxMonth(tx.periodMonth || selectedMonth || currentMonthName);
-    setEditTxYear(tx.periodYear || selectedYear || currentYearStr);
-    setEditTxPaymentMethod((tx.paymentMethod === 'online' ? 'online' : 'cash'));
-    setEditTxRemark(tx.remark || '');
-  };
-
-  const handleSaveEditedTx = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTx) return;
-    const amt = Number(editTxAmount);
-    if (isNaN(amt) || amt <= 0) {
-      alert('Pawisa zat dik tak chhu lut rawh le.');
-      return;
-    }
-
-    const catName = editTxCategory.trim() || 'General';
-    const updatedTx: Transaction = {
-      ...editingTx,
-      donorName: editTxDonorName.trim() || editingTx.donorName,
-      amount: amt,
-      totalAmount: amt,
-      paymentMethod: editTxPaymentMethod,
-      category: editingTx.category || 'kumtluang',
-      subCategory: catName,
-      subCategoryBreakdown: { [catName]: amt },
-      periodType: 'monthly',
-      periodMonth: editTxMonth,
-      periodYear: editTxYear,
-      periodLabel: `${editTxMonth} ${editTxYear}`,
-      remark: editTxRemark.trim() || undefined
-    };
-
-    saveTransaction(updatedTx);
-    const refreshed = getStoredTransactions();
-    setLocalTxList(refreshed);
-    setEditingTx(null);
-    setEntrySuccess(`₹${amt.toLocaleString('en-IN')} record chu hlawhtling takin siamthat (updated) a ni ta!`);
-    onDataUpdated();
-    setTimeout(() => setEntrySuccess(null), 3500);
-  };
-
-  const handleRequestDeleteTx = (tx: Transaction) => {
-    setDeletingTx(tx);
-  };
-
-  const handleConfirmDeleteTx = () => {
-    if (!deletingTx) return;
-    const targetId = deletingTx.id;
-    deleteStoredTransaction(targetId);
-    const refreshed = getStoredTransactions();
-    setLocalTxList(refreshed);
-    if (editingTx?.id === targetId) {
-      setEditingTx(null);
-    }
-    setDeletingTx(null);
-    setEntrySuccess(`Transaction record (ID: ${targetId}) chu hlawhtling takin paih (deleted) a ni ta!`);
-    onDataUpdated();
-    setTimeout(() => setEntrySuccess(null), 3500);
   };
 
   // Add dependent to new member draft
@@ -607,94 +412,33 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setNewDependents(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Check duplicate when typing in Registration
-  const checkDuplicate = (org: string, p4: string, fullPhone: string, name: string, targetCampId: string) => {
-    const targetId = `${(org || 'EBE').toUpperCase()}-${p4}`.trim();
-    const allList = getMembers('all');
-
-    if (p4 && p4.length === 4) {
-      const idMatch = allList.find(m => m.id.toUpperCase() === targetId.toUpperCase());
-      if (idMatch) {
-        setDuplicateWarning(`Hriattirna: Member ID [${idMatch.id}] (${idMatch.name}) hi a awm sa tawh a ni.`);
-        setExistingDuplicateMatch(idMatch);
-        return idMatch;
-      }
-    }
-
-    const cleanFull = fullPhone.replace(/\D/g, '');
-    if (cleanFull.length === 10) {
-      const phoneMatch = allList.find(m => m.fullPhone === cleanFull || (m.campaignId === targetCampId && m.phoneLast4 === cleanFull.slice(-4)));
-      if (phoneMatch) {
-        setDuplicateWarning(`Hriattirna: Phone number [${cleanFull}] hi ${phoneMatch.name} (${phoneMatch.id}) hian a hmang tawh a ni.`);
-        setExistingDuplicateMatch(phoneMatch);
-        return phoneMatch;
-      }
-    }
-
-    if (name.trim().length >= 2 && targetCampId) {
-      const nameMatch = allList.find(m => m.campaignId === targetCampId && m.name.toLowerCase().trim() === name.toLowerCase().trim());
-      if (nameMatch) {
-        setDuplicateWarning(`Hriattirna: Hming "${nameMatch.name}" (${nameMatch.id}) hi he Bawm chhungah hian a awm sa tawh a ni.`);
-        setExistingDuplicateMatch(nameMatch);
-        return nameMatch;
-      }
-    }
-
-    setDuplicateWarning(null);
-    setExistingDuplicateMatch(null);
-    return null;
-  };
-
   // Handle Full Phone Input in Registration (Max 10 digits, auto-fills last 4 digits)
   const handleFullPhoneChange = (val: string) => {
     const cleaned = val.replace(/\D/g, '').slice(0, 10);
     setNewFullPhone(cleaned);
-    const p4 = cleaned.length >= 4 ? cleaned.slice(-4) : newPhone4;
     if (cleaned.length >= 4) {
+      const p4 = cleaned.slice(-4);
       setNewPhone4(p4);
+      handlePhoneChange(p4);
     }
-    const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
-    checkDuplicate(newOrgCode, p4, cleaned, newHming, targetCamp?.id || '');
   };
 
+  // Check duplicate when typing in Registration
   const handlePhoneChange = (val: string) => {
     const cleaned = val.replace(/[^0-9]/g, '').slice(0, 4);
     setNewPhone4(cleaned);
-    const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
-    checkDuplicate(newOrgCode, cleaned, newFullPhone, newHming, targetCamp?.id || '');
-  };
-
-  const executeSaveMember = (memberToSave: MemberRecord) => {
-    addOrUpdateMember(memberToSave);
-    
-    // Explicitly reload members scoped to the current dropdown filter
-    const updated = getMembers(selectedCampaignId);
-    setMembers(updated);
-
-    const depCount = memberToSave.dependents?.length || 0;
-    setRegSuccess(`Member [${memberToSave.id}] ${memberToSave.name} ${depCount > 0 ? `leh dependent ${depCount}` : ''} chu vawn fel a ni ta!`);
-    setSelectedMember(memberToSave);
-    setSelectedPayerType('primary');
-    setQuickPhone4(memberToSave.phoneLast4);
-    if (memberToSave.campaignId) {
-      setQuickEntryCampaignId(memberToSave.campaignId);
+    if (cleaned.length >= 4) {
+      const p4 = cleaned.slice(-4);
+      const allList = getMembers('all');
+      const exists = allList.find(m => m.orgCode === newOrgCode.toUpperCase() && m.phoneLast4 === p4);
+      if (exists) {
+        setDuplicateWarning(`Hriattirna: ${newOrgCode}-${p4} (${exists.name}) hi a awm sa tawh a, duplicate awm lohnan enchiang rawh.`);
+      } else {
+        setDuplicateWarning(null);
+      }
+    } else {
+      setDuplicateWarning(null);
     }
-    
-    // Reset form so user can immediately register the next member
-    setNewHming('');
-    setNewPhone4('');
-    setNewFullPhone('');
-    setNewSection('');
-    setNewAvatarUrl('');
-    setNewDependents([]);
-    setDuplicateWarning(null);
-    setExistingDuplicateMatch(null);
-    setDuplicateModalTarget(null);
-    onDataUpdated();
-
-    setTimeout(() => {
-      setRegSuccess(null);
-    }, 5000);
   };
 
   const handleRegisterMember = (e: React.FormEvent) => {
@@ -712,17 +456,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const org = (newOrgCode.trim().toUpperCase() || targetCamp?.orgCode || 'EBE');
     const p4 = newPhone4.slice(-4);
     const generatedId = `${org}-${p4}`;
-    const cleanFull = newFullPhone.replace(/\D/g, '');
-
-    // Check duplicate
-    const allList = getMembers('all');
-    const existingById = allList.find(m => m.id.toUpperCase() === generatedId.toUpperCase());
-    const existingByPhone = cleanFull.length === 10
-      ? allList.find(m => m.fullPhone === cleanFull && m.campaignId === targetCamp?.id)
-      : null;
-    const existingByName = allList.find(m => m.campaignId === targetCamp?.id && m.name.toLowerCase().trim() === newHming.toLowerCase().trim());
-
-    const duplicate = existingById || existingByPhone || existingByName;
 
     // Convert draft dependents into MemberDependent objects with subIds
     const formattedDependents: MemberDependent[] = newDependents.map((dep, idx) => ({
@@ -737,7 +470,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       name: newHming.trim(),
       orgCode: org,
       phoneLast4: p4,
-      fullPhone: cleanFull || undefined,
+      fullPhone: newFullPhone.trim() || undefined,
       section: newSection.trim() || undefined,
       avatarUrl: newAvatarUrl || undefined,
       isFamilyHead: true,
@@ -745,23 +478,34 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       createdAt: new Date().toISOString()
     };
 
-    if (duplicate) {
-      let reason = `Member ID [${generatedId}] hi ${duplicate.name} pualin a awm sa tawh a ni.`;
-      if (duplicate.id !== generatedId && existingByPhone) {
-        reason = `Phone number [${cleanFull}] hi ${duplicate.name} (${duplicate.id}) hian a hmang tawh a ni.`;
-      } else if (duplicate.id !== generatedId && existingByName) {
-        reason = `Hming "${newHming}" hi ID [${duplicate.id}] nen he Bawm-ah hian a awm sa tawh a ni.`;
-      }
+    addOrUpdateMember(newM);
+    
+    // Explicitly reload members scoped to the current dropdown filter
+    const updated = getMembers(selectedCampaignId);
+    setMembers(updated);
 
-      setDuplicateModalTarget({
-        existingMember: duplicate,
-        newDraft: newM,
-        reason
-      });
-      return;
+    setRegSuccess(`Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
+    setSelectedMember(newM);
+    setSelectedPayerType('primary');
+    setQuickPhone4(newM.phoneLast4);
+    if (targetCamp?.id) {
+      setQuickEntryCampaignId(targetCamp.id);
     }
-
-    executeSaveMember(newM);
+    
+    // Reset form so user can immediately register the next member
+    setNewHming('');
+    setNewPhone4('');
+    setNewFullPhone('');
+    setNewSection('');
+    setNewAvatarUrl('');
+    setNewDependents([]);
+    setDuplicateWarning(null);
+    onDataUpdated();
+    
+    // Do not automatically switch tabs away so creator can add multiple members continuously
+    setTimeout(() => {
+      setRegSuccess(null);
+    }, 6000);
   };
 
   // Open Edit Member Modal
@@ -825,7 +569,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       orgCode: org,
       phoneLast4: p4,
       fullPhone: editFullPhone.trim() || undefined,
-      section: editSection.trim() || '',
+      section: editSection.trim() || undefined,
       avatarUrl: editAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: updatedDeps,
@@ -843,77 +587,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     alert(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
   };
 
-  // Delete Member state and dialog handlers
-  const [deletingMemberTarget, setDeletingMemberTarget] = useState<{
-    member: MemberRecord;
-    txCount: number;
-    totalAmount: number;
-  } | null>(null);
-  const [deleteSuccessNotice, setDeleteSuccessNotice] = useState<string | null>(null);
-
-  const handlePromptDeleteMember = (targetMember: MemberRecord) => {
-    const allTxs = getStoredTransactions();
-    const cleanId = (targetMember.id || '').trim().toLowerCase();
-    const matching = allTxs.filter(t => {
-      if (!t) return false;
-      const tMemberId = (t.memberId || '').trim().toLowerCase();
-      const tRemark = (t.remark || '').trim().toLowerCase();
-      const tRef = (t.referenceNo || '').trim().toLowerCase();
-      const tHash = (t.txHash || '').trim().toLowerCase();
-      if (tMemberId && tMemberId === cleanId) return true;
-      if (tRemark && tRemark.includes(cleanId)) return true;
-      if (tRef && tRef.includes(cleanId)) return true;
-      if (tHash && tHash.includes(cleanId)) return true;
-      return false;
-    });
-    const validTxns = matching.filter(t => t.status !== 'failed' && t.status !== 'rejected');
-    const sumAmount = validTxns.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-
-    setDeletingMemberTarget({
-      member: targetMember,
-      txCount: matching.length,
-      totalAmount: sumAmount
-    });
-  };
-
-  const handleExecuteDeleteMember = (deleteRecords: boolean) => {
-    if (!deletingMemberTarget) return;
-    const { member } = deletingMemberTarget;
-    const campId = member.campaignId || (selectedCampaignId !== 'all' ? selectedCampaignId : undefined);
-    
-    if (deleteRecords) {
-      const res = deleteMemberWithTransactions(member.id, campId);
-      setDeleteSuccessNotice(`Member "${member.name}" (${member.id}) leh a chhunga transaction ${res.deletedTxCount} chu hlawhtling takin paih bo (deleted) a ni!`);
-    } else {
-      deleteMember(member.id, campId);
-      setDeleteSuccessNotice(`Member "${member.name}" (${member.id}) chu hlawhtling takin paih bo (deleted) a ni!`);
-    }
-
-    const updated = getMembers(selectedCampaignId);
-    setMembers(updated);
-    setLocalTxList(getStoredTransactions());
-    if (selectedMember?.id === member.id) {
-      setSelectedMember(null);
-    }
-    if (editingMember?.id === member.id) {
-      setEditingMember(null);
-    }
-    setDeletingMemberTarget(null);
-    onDataUpdated();
-    
-    setTimeout(() => {
-      setDeleteSuccessNotice(null);
-    }, 6000);
-  };
-
+  // Delete Member
   const handleDeleteMember = (memberId: string, memberName: string) => {
-    const mem = members.find(m => (m.id || '').trim().toLowerCase() === (memberId || '').trim().toLowerCase()) 
-      || getMembers('all').find(m => (m.id || '').trim().toLowerCase() === (memberId || '').trim().toLowerCase());
-    if (mem) {
-      handlePromptDeleteMember(mem);
-    } else {
+    if (window.confirm(`Member "${memberName}" (${memberId}) hi paih (delete) i chiang em?`)) {
       deleteMember(memberId, selectedCampaignId);
-      setMembers(getMembers(selectedCampaignId));
+      const updated = getMembers(selectedCampaignId);
+      setMembers(updated);
+      if (selectedMember?.id === memberId) {
+        setSelectedMember(null);
+      }
       onDataUpdated();
     }
   };
@@ -970,81 +652,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
     return getMembers(printOrgScope);
   }, [printOrgScope, allowedCampaigns]);
-
-  // Selected member transactions for Quick Entry History / Edit / Delete
-  const selectedMemberTransactions = useMemo(() => {
-    if (!selectedMember) return [];
-    const p4 = selectedMember.phoneLast4;
-    const fullP = selectedMember.fullPhone;
-    const mId = (selectedMember.id || '').toLowerCase().trim();
-    const mName = (selectedMember.name || '').toLowerCase().trim();
-    const depIds = (selectedMember.dependents || []).map(d => (d.subId || '').toLowerCase().trim()).filter(Boolean);
-    const depNames = (selectedMember.dependents || []).map(d => (d.name || '').toLowerCase().trim()).filter(Boolean);
-
-    return localTxList.filter(t => {
-      if (!t || !t.id) return false;
-      const r = (t.remark || '').toLowerCase();
-      const ref = (t.referenceNo || '').toLowerCase();
-      const hash = (t.txHash || '').toLowerCase();
-      const dName = (t.donorName || '').toLowerCase();
-      const dPhone = (t.donorPhone || '').toLowerCase();
-      const tId = (t.id || '').toLowerCase();
-
-      // Check payment type filter
-      if (entryFilterType === 'cash' && t.paymentMethod !== 'cash') return false;
-      if (entryFilterType === 'online' && t.paymentMethod === 'cash') return false;
-
-      // Check search query if typed
-      if (entrySearchQuery.trim()) {
-        const sq = entrySearchQuery.toLowerCase().trim();
-        const matchesQuery = dName.includes(sq) || r.includes(sq) || ref.includes(sq) || tId.includes(sq) || String(t.amount || '').includes(sq) || (t.subCategory || '').toLowerCase().includes(sq) || (t.periodMonth || '').toLowerCase().includes(sq);
-        if (!matchesQuery) return false;
-      }
-
-      if (mId && (r.includes(mId) || ref.includes(mId) || hash.includes(mId) || tId.includes(mId))) return true;
-      if (depIds.some(did => did && (r.includes(did) || ref.includes(did) || hash.includes(did)))) return true;
-      if (fullP && (dPhone === fullP.toLowerCase() || dPhone.includes(fullP.toLowerCase()))) return true;
-      if (p4 && dPhone.endsWith(p4)) return true;
-      if (mName && dName.includes(mName)) return true;
-      if (depNames.some(dn => dn && dName.includes(dn))) return true;
-      return false;
-    }).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
-  }, [selectedMember, localTxList, entryFilterType, entrySearchQuery]);
-
-  // Active Bawm recent transactions
-  const activeBawmTransactions = useMemo(() => {
-    return localTxList.filter(t => {
-      if (!t || !t.id) return false;
-      
-      // Filter by active campaign if scoped
-      if (activeScopedCampaign) {
-        const campId = activeScopedCampaign.id;
-        const campTitle = (activeScopedCampaign.title || '').toLowerCase();
-        const orgCode = (activeScopedCampaign.orgCode || '').toLowerCase();
-        const isCampMatch = t.campaignId === campId || 
-          (campTitle && (t.campaignTitle || '').toLowerCase().includes(campTitle)) ||
-          (orgCode && ((t.referenceNo || '').toLowerCase().includes(orgCode) || (t.remark || '').toLowerCase().includes(orgCode) || (t.txHash || '').toLowerCase().includes(orgCode)));
-        if (!isCampMatch) return false;
-      }
-
-      // Check payment type filter
-      if (entryFilterType === 'cash' && t.paymentMethod !== 'cash') return false;
-      if (entryFilterType === 'online' && t.paymentMethod === 'cash') return false;
-
-      // Check search query if typed
-      if (entrySearchQuery.trim()) {
-        const sq = entrySearchQuery.toLowerCase().trim();
-        const dName = (t.donorName || '').toLowerCase();
-        const r = (t.remark || '').toLowerCase();
-        const ref = (t.referenceNo || '').toLowerCase();
-        const tId = (t.id || '').toLowerCase();
-        const matchesQuery = dName.includes(sq) || r.includes(sq) || ref.includes(sq) || tId.includes(sq) || String(t.amount || '').includes(sq) || (t.subCategory || '').toLowerCase().includes(sq) || (t.periodMonth || '').toLowerCase().includes(sq);
-        if (!matchesQuery) return false;
-      }
-
-      return true;
-    }).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime()).slice(0, 50);
-  }, [activeScopedCampaign, localTxList, entryFilterType, entrySearchQuery]);
 
   if (!isOpen) return null;
 
@@ -1188,7 +795,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 )}
                 {allowedCampaigns.map(camp => (
                   <option key={camp.id} value={camp.id}>
-                    {formatCampaignOptionLabel(camp, campaignCounts[camp.id] || 0)}
+                    🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}] — {campaignCounts[camp.id] || 0} Members
                   </option>
                 ))}
               </select>
@@ -1259,72 +866,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         </div>
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 bg-white space-y-4">
-          {deleteSuccessNotice && (
-            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-xs animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{deleteSuccessNotice}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDeleteSuccessNotice(null)}
-                className="text-emerald-700 hover:text-emerald-900 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* ACTIVE BAWM PUI SUMMARY CARD */}
-          {activeScopedCampaign && (
-            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-xl shrink-0">
-                  {activeScopedCampaign.category === 'kumtluang' ? '🏛️' : '📁'}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide truncate">
-                      {activeScopedCampaign.title}
-                    </h4>
-                    <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
-                      Prefix: {activeScopedCampaign.orgCode || 'QR'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 truncate mt-0.5">
-                    <span className="font-semibold text-slate-200">{activeScopedCampaign.orgName || creatorProfile.orgName || 'Organization'}</span>
-                    {activeScopedCampaign.creatorName && (
-                      <>
-                        <span className="text-slate-500 mx-1.5">•</span>
-                        <span className="text-slate-400">Creator: {activeScopedCampaign.creatorName}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                <div className="text-right">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Enrolled Members</div>
-                  <div className="text-sm sm:text-base font-black font-mono text-emerald-400">
-                    {campaignCounts[activeScopedCampaign.id] || members.length || 0} Members
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('register_member')}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1 active:scale-95"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>+ Add Member</span>
-                </button>
-              </div>
-            </div>
-          )}
-
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 bg-white">
           {allowedCampaigns.length === 0 && (
-            <div className="p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="mb-4 p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2.5">
                 <Building2 className="w-5 h-5 text-indigo-600 shrink-0" />
                 <div>
@@ -1424,7 +968,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                                 )}
                               </div>
                               <div className={`text-[10.5px] mt-0.5 ${selectedMember?.id === m.id ? 'text-indigo-100' : 'text-slate-500'}`}>
-                                Phone: ****{m.phoneLast4}{hasCampaignSections && m.section ? ` • ${m.section}` : ''}
+                                Phone: ****{m.phoneLast4} • {m.section || 'General'}
                               </div>
                             </div>
                           </div>
@@ -1534,27 +1078,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       >
                         {allowedCampaigns.map(c => (
-                          <option key={c.id} value={c.id}>{formatCampaignOptionLabel(c)}</option>
+                          <option key={c.id} value={c.id}>{c.title} [{c.orgCode || 'QR'}]</option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Fund Head / Category */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
-                      <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      >
-                        {campaignCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Month & Year Selection (Defaults to Current, Past Selectable) */}
+                    {/* Category & Month */}
                     <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
+                        <select
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {campaignCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">Thla (Month)</label>
                         <select
@@ -1562,68 +1105,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           onChange={(e) => setSelectedMonth(e.target.value)}
                           className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         >
-                          {monthsList.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Kum (Year)</label>
-                        <select
-                          value={selectedYear}
-                          onChange={(e) => setSelectedYear(e.target.value)}
-                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        >
-                          {selectableYears.map(yr => (
-                            <option key={yr} value={yr}>
-                              {yr}
-                            </option>
+                          {monthsList.map(m => (
+                            <option key={m} value={m}>{m}</option>
                           ))}
                         </select>
                       </div>
                     </div>
 
-                    {/* Payment Mode Selector */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
-                        Pekna Hmanraw Thlan Tur (Payment Mode) <span className="text-red-500">*</span>
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEntryPaymentMethod('cash')}
-                          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
-                            entryPaymentMethod === 'cash'
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          <span>💵 Cash Counter (Cash)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEntryPaymentMethod('online')}
-                          className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer border ${
-                            entryPaymentMethod === 'online'
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          <span>⚡ Direct UPI / Bank</span>
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        {entryPaymentMethod === 'cash' 
-                          ? 'Kut-a pawisa fai (cash) dawn chhinchhiahna.' 
-                          : 'Biakin/Pawl UPI ID / Account-a an lo thawn direct (Outside RonPay) chhinchhiahna.'}
-                      </p>
-                    </div>
-
-                    {/* Amount, UTR/Ref & Remark */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Amount & Remark */}
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">Pek Zat (Amount ₹) <span className="text-red-500">*</span></label>
                         <div className="relative">
@@ -1638,270 +1128,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         </div>
                       </div>
 
-                      {entryPaymentMethod === 'online' ? (
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">UPI Ref / UTR (Optional)</label>
-                          <input
-                            type="text"
-                            value={entryTxRef}
-                            onChange={(e) => setEntryTxRef(e.target.value)}
-                            placeholder="e.g. UTR123456789"
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
-                          <input
-                            type="text"
-                            value={entryRemark}
-                            onChange={(e) => setEntryRemark(e.target.value)}
-                            placeholder="e.g. Inkhawm thawh / Cash counter"
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {entryPaymentMethod === 'online' && (
                       <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Remark / Note (Optional)</label>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Remark (Optional)</label>
                         <input
                           type="text"
                           value={entryRemark}
                           onChange={(e) => setEntryRemark(e.target.value)}
-                          placeholder="e.g. GPay kaltlanga rawn pe / Direct UPI"
+                          placeholder="e.g. Inkhawm thawh / Cash"
                           className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         />
                       </div>
-                    )}
+                    </div>
 
                     <button
                       type="submit"
                       disabled={!selectedMember}
-                      className={`w-full py-3.5 text-white rounded-2xl text-xs font-black transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
-                        entryPaymentMethod === 'cash'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
-                          : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
-                      }`}
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                     >
                       <Check className="w-4 h-4" />
-                      <span>
-                        {entryPaymentMethod === 'cash'
-                          ? 'Cash Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)'
-                          : 'Direct UPI Thawhkhawm Chhinchhiah Rawh (Save UPI Payment)'}
-                      </span>
+                      <span>Thawhkhawm Chhinchhiah Rawh (Save Cash Payment)</span>
                     </button>
                   </form>
-                </div>
-
-                {/* RECENT ENTRIES & EDIT/DELETE SECTION */}
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <div>
-                        <h4 className="text-xs font-black text-slate-900">
-                          {selectedMember 
-                            ? `${selectedMember.name} (${selectedMember.id}) Sulhnu & Records`
-                            : `${activeScopedCampaign?.title || 'Kumtluang Bawm'} Sulhnu & Records`}
-                        </h4>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          Record-te hi [✏️ Edit / Siamtha] emaw [🗑️ Paih / Delete] awlsam takin a tih theih
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setEntryFilterType('all')}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                          entryFilterType === 'all'
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEntryFilterType('cash')}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                          entryFilterType === 'cash'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        💵 Cash
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEntryFilterType('online')}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                          entryFilterType === 'online'
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        ⚡ UPI
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Search box within recent entries */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-                    <input
-                      type="text"
-                      value={entrySearchQuery}
-                      onChange={(e) => setEntrySearchQuery(e.target.value)}
-                      placeholder="Zawnna (Hming, ID, Amount, Category, Thla...)"
-                      className="w-full pl-8 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                    {entrySearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setEntrySearchQuery('')}
-                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  {selectedMember ? (
-                    selectedMemberTransactions.length === 0 ? (
-                      <div className="text-center py-6 text-slate-400 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                        He member tan hian record zawn hmuh a awm rih lo.
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                        {selectedMemberTransactions.map(tx => (
-                          <div 
-                            key={tx.id}
-                            className="bg-slate-50 border border-slate-200/80 hover:border-indigo-300 rounded-xl p-3 flex items-center justify-between gap-3 transition shadow-2xs"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                  tx.paymentMethod === 'cash' 
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                                    : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                }`}>
-                                  {tx.paymentMethod === 'cash' ? '💵 Cash' : '⚡ UPI'}
-                                </span>
-                                <span className="text-xs font-black text-slate-900">
-                                  ₹{tx.amount?.toLocaleString('en-IN')}
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-700">
-                                  {tx.subCategory || tx.category}
-                                </span>
-                                {tx.periodMonth && (
-                                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                    {tx.periodMonth} {tx.periodYear || ''}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
-                                <span className="font-medium">{new Date(tx.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                {tx.donorName && tx.donorName !== selectedMember.name && (
-                                  <span className="font-bold text-slate-700">Pual: {tx.donorName}</span>
-                                )}
-                                {tx.remark && <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">{tx.remark}</span>}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditTx(tx)}
-                                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-indigo-500 hover:text-indigo-600 text-slate-700 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                title="Siamtha / Edit"
-                              >
-                                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRequestDeleteTx(tx)}
-                                className="px-2.5 py-1.5 bg-white border border-rose-200 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-700 text-rose-600 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                title="Paih / Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Paih</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  ) : (
-                    activeBawmTransactions.length === 0 ? (
-                      <div className="text-center py-6 text-slate-400 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                        He bawm pual hian transaction zawn hmuh a awm rih lo.
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                        {activeBawmTransactions.map(tx => (
-                          <div 
-                            key={tx.id}
-                            className="bg-slate-50 border border-slate-200/80 hover:border-indigo-300 rounded-xl p-3 flex items-center justify-between gap-3 transition shadow-2xs"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                  tx.paymentMethod === 'cash' 
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                                    : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                }`}>
-                                  {tx.paymentMethod === 'cash' ? '💵 Cash' : '⚡ UPI'}
-                                </span>
-                                <span className="text-xs font-black text-slate-900">
-                                  ₹{tx.amount?.toLocaleString('en-IN')}
-                                </span>
-                                <span className="text-xs font-bold text-slate-800 truncate">
-                                  {tx.donorName || 'Anonymous'}
-                                </span>
-                                <span className="text-[10px] font-medium text-slate-500">
-                                  ({tx.subCategory || tx.category || 'General'})
-                                </span>
-                                {tx.periodMonth && (
-                                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                    {tx.periodMonth} {tx.periodYear || ''}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
-                                <span className="font-medium">{new Date(tx.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                {tx.remark && <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[220px]">{tx.remark}</span>}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditTx(tx)}
-                                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-indigo-500 hover:text-indigo-600 text-slate-700 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                title="Siamtha / Edit"
-                              >
-                                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRequestDeleteTx(tx)}
-                                className="px-2.5 py-1.5 bg-white border border-rose-200 hover:border-rose-500 hover:bg-rose-50 hover:text-rose-700 text-rose-600 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                title="Paih / Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Paih</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  )}
                 </div>
 
               </div>
@@ -1931,37 +1178,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               )}
 
               {duplicateWarning && (
-                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-2 animate-fadeIn shadow-xs">
-                  <div className="flex items-start gap-2.5 text-xs font-bold text-amber-900">
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="font-black text-amber-950 uppercase tracking-wide">Duplicate Record Hriattirna</div>
-                      <p className="mt-0.5">{duplicateWarning}</p>
-                      {existingDuplicateMatch && (
-                        <div className="mt-2 p-2.5 bg-white rounded-xl border border-amber-200 text-[11px] space-y-1 shadow-2xs">
-                          <div className="font-bold text-slate-800">
-                            Awm sa: <span className="text-indigo-900 font-mono font-black">{existingDuplicateMatch.id}</span> - {existingDuplicateMatch.name}
-                            {existingDuplicateMatch.section ? ` (${existingDuplicateMatch.section})` : ''}
-                          </div>
-                          <div className="text-slate-600 font-mono text-[10.5px]">
-                            Phone: {existingDuplicateMatch.fullPhone || `****${existingDuplicateMatch.phoneLast4}`}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {existingDuplicateMatch && (
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200/80">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(existingDuplicateMatch)}
-                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        <span>Awmsa Siamtha Rawh (Edit Member)</span>
-                      </button>
-                    </div>
-                  )}
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-2 text-xs font-bold text-amber-900 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{duplicateWarning}</span>
                 </div>
               )}
 
@@ -1983,17 +1202,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </label>
                   <select
                     value={regTargetCampaignId}
-                    onChange={(e) => {
-                      const newCampId = e.target.value;
-                      setRegTargetCampaignId(newCampId);
-                      checkDuplicate(newOrgCode, newPhone4, newFullPhone, newHming, newCampId);
-                    }}
+                    onChange={(e) => setRegTargetCampaignId(e.target.value)}
                     className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     required
                   >
                     {allowedCampaigns.map(c => (
                       <option key={c.id} value={c.id}>
-                        {formatCampaignOptionLabel(c)}
+                        🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
                       </option>
                     ))}
                   </select>
@@ -2006,12 +1221,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <input
                     type="text"
                     value={newHming}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setNewHming(val);
-                      const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
-                      checkDuplicate(newOrgCode, newPhone4, newFullPhone, val, targetCamp?.id || '');
-                    }}
+                    onChange={(e) => setNewHming(e.target.value)}
                     placeholder="e.g. Rammuanpuia Ralte"
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     required
@@ -2046,12 +1256,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       type="text"
                       maxLength={5}
                       value={newOrgCode}
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase();
-                        setNewOrgCode(val);
-                        const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
-                        checkDuplicate(val, newPhone4, newFullPhone, newHming, targetCamp?.id || '');
-                      }}
+                      onChange={(e) => setNewOrgCode(e.target.value.toUpperCase())}
                       placeholder="e.g. EBE / BCM / YMA"
                       className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
                       required
@@ -2082,25 +1287,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </span>
                 </div>
 
-                {activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0 && (
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      {activeRegisterCampaign.sectionLabel || 'Section / Bial / Veng'}
-                    </label>
-                    <select
-                      value={newSection}
-                      onChange={(e) => setNewSection(e.target.value)}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    >
-                      <option value="">-- Thlang Rawh ({activeRegisterCampaign.sectionLabel || 'Bial / Section'}) --</option>
-                      {activeRegisterCampaign.definedSections.map((sec, idx) => (
-                        <option key={idx} value={sec}>
-                          {sec}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Section / Bial / Veng
+                  </label>
+                  <select
+                    value={newSection}
+                    onChange={(e) => setNewSection(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="">-- Thlang Rawh (Bial / Section) --</option>
+                    {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
+                      ? activeRegisterCampaign.definedSections
+                      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                    ).map((sec, idx) => (
+                      <option key={idx} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 {/* Member Profile Photo Upload */}
                 <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2">
@@ -2271,7 +1477,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   >
                     {allowedCampaigns.map(camp => (
                       <option key={camp.id} value={camp.id}>
-                        {formatCampaignOptionLabel(camp)}
+                        🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
                       </option>
                     ))}
                     {creatorProfile.isAdmin && (
@@ -2322,7 +1528,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     >
                       <option value="">-- Member Thlang Rawh ({printTargetMembers.length} Available) --</option>
                       {printTargetMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {hasCampaignSections && m.section ? `• ${m.section}` : ''}</option>
+                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
                       ))}
                     </select>
                   </div>
@@ -2357,68 +1563,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         <span>Include Monthly Trend Visual Chart</span>
                       </label>
                     </div>
-
-                    {includeMonthlyChart && (
-                      <div className="pt-2 border-t border-indigo-200/70 space-y-2">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <label className="text-[10.5px] font-black text-indigo-950 block">
-                            Monthly Trend Chart Range (From – Upto):
-                          </label>
-                          {/* Quick 1-Click Range Presets */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
-                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
-                                chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
-                              }`}
-                            >
-                              Jan–Dec (Default)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
-                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
-                                chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
-                              }`}
-                            >
-                              Apr–Mar (Fin Year)
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 bg-white p-2.5 rounded-xl border border-indigo-200">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-700 block mb-1">From (Start Month)</label>
-                            <select
-                              value={chartStartMonth}
-                              onChange={(e) => setChartStartMonth(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
-                            >
-                              {ALL_MONTH_NAMES_SHORT.map(m => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-700 block mb-1">Upto (End Month)</label>
-                            <select
-                              value={chartEndMonth}
-                              onChange={(e) => setChartEndMonth(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
-                            >
-                              {ALL_MONTH_NAMES_SHORT.map(m => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -2458,10 +1602,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         },
                         {
                           includeMonthlyChart,
-                          monthRangeConfig: {
-                            startMonth: chartStartMonth,
-                            endMonth: chartEndMonth
-                          },
                           includeSignatures,
                           preparedByTitle: 'Prepared by (Treasurer / Recorder)',
                           verifiedByTitle: 'Verified by (Auditor / Finance)',
@@ -2569,7 +1709,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       )}
                       {allowedCampaigns.map(c => (
                         <option key={c.id} value={c.id}>
-                          {formatCampaignOptionLabel(c, campaignCounts[c.id] || 0)}
+                          🏛️ {c.orgCode || 'QR'} - {c.orgName || c.title} ({campaignCounts[c.id] || 0})
                         </option>
                       ))}
                     </select>
@@ -2585,7 +1725,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       id="member-roll-filter-search-input"
                       value={dirSearch}
                       onChange={(e) => setDirSearch(e.target.value)}
-                      placeholder={hasCampaignSections ? "Hming, ID, Phone, Section zawnna..." : "Hming, ID, Phone zawnna..."}
+                      placeholder="Hming, ID, Phone, Section zawnna..."
                       className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     {dirSearch && (
@@ -2637,7 +1777,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
                                 {m.id}
                               </span>
-                              {hasCampaignSections && m.section && (
+                              {m.section && (
                                 <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
                                   {m.section}
                                 </span>
@@ -2718,11 +1858,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         )}
                         <th className="p-3">Chhungkaw Hotu & Dependents</th>
                         <th className="p-3">Phone (Last 4)</th>
-                        {hasCampaignSections && (
-                          <th className="p-3">
-                            {activeScopedCampaign?.sectionLabel || 'Section / Bial'}
-                          </th>
-                        )}
+                        <th className="p-3">Section / Bial</th>
                         <th className="p-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -2773,15 +1909,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               {m.fullPhone ? m.fullPhone : `****${m.phoneLast4}`}
                             </td>
 
-                            {hasCampaignSections && (
-                              <td className="p-3 text-slate-600 font-medium">
-                                {m.section ? (
-                                  <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
-                                    {m.section}
-                                  </span>
-                                ) : '-'}
-                              </td>
-                            )}
+                            <td className="p-3 text-slate-600 font-medium">
+                              {m.section ? (
+                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-[10.5px]">
+                                  {m.section}
+                                </span>
+                              ) : '-'}
+                            </td>
 
                             <td className="p-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
@@ -2913,7 +2047,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 >
                   {allowedCampaigns.map(c => (
                     <option key={c.id} value={c.id}>
-                      {formatCampaignOptionLabel(c)}
+                      {c.orgName || c.title} [{c.orgCode || 'QR'}]
                     </option>
                   ))}
                 </select>
@@ -2985,50 +2119,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </div>
 
               <div>
-                {activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10.5px] font-bold text-slate-700">
-                        {activeEditCampaign.sectionLabel || 'Section / Bial'}
-                      </label>
-                      {editSection && (
-                        <button
-                          type="button"
-                          onClick={() => setEditSection('')}
-                          className="text-[10px] text-rose-600 font-extrabold hover:underline cursor-pointer"
-                        >
-                          Paih / Clear Section
-                        </button>
-                      )}
-                    </div>
-                    <select
-                      value={editSection}
-                      onChange={(e) => setEditSection(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
-                    >
-                      <option value="">-- A awm lo / Paih / None --</option>
-                      {activeEditCampaign.definedSections.map((sec, idx) => (
-                        <option key={idx} value={sec}>
-                          {sec}
-                        </option>
-                      ))}
-                      {editSection && !activeEditCampaign.definedSections.includes(editSection) && (
-                        <option value={editSection}>{editSection} (Existing)</option>
-                      )}
-                    </select>
-                  </>
-                ) : editSection ? (
-                  <div className="flex items-center justify-between p-2 bg-slate-100 rounded-xl border border-slate-200">
-                    <span className="text-[11px] font-medium text-slate-700">Section Awmsa: <b className="text-slate-900">{editSection}</b></span>
-                    <button
-                      type="button"
-                      onClick={() => setEditSection('')}
-                      className="text-[10.5px] text-rose-600 font-extrabold hover:underline cursor-pointer"
-                    >
-                      Paih / Clear Section
-                    </button>
-                  </div>
-                ) : null}
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  Section / Bial
+                </label>
+                <select
+                  value={editSection}
+                  onChange={(e) => setEditSection(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                >
+                  <option value="">-- Thlang Rawh --</option>
+                  {(activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0
+                    ? activeEditCampaign.definedSections
+                    : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                  ).map((sec, idx) => (
+                    <option key={idx} value={sec}>
+                      {sec}
+                    </option>
+                  ))}
+                  {editSection && !activeEditCampaign?.definedSections?.includes(editSection) && (
+                    <option value={editSection}>{editSection} (Existing)</option>
+                  )}
+                </select>
               </div>
 
               {/* Photo Upload in Edit Modal */}
@@ -3135,408 +2246,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    const mToDel = editingMember;
-                    setEditingMember(null);
-                    handlePromptDeleteMember(mToDel);
-                  }}
-                  className="px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl transition cursor-pointer text-xs flex items-center gap-1.5 border border-rose-200 shadow-2xs"
-                  title="Delete this member completely"
+                  onClick={() => setEditingMember(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Member Paih</span>
+                  Cancel
                 </button>
-                <div className="flex gap-2 flex-1 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setEditingMember(null)}
-                    className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 max-w-[200px] bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-                  >
-                    <Check className="w-4 h-4" /> Vawng / Save
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRM DELETE MEMBER MODAL */}
-      {deletingMemberTarget && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
-          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative my-auto space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-11 h-11 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shrink-0 shadow-xs">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div className="space-y-0.5 flex-1">
-                <h3 className="text-base font-black text-slate-900">Member Paih (Delete) I Chiang Em?</h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Duplicate / Mistake record paih bo na
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDeletingMemberTarget(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-3.5 space-y-1.5 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Member ID:</span>
-                <span className="font-mono font-black text-rose-900 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-300">
-                  {deletingMemberTarget.member.id}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Hming:</span>
-                <span className="font-black text-slate-900">{deletingMemberTarget.member.name}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Phone:</span>
-                <span className="font-mono font-bold text-slate-700">
-                  {deletingMemberTarget.member.fullPhone || `****${deletingMemberTarget.member.phoneLast4}`}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-1 border-t border-rose-200/80">
-                <span className="text-slate-600 font-medium">Chhung lama records awm zat:</span>
-                <span className="font-bold text-rose-950">
-                  {deletingMemberTarget.txCount} txns (₹{deletingMemberTarget.totalAmount.toLocaleString('en-IN')})
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <button
-                type="button"
-                onClick={() => handleExecuteDeleteMember(true)}
-                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs transition shadow-md shadow-rose-200 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Member Leh A Chhunga Records ({deletingMemberTarget.txCount} txns) Paih Veк Rawh</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExecuteDeleteMember(false)}
-                className="w-full py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs transition border border-slate-300 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>Member Chauh Paih (Ledger Record Dah Tha Rawh)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDeletingMemberTarget(null)}
-                className="w-full py-2 text-slate-500 hover:text-slate-800 font-bold text-xs transition cursor-pointer"
-              >
-                Kansel / Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT TRANSACTION MODAL */}
-      {editingTx && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn text-slate-800">
-          <div className="bg-white border border-indigo-200 rounded-3xl w-full max-w-md p-6 shadow-2xl relative my-auto shrink-0 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <Edit2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Thawhkhawm Record Siamthatna</h3>
-                  <p className="text-[10px] text-slate-500 font-mono">ID: {editingTx.id}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingTx(null)}
-                className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditedTx} className="space-y-4 text-xs">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Puitu / Member Hming <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editTxDonorName}
-                  onChange={(e) => setEditTxDonorName(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Pek Zat (Amount ₹) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
-                    <input
-                      type="number"
-                      value={editTxAmount}
-                      onChange={(e) => setEditTxAmount(e.target.value)}
-                      className="w-full pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Payment Mode
-                  </label>
-                  <select
-                    value={editTxPaymentMethod}
-                    onChange={(e) => setEditTxPaymentMethod(e.target.value as any)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    <option value="cash">💵 Cash Counter</option>
-                    <option value="online">⚡ Direct UPI / Online</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Fund Head / Category</label>
-                  <select
-                    value={editTxCategory}
-                    onChange={(e) => setEditTxCategory(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    {campaignCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                    {!campaignCategories.includes(editTxCategory) && editTxCategory && (
-                      <option value={editTxCategory}>{editTxCategory}</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Thla (Month)</label>
-                  <select
-                    value={editTxMonth}
-                    onChange={(e) => setEditTxMonth(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    {monthsList.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Kum (Year)</label>
-                  <select
-                    value={editTxYear}
-                    onChange={(e) => setEditTxYear(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  >
-                    {selectableYears.map(y => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Remark / Note</label>
-                <input
-                  type="text"
-                  value={editTxRemark}
-                  onChange={(e) => setEditTxRemark(e.target.value)}
-                  placeholder="e.g. Inkhawm thawh / UTR ref"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex flex-col sm:flex-row gap-2 border-t border-slate-100">
                 <button
-                  type="button"
-                  onClick={() => handleRequestDeleteTx(editingTx)}
-                  className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-black rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                  type="submit"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Paih Bo Rawh (Delete)</span>
+                  <Check className="w-4 h-4" /> Vawng / Save Changes
                 </button>
-
-                <div className="flex-1 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingTx(null)}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Save Siamthatna</span>
-                  </button>
-                </div>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRM DELETE TRANSACTION MODAL */}
-      {deletingTx && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
-          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl relative my-auto text-center space-y-4">
-            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            
-            <div>
-              <h3 className="text-base font-black text-slate-900">Transaction Paih I Chiang Em?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                He thawhkhawm record (₹{deletingTx.amount?.toLocaleString('en-IN')} - {deletingTx.donorName}) hi database atangin paih hlen a ni dawn e.
-              </p>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-left text-xs font-medium space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-500">ID:</span>
-                <span className="font-mono text-slate-800">{deletingTx.id}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Pual / Hming:</span>
-                <span className="font-bold text-slate-800">{deletingTx.donorName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Pek Zat:</span>
-                <span className="font-black text-slate-900">₹{deletingTx.amount?.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setDeletingTx(null)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeleteTx}
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Paih Bo Rawh</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRM DUPLICATE MEMBER MODAL */}
-      {duplicateModalTarget && (
-        <div className="fixed inset-0 z-70 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-amber-300 shadow-2xl space-y-4 animate-scaleUp text-slate-800">
-            <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-6 h-6 text-amber-700" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Member Duplicate A Awm Sa!</h3>
-                <p className="text-xs text-amber-800 font-semibold mt-0.5">
-                  {duplicateModalTarget.reason}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3.5 space-y-2 text-xs">
-              <div className="font-black text-slate-700 uppercase tracking-wider text-[10px]">
-                Member Awm Sa (Existing Record):
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">ID & Hming:</span>
-                <span className="font-bold text-slate-900">
-                  <span className="font-mono text-indigo-700 font-black">{duplicateModalTarget.existingMember.id}</span> - {duplicateModalTarget.existingMember.name}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Phone:</span>
-                <span className="font-mono font-bold text-slate-800">
-                  {duplicateModalTarget.existingMember.fullPhone || `****${duplicateModalTarget.existingMember.phoneLast4}`}
-                </span>
-              </div>
-              {duplicateModalTarget.existingMember.section && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Section / Bial:</span>
-                  <span className="font-bold text-slate-800">{duplicateModalTarget.existingMember.section}</span>
-                </div>
-              )}
-              {duplicateModalTarget.existingMember.dependents && duplicateModalTarget.existingMember.dependents.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 font-medium">Dependents:</span>
-                  <span className="font-bold text-slate-800">{duplicateModalTarget.existingMember.dependents.length} members</span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const existing = duplicateModalTarget.existingMember;
-                  setDuplicateModalTarget(null);
-                  handleOpenEdit(existing);
-                }}
-                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Edit3 className="w-4 h-4" />
-                <span>Awmsa Siamtha Rawh (Open in Edit)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  executeSaveMember(duplicateModalTarget.newDraft);
-                }}
-                className="w-full py-2.5 px-4 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-amber-300"
-              >
-                <span>Record Thar Hian Update / Overwrite Rawh</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDuplicateModalTarget(null)}
-                className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                Kansel / Phone Dang Hmang Rawh
-              </button>
-            </div>
           </div>
         </div>
       )}

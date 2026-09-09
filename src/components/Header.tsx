@@ -169,7 +169,9 @@ export const Header: React.FC<HeaderProps> = ({
     return saved;
   });
   const [isLocating, setIsLocating] = useState<boolean>(false);
-  const [isGpsActive, setIsGpsActive] = useState<boolean>(false);
+  const [isGpsActive, setIsGpsActive] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('kut_app_gps_verified') === 'true';
+  });
   const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
   const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
   const [customLocationInput, setCustomLocationInput] = useState<string>('');
@@ -294,12 +296,14 @@ export const Header: React.FC<HeaderProps> = ({
     return 'Mizoram, India';
   };
 
-  // Trigger Live GPS with High Accuracy first
+  // Trigger Live GPS with High Accuracy first, then WiFi/laptop fallback
   const triggerLiveGPS = useCallback((interactive: boolean = false) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       const saved = localStorage.getItem('kut_app_user_location') || 'Zobawk, Lunglei';
       setUserLocation(saved);
-      if (interactive) setGpsErrorMsg('I phone browser-ah GPS Geolocation a function thei lo.');
+      setIsGpsActive(false);
+      localStorage.removeItem('kut_app_gps_verified');
+      if (interactive) setGpsErrorMsg('I browser/device-ah GPS Geolocation a function thei lo.');
       return;
     }
 
@@ -313,6 +317,7 @@ export const Header: React.FC<HeaderProps> = ({
         const resolved = await resolveLocationName(lat, lng);
         setUserLocation(resolved);
         setIsGpsActive(true);
+        localStorage.setItem('kut_app_gps_verified', 'true');
         setGpsErrorMsg('');
         localStorage.setItem('kut_app_user_location', resolved);
         window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: resolved, lat, lng } }));
@@ -323,6 +328,7 @@ export const Header: React.FC<HeaderProps> = ({
         const fallback = getNearestMizoramLocation(lat, lng).name;
         setUserLocation(fallback);
         setIsGpsActive(true);
+        localStorage.setItem('kut_app_gps_verified', 'true');
         localStorage.setItem('kut_app_user_location', fallback);
       } finally {
         setIsLocating(false);
@@ -330,34 +336,44 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     const handleError = (error: GeolocationPositionError) => {
+      // If high accuracy failed due to timeout or position unavailable on laptop/desktop, try normal WiFi accuracy
+      if (error.code !== error.PERMISSION_DENIED) {
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          (err2) => {
+            setIsLocating(false);
+            setIsGpsActive(false);
+            localStorage.removeItem('kut_app_gps_verified');
+            let msg = 'GPS signal zawn a hlawhchham rih e. A hnuaia i awmna khua hi direct-in thlang mai rawh le.';
+            if (err2.code === err2.PERMISSION_DENIED) {
+              msg = 'Browser-ah Location permission a blocked. Browser address bar-a "Location Allow" phalsak rawh le.';
+            }
+            setGpsErrorMsg(msg);
+          },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+        );
+        return;
+      }
+
       setIsLocating(false);
-      let msg = 'GPS signal zawn a hlawhchham rih e.';
-      if (error.code === error.PERMISSION_DENIED) {
-        msg = 'Phone Location access a blocked. Browser/Phone Setting-ah "Allow Location" phalsak rawh le, emaw a hnuaia khua hi thlang mai rawh.';
-      } else if (error.code === error.TIMEOUT) {
-        msg = 'GPS signal hmuh a muang deuh. A hnuaia i awmna khua/veng hi direct-in thlang mai rawh le.';
-      }
+      setIsGpsActive(false);
+      localStorage.removeItem('kut_app_gps_verified');
+      let msg = 'Browser-ah Location access a in-block. Address bar kil sir zawnah "Allow Location" phalsak rawh le, emaw khua hi thlang mai rawh.';
       setGpsErrorMsg(msg);
-      
-      const saved = localStorage.getItem('kut_app_user_location');
-      if (!saved || saved.includes('Detecting') || saved.includes('Assam') || saved.includes('Nagaon')) {
-        const defaultLoc = 'Zobawk, Lunglei';
-        setUserLocation(defaultLoc);
-        localStorage.setItem('kut_app_user_location', defaultLoc);
-      }
     };
 
     navigator.geolocation.getCurrentPosition(
       handleSuccess,
       handleError,
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
     );
   }, []);
 
   // Quick select explicit location
   const handleSelectLocation = (locName: string) => {
     setUserLocation(locName);
-    setIsGpsActive(true);
+    setIsGpsActive(false);
+    localStorage.removeItem('kut_app_gps_verified');
     localStorage.setItem('kut_app_user_location', locName);
     window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: locName } }));
     setShowLocationModal(false);
@@ -595,28 +611,41 @@ export const Header: React.FC<HeaderProps> = ({
           <div 
             onClick={handleLocationClick}
             className="flex items-center gap-1.5 min-w-0 text-slate-300 hover:text-amber-300 transition cursor-pointer group text-left flex-1"
-            title="Auto GPS Location (Click to change)"
+            title="Location (Click to change or run GPS)"
           >
             {isLocating ? (
               <Loader2 className="w-3 h-3 text-amber-400 animate-spin shrink-0" />
             ) : (
               <span className="relative flex items-center justify-center shrink-0">
-                <MapPin className="w-3 h-3 text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-emerald-400 rounded-full animate-ping" />
+                <MapPin className={`w-3 h-3 ${isGpsActive ? 'text-emerald-400' : 'text-amber-400'} group-hover:scale-110 transition-transform`} />
+                {isGpsActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-emerald-400 rounded-full animate-ping" />
+                )}
               </span>
             )}
             <span className="truncate text-[11px] font-bold text-slate-200 max-w-[170px] sm:max-w-[240px]">
               {userLocation}
             </span>
-            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-emerald-950/90 border border-emerald-500/40 rounded text-[7.5px] font-black text-emerald-300 uppercase tracking-wider shrink-0">
-              <Crosshair className="w-2 h-2 text-emerald-400" /> GPS
-            </span>
-            <span
-              title="Re-detect GPS"
-              className="p-0.5 hover:text-amber-400 shrink-0"
+            {isGpsActive ? (
+              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-emerald-950/90 border border-emerald-500/40 rounded text-[7.5px] font-black text-emerald-300 uppercase tracking-wider shrink-0">
+                <Crosshair className="w-2 h-2 text-emerald-400" /> GPS
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-[7.5px] font-bold text-amber-300/90 uppercase tracking-wider shrink-0" title="Click to detect GPS or set town">
+                Khua
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerLiveGPS(true);
+              }}
+              title="Detect Live GPS"
+              className="p-0.5 text-slate-400 hover:text-amber-400 hover:scale-110 transition shrink-0 cursor-pointer"
             >
-              <RotateCw className={`w-2.5 h-2.5 text-slate-500 opacity-70 group-hover:opacity-100 transition-all ${isLocating ? 'animate-spin text-amber-400' : ''}`} />
-            </span>
+              <RotateCw className={`w-2.5 h-2.5 ${isLocating ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
           </div>
 
           {/* Quick Actions: Sulhnu (History) & Report (Print / Statement) */}

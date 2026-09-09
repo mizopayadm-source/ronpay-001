@@ -1,6 +1,5 @@
 import { Transaction, MemberRecord } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
-import { isTransactionInMonth, getTransactionMonthInfo } from './monthHelper';
 
 export interface MatrixRow {
   donorName: string;
@@ -45,35 +44,10 @@ export interface PDFExportOptions {
   includeMonthlyChart?: boolean;
   monthRangeConfig?: MonthRangeConfig;
   includeSignatures?: boolean;
-  groupByDonor?: boolean;
-  showDateTime?: boolean;
-  members?: MemberRecord[];
   preparedByTitle?: string;
   verifiedByTitle?: string;
   approvedByTitle?: string;
   targetInfo?: TargetExportInfo;
-}
-
-export interface GroupedDonorRecord {
-  donorName: string;
-  isAnonymous: boolean;
-  memberId?: string;
-  section?: string;
-  phone?: string;
-  donorMemberId?: string;
-  donorSection?: string;
-  donorPhone?: string;
-  paymentMethods: ('online' | 'cash')[];
-  paymentMethodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH';
-  totalAmount: number;
-  transactionsCount: number;
-  txCount: number;
-  transactions: Transaction[];
-  monthsPaid: string[];
-  datesPaid: string[];
-  dateRange: string;
-  categoryBreakdown: { [category: string]: number };
-  remarks: string[];
 }
 
 /**
@@ -94,110 +68,48 @@ export const printHtmlSafely = (html: string, docTitle: string = 'Print Document
 
 /**
  * Universal File Download & Share helper:
- * 1. Checks if Android Native Bridge (RonPayBridge / AndroidBlobDownloader) is present (Mobile APK).
- *    If yes, passes Base64 directly to Android Java for writing to the phone's public Downloads directory.
- * 2. Prepares server-backed stream via /api/prepare-download for mobile WebViews & browsers
- *    (receives HTTP Content-Disposition: attachment so Android Download Manager catches it).
- * 3. Fallback to standard Blob URL & Base64 Data URI anchor click.
+ * 1. Checks if Web Share API (navigator.share) is available with files on Mobile / Android WebViews.
+ * 2. Fallback to standard Blob URL & <a> download click.
+ * 3. Fallback to Base64 Data URI for WebViews without Blob download support.
  */
 export const downloadFileUniversal = async (
   content: string | Blob,
   fileName: string,
   mimeType: string,
-  _title: string = 'RonPay Report'
+  title: string = 'RonPay Report'
 ): Promise<boolean> => {
   try {
     const blob = content instanceof Blob 
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
 
-    const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-
-    // Convert Blob to Base64 data URI helper
-    const readBlobAsDataUri = (): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (reader.result && typeof reader.result === 'string') {
-            resolve(reader.result);
-          } else {
-            reject(new Error('Failed to read blob'));
-          }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    };
-
-    let base64Uri = '';
-    try {
-      base64Uri = await readBlobAsDataUri();
-    } catch (e) {
-      console.warn('Base64 conversion failed:', e);
-    }
-
-    // =========================================================================
-    // TIER 1: Native Android Bridge (RonPay APK / Android WebView)
-    // =========================================================================
-    if (typeof window !== 'undefined') {
-      const w = window as any;
-      const nativeBridge = w.RonPayBridge || w.AndroidBlobDownloader || w.AndroidDownloader;
-      if (nativeBridge && typeof nativeBridge.getBase64FromBlobData === 'function') {
-        try {
-          if (base64Uri) {
-            nativeBridge.getBase64FromBlobData(base64Uri, mimeType, fileName);
-            return true;
-          }
-        } catch (bridgeErr) {
-          console.warn('Native bridge execution failed, falling back to stream:', bridgeErr);
-        }
-      }
-    }
-
-    // =========================================================================
-    // TIER 2: Server-Streamed HTTP Download (Directly triggers phone Download Manager)
-    // =========================================================================
-    if (base64Uri) {
+    // Step 1: Check Web Share API with files (Android / iOS / Mobile WebViews)
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        const resp = await fetch('/api/prepare-download', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName,
-            mimeType,
-            base64Data: base64Uri,
-          }),
-        });
-        if (resp.ok) {
-          const resData = await resp.json();
-          if (resData.success && resData.downloadUrl) {
-            const serverAnchor = document.createElement('a');
-            serverAnchor.href = resData.downloadUrl;
-            serverAnchor.download = fileName;
-            serverAnchor.target = '_self';
-            serverAnchor.style.display = 'none';
-            document.body.appendChild(serverAnchor);
-            serverAnchor.click();
-
-            setTimeout(() => {
-              try { document.body.removeChild(serverAnchor); } catch {}
-            }, 2000);
-            return true;
-          }
+        const file = new File([blob], fileName, { type: mimeType.split(';')[0] });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: title || fileName,
+            text: `${title} - RonPay Report`,
+            files: [file],
+          });
+          return true;
         }
-      } catch (streamErr) {
-        console.warn('Server download stream failed, falling back to local blob:', streamErr);
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') {
+          return true; // User intentionally dismissed the share sheet
+        }
+        console.warn('Web Share API error, falling back to download link', shareErr);
       }
     }
 
-    // =========================================================================
-    // TIER 3: Client-side Blob Object URL anchor download
-    // =========================================================================
+    // Step 2: Standard Blob Object URL
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
-    a.style.display = 'none';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
     a.click();
 
@@ -205,24 +117,29 @@ export const downloadFileUniversal = async (
       try {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      } catch (e) {}
-    }, 2500);
+      } catch (e) {
+        // ignore cleanup error
+      }
+    }, 1500);
 
-    // =========================================================================
-    // TIER 4: Base64 Data URI anchor fallback for mobile WebViews
-    // =========================================================================
-    if (base64Uri && isMobile) {
+    // Step 3: Additional fallback for Android WebView which ignores blob URLs
+    if (typeof content === 'string') {
       try {
+        const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
         const fallbackA = document.createElement('a');
-        fallbackA.href = base64Uri;
+        fallbackA.href = dataUri;
         fallbackA.download = fileName;
-        fallbackA.style.display = 'none';
+        fallbackA.target = '_blank';
         document.body.appendChild(fallbackA);
         fallbackA.click();
         setTimeout(() => {
-          try { document.body.removeChild(fallbackA); } catch {}
-        }, 1500);
-      } catch (e) {}
+          try {
+            document.body.removeChild(fallbackA);
+          } catch (e) {}
+        }, 1000);
+      } catch (e) {
+        // ignore
+      }
     }
 
     return true;
@@ -232,149 +149,18 @@ export const downloadFileUniversal = async (
   }
 };
 
-export interface WhatsAppSharePayload {
-  content?: Blob | string;
-  base64Data?: string;
-  fileName: string;
-  mimeType?: string;
-  summaryText?: string;
-  title?: string;
-}
-
-/**
- * Universal WhatsApp PDF & Document Share:
- * 1. Priority 1 (Android APK Native Bridge):
- *    Directly invokes window.RonPayBridge.shareFileToWhatsApp(base64Data, mimeType, fileName, summaryText).
- *    This allows WhatsApp to open natively with the generated PDF attached directly as a document!
- * 2. Priority 2 (Mobile Web Share API):
- *    Uses navigator.share({ files: [file], text: summaryText, title }) if supported.
- * 3. Priority 3 (Browser Fallback):
- *    Downloads the PDF file automatically and launches WhatsApp with pre-filled summary text.
- */
-export const shareFileToWhatsAppUniversal = async ({
-  content,
-  base64Data,
-  fileName,
-  mimeType = 'application/pdf',
-  summaryText = '',
-  title = 'RonPay Report'
-}: WhatsAppSharePayload): Promise<{ success: boolean; method: 'native_bridge' | 'web_share' | 'wa_url_fallback' }> => {
-  try {
-    // 1. Ensure clean base64 data string
-    let pureBase64 = base64Data || '';
-
-    if (!pureBase64 && content) {
-      const blob = content instanceof Blob
-        ? content
-        : new Blob([content], { type: mimeType });
-
-      pureBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (reader.result && typeof reader.result === 'string') {
-            resolve(reader.result);
-          } else {
-            reject(new Error('Failed to convert blob to base64'));
-          }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    // =========================================================================
-    // TIER 1: Native Android Bridge (window.RonPayBridge.shareFileToWhatsApp)
-    // =========================================================================
-    if (typeof window !== 'undefined') {
-      const w = window as any;
-      const nativeBridge = w.RonPayBridge || w.AndroidBlobDownloader || w.AndroidDownloader;
-      if (nativeBridge && typeof nativeBridge.shareFileToWhatsApp === 'function') {
-        try {
-          nativeBridge.shareFileToWhatsApp(pureBase64, mimeType, fileName, summaryText);
-          return { success: true, method: 'native_bridge' };
-        } catch (bridgeErr) {
-          console.warn('RonPayBridge.shareFileToWhatsApp failed, falling back:', bridgeErr);
-        }
-      }
-    }
-
-    // =========================================================================
-    // TIER 2: Native Web Share API with File
-    // =========================================================================
-    const blobToShare = content instanceof Blob 
-      ? content 
-      : (pureBase64 ? await (await fetch(pureBase64)).blob() : null);
-
-    if (blobToShare && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-      try {
-        const file = new File([blobToShare], fileName, { type: mimeType });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title,
-            text: summaryText,
-            files: [file],
-          });
-          return { success: true, method: 'web_share' };
-        }
-      } catch (shareErr: any) {
-        if (shareErr?.name === 'AbortError') {
-          return { success: true, method: 'web_share' };
-        }
-        console.warn('navigator.share failed:', shareErr);
-      }
-    }
-
-    // =========================================================================
-    // TIER 3: Universal Web Fallback (Download PDF + Open WhatsApp)
-    // =========================================================================
-    // Copy summary text to clipboard
-    if (typeof navigator !== 'undefined' && navigator.clipboard && summaryText) {
-      try {
-        await navigator.clipboard.writeText(summaryText);
-      } catch {}
-    }
-
-    // Ensure PDF file is saved/downloaded
-    if (blobToShare) {
-      try {
-        await downloadFileUniversal(blobToShare, fileName, mimeType, title);
-      } catch (dlErr) {
-        console.warn('PDF download fallback failed:', dlErr);
-      }
-    }
-
-    // Open WhatsApp Web or App
-    const encoded = encodeURIComponent(summaryText);
-    const waUrl = `https://wa.me/?text=${encoded}`;
-    const waLink = document.createElement('a');
-    waLink.href = waUrl;
-    waLink.target = '_blank';
-    waLink.rel = 'noopener noreferrer';
-    document.body.appendChild(waLink);
-    waLink.click();
-    setTimeout(() => {
-      try { document.body.removeChild(waLink); } catch {}
-    }, 1000);
-
-    return { success: true, method: 'wa_url_fallback' };
-  } catch (err) {
-    console.error('shareFileToWhatsAppUniversal failed:', err);
-    return { success: false, method: 'wa_url_fallback' };
-  }
-};
-
 /**
  * Returns the ordered array of month abbreviations for a given From - Upto month configuration.
  */
 export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
-  const start = config?.startMonth || 'Jan';
-  const end = config?.endMonth || 'Dec';
+  const start = config?.startMonth || 'Apr';
+  const end = config?.endMonth || 'Mar';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   const sIdx = months.indexOf(start);
   const eIdx = months.indexOf(end);
   if (sIdx === -1 || eIdx === -1) {
-    return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
   }
   
   if (sIdx === eIdx) {
@@ -393,16 +179,9 @@ export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
  */
 export const buildKumtluangMatrix = (
   transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc',
-  preferredCategories?: string[]
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
 ): KumtluangMatrixData => {
   const categorySet = new Set<string>();
-  if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 0) {
-    preferredCategories.forEach(cat => {
-      if (cat && cat.trim()) categorySet.add(cat.trim());
-    });
-  }
-
   const donorMap = new Map<string, { [cat: string]: number }>();
   const donorPaymentMethods = new Map<string, Set<'online' | 'cash'>>();
   const donorRemarks = new Map<string, string[]>();
@@ -450,9 +229,7 @@ export const buildKumtluangMatrix = (
         }
       });
     } else {
-      const fallbackCat = (preferredCategories && preferredCategories.length > 0)
-        ? preferredCategories[0]
-        : (t.subCategory || t.campaignTitle || 'General Collection');
+      const fallbackCat = t.campaignTitle || 'General Collection';
       categorySet.add(fallbackCat);
       donorCats[fallbackCat] = (donorCats[fallbackCat] || 0) + t.amount;
     }
@@ -520,167 +297,6 @@ export const buildKumtluangMatrix = (
 };
 
 /**
- * Groups and aggregates transactions by Donor / Member into consolidated single-row records.
- * Solves the issue of multiple transactions for the same donor cluttering statements or tables.
- */
-export const buildGroupedDonorRecords = (
-  transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
-): GroupedDonorRecord[] => {
-  const donorMap = new Map<string, {
-    donorName: string;
-    isAnonymous: boolean;
-    memberId?: string;
-    section?: string;
-    phone?: string;
-    paymentMethods: Set<'online' | 'cash'>;
-    totalAmount: number;
-    transactions: Transaction[];
-    monthsSet: Set<string>;
-    datesList: Date[];
-    categoryBreakdown: { [cat: string]: number };
-    remarksSet: Set<string>;
-  }>();
-
-  transactions.forEach(t => {
-    const rawName = t.isAnonymous ? 'Anonymous' : (t.donorName?.trim() || 'Unknown Donor');
-    // Group key: normalize donor name
-    const groupKey = rawName.toLowerCase();
-
-    if (!donorMap.has(groupKey)) {
-      donorMap.set(groupKey, {
-        donorName: rawName,
-        isAnonymous: Boolean(t.isAnonymous),
-        memberId: t.memberId || undefined,
-        section: t.donorVeng || undefined,
-        phone: t.donorPhone || undefined,
-        paymentMethods: new Set<'online' | 'cash'>(),
-        totalAmount: 0,
-        transactions: [],
-        monthsSet: new Set<string>(),
-        datesList: [],
-        categoryBreakdown: {},
-        remarksSet: new Set<string>(),
-      });
-    }
-
-    const donorRec = donorMap.get(groupKey)!;
-    donorRec.totalAmount += (t.amount || 0);
-    donorRec.transactions.push(t);
-
-    if (t.memberId && !donorRec.memberId) {
-      donorRec.memberId = t.memberId;
-    }
-    if (t.donorVeng && !donorRec.section) {
-      donorRec.section = t.donorVeng;
-    }
-    if (t.donorPhone && !donorRec.phone) {
-      donorRec.phone = t.donorPhone;
-    }
-
-    const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
-    donorRec.paymentMethods.add(method);
-
-    // Track month / period label
-    const mInfo = getTransactionMonthInfo(t);
-    const mLabel = t.periodLabel || `${mInfo.shortMonth} ${mInfo.year}`;
-    donorRec.monthsSet.add(mLabel);
-
-    try {
-      const d = new Date(t.timestamp);
-      if (!isNaN(d.getTime())) {
-        donorRec.datesList.push(d);
-      }
-    } catch {}
-
-    // Track category breakdown
-    if (t.subCategoryBreakdown && typeof t.subCategoryBreakdown === 'object') {
-      Object.entries(t.subCategoryBreakdown).forEach(([k, v]) => {
-        const amt = Number(v) || 0;
-        if (amt > 0) {
-          donorRec.categoryBreakdown[k] = (donorRec.categoryBreakdown[k] || 0) + amt;
-        }
-      });
-    } else if (t.subCategory) {
-      donorRec.categoryBreakdown[t.subCategory] = (donorRec.categoryBreakdown[t.subCategory] || 0) + t.amount;
-    }
-
-    if (t.remark && t.remark.trim()) {
-      donorRec.remarksSet.add(t.remark.trim());
-    }
-  });
-
-  const records: GroupedDonorRecord[] = [];
-
-  donorMap.forEach(d => {
-    const methodsArr = Array.from(d.paymentMethods);
-    let methodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH' = 'ONLINE';
-    if (d.paymentMethods.has('online') && d.paymentMethods.has('cash')) {
-      methodLabel = 'ONLINE + CASH';
-    } else if (d.paymentMethods.has('cash')) {
-      methodLabel = 'CASH';
-    } else {
-      methodLabel = 'ONLINE';
-    }
-
-    // Determine date range text
-    let dateRange = '';
-    if (d.datesList.length === 1) {
-      dateRange = formatDateDDMMYYYY(d.datesList[0]);
-    } else if (d.datesList.length > 1) {
-      const sortedDates = [...d.datesList].sort((a, b) => a.getTime() - b.getTime());
-      const minD = formatDateDDMMYYYY(sortedDates[0]);
-      const maxD = formatDateDDMMYYYY(sortedDates[sortedDates.length - 1]);
-      dateRange = minD === maxD ? minD : `${minD} - ${maxD}`;
-    }
-
-    const uniqueDatesFormatted = Array.from(
-      new Set(d.datesList.map(dt => formatDateDDMMYYYY(dt)))
-    );
-
-    records.push({
-      donorName: d.donorName,
-      isAnonymous: d.isAnonymous,
-      memberId: d.memberId,
-      section: d.section,
-      phone: d.phone,
-      donorMemberId: d.memberId,
-      donorSection: d.section,
-      donorPhone: d.phone,
-      paymentMethods: methodsArr,
-      paymentMethodLabel: methodLabel,
-      totalAmount: d.totalAmount,
-      transactionsCount: d.transactions.length,
-      txCount: d.transactions.length,
-      transactions: d.transactions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-      monthsPaid: Array.from(d.monthsSet),
-      datesPaid: uniqueDatesFormatted,
-      dateRange,
-      categoryBreakdown: d.categoryBreakdown || {},
-      remarks: Array.from(d.remarksSet),
-    });
-  });
-
-  // Apply sorting
-  if (sortOrder === 'name-asc') {
-    records.sort((a, b) => a.donorName.localeCompare(b.donorName));
-  } else if (sortOrder === 'name-desc') {
-    records.sort((a, b) => b.donorName.localeCompare(a.donorName));
-  } else if (sortOrder === 'amount-desc') {
-    records.sort((a, b) => b.totalAmount - a.totalAmount);
-  } else {
-    // date-desc (newest payment first)
-    records.sort((a, b) => {
-      const timeA = a.transactions[0] ? new Date(a.transactions[0].timestamp).getTime() : 0;
-      const timeB = b.transactions[0] ? new Date(b.transactions[0].timestamp).getTime() : 0;
-      return timeB - timeA;
-    });
-  }
-
-  return records;
-};
-
-/**
  * Computes monthly distribution for the visual bar chart based on selected month configuration
  */
 export const computeMonthlyDistribution = (
@@ -691,12 +307,15 @@ export const computeMonthlyDistribution = (
   const monthTotals: Record<string, number> = {};
   months.forEach(m => { monthTotals[m] = 0; });
 
+  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   transactions.forEach(t => {
     try {
-      const monthInfo = getTransactionMonthInfo(t);
-      const mName = monthInfo.shortMonth;
+      const d = new Date(t.timestamp);
+      const mIdx = d.getMonth(); // 0=Jan, 3=Apr, 7=Aug
+      const mName = monthNamesShort[mIdx];
       if (monthTotals[mName] !== undefined) {
-        monthTotals[mName] += (t.amount || 0);
+        monthTotals[mName] += t.amount;
       }
     } catch {
       // fallback
@@ -1383,27 +1002,16 @@ export const generateTransactionsPDFHtml = (
   const sharedPrintStyles = `
     @page { 
       size: auto; 
-      margin: 10mm 10mm 10mm 10mm; 
+      margin: 12mm 10mm 12mm 10mm; 
     }
     * { box-sizing: border-box; }
-    html, body {
-      width: 100% !important;
-      max-width: 100% !important;
-      height: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-      overflow: visible !important;
-      overflow-x: visible !important;
-      overflow-y: visible !important;
-      position: static !important;
-      background: #ffffff !important;
-      color: #1e293b !important;
-    }
     body { 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+      color: #1e293b; 
       margin: 0; 
       padding: 16px; 
       font-size: 11px; 
+      background: #ffffff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -1530,19 +1138,18 @@ export const generateTransactionsPDFHtml = (
 
     /* Table Styles */
     table { 
-      width: 100% !important; 
-      max-width: 100% !important;
+      width: 100%; 
       border-collapse: collapse; 
       text-align: left; 
       font-size: 11px; 
-      margin-top: 8px; 
+      margin-top: 10px; 
     }
     thead th {
       background: #1e1b4b;
       color: #ffffff;
-      padding: 8px 10px;
+      padding: 10px 12px;
       text-transform: uppercase;
-      font-size: 9px;
+      font-size: 9.5px;
       letter-spacing: 0.5px;
     }
     .total-row {
@@ -1550,70 +1157,63 @@ export const generateTransactionsPDFHtml = (
       font-weight: 900;
     }
 
-    /* Clean multi-page table structure */
+    /* Prevent header row repeating on subsequent pages */
     thead {
-      display: table-header-group !important;
-    }
-    tbody {
       display: table-row-group !important;
-    }
-    tfoot {
-      display: table-footer-group !important;
     }
     tr {
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
-    th, td {
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
+    tfoot {
+      display: table-row-group !important;
     }
 
     /* Signature Blocks */
     .sign-grid {
-      margin-top: 20px;
+      margin-top: 40px;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
+      gap: 24px;
       text-align: center;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .sign-box {
       border-top: 1.5px dashed #64748b;
-      padding-top: 6px;
+      padding-top: 8px;
     }
     .sign-label {
-      font-size: 10.5px;
+      font-size: 11px;
       font-weight: 800;
       color: #1e293b;
     }
     .sign-subtext {
-      font-size: 9px;
+      font-size: 9.5px;
       color: #64748b;
       margin-top: 2px;
     }
     .digital-seal {
-      font-size: 8px;
+      font-size: 8.5px;
       font-weight: bold;
       color: #4338ca;
-      margin-top: 3px;
+      margin-top: 4px;
       display: inline-block;
       background: #e0e7ff;
-      padding: 2px 6px;
+      padding: 2px 8px;
       border-radius: 4px;
     }
 
     .footer {
-      margin-top: 14px;
+      margin-top: 30px;
       border-top: 1px solid #cbd5e1;
-      padding-top: 8px;
-      font-size: 8.5px;
+      padding-top: 10px;
+      font-size: 9px;
       color: #64748b;
       display: flex;
       justify-content: space-between;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     @media screen and (max-width: 640px) {
@@ -1625,96 +1225,39 @@ export const generateTransactionsPDFHtml = (
       .target-bar { flex-direction: column; gap: 6px; }
       table { font-size: 10px; }
       th, td { padding: 6px 8px !important; }
-      .sign-grid { grid-template-columns: 1fr; gap: 14px; margin-top: 18px; }
+      .sign-grid { grid-template-columns: 1fr; gap: 14px; margin-top: 24px; }
     }
 
     @media print {
-      html, body {
-        width: 100% !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        overflow: visible !important;
-        overflow-x: visible !important;
-        overflow-y: visible !important;
-        position: static !important;
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      .header-banner { 
-        margin-top: 0;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      .summary-bar,
-      .target-bar {
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-      }
-      thead { display: table-header-group !important; }
-      tbody { display: table-row-group !important; }
-      tfoot { display: table-footer-group !important; }
-      tr, th, td {
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      .sign-grid, .footer, .report-footer {
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      .page-break, .break-before-page {
-        page-break-before: always !important;
-        break-before: page !important;
-      }
-      .page-break-after {
-        page-break-after: always !important;
-        break-after: page !important;
-      }
-      .no-print { display: none !important; }
+      body { padding: 0; }
+      .header-banner { margin-top: 0; }
+      thead { display: table-row-group !important; }
     }
   `;
 
   // If Kumtluang Bawm, format matrix table: Sl No | Hming | Mode | Cat 1 | Cat 2 | ... | Total
   if (isKumtluang) {
     const matrix = buildKumtluangMatrix(transactions, sortOrder);
-    const catCount = matrix.categories.length;
-    // Multi-category matrix statements are wide ledgers - standard accounting format is A4 Landscape
-    const isWideLedger = catCount >= 3;
-    const pageOrientation = isWideLedger ? 'landscape' : 'portrait';
-
-    const thPadding = catCount >= 6 ? '5px 4px' : catCount >= 4 ? '6px 6px' : '8px 10px';
-    const thFontSize = catCount >= 6 ? '7.5px' : catCount >= 4 ? '8.5px' : '9.5px';
-    const tdPadding = catCount >= 6 ? '5px 4px' : catCount >= 4 ? '6px 6px' : '7px 8px';
-    const tdFontSize = catCount >= 6 ? '8.5px' : catCount >= 4 ? '9.5px' : '10px';
-
-    const matrixHeaderThs = matrix.categories.map(c => `
-      <th style="text-align: right; padding: ${thPadding}; font-weight: 800; font-size: ${thFontSize}; line-height: 1.15; word-break: break-word;">
-        <div style="min-width: 55px;">${c.toUpperCase()}</div>
-      </th>
-    `).join('');
+    const matrixHeaderThs = matrix.categories.map(c => `<th style="text-align: right; padding: 9px 12px; font-weight: 800;">${c.toUpperCase()}</th>`).join('');
     
     const matrixRowsHtml = matrix.rows.map((r, idx) => {
       const modeBadge = r.paymentMethodLabel === 'CASH'
-        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
         : r.paymentMethodLabel === 'ONLINE'
-        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
-        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8px; padding: 2px 5px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
+        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
+        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
 
       return `
       <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 34px; font-size: ${tdFontSize};">${idx + 1}</td>
-        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a; font-size: ${tdFontSize}; max-width: 170px; word-break: break-word;">${r.donorName}</td>
-        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: center; width: 66px;">${modeBadge}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">${r.donorName}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center; width: 85px;">${modeBadge}</td>
         ${matrix.categories.map(c => `
-          <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; font-size: ${tdFontSize}; white-space: nowrap; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
+          <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
             ${r.categoryAmounts[c] > 0 ? `₹${r.categoryAmounts[c].toLocaleString('en-IN')}` : '-'}
           </td>
         `).join('')}
-        <td style="padding: ${tdPadding}; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #4338ca; background-color: #f1f5f9; font-size: ${tdFontSize}; white-space: nowrap;">
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #4338ca; background-color: #f1f5f9;">
           ₹${r.total.toLocaleString('en-IN')}
         </td>
       </tr>
@@ -1722,16 +1265,10 @@ export const generateTransactionsPDFHtml = (
     }).join('');
 
     const matrixFooterTds = matrix.categories.map(c => `
-      <td style="text-align: right; padding: ${tdPadding}; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: ${tdFontSize}; white-space: nowrap;">
+      <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 12px;">
         ₹${matrix.columnTotals[c].toLocaleString('en-IN')}
       </td>
     `).join('');
-
-    const orientationStyle = isWideLedger ? `
-      @page { size: A4 landscape; margin: 8mm; }
-    ` : `
-      @page { size: A4 portrait; margin: 10mm; }
-    `;
 
     return `
       <!DOCTYPE html>
@@ -1740,13 +1277,9 @@ export const generateTransactionsPDFHtml = (
           <title>${orgDisplay} - Financial Statement</title>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta name="x-report-orientation" content="${pageOrientation}" />
-          <style>
-            ${sharedPrintStyles}
-            ${orientationStyle}
-          </style>
+          <style>${sharedPrintStyles}</style>
         </head>
-        <body data-default-orientation="${pageOrientation}" class="report-orientation-${pageOrientation}">
+        <body>
           <div class="header-banner">
             <div class="header-left-wrap">
               ${avatarHtml}
@@ -1763,31 +1296,29 @@ export const generateTransactionsPDFHtml = (
           ${collectionSummaryBarHtml}
           ${targetSummaryHtml}
 
-          <div style="width: 100%; overflow-x: visible;">
-            <table style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: auto;">
-              <thead>
-                <tr>
-                  <th style="width: 34px; text-align: center; padding: ${thPadding}; font-size: ${thFontSize};">SL NO.</th>
-                  <th style="padding: ${thPadding}; font-size: ${thFontSize};">HMING (DONOR)</th>
-                  <th style="width: 66px; text-align: center; padding: ${thPadding}; font-size: ${thFontSize};">MODE</th>
-                  ${matrixHeaderThs}
-                  <th style="text-align: right; padding: ${thPadding}; background: #312e81; font-size: ${thFontSize}; white-space: nowrap;">TOTAL (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${matrixRowsHtml}
-              </tbody>
-              <tfoot>
-                <tr class="total-row">
-                  <td colspan="3" style="padding: ${tdPadding}; font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; font-size: ${tdFontSize};">GRAND TOTAL</td>
-                  ${matrixFooterTds}
-                  <td style="text-align: right; padding: ${tdPadding}; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: ${tdFontSize}; background-color: #dcfce7; white-space: nowrap;">
-                    ₹${matrix.grandTotal.toLocaleString('en-IN')}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 45px; text-align: center;">SL NO.</th>
+                <th style="padding: 10px 12px;">HMING (DONOR)</th>
+                <th style="width: 85px; text-align: center;">MODE</th>
+                ${matrixHeaderThs}
+                <th style="text-align: right; padding: 10px 12px; background: #312e81;">TOTAL (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${matrixRowsHtml}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="3" style="padding: 11px 12px; font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; font-size: 12px;">GRAND TOTAL</td>
+                ${matrixFooterTds}
+                <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 13px; background-color: #dcfce7;">
+                  ₹${matrix.grandTotal.toLocaleString('en-IN')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
 
           ${signatureBlockHtml}
 
@@ -1800,114 +1331,34 @@ export const generateTransactionsPDFHtml = (
     `;
   }
 
-  // Standard report (Grouped by Donor by default, or Itemized if unselected)
-  const shouldGroupByDonor = options.groupByDonor !== false;
-  const showDateTime = options.showDateTime !== false;
+  // Standard itemized report for Ralna, Khawlsak, Rikrum, etc.
+  const rowsHtml = transactions.map((t, idx) => {
+    const isCash = t.paymentMethod.toLowerCase().includes('cash');
+    const paymentBadge = isCash
+      ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+      : `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`;
 
-  let tableHeaderHtml = '';
-  let rowsHtml = '';
-  let tableFooterColspan = 4;
+    let remarks = t.periodLabel || '';
+    if (t.remark && t.remark.trim()) {
+      remarks = remarks ? `${remarks} • Note: ${t.remark.trim()}` : t.remark.trim();
+    }
+    if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
+      const parts = Object.entries(t.subCategoryBreakdown).map(([k, v]) => `${k}: ₹${v}`);
+      remarks = remarks ? `${remarks} (${parts.join(', ')})` : parts.join(', ');
+    }
 
-  if (shouldGroupByDonor) {
-    const groupedRecords = buildGroupedDonorRecords(transactions, sortOrder);
-    tableFooterColspan = showDateTime ? 5 : 4;
-
-    tableHeaderHtml = `
-      <tr>
-        <th style="width: 45px; text-align: center;">SL NO.</th>
-        <th style="padding: 10px 12px;">HMING (DONOR)</th>
-        <th style="width: 95px; text-align: center;">PAYMENT MODE</th>
-        ${showDateTime ? '<th style="padding: 10px 12px;">DATE / THLA BI</th>' : ''}
-        <th style="padding: 10px 12px;">PEK ZAT / DETAILS</th>
-        <th style="padding: 10px 12px;">REMARKS / NOTE</th>
-        <th style="text-align: right; padding: 10px 12px;">TOTAL AMOUNT (₹)</th>
+    return `
+      <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; font-family: monospace;">${formatDateTimeDDMMYYYY(t.timestamp)}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">${t.isAnonymous ? '<i>Anonymous</i>' : t.donorName}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${paymentBadge}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">${remarks || '-'}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 9.5px; color: #64748b;">${t.txHash || t.id.slice(0, 12)}</td>
+        <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11px; color: #0f172a;">₹${t.amount.toLocaleString('en-IN')}</td>
       </tr>
     `;
-
-    rowsHtml = groupedRecords.map((d, idx) => {
-      const modeBadge = d.paymentMethodLabel === 'CASH'
-        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
-        : d.paymentMethodLabel === 'ONLINE'
-        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
-        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
-
-      const memberBadge = d.memberId ? `<span style="font-family: monospace; font-size: 9px; background: #e2e8f0; color: #334155; padding: 1px 4px; border-radius: 3px; margin-left: 6px;">${d.memberId}</span>` : '';
-      const sectionInfo = d.section ? `<span style="font-size: 9.5px; color: #64748b; margin-left: 4px;">• ${d.section}</span>` : '';
-      
-      const countLabel = d.transactionsCount > 1 
-        ? `<span style="font-weight: 700; color: #1e293b;">${d.transactionsCount} payments</span>` 
-        : `<span style="color: #64748b;">1 payment</span>`;
-
-      const breakdownParts = Object.entries(d.categoryBreakdown).map(([k, v]) => `${k}: ₹${v.toLocaleString('en-IN')}`);
-      const breakdownText = breakdownParts.length > 1 ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">${breakdownParts.join(', ')}</div>` : '';
-
-      const dateOrMonths = d.dateRange || d.monthsPaid.join(', ') || '-';
-      const remarksText = d.remarks.length > 0 ? d.remarks.join(' • ') : '-';
-
-      return `
-        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">
-            ${d.isAnonymous ? '<i>Anonymous</i>' : d.donorName}
-            ${memberBadge}
-            ${sectionInfo}
-          </td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${modeBadge}</td>
-          ${showDateTime ? `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #475569;">${dateOrMonths}</td>` : ''}
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">
-            ${countLabel}
-            ${breakdownText}
-          </td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; color: #64748b;">${remarksText}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11.5px; color: #0f172a; background-color: ${idx % 2 === 0 ? '#f8fafc' : '#f1f5f9'};">
-            ₹${d.totalAmount.toLocaleString('en-IN')}
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } else {
-    // Itemized line by line view
-    tableFooterColspan = showDateTime ? 5 : 4;
-    tableHeaderHtml = `
-      <tr>
-        <th style="width: 45px; text-align: center;">SL NO.</th>
-        ${showDateTime ? '<th style="padding: 10px 12px;">DATE & TIME</th>' : ''}
-        <th style="padding: 10px 12px;">HMING (DONOR)</th>
-        <th style="width: 85px; text-align: center;">MODE</th>
-        <th style="padding: 10px 12px;">REMARKS / NOTE</th>
-        <th style="padding: 10px 12px;">TXN REF</th>
-        <th style="text-align: right; padding: 10px 12px;">AMOUNT (₹)</th>
-      </tr>
-    `;
-
-    rowsHtml = transactions.map((t, idx) => {
-      const isCash = t.paymentMethod.toLowerCase().includes('cash');
-      const paymentBadge = isCash
-        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
-        : `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`;
-
-      let remarks = t.periodLabel || '';
-      if (t.remark && t.remark.trim()) {
-        remarks = remarks ? `${remarks} • Note: ${t.remark.trim()}` : t.remark.trim();
-      }
-      if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
-        const parts = Object.entries(t.subCategoryBreakdown).map(([k, v]) => `${k}: ₹${v}`);
-        remarks = remarks ? `${remarks} (${parts.join(', ')})` : parts.join(', ');
-      }
-
-      return `
-        <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
-          ${showDateTime ? `<td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; font-family: monospace;">${formatDateTimeDDMMYYYY(t.timestamp)}</td>` : ''}
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 11px; color: #0f172a;">${t.isAnonymous ? '<i>Anonymous</i>' : t.donorName}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10px; text-align: center;">${paymentBadge}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 10.5px; color: #334155;">${remarks || '-'}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 9.5px; color: #64748b;">${t.txHash || t.id.slice(0, 12)}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; font-size: 11px; color: #0f172a;">₹${t.amount.toLocaleString('en-IN')}</td>
-        </tr>
-      `;
-    }).join('');
-  }
+  }).join('');
 
   return `
     <!DOCTYPE html>
@@ -1916,13 +1367,9 @@ export const generateTransactionsPDFHtml = (
         <title>${orgDisplay} - Financial Statement</title>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="x-report-orientation" content="portrait" />
-        <style>
-          ${sharedPrintStyles}
-          @page { size: A4 portrait; margin: 10mm; }
-        </style>
+        <style>${sharedPrintStyles}</style>
       </head>
-      <body data-default-orientation="portrait" class="report-orientation-portrait">
+      <body>
         <div class="header-banner">
           <div class="header-left-wrap">
             ${avatarHtml}
@@ -1941,14 +1388,22 @@ export const generateTransactionsPDFHtml = (
 
         <table>
           <thead>
-            ${tableHeaderHtml}
+            <tr>
+              <th style="width: 45px; text-align: center;">SL NO.</th>
+              <th>DATE & TIME</th>
+              <th>HMING (DONOR)</th>
+              <th style="text-align: center;">PAYMENT MODE</th>
+              <th>REMARKS / NOTE</th>
+              <th>REFERENCE / HASH</th>
+              <th style="text-align: right;">AMOUNT (₹)</th>
+            </tr>
           </thead>
           <tbody>
             ${rowsHtml}
           </tbody>
           <tfoot>
             <tr style="background: #e2e8f0; font-weight: 900;">
-              <td colspan="${tableFooterColspan + 1}" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
+              <td colspan="6" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
               <td style="padding: 11px 12px; border-top: 2px solid #0f172a; text-align: right; font-size: 13px; color: #047857; background: #dcfce7;">
                 ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </td>
@@ -2125,7 +1580,11 @@ export const generateMasterLedgerPrintHtml = (
 
     let rowTotal = 0;
     const monthCols = months.map(m => {
-      const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
+      const monthTxns = memberTxns.filter(t => {
+        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+        const d = new Date(t.timestamp);
+        return months[d.getMonth()] === m;
+      });
       const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
       rowTotal += sum;
       monthTotals[m] += sum;
@@ -2177,21 +1636,8 @@ export const generateMasterLedgerPrintHtml = (
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
           .header-left { display: flex; align-items: center; }
           @media print {
-            html, body {
-              width: 100% !important;
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-              overflow-x: visible !important;
-              overflow-y: visible !important;
-              position: static !important;
-            }
-            thead { display: table-header-group !important; }
-            tbody { display: table-row-group !important; }
-            tfoot { display: table-footer-group !important; }
-            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
-            .header, .footer { page-break-inside: avoid !important; break-inside: avoid !important; }
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>
@@ -2277,7 +1723,11 @@ export const generateMemberCategoryMatrixPrintHtml = (
   const rowsHtml = categories.map((cat, idx) => {
     let rowTotal = 0;
     const monthCols = months.map(m => {
-      const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
+      const monthTxns = memberTxns.filter(t => {
+        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+        const d = new Date(t.timestamp);
+        return months[d.getMonth()] === m;
+      });
       const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
       rowTotal += sum;
       monthTotals[m] += sum;
@@ -2321,21 +1771,8 @@ export const generateMemberCategoryMatrixPrintHtml = (
           th { background: #1e293b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
           .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; background: #f8fafc; }
           @media print {
-            html, body {
-              width: 100% !important;
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-              overflow-x: visible !important;
-              overflow-y: visible !important;
-              position: static !important;
-            }
-            thead { display: table-header-group !important; }
-            tbody { display: table-row-group !important; }
-            tfoot { display: table-footer-group !important; }
-            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
-            .card { page-break-inside: avoid !important; break-inside: avoid !important; }
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>
@@ -2427,7 +1864,11 @@ export const generateMemberPassbookVerticalPrintHtml = (
 
   const rowsHtml = months.map((month, idx) => {
     let monthTotal = 0;
-    const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, month));
+    const monthTxns = memberTxns.filter(t => {
+      if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
+      const d = new Date(t.timestamp);
+      return months[d.getMonth()] === month;
+    });
 
     const catCols = categories.map(cat => {
       const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
@@ -2473,21 +1914,8 @@ export const generateMemberPassbookVerticalPrintHtml = (
           th { background: #1e293b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
           .card { border: 1.5px solid #1e3a8a; border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #f8fafc; }
           @media print {
-            html, body {
-              width: 100% !important;
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-              overflow-x: visible !important;
-              overflow-y: visible !important;
-              position: static !important;
-            }
-            thead { display: table-header-group !important; }
-            tbody { display: table-row-group !important; }
-            tfoot { display: table-footer-group !important; }
-            tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
-            .card { page-break-inside: avoid !important; break-inside: avoid !important; }
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           }
         </style>
       </head>

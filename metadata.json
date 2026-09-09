@@ -1,6 +1,6 @@
 {
   "name": "RonPay - A Digital Payment Platform",
   "description": "RonPay - Mizoram Community Bawm, QR Code collection system, UPI payment tracking, and Member Roll Manager.",
-  "requestFramePermissions": ["camera"],
+  "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

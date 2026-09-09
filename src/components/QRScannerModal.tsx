@@ -5,13 +5,16 @@ import {
   Camera, 
   Sparkles, 
   AlertTriangle, 
+  ShieldAlert, 
   Upload, 
+  Smartphone, 
   CheckCircle2, 
   RefreshCw, 
   Zap, 
   Image as ImageIcon, 
   Check,
-  RotateCcw
+  RotateCcw,
+  Info
 } from 'lucide-react';
 import jsQR from 'jsqr';
 import { BawmCategory, Campaign } from '../types';
@@ -298,14 +301,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const isScanningRef = useRef<boolean>(false);
-  const isProcessingRef = useRef<boolean>(false);
-  const lastScanTimeRef = useRef<number>(0);
-  const frameCountRef = useRef<number>(0);
 
   // Stop camera stream safely
   const stopCamera = useCallback(() => {
     isScanningRef.current = false;
-    isProcessingRef.current = false;
     if (animFrameIdRef.current) {
       cancelAnimationFrame(animFrameIdRef.current);
       animFrameIdRef.current = null;
@@ -334,15 +333,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // Stop camera immediately upon detection
     stopCamera();
     setLastScannedText(rawText);
-
-    // Haptic feedback on mobile if supported
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      try {
-        navigator.vibrate(60);
-      } catch (e) {
-        // ignore
-      }
-    }
 
     // Reset file inputs so subsequent uploads start fresh
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -398,112 +388,69 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   }, []);
 
-  // Continuous QR scan loop using Hardware BarcodeDetector + High-speed Optimized jsQR
+  // Continuous QR scan loop using BarcodeDetector + jsQR
   const tickScan = useCallback(async () => {
     if (!isScanningRef.current) return;
 
+    if (!videoRef.current || videoRef.current.readyState < 2 || videoRef.current.videoWidth === 0) {
+      animFrameIdRef.current = requestAnimationFrame(tickScan);
+      return;
+    }
+
     const video = videoRef.current;
-    if (!video || video.readyState < 2 || video.videoWidth === 0) {
-      animFrameIdRef.current = requestAnimationFrame(tickScan);
-      return;
-    }
 
-    // Concurrency guard: never process multiple frames in parallel
-    if (isProcessingRef.current) {
-      animFrameIdRef.current = requestAnimationFrame(tickScan);
-      return;
-    }
-
-    // Frame pacing: scan every ~50ms (~20 scans/second) to keep camera preview buttery smooth at 60fps
-    const now = performance.now();
-    if (now - lastScanTimeRef.current < 50) {
-      animFrameIdRef.current = requestAnimationFrame(tickScan);
-      return;
-    }
-    lastScanTimeRef.current = now;
-    frameCountRef.current = (frameCountRef.current + 1) % 60;
-    const currentFrame = frameCountRef.current;
-
-    isProcessingRef.current = true;
-
-    try {
-      // 1. Try Hardware-Accelerated Native BarcodeDetector directly on Video element (Chrome/Android)
-      if (barcodeDetectorRef.current) {
-        try {
-          const barcodes = await barcodeDetectorRef.current.detect(video);
-          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-            handleRawDecodedData(barcodes[0].rawValue);
-            return;
-          }
-        } catch (e) {
-          // Fallback to jsQR
-        }
-      }
-
-      // 2. High-Performance Canvas Pass with Viewfinder Center-Crop Priority
-      if (!canvasRef.current) {
-        canvasRef.current = document.createElement('canvas');
-      }
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-      if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-
-        // Pass 2A: Viewfinder Center Box Crop (Where the user points the camera)
-        // Crop the central 65% of the video frame and scale to 360x360.
-        // 360x360 = 129,600 pixels. jsQR evaluates this in ~6-8ms!
-        const cropSize = Math.min(vw, vh) * 0.65;
-        const sx = (vw - cropSize) / 2;
-        const sy = (vh - cropSize) / 2;
-        const targetCropDim = 360;
-
-        if (canvas.width !== targetCropDim || canvas.height !== targetCropDim) {
-          canvas.width = targetCropDim;
-          canvas.height = targetCropDim;
-        }
-
-        ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, targetCropDim, targetCropDim);
-        const centerImgData = ctx.getImageData(0, 0, targetCropDim, targetCropDim);
-
-        // Try standard QR detection (inversion every 4th frame)
-        let code = jsQR(centerImgData.data, centerImgData.width, centerImgData.height, {
-          inversionAttempts: currentFrame % 4 === 0 ? 'attemptBoth' : 'dontInvert',
-        });
-
-        if (code && code.data && code.data.trim()) {
-          handleRawDecodedData(code.data);
+    // 1. Try Hardware-Accelerated Native BarcodeDetector directly on Video element
+    if (barcodeDetectorRef.current) {
+      try {
+        const barcodes = await barcodeDetectorRef.current.detect(video);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          handleRawDecodedData(barcodes[0].rawValue);
           return;
         }
-
-        // Pass 2B: Full Frame Scan (downscaled to 480px width for fast full-field coverage)
-        // If center crop didn't find the code (e.g. held near edge), scan full frame downscaled
-        const fullScale = Math.min(1, 480 / vw);
-        const fullW = Math.round(vw * fullScale);
-        const fullH = Math.round(vh * fullScale);
-
-        if (canvas.width !== fullW || canvas.height !== fullH) {
-          canvas.width = fullW;
-          canvas.height = fullH;
-        }
-
-        ctx.drawImage(video, 0, 0, fullW, fullH);
-        const fullImgData = ctx.getImageData(0, 0, fullW, fullH);
-
-        code = jsQR(fullImgData.data, fullImgData.width, fullImgData.height, {
-          inversionAttempts: currentFrame % 4 === 0 ? 'attemptBoth' : 'dontInvert',
-        });
-
-        if (code && code.data && code.data.trim()) {
-          handleRawDecodedData(code.data);
-          return;
-        }
+      } catch (e) {
+        // Fallback to canvas/jsQR
       }
-    } catch (err) {
-      console.warn('Frame scan error:', err);
-    } finally {
-      isProcessingRef.current = false;
+    }
+
+    // 2. High performance Canvas + jsQR pass
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+    }
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+      // Optimal resolution for jsQR (around 800px width)
+      const scale = Math.min(1, 800 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+
+      if (code && code.data && code.data.trim()) {
+        handleRawDecodedData(code.data);
+        return;
+      }
+
+      // If full frame didn't find, try center-box crop (zoomed center 70%)
+      const cropW = Math.round(canvas.width * 0.7);
+      const cropH = Math.round(canvas.height * 0.7);
+      const cropX = Math.round((canvas.width - cropW) / 2);
+      const cropY = Math.round((canvas.height - cropH) / 2);
+      const cropData = ctx.getImageData(cropX, cropY, cropW, cropH);
+      const cropCode = jsQR(cropData.data, cropData.width, cropData.height, {
+        inversionAttempts: 'attemptBoth'
+      });
+
+      if (cropCode && cropCode.data && cropCode.data.trim()) {
+        handleRawDecodedData(cropCode.data);
+        return;
+      }
     }
 
     if (isScanningRef.current) {
@@ -528,17 +475,13 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         video: {
           facingMode: { ideal: mode },
           width: { ideal: 1280 },
-          height: { ideal: 720 },
-          // @ts-ignore
-          focusMode: { ideal: 'continuous' }
+          height: { ideal: 720 }
         },
         audio: false
       },
       {
         video: {
-          facingMode: { ideal: mode },
-          // @ts-ignore
-          focusMode: { ideal: 'continuous' }
+          facingMode: { ideal: mode }
         },
         audio: false
       },
@@ -596,22 +539,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         setIsStartingCamera(false);
         isScanningRef.current = true;
 
-        // Check torch & continuous autofocus capability
+        // Check torch capability
         const track = stream.getVideoTracks()[0];
         const capabilities = track?.getCapabilities?.() as any;
-        if (capabilities) {
-          if ('torch' in capabilities) {
-            setHasTorch(true);
-          }
-          if ('focusMode' in capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
-            try {
-              await (track as any).applyConstraints({
-                advanced: [{ focusMode: 'continuous' }]
-              });
-            } catch (e) {
-              // ignore
-            }
-          }
+        if (capabilities && 'torch' in capabilities) {
+          setHasTorch(true);
         }
 
         // Start scanning loop
@@ -971,6 +903,96 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             title="Reset Scanner"
           >
             <RotateCcw className="w-3 h-3 text-slate-400" /> Clear / Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Scan Simulator & Admin Approval Trigger Section */}
+      <div className="space-y-2 z-10 bg-slate-900/95 p-3 rounded-2xl border border-slate-800 shadow-2xl max-w-sm mx-auto w-full">
+        <p className="text-[9.5px] text-slate-400 font-extrabold uppercase text-center tracking-wider flex items-center justify-center gap-1">
+          <Info className="w-3 h-3 text-indigo-400" /> Quick Test & Bawm Simulators:
+        </p>
+
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleRawDecodedData('upi://pay?pa=mizopay@axl&pn=Mizo%20Merchant&am=100')}
+            className="col-span-2 bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] py-1.5 px-2 rounded-xl font-bold border border-indigo-500 flex items-center justify-center gap-1.5 cursor-pointer transition"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+            Scan Any External UPI QR (GPay / PhonePe / Paytm)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'ralna' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'ralna', campaign: c });
+            }}
+            className="bg-purple-950 hover:bg-purple-900 text-purple-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-purple-700/60 transition cursor-pointer text-center"
+          >
+            Scan Ralna QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'khawlsak' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'khawlsak', campaign: c });
+            }}
+            className="bg-emerald-950 hover:bg-emerald-900 text-emerald-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-emerald-700/60 transition cursor-pointer text-center"
+          >
+            Scan Khawlsak QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'rikrum' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'rikrum', campaign: c });
+            }}
+            className="bg-rose-950 hover:bg-rose-900 text-rose-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-rose-700/60 transition cursor-pointer text-center"
+          >
+            Scan Rikrum QR
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const c = campaigns.find(i => i.category === 'kumtluang' && i.status === 'active');
+              if (c) handleRawDecodedData(c.id);
+              else onScanResult({ type: 'kumtluang', campaign: c });
+            }}
+            className="bg-blue-950 hover:bg-blue-900 text-blue-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-blue-700/60 transition cursor-pointer text-center"
+          >
+            Scan Kumtluang QR
+          </button>
+
+          {/* Pending Approval Test Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const pendingC = campaigns.find(i => i.status === 'pending_approval') || {
+                id: 'cmp-pending-demo',
+                category: 'ralna',
+                title: 'Pi Liani Ralna (Demo Pending)',
+                location: 'Dawrpui, Aizawl',
+                gpsCoords: '23.7271, 92.7176',
+                upiId: 'liani@axl',
+                validityDate: '2026-12-31',
+                status: 'pending_approval',
+                createdAt: new Date().toISOString(),
+              } as Campaign;
+
+              onScanResult({ type: 'pending', campaign: pendingC, rawText: pendingC.id });
+            }}
+            className="col-span-2 bg-amber-950 hover:bg-amber-900 text-amber-200 text-[10px] py-1.5 px-2 rounded-xl font-bold border border-amber-700/60 transition cursor-pointer flex items-center justify-center gap-1"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+            Scan Creator QR (Waiting for Admin Approval)
           </button>
         </div>
       </div>

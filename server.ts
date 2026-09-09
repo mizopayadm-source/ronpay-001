@@ -1,8 +1,8 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
 // Initialize Gemini Client Lazily
@@ -136,12 +136,34 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
       campaignId, 
       category, 
       customerPhone,
-      simulateStatus 
+      simulateStatus,
+      feeOption = 'ADD_ON', // 'ADD_ON' (Rs 100 + Rs 1 = Rs 101) or 'DEDUCT_FROM_DONATION' (Rs 99 + Rs 1 = Rs 100)
+      baseAmountInRupees
     } = req.body;
 
-    const amountInPaise = Math.round((Number(amountInRupees) || 100) * 100);
+    const rawAmount = Number(amountInRupees) || 100;
+    let merchantSharePaise = 0;
+    let platformFeePaise = 0;
+    let totalPayablePaise = 0;
+
+    if (feeOption === 'ADD_ON') {
+      const baseRupees = Number(baseAmountInRupees) || rawAmount;
+      merchantSharePaise = Math.round(baseRupees * 100);
+      platformFeePaise = Math.round(merchantSharePaise * 0.01); // 1% fee on top
+      totalPayablePaise = merchantSharePaise + platformFeePaise;
+    } else {
+      totalPayablePaise = Math.round(rawAmount * 100);
+      platformFeePaise = Math.round(totalPayablePaise * 0.01); // 1% deducted
+      merchantSharePaise = totalPayablePaise - platformFeePaise;
+    }
+
+    const amountInPaise = totalPayablePaise;
     const merchantTransactionId = `RPAY_TXN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const merchantUserId = `USER_${(customerPhone || '9862000000').replace(/\D/g, '')}`;
+
+    const effectiveOrigin = (req.headers.origin && !req.headers.origin.includes('run.app'))
+      ? req.headers.origin
+      : 'https://ronpay.app';
 
     // Standard PhonePe PG V2 Payload Schema
     const paymentPayload = {
@@ -149,9 +171,9 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
       merchantTransactionId: merchantTransactionId,
       merchantUserId: merchantUserId,
       amount: amountInPaise,
-      redirectUrl: `${req.headers.origin || 'http://localhost:3000'}/api/phonepe/callback?txnId=${merchantTransactionId}`,
+      redirectUrl: `${effectiveOrigin}/api/phonepe/callback?txnId=${merchantTransactionId}`,
       redirectMode: 'POST',
-      callbackUrl: `${req.headers.origin || 'http://localhost:3000'}/api/phonepe/webhook`,
+      callbackUrl: `${effectiveOrigin}/api/phonepe/webhook`,
       mobileNumber: customerPhone || '9862300000',
       paymentInstrument: {
         type: 'PAY_PAGE'
@@ -160,10 +182,6 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
 
     const base64Payload = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
     const xVerifyHeader = generateChecksum(base64Payload, '/pg/v1/pay', PHONEPE_CLIENT_SECRET, '1');
-
-    // Calculate Split Settlement (99% Campaign Creator, 1% RonPay Platform Fee)
-    const platformFeePaise = Math.round(amountInPaise * 0.01);
-    const merchantSharePaise = amountInPaise - platformFeePaise;
 
     // Save state in record store
     transactionStore[merchantTransactionId] = {
@@ -206,7 +224,10 @@ app.post('/api/phonepe/initiate-pay', (req: Request, res: Response) => {
           totalRupees: (amountInPaise / 100).toFixed(2),
           campaignSettlementRupees: (merchantSharePaise / 100).toFixed(2),
           platformFeeRupees: (platformFeePaise / 100).toFixed(2),
-          rule: '1% RonPay Gateway Service Fee + 99% Direct Campaign Account'
+          feeOption: feeOption,
+          rule: feeOption === 'ADD_ON'
+            ? `1% Add-on Fee (₹${(platformFeePaise / 100).toFixed(2)}) + 100% Full Donation (₹${(merchantSharePaise / 100).toFixed(2)}) to Campaign`
+            : `1% Fee Deducted (₹${(platformFeePaise / 100).toFixed(2)}) + Net ₹${(merchantSharePaise / 100).toFixed(2)} to Campaign`
         }
       }
     });
@@ -1511,14 +1532,22 @@ async function startServer() {
     return;
   }
   const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && hasDist);
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  // Vite middleware for development only
+  if (!isProduction) {
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (viteErr) {
+      console.warn('Vite dev middleware failed to load, falling back to static server:', viteErr);
+      app.use(express.static(distPath));
+    }
   } else {
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
@@ -1532,7 +1561,7 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`RonPay Server running on http://0.0.0.0:${PORT} (NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
+    console.log(`RonPay Server running on http://0.0.0.0:${PORT} (NODE_ENV: ${process.env.NODE_ENV || (isProduction ? 'production' : 'development')})`);
   });
 
   // Graceful shutdown handling

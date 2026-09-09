@@ -1,5 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, PaymentGatewayConfig } from '../types';
-import { getUserRole } from './rbac';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
 import {
   syncCampaignToFirestore,
@@ -15,7 +14,6 @@ import {
 } from '../services/firestoreSync';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
-const DELETED_CAMPAIGNS_KEY = 'ronpay_deleted_campaign_ids_v1';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
 const CREATOR_PROFILE_KEY = 'ronpay_creator_profile_v2';
 const CREATORS_LIST_KEY = 'ronpay_creators_list_v2';
@@ -24,43 +22,6 @@ const PRICING_CONFIG_KEY = 'ronpay_pricing_config_v1';
 const CAMPAIGNS_LAST_SYNC_KEY = 'ronpay_campaigns_last_sync_v1';
 const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
 const ANNOUNCEMENT_KEY = 'ronpay_announcement_v1';
-
-export const getDeletedCampaignIds = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem(DELETED_CAMPAIGNS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set(arr.map(id => String(id).toLowerCase().trim()));
-      }
-    }
-  } catch (e) {}
-  return new Set<string>();
-};
-
-export const recordDeletedCampaignId = (id: string): void => {
-  if (!id) return;
-  try {
-    const set = getDeletedCampaignIds();
-    set.add(String(id).toLowerCase().trim());
-    localStorage.setItem(DELETED_CAMPAIGNS_KEY, JSON.stringify(Array.from(set)));
-  } catch (e) {}
-};
-
-export const unrecordDeletedCampaignId = (id: string): void => {
-  if (!id) return;
-  try {
-    const set = getDeletedCampaignIds();
-    set.delete(String(id).toLowerCase().trim());
-    localStorage.setItem(DELETED_CAMPAIGNS_KEY, JSON.stringify(Array.from(set)));
-  } catch (e) {}
-};
-
-export const clearDeletedCampaignIds = (): void => {
-  try {
-    localStorage.removeItem(DELETED_CAMPAIGNS_KEY);
-  } catch (e) {}
-};
 
 export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
   {
@@ -180,48 +141,25 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 
 export const getStoredCampaigns = (): Campaign[] => {
   try {
-    const deletedIds = getDeletedCampaignIds();
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out any explicitly deleted campaigns
-        const validParsed = parsed.filter((camp: Campaign) => 
-          camp && camp.id && !deletedIds.has(String(camp.id).toLowerCase().trim())
-        );
-
-        let cleanedLegacy = false;
-        const mapped = validParsed.map((camp: Campaign) => {
-          let updatedCamp = { ...camp };
-          if (!updatedCamp.orgCode) {
+        const mapped = parsed.map((camp: Campaign) => {
+          if (!camp.orgCode) {
             const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
             const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-            updatedCamp.orgCode = derived;
+            return { ...camp, orgCode: derived };
           }
-          // Clean up legacy hardcoded demo sections if present from old app state
-          const secs = updatedCamp.definedSections;
-          if (Array.isArray(secs)) {
-            const str = JSON.stringify(secs);
-            if (
-              str === JSON.stringify(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']) ||
-              str === JSON.stringify(['Bial I (Khatla South)', 'Bial II (Khatla North)', 'Bial III (Khatla East)', 'Bial IV (Khatla West)', 'General / Khawchhung']) ||
-              str === JSON.stringify(['Section A (Vengthar)', 'Section B (Vengthar)', 'Section C (Vengthar)', 'Section D (Vengthar)', 'General'])
-            ) {
-              delete updatedCamp.definedSections;
-              delete updatedCamp.sectionLabel;
-              cleanedLegacy = true;
-            }
-          }
-          return updatedCamp;
+          return camp;
         });
 
-        // Smart merge: ensure default initial campaigns exist unless explicitly deleted
-        const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
+        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns
+        const existingIds = new Set(mapped.map(c => c.id));
         let hasNew = false;
         const merged = [...mapped];
         for (const initCamp of INITIAL_CAMPAIGNS) {
-          const initIdLower = String(initCamp.id).toLowerCase().trim();
-          if (!existingIds.has(initIdLower) && !deletedIds.has(initIdLower)) {
+          if (!existingIds.has(initCamp.id)) {
             merged.push(initCamp);
             hasNew = true;
           }
@@ -233,7 +171,7 @@ export const getStoredCampaigns = (): Campaign[] => {
           return timeB - timeA;
         });
 
-        if (hasNew || mapped.length !== parsed.length || cleanedLegacy) {
+        if (hasNew || mapped.length !== parsed.length) {
           localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(sorted));
         }
 
@@ -241,8 +179,7 @@ export const getStoredCampaigns = (): Campaign[] => {
       }
     }
     // Initialize if never stored before
-    const initialFiltered = INITIAL_CAMPAIGNS.filter(c => !deletedIds.has(String(c.id).toLowerCase().trim()));
-    const initialSorted = [...initialFiltered].sort((a, b) => {
+    const initialSorted = [...INITIAL_CAMPAIGNS].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
@@ -252,8 +189,7 @@ export const getStoredCampaigns = (): Campaign[] => {
   } catch (e) {
     console.error('Failed to parse stored campaigns', e);
   }
-  const deletedIds = getDeletedCampaignIds();
-  return INITIAL_CAMPAIGNS.filter(c => !deletedIds.has(String(c.id).toLowerCase().trim()));
+  return INITIAL_CAMPAIGNS;
 };
 
 // Helper to derive 3-letter prefix from string
@@ -383,6 +319,13 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sortedSanitized }));
     }
 
+    // Direct Sync to Firebase Firestore
+    for (const camp of sortedSanitized) {
+      if (camp && camp.id) {
+        syncCampaignToFirestore(camp).catch(() => {});
+      }
+    }
+
     // Asynchronously push to backend server for multi-device sync
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
@@ -398,9 +341,8 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
 
 export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
-  unrecordDeletedCampaignId(camp.id);
   const current = getStoredCampaigns();
-  const idx = current.findIndex(c => String(c.id).toLowerCase().trim() === String(camp.id).toLowerCase().trim());
+  const idx = current.findIndex(c => c.id === camp.id);
   let updated: Campaign[];
   if (idx >= 0) {
     updated = [...current];
@@ -421,76 +363,77 @@ export const saveCampaign = (camp: Campaign): void => {
   }
 };
 
-export const deleteStoredCampaign = (campaignId: string): void => {
+export const deleteStoredCampaign = (campaignId: string, reason?: string, deletedBy?: string): void => {
   if (!campaignId) return;
-  const cleanId = String(campaignId).toLowerCase().trim();
-  recordDeletedCampaignId(cleanId);
   const current = getStoredCampaigns();
-  const updated = current.filter(c => String(c.id).toLowerCase().trim() !== cleanId);
-  saveStoredCampaigns(updated);
-  deleteCampaignFromFirestore(campaignId).catch(() => {});
+  const target = current.find(c => c.id === campaignId);
+  if (!target) return;
+
+  const allTxns = getStoredTransactions();
+  const campTxns = allTxns.filter(t => t.campaignId === campaignId || t.campaignTitle === target.title);
+  const hasPayments = campTxns.length > 0;
+
+  if (hasPayments) {
+    // Financial Safety Rule: Retain financial ledger & sulhnu history. Soft delete / Archive only!
+    const updated = current.map(c => {
+      if (c.id === campaignId) {
+        return {
+          ...c,
+          status: 'cancelled' as const,
+          deletionReason: reason || 'Siam sual palh vanga tihtawp / Archived',
+          cancelledAt: new Date().toISOString()
+        };
+      }
+      return c;
+    });
+    saveStoredCampaigns(updated);
+    recordAuditLog(
+      'Campaign Cancelled & Archived',
+      `Campaign "${target.title}" (${target.id}) with ${campTxns.length} transactions was cancelled and safely archived. Reason: ${reason || 'Siam sual / Creator cancelled'} (Ledger Retained)`,
+      'campaign',
+      campaignId
+    );
+  } else {
+    // Zero collections: Safe for hard delete
+    const updated = current.filter(c => c.id !== campaignId);
+    saveStoredCampaigns(updated);
+    deleteCampaignFromFirestore(campaignId).catch(() => {});
+    recordAuditLog(
+      'Campaign Deleted',
+      `Fresh campaign "${target.title}" (${target.id}) with ₹0 collections was deleted permanently. Reason: ${reason || 'Siam sual palh'}`,
+      'campaign',
+      campaignId
+    );
+  }
+
   if (typeof fetch !== 'undefined') {
     fetch(`/api/campaigns/${campaignId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: 'Zero-balance delete from client', performedBy: 'Admin/Creator' })
     }).catch(() => {});
   }
 };
 
-const DELETED_TRANSACTIONS_KEY = 'ronpay_deleted_transaction_ids_v1';
-
-export const getDeletedTransactionIds = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem(DELETED_TRANSACTIONS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
-      }
-    }
-  } catch {}
-  return new Set<string>();
-};
-
-export const recordDeletedTransactionId = (txId: string): void => {
-  if (!txId) return;
-  const set = getDeletedTransactionIds();
-  set.add(String(txId).toLowerCase().trim());
-  localStorage.setItem(DELETED_TRANSACTIONS_KEY, JSON.stringify(Array.from(set)));
-};
-
-export const unrecordDeletedTransactionId = (txId: string): void => {
-  if (!txId) return;
-  const set = getDeletedTransactionIds();
-  set.delete(String(txId).toLowerCase().trim());
-  localStorage.setItem(DELETED_TRANSACTIONS_KEY, JSON.stringify(Array.from(set)));
-};
-
 export const getStoredTransactions = (): Transaction[] => {
   try {
-    const deletedIds = getDeletedTransactionIds();
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy sample entries for Liana & Kunga or deleted transactions
+        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
         const cleaned = parsed.filter(t => 
-          t && t.id &&
-          !deletedIds.has(String(t.id).toLowerCase().trim()) &&
           t.donorName !== 'Liana' && 
           t.donorName !== 'Kunga' && 
           !legacyMismatchedIds.has(t.id)
         );
 
-        // Smart merge with INITIAL_TRANSACTIONS only if never deleted
-        const existingIds = new Set(cleaned.map(t => String(t.id).toLowerCase().trim()));
+        // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
+        // (like Zonunmawia or demo accounts) are never missing due to old browser cache
+        const existingIds = new Set(cleaned.map(t => t.id));
         let hasNew = false;
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
-          const cleanInitId = String(initTx.id).toLowerCase().trim();
-          if (!existingIds.has(cleanInitId) && !deletedIds.has(cleanInitId)) {
+          if (!existingIds.has(initTx.id)) {
             merged.push(initTx);
             hasNew = true;
           }
@@ -502,10 +445,9 @@ export const getStoredTransactions = (): Transaction[] => {
         return merged;
       }
     }
-    // Initialize if never stored before, filtering out deleted ones
-    const initialFiltered = INITIAL_TRANSACTIONS.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(initialFiltered));
-    return initialFiltered;
+    // Initialize if never stored before
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
+    return INITIAL_TRANSACTIONS;
   } catch (e) {
     console.error('Failed to parse stored transactions', e);
   }
@@ -519,6 +461,13 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
     // Broadcast local event for immediate real-time sync
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
+    }
+
+    // Direct Sync to Firebase Firestore
+    for (const tx of transactions) {
+      if (tx && tx.id) {
+        syncTransactionToFirestore(tx).catch(() => {});
+      }
     }
 
     if (typeof fetch !== 'undefined') {
@@ -535,8 +484,8 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
 
 export const GUEST_CREATOR_PROFILE: CreatorProfile = {
   name: 'Khualmi (Guest User)',
-  orgName: 'Mizoram Mipui / Community',
-  designation: 'Khualmi / Guest User',
+  orgName: 'RonPay Community',
+  designation: 'Visitor / Donor',
   phone: '',
   isPhoneVerified: false,
   isApproved: false,
@@ -559,27 +508,8 @@ export const DEFAULT_INITIAL_CREATOR: CreatorProfile = {
   createdQRsCount: 5,
 };
 
-export const USER_AUTHENTICATED_KEY = 'ronpay_user_authenticated';
-
 export const getStoredCreatorProfile = (): CreatorProfile => {
   try {
-    // If URL has explicit guest parameter, enforce guest mode
-    if (typeof window !== 'undefined') {
-      const searchParams = new URLSearchParams(window.location.search);
-      if (searchParams.get('guest') === 'true' || searchParams.get('logout') === 'true') {
-        localStorage.removeItem(USER_AUTHENTICATED_KEY);
-        localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
-        sessionStorage.removeItem('ronpay_admin_auth');
-        return GUEST_CREATOR_PROFILE;
-      }
-    }
-
-    // Auto-Guest Default: If user has not actively authenticated, always default to clean Guest User (Khualmi)
-    const isAuthenticated = typeof window !== 'undefined' && localStorage.getItem(USER_AUTHENTICATED_KEY) === 'true';
-    if (!isAuthenticated) {
-      return GUEST_CREATOR_PROFILE;
-    }
-
     const raw = localStorage.getItem(CREATOR_PROFILE_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
@@ -594,13 +524,13 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
   } catch (e) {
     console.error('Failed to parse creator profile', e);
   }
-  // Default entry in RonPay App: Guest User / (Khualmi)
+  // First time app launch: new user enters as Guest User (Khualmi)
+  saveStoredCreatorProfile(GUEST_CREATOR_PROFILE);
   return GUEST_CREATOR_PROFILE;
 };
 
 export const logoutCreator = (): CreatorProfile => {
   try {
-    localStorage.removeItem(USER_AUTHENTICATED_KEY);
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
     sessionStorage.removeItem('ronpay_admin_auth');
     if (typeof window !== 'undefined') {
@@ -615,7 +545,6 @@ export const logoutCreator = (): CreatorProfile => {
 
 export const loginCreator = (profile: CreatorProfile): void => {
   try {
-    localStorage.setItem(USER_AUTHENTICATED_KEY, 'true');
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
     if (profile.isAdmin) {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
@@ -731,6 +660,12 @@ export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
           window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: updatedActive }));
           window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: updatedActive }));
         }
+      }
+    }
+
+    for (const c of creators) {
+      if (c && c.phone) {
+        syncCreatorToFirestore(c).catch(() => {});
       }
     }
 
@@ -1484,42 +1419,6 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   }
 ];
 
-export const getDeletedMemberIds = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem('ronpay_deleted_member_ids');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.map(x => String(x).toLowerCase().trim()));
-      }
-    }
-  } catch (e) {
-    console.error('Failed to parse deleted member IDs', e);
-  }
-  return new Set();
-};
-
-export const recordDeletedMemberId = (memberId: string): void => {
-  try {
-    const set = getDeletedMemberIds();
-    set.add(memberId.toLowerCase().trim());
-    localStorage.setItem('ronpay_deleted_member_ids', JSON.stringify(Array.from(set)));
-  } catch (e) {
-    console.error('Failed to record deleted member ID', e);
-  }
-};
-
-export const unrecordDeletedMemberId = (memberId: string): void => {
-  try {
-    const set = getDeletedMemberIds();
-    if (set.delete(memberId.toLowerCase().trim())) {
-      localStorage.setItem('ronpay_deleted_member_ids', JSON.stringify(Array.from(set)));
-    }
-  } catch (e) {
-    console.error('Failed to unrecord deleted member ID', e);
-  }
-};
-
 export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
     let storedMembers: MemberRecord[] = [];
@@ -1531,25 +1430,16 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     }
 
-    const deletedIds = getDeletedMemberIds();
-
     // Merge default initial members with stored members
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id) {
-        const idLower = m.id.toLowerCase().trim();
-        if (!deletedIds.has(idLower)) {
-          map.set(idLower, m);
-        }
-      }
+      if (m && m.id) map.set(m.id.toLowerCase(), m);
     }
     for (const m of storedMembers) {
       if (m && m.id) {
-        const idLower = m.id.toLowerCase().trim();
-        if (!deletedIds.has(idLower)) {
-          // Stored member is authoritative and completely overwrites default properties
-          map.set(idLower, m);
-        }
+        const k = m.id.toLowerCase();
+        const existing = map.get(k);
+        map.set(k, { ...(existing || {}), ...m });
       }
     }
 
@@ -1618,6 +1508,11 @@ export const saveMembers = (members: MemberRecord[]): void => {
       window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: members }));
     }
 
+    for (const m of members) {
+      if (m && m.id) {
+        syncMemberToFirestore(m).catch(() => {});
+      }
+    }
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/sync', {
         method: 'POST',
@@ -1631,9 +1526,6 @@ export const saveMembers = (members: MemberRecord[]): void => {
 };
 
 export const addOrUpdateMember = (member: MemberRecord): void => {
-  if (member && member.id) {
-    unrecordDeletedMemberId(member.id);
-  }
   const allList = getMembers(); // Load all members across all Bawms
   const targetId = (member.id || '').trim().toLowerCase();
   const idx = allList.findIndex(m => 
@@ -1659,9 +1551,6 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
-  if (memberId) {
-    recordDeletedMemberId(memberId);
-  }
   const allList = getMembers();
   const targetId = (memberId || '').trim().toLowerCase();
   const filtered = allList.filter(m => {
@@ -1678,52 +1567,6 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
       method: 'DELETE'
     }).catch(() => {});
   }
-};
-
-export const deleteMemberWithTransactions = (
-  memberId: string, 
-  campaignId?: string
-): { deletedMember: boolean; deletedTxCount: number } => {
-  if (!memberId) return { deletedMember: false, deletedTxCount: 0 };
-  const cleanMemberId = memberId.trim().toLowerCase();
-  
-  // 1. Delete the member record
-  deleteMember(memberId, campaignId);
-  
-  // 2. Find and delete all matching transactions for this member
-  const allTxs = getStoredTransactions();
-  const txsToDelete = allTxs.filter(t => {
-    if (!t) return false;
-    const tMemberId = (t.memberId || '').trim().toLowerCase();
-    const tRemark = (t.remark || '').trim().toLowerCase();
-    const tRef = (t.referenceNo || '').trim().toLowerCase();
-    const tHash = (t.txHash || '').trim().toLowerCase();
-    
-    // Check exact member ID
-    if (tMemberId && tMemberId === cleanMemberId) return true;
-    // Check remark, ref, hash containing member ID
-    if (tRemark && tRemark.includes(cleanMemberId)) return true;
-    if (tRef && tRef.includes(cleanMemberId)) return true;
-    if (tHash && tHash.includes(cleanMemberId)) return true;
-    
-    return false;
-  });
-  
-  if (txsToDelete.length > 0) {
-    deleteMultipleTransactions(txsToDelete.map(t => t.id));
-  }
-  
-  return { deletedMember: true, deletedTxCount: txsToDelete.length };
-};
-
-export const deleteMembersOfCampaign = (campaignId: string): void => {
-  if (!campaignId) return;
-  const cleanId = String(campaignId).trim().toLowerCase();
-  const allMembers = getMembers('all');
-  const membersToDelete = allMembers.filter(m => String(m.campaignId || '').trim().toLowerCase() === cleanId);
-  membersToDelete.forEach(m => {
-    deleteMember(m.id, campaignId);
-  });
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
@@ -1756,17 +1599,8 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 };
 
 export const saveTransaction = (tx: Transaction): void => {
-  if (!tx || !tx.id) return;
-  unrecordDeletedTransactionId(tx.id);
   const current = getStoredTransactions();
-  const idx = current.findIndex(t => String(t.id).toLowerCase().trim() === String(tx.id).toLowerCase().trim());
-  let updated: Transaction[];
-  if (idx >= 0) {
-    updated = [...current];
-    updated[idx] = tx;
-  } else {
-    updated = [tx, ...current];
-  }
+  const updated = [tx, ...current];
   saveStoredTransactions(updated);
   if (tx && tx.id) {
     syncTransactionToFirestore(tx).catch(() => {});
@@ -1776,86 +1610,6 @@ export const saveTransaction = (tx: Transaction): void => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tx)
-    }).catch(() => {});
-  }
-};
-
-export const saveMultipleTransactions = (txs: Transaction[]): void => {
-  if (!Array.isArray(txs) || txs.length === 0) return;
-  const current = getStoredTransactions();
-  const map = new Map<string, Transaction>();
-  current.forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
-  
-  txs.forEach(t => {
-    if (t && t.id) {
-      unrecordDeletedTransactionId(t.id);
-      map.set(String(t.id).toLowerCase().trim(), t);
-      syncTransactionToFirestore(t).catch(() => {});
-    }
-  });
-
-  const updated = Array.from(map.values()).sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-  saveStoredTransactions(updated);
-};
-
-export const deleteMultipleTransactions = (transactionIds: string[]): void => {
-  if (!Array.isArray(transactionIds) || transactionIds.length === 0) return;
-  const set = new Set(transactionIds.map(id => String(id).toLowerCase().trim()));
-  set.forEach(id => recordDeletedTransactionId(id));
-  const current = getStoredTransactions();
-  const updated = current.filter(t => !set.has(String(t.id).toLowerCase().trim()));
-  saveStoredTransactions(updated);
-  transactionIds.forEach(id => {
-    deleteTransactionFromFirestore(id).catch(() => {});
-  });
-};
-
-export const updateDonorTransactions = (
-  donorName: string,
-  updatedTxs: Transaction[],
-  deletedTxIds: string[]
-): void => {
-  const deletedSet = new Set(deletedTxIds.map(id => String(id).toLowerCase().trim()));
-  deletedSet.forEach(id => recordDeletedTransactionId(id));
-  
-  const current = getStoredTransactions();
-  // Filter out deleted IDs and any old versions of updated transactions
-  const updatedIdSet = new Set(updatedTxs.map(t => String(t.id).toLowerCase().trim()));
-  
-  const remaining = current.filter(t => {
-    const cleanId = String(t.id).toLowerCase().trim();
-    if (deletedSet.has(cleanId)) return false;
-    if (updatedIdSet.has(cleanId)) return false;
-    return true;
-  });
-
-  updatedTxs.forEach(t => {
-    unrecordDeletedTransactionId(t.id);
-    syncTransactionToFirestore(t).catch(() => {});
-  });
-
-  const allUpdated = [...updatedTxs, ...remaining].sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  saveStoredTransactions(allUpdated);
-};
-
-export const deleteStoredTransaction = (transactionId: string): void => {
-  if (!transactionId) return;
-  const cleanId = String(transactionId).toLowerCase().trim();
-  recordDeletedTransactionId(cleanId);
-  const current = getStoredTransactions();
-  const updated = current.filter(t => String(t.id).toLowerCase().trim() !== cleanId);
-  saveStoredTransactions(updated);
-  deleteTransactionFromFirestore(transactionId).catch(() => {});
-  if (typeof fetch !== 'undefined') {
-    fetch(`/api/transactions/${encodeURIComponent(transactionId)}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: 'Deleted by user / admin' })
     }).catch(() => {});
   }
 };
@@ -1952,242 +1706,211 @@ export const saveStoredWallet = (wallet: RonPayWallet) => {
   }
 };
 
-export const addStoredNotification = (notif: {
-  id?: string;
-  type?: 'general' | 'personal' | 'payment' | 'announcement' | 'system' | 'bawm';
-  title: string;
-  message: string;
-  amount?: number;
-  transactionId?: string;
-  campaignId?: string;
-  tag?: string;
-}) => {
+const STAFF_ACCOUNTS_KEY = 'ronpay_staff_accounts_v1';
+
+export const getStoredStaffAccounts = (): StaffAccount[] => {
   try {
-    const raw = localStorage.getItem('ronpay_notifications_v2');
-    const list = raw ? JSON.parse(raw) : [];
-    const item = {
-      id: notif.id || `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      type: notif.type || 'general',
-      title: notif.title,
-      message: notif.message,
-      timestamp: new Date().toISOString(),
-      read: false,
-      amount: notif.amount,
-      transactionId: notif.transactionId,
-      campaignId: notif.campaignId,
-      tag: notif.tag || (notif.type === 'personal' ? 'Personal' : 'General')
-    };
-    const updated = [item, ...list];
-    localStorage.setItem('ronpay_notifications_v2', JSON.stringify(updated));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ronpay_notifications_updated', { detail: updated }));
+    const raw = localStorage.getItem(STAFF_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
   } catch (e) {
-    console.error('Failed to add stored notification', e);
+    console.error('Failed to read staff accounts from storage', e);
+  }
+  return [
+    {
+      id: 'staff-super-1',
+      name: 'Super Admin (Master)',
+      email: 'superadmin@ronpay.com',
+      phone: '9862000001',
+      role: 'SUPER_ADMIN',
+      designation: 'Chief System Architect',
+      assignedAt: '2026-01-01T00:00:00.000Z',
+      assignedBy: 'System Root',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      lastLogin: new Date().toISOString(),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'staff-admin-1',
+      name: 'Lalrinchhana (Operations)',
+      email: 'admin@ronpay.com',
+      phone: '9862000002',
+      role: 'ADMIN',
+      designation: 'Operations & Finance Manager',
+      assignedAt: '2026-02-15T00:00:00.000Z',
+      assignedBy: 'superadmin@ronpay.com',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      lastLogin: new Date(Date.now() - 3600000 * 4).toISOString(),
+      createdAt: '2026-02-15T00:00:00.000Z'
+    },
+    {
+      id: 'staff-mod-1',
+      name: 'Zonunmawii (KYC Desk)',
+      email: 'moderator@ronpay.com',
+      phone: '9862000003',
+      role: 'MODERATOR',
+      designation: 'Creator Verification & KYC Officer',
+      assignedAt: '2026-03-01T00:00:00.000Z',
+      assignedBy: 'admin@ronpay.com',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
+      lastLogin: new Date(Date.now() - 3600000 * 2).toISOString(),
+      createdAt: '2026-03-01T00:00:00.000Z'
+    }
+  ];
+};
+
+export const saveStoredStaffAccounts = (staffList: StaffAccount[]): void => {
+  try {
+    localStorage.setItem(STAFF_ACCOUNTS_KEY, JSON.stringify(staffList));
+  } catch (e) {
+    console.error('Failed to save staff accounts to storage', e);
   }
 };
 
-/**
- * Finds the corresponding campaign for a given transaction.
- */
-export const getTransactionCampaign = (tx: Transaction, campaigns?: Campaign[]): Campaign | undefined => {
-  if (!tx) return undefined;
-  const list = (campaigns && campaigns.length > 0) ? campaigns : getStoredCampaigns();
-  const txCampId = String(tx.campaignId || '').toLowerCase().trim();
-  const txCampTitle = String(tx.campaignTitle || '').toLowerCase().trim();
-
-  return list.find(c => {
-    const cId = String(c.id || '').toLowerCase().trim();
-    const cTitle = String(c.title || '').toLowerCase().trim();
-    return (txCampId && cId === txCampId) || (txCampTitle && cTitle === txCampTitle);
-  });
+export const saveStaffAccount = (staff: StaffAccount): void => {
+  const current = getStoredStaffAccounts();
+  const index = current.findIndex(s => s.id === staff.id);
+  let updated: StaffAccount[];
+  if (index >= 0) {
+    updated = [...current];
+    updated[index] = staff;
+  } else {
+    updated = [staff, ...current];
+  }
+  saveStoredStaffAccounts(updated);
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/admin/staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-role': 'SUPER_ADMIN' },
+      body: JSON.stringify(staff)
+    }).catch(() => {});
+  }
 };
 
-/**
- * Validates whether the active user profile has authority to approve or reject a cash payment receipt.
- * Strict RBAC & Ownership Mandate:
- * 1. Admin & Super Admin: Authorized to approve/reject cash across all campaigns.
- * 2. Creator: Authorized to approve/reject cash ONLY for campaigns they personally created (ama bawm siam a mi chauh).
- *    Midang bawm a mi emaw, ama siam loh bawm a mi chu a approve thei tur a ni lo.
- * 3. Moderator, Member, Guest: STRICTLY NOT AUTHORIZED to approve cash receipts.
- */
+export const deleteStaffAccount = (staffId: string): void => {
+  const current = getStoredStaffAccounts();
+  const updated = current.filter(s => s.id !== staffId);
+  saveStoredStaffAccounts(updated);
+};
+
+export const deleteStoredTransaction = (transactionId: string): void => {
+  if (!transactionId) return;
+  const current = getStoredTransactions();
+  const updated = current.filter(t => t.id !== transactionId);
+  saveStoredTransactions(updated);
+  deleteTransactionFromFirestore(transactionId).catch(() => {});
+  if (typeof fetch !== 'undefined') {
+    fetch(`/api/transactions/${encodeURIComponent(transactionId)}`, { method: 'DELETE' }).catch(() => {});
+  }
+};
+
+export const deleteMultipleTransactions = (transactionIds: string[]): void => {
+  if (!transactionIds || transactionIds.length === 0) return;
+  const idSet = new Set(transactionIds);
+  const current = getStoredTransactions();
+  const updated = current.filter(t => !idSet.has(t.id));
+  saveStoredTransactions(updated);
+  for (const id of transactionIds) {
+    deleteTransactionFromFirestore(id).catch(() => {});
+  }
+};
+
+export const deleteMembersOfCampaign = (campaignId: string): void => {
+  if (!campaignId) return;
+  const allMembers = getMembers();
+  const filtered = allMembers.filter(m => m.campaignId !== campaignId);
+  saveMembers(filtered);
+};
+
 export const canApproveCashPayment = (
   tx: Transaction,
   campaigns?: Campaign[],
   creatorProfile?: CreatorProfile | null
 ): { allowed: boolean; reason?: string } => {
-  if (!tx) return { allowed: false, reason: 'Transaction hmuh a ni lo' };
-  if (!creatorProfile) {
-    return { allowed: false, reason: 'Log in a ngai (Authentication required)' };
-  }
-
-  const role = getUserRole(creatorProfile);
-
-  // 1. Super Admin & Admin can approve any cash/UPI payment
-  if (role === 'SUPER_ADMIN' || role === 'ADMIN' || creatorProfile.isAdmin) {
+  if (!tx) return { allowed: false, reason: 'Transaction a awm lo.' };
+  if (tx.paymentMethod !== 'cash') return { allowed: false, reason: 'Cash payment a ni lo.' };
+  if (!creatorProfile) return { allowed: false, reason: 'Log in a ngai.' };
+  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') {
     return { allowed: true };
   }
-
-  // 2. Creator can ONLY approve for their own campaign
-  if (role === 'CREATOR' || creatorProfile.isApproved) {
-    const camp = getTransactionCampaign(tx, campaigns);
-    if (camp && isCampaignCreator(camp, creatorProfile)) {
-      return { allowed: true };
-    }
-    return { 
-      allowed: false, 
-      reason: 'Bawm siamtu (Creator) amah ngei emaw Admin chauhvin he bawma sum lo lut hi an approve thei. Ama siam loh bawm a mi chu approve theih a ni lo.' 
-    };
+  const allCampaigns = campaigns || getStoredCampaigns();
+  const camp = allCampaigns.find(c => c.id === tx.campaignId);
+  if (camp && isCampaignCreator(camp, creatorProfile)) {
+    return { allowed: true };
   }
-
-  // 3. Moderator is restricted to content/campaign/KYC reviews, not cash/funds handling
-  if (role === 'MODERATOR') {
-    return { 
-      allowed: false, 
-      reason: 'Moderator chuan Pawisa a approve thei lo. Bawm Siamtu (Creator) emaw Admin chauhvin an approve thei.' 
-    };
-  }
-
-  // 4. Member / Donor / Guest
-  return { 
-    allowed: false, 
-    reason: 'He payment receipt hi Creator leh Admin chauhin an approve thei.' 
-  };
+  return { allowed: false, reason: 'He bawm hi i siam a nih loh avangin cash approve theihna i nei lo.' };
 };
-
-export const canApprovePayment = canApproveCashPayment;
 
 export const approveCashTransaction = (
-  transactionId: string, 
-  verifierName: string = 'Admin / Creator',
+  transactionId: string,
+  verifierName: string,
   creatorProfile?: CreatorProfile | null,
-  campaignsList?: Campaign[]
+  campaigns?: Campaign[]
 ): Transaction | null => {
-  const all = getStoredTransactions();
-  const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
-  if (index === -1) return null;
+  const current = getStoredTransactions();
+  const targetIndex = current.findIndex(t => t.id === transactionId);
+  if (targetIndex === -1) return null;
+  const target = current[targetIndex];
+  const auth = canApproveCashPayment(target, campaigns, creatorProfile);
+  if (!auth.allowed) return null;
 
-  const current = all[index];
-
-  // Enforce security & ownership verification if creatorProfile is provided
-  if (creatorProfile) {
-    const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
-    if (!auth.allowed) {
-      console.warn('Unauthorized approval attempt:', auth.reason);
-      return null;
-    }
-  }
-
-  const isOnline = current.paymentMethod === 'online' || !!current.utrRef;
-
-  const updated: Transaction = {
-    ...current,
+  const updatedTx: Transaction = {
+    ...target,
     status: 'completed',
-    verifiedBy: verifierName,
+    verifiedBy: verifierName || 'Bawm Creator',
     verifiedAt: new Date().toISOString(),
-    remark: current.remark 
-      ? `${current.remark} (${isOnline ? 'UPI Verified' : 'Cash Approved'} by ${verifierName})` 
-      : `${isOnline ? 'UPI Verified & Approved' : 'Cash Approved'} by ${verifierName}`
   };
 
-  all[index] = updated;
-  saveStoredTransactions(all);
-  saveTransaction(updated);
-
-  // Record audit log
+  current[targetIndex] = updatedTx;
+  saveStoredTransactions(current);
   recordAuditLog(
-    isOnline ? 'UPI Payment Approved' : 'Cash Approved',
-    isOnline 
-      ? `UPI Payment ₹${updated.amount} (UTR: ${updated.utrRef || updated.id}) for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was VERIFIED/APPROVED by ${verifierName}`
-      : `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was APPROVED/VERIFIED by ${verifierName}`,
+    'Cash Approved',
+    `Txn ${transactionId} (₹${target.amount}) chu ${verifierName}-in a pawm fel ta.`,
     'transaction',
-    updated.id
+    transactionId
   );
-
-  // Add Notification
-  addStoredNotification({
-    type: 'personal',
-    title: isOnline ? `UPI Payment Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}` : `Cash Dawn Fel: ₹${updated.amount.toLocaleString('en-IN')}`,
-    message: isOnline
-      ? `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} UPI pek (UTR: ${updated.utrRef || updated.id}) ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian an bank account-ah an verify fel ta e. (Txn: ${updated.id})`
-      : `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu ${verifierName} hian a dawng fel ta e. (Txn: ${updated.id})`,
-    amount: updated.amount,
-    transactionId: updated.id,
-    campaignId: updated.campaignId,
-    tag: isOnline ? 'UPI Payment Approved' : 'Cash Approved'
-  });
-
-  return updated;
+  return updatedTx;
 };
-
-export const approvePendingTransaction = approveCashTransaction;
 
 export const rejectCashTransaction = (
-  transactionId: string, 
-  rejectorName: string = 'Admin / Creator',
-  reason: string = 'Pawisa dawn a ni lo',
+  transactionId: string,
+  verifierName: string,
+  reason?: string,
   creatorProfile?: CreatorProfile | null,
-  campaignsList?: Campaign[]
+  campaigns?: Campaign[]
 ): Transaction | null => {
-  const all = getStoredTransactions();
-  const index = all.findIndex(t => String(t.id).toLowerCase().trim() === String(transactionId).toLowerCase().trim());
-  if (index === -1) return null;
+  const current = getStoredTransactions();
+  const targetIndex = current.findIndex(t => t.id === transactionId);
+  if (targetIndex === -1) return null;
+  const target = current[targetIndex];
+  const auth = canApproveCashPayment(target, campaigns, creatorProfile);
+  if (!auth.allowed) return null;
 
-  const current = all[index];
-
-  // Enforce security & ownership verification if creatorProfile is provided
-  if (creatorProfile) {
-    const auth = canApproveCashPayment(current, campaignsList, creatorProfile);
-    if (!auth.allowed) {
-      console.warn('Unauthorized rejection attempt:', auth.reason);
-      return null;
-    }
-  }
-
-  const isOnline = current.paymentMethod === 'online' || !!current.utrRef;
-
-  const updated: Transaction = {
-    ...current,
+  const updatedTx: Transaction = {
+    ...target,
     status: 'rejected',
-    rejectedBy: rejectorName,
+    rejectionReason: reason || 'Cash pawisa dawn fel a ni lo.',
     rejectedAt: new Date().toISOString(),
-    rejectionReason: reason,
-    remark: current.remark 
-      ? `${current.remark} (${isOnline ? 'UPI Rejected' : 'Cash Rejected'}: ${reason})` 
-      : `${isOnline ? 'UPI Rejected' : 'Cash Rejected'}: ${reason}`
+    verifiedBy: verifierName || 'Bawm Creator',
   };
 
-  all[index] = updated;
-  saveStoredTransactions(all);
-  saveTransaction(updated);
-
-  // Record audit log
+  current[targetIndex] = updatedTx;
+  saveStoredTransactions(current);
   recordAuditLog(
-    isOnline ? 'UPI Payment Rejected' : 'Cash Rejected',
-    isOnline
-      ? `UPI Payment ₹${updated.amount} (UTR: ${updated.utrRef || updated.id}) for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`
-      : `Cash ₹${updated.amount} for "${updated.campaignTitle || updated.campaignId}" (Donor: ${updated.donorName}) was REJECTED by ${rejectorName}. Reason: ${reason}`,
+    'Cash Rejected',
+    `Txn ${transactionId} (₹${target.amount}) chu ${verifierName}-in a hnawl. Chhan: ${reason || 'Cash a thleng lo'}`,
     'transaction',
-    updated.id
+    transactionId
   );
-
-  // Add Notification
-  addStoredNotification({
-    type: 'personal',
-    title: isOnline ? `UPI Payment Hnawl: ₹${updated.amount.toLocaleString('en-IN')}` : `Cash Hnawl: ₹${updated.amount.toLocaleString('en-IN')}`,
-    message: isOnline
-      ? `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} UPI pek (UTR: ${updated.utrRef || updated.id}) ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`
-      : `"${updated.campaignTitle || 'RonPay Bawm'}"-a ${updated.donorName} cash pek ₹${updated.amount.toLocaleString('en-IN')} chu dawng loh/hnawl a ni. Chhan: ${reason}`,
-    amount: updated.amount,
-    transactionId: updated.id,
-    campaignId: updated.campaignId,
-    tag: isOnline ? 'UPI Payment Rejected' : 'Cash Rejected'
-  });
-
-  return updated;
+  return updatedTx;
 };
-
-export const rejectPendingTransaction = rejectCashTransaction;
 
 const PG_CONFIG_KEY = 'ronpay_pg_config_v1';
 
@@ -2198,41 +1921,25 @@ export const DEFAULT_PG_CONFIG: PaymentGatewayConfig = {
   merchantId: 'PGTEST_RONPAY_001',
   keyId: 'M2306160483220674079460',
   keySecret: '099eb0cd-02cf-4e2a-8aca-3e6c6aff0399',
-  webhookSecret: 'whsec_ronpay_verification_token',
-  webhookEndpoint: 'https://ronpay.app/api/pg/webhook',
-  isKycSubmitted: true,
-  kycStatus: 'verified',
-  businessPan: 'AABCR1234F',
-  businessGst: '15AABCR1234F1Z5',
-  settlementAccount: 'Direct Nodal Beneficiary Account',
-  settlementIfsc: 'SBIN0001539',
-  autoRefundDuplicateMinutes: 15
+  webhookEndpoint: 'https://ronpay.app/api/webhooks/phonepe',
+  saltKey: '099eb0cd-02cf-4e2a-8aca-3e6c6aff0399',
+  saltIndex: 1,
+  webhookSecret: 'whsec_ronpay_live_secret_key',
+  isEnabled: true,
+  isAutoSplitEnabled: true,
+  ronpaySplitPercent: 1.0,
+  minTransactionAmount: 1,
+  maxTransactionAmount: 100000,
 };
 
 export const getStoredPGConfig = (): PaymentGatewayConfig => {
   try {
     const raw = localStorage.getItem(PG_CONFIG_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      // Migrate any old dev container / cloud run sandbox URLs to official ronpay.app domain
-      if (
-        !parsed.webhookEndpoint ||
-        parsed.webhookEndpoint.includes('run.app') ||
-        parsed.webhookEndpoint.includes('ais-dev') ||
-        parsed.webhookEndpoint.includes('ais-pre') ||
-        parsed.webhookEndpoint.includes('localhost') ||
-        parsed.webhookEndpoint.includes('ais-dev-a3j73fwv24ssrienmthjhs') ||
-        parsed.webhookEndpoint.includes('ais-dev-aurigq73fhh5a7ck4exy2a')
-      ) {
-        parsed.webhookEndpoint = 'https://ronpay.app/api/pg/webhook';
-        try {
-          localStorage.setItem(PG_CONFIG_KEY, JSON.stringify({ ...DEFAULT_PG_CONFIG, ...parsed }));
-        } catch (_) {}
-      }
-      return { ...DEFAULT_PG_CONFIG, ...parsed };
+      return { ...DEFAULT_PG_CONFIG, ...JSON.parse(raw) };
     }
   } catch (e) {
-    console.warn('Failed to load PG config, using default:', e);
+    console.error('Failed to parse stored PG config', e);
   }
   return DEFAULT_PG_CONFIG;
 };
@@ -2240,76 +1947,14 @@ export const getStoredPGConfig = (): PaymentGatewayConfig => {
 export const saveStoredPGConfig = (config: PaymentGatewayConfig): void => {
   try {
     localStorage.setItem(PG_CONFIG_KEY, JSON.stringify(config));
-    recordAuditLog(
-      'PG Config Updated',
-      `Payment Gateway Mode set to ${config.mode.toUpperCase()} (${config.provider} - ${config.environment})`,
-      'system',
-      config.merchantId
-    );
-  } catch (e) {
-    console.error('Failed to save PG config:', e);
-  }
-};
-
-/* ========================================================================== */
-/* ADMIN SECURITY & MASTER CREDENTIAL CONFIGURATION                          */
-/* ========================================================================== */
-
-export interface AdminSecurityConfig {
-  primarySuperAdminPhone: string;
-  adminPhoneList: string[];
-  masterPasscode: string;
-  enableSecretTesterTab: boolean;
-  updatedAt?: string;
-}
-
-export const DEFAULT_ADMIN_SECURITY_CONFIG: AdminSecurityConfig = {
-  primarySuperAdminPhone: '9436001234',
-  adminPhoneList: ['9436001234', '7005153902', '9436154321'],
-  masterPasscode: '7777',
-  enableSecretTesterTab: false,
-};
-
-const ADMIN_SECURITY_KEY = 'ronpay_admin_security_config_v1';
-
-export const getStoredAdminSecurityConfig = (): AdminSecurityConfig => {
-  try {
     if (typeof window !== 'undefined') {
-      const raw = localStorage.getItem(ADMIN_SECURITY_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            ...DEFAULT_ADMIN_SECURITY_CONFIG,
-            ...parsed,
-          };
-        }
-      }
+      window.dispatchEvent(new CustomEvent('ronpay_pg_config_updated', { detail: config }));
     }
   } catch (e) {
-    console.warn('Failed to load admin security config:', e);
+    console.error('Failed to save PG config', e);
   }
-  return DEFAULT_ADMIN_SECURITY_CONFIG;
 };
 
-export const saveStoredAdminSecurityConfig = (config: AdminSecurityConfig): void => {
-  try {
-    if (typeof window !== 'undefined') {
-      const payload = {
-        ...config,
-        updatedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(ADMIN_SECURITY_KEY, JSON.stringify(payload));
-      window.dispatchEvent(new CustomEvent('ronpay_admin_security_updated', { detail: payload }));
-      recordAuditLog(
-        'Admin Security Updated',
-        `Super Admin phone set to +91 ${config.primarySuperAdminPhone}, Tester Tab: ${config.enableSecretTesterTab ? 'Enabled' : 'Hidden'}`,
-        'system',
-        config.primarySuperAdminPhone
-      );
-    }
-  } catch (e) {
-    console.error('Failed to save admin security config:', e);
-  }
-};
+
+
 

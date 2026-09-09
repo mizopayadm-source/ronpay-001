@@ -1,377 +1,338 @@
-import { UserRole, RolePermissions, CreatorProfile } from '../types';
-import { getStoredAdminSecurityConfig } from './storage';
+import { UserRole, PermissionKey, StaffAccount } from '../types';
 
 /**
- * Role Hierarchy Numerical Weights
- * Higher value = higher privilege level
+ * 6-Tier Role Hierarchy & Rank Matrix
+ * Higher number = Greater clearance
  */
-export const ROLE_HIERARCHY_LEVEL: Record<UserRole, number> = {
-  SUPER_ADMIN: 100,
-  ADMIN: 80,
-  MODERATOR: 60,
-  CREATOR: 40,
-  MEMBER: 20,
-  GUEST: 0,
+export const ROLE_RANKS: Record<UserRole, number> = {
+  SUPER_ADMIN: 6,
+  ADMIN: 5,
+  MODERATOR: 4,
+  CREATOR: 3,
+  MEMBER: 2,
+  GUEST: 1,
 };
 
-export interface RoleMeta {
+export interface RoleMetadata {
   role: UserRole;
   title: string;
-  shortTitle: string;
-  badge: string;
-  badgeColor: string;
-  badgeBg: string;
-  badgeBorder: string;
-  badgeText: string;
-  iconName: string;
+  shortTitle?: string;
+  mizoTitle: string;
   description: string;
-  responsibilities: string[];
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  badgeColor?: string;
+  badge?: string;
+  accentColor: string;
+  iconName: string;
+  summaryMizo: string;
 }
 
-export const ROLE_METAS: Record<UserRole, RoleMeta> = {
+export const ROLE_DEFINITIONS: Record<UserRole, RoleMetadata> = {
   SUPER_ADMIN: {
     role: 'SUPER_ADMIN',
     title: 'Super Administrator',
     shortTitle: 'Super Admin',
-    badge: 'SUPER ADMIN',
-    badgeColor: 'bg-purple-600 text-white',
-    badgeBg: 'bg-purple-950/80',
-    badgeBorder: 'border-purple-500/80',
-    badgeText: 'text-purple-300',
+    mizoTitle: 'Master / Super Admin',
+    description: 'Full system access, platform settings, payout configs, database backups, and staff account management.',
+    badgeBg: 'bg-purple-900',
+    badgeText: 'text-amber-300',
+    badgeBorder: 'border-purple-700',
+    badgeColor: 'bg-purple-900 text-amber-300 border-purple-700',
+    badge: '👑 SUPER ADMIN',
+    accentColor: '#7c3aed',
     iconName: 'Crown',
-    description: 'Full system access, platform financial settings, payout configs, and manages Admin/Moderator accounts.',
-    responsibilities: [
-      'Full platform control & disaster recovery backups',
-      'Manage Admin & Moderator role assignments',
-      'Platform pricing, transaction fee rates & payout gateways',
-      'Creator verification & Bawm approvals',
-      'Direct system audit oversight & emergency locks'
-    ]
+    summaryMizo: 'Platform setting, Payout rates, Admin dang siam leh Database thunun theitu.',
   },
   ADMIN: {
     role: 'ADMIN',
     title: 'Platform Administrator',
     shortTitle: 'Admin',
-    badge: 'ADMIN',
-    badgeColor: 'bg-indigo-600 text-white',
-    badgeBg: 'bg-indigo-950/80',
-    badgeBorder: 'border-indigo-500/80',
-    badgeText: 'text-indigo-300',
+    mizoTitle: 'System Operations Admin',
+    description: 'Platform operations, financial reports, user management, dispute handling, and campaign approvals.',
+    badgeBg: 'bg-blue-900',
+    badgeText: 'text-blue-200',
+    badgeBorder: 'border-blue-700',
+    badgeColor: 'bg-blue-900 text-blue-200 border-blue-700',
+    badge: '⚡ ADMIN',
+    accentColor: '#2563eb',
     iconName: 'ShieldCheck',
-    description: 'Platform operations, financial reports, user management, and dispute handling.',
-    responsibilities: [
-      'Platform operations & live transaction management',
-      'Creator KYC verification & campaign approvals',
-      'Financial collection reports & revenue analysis',
-      'Broadcast announcements & alerts',
-      'Dispute resolution & user support'
-    ]
+    summaryMizo: 'Operations, Finance report, Campaign verify leh buaina (Dispute) chinfelna.',
   },
   MODERATOR: {
     role: 'MODERATOR',
-    title: 'Compliance Moderator',
+    title: 'Content & KYC Moderator',
     shortTitle: 'Moderator',
-    badge: 'MODERATOR',
-    badgeColor: 'bg-teal-600 text-white',
-    badgeBg: 'bg-teal-950/80',
-    badgeBorder: 'border-teal-500/80',
-    badgeText: 'text-teal-300',
+    mizoTitle: 'KYC & Moderator',
+    description: 'Specifically handles Creator KYC verification (approve/reject creators), review reports, and content moderation.',
+    badgeBg: 'bg-emerald-900',
+    badgeText: 'text-emerald-200',
+    badgeBorder: 'border-emerald-700',
+    badgeColor: 'bg-emerald-900 text-emerald-200 border-emerald-700',
+    badge: '🛡️ MODERATOR',
+    accentColor: '#059669',
     iconName: 'UserCheck',
-    description: 'Specifically handles Creator KYC verification (approve/reject creators), reviews reports, and moderates content.',
-    responsibilities: [
-      'Creator KYC verification & onboarding review',
-      'Bawm/Campaign content moderation & compliance checks',
-      'Review flagged transactions & user reports',
-      'Approve/Reject pending creator applications'
-    ]
+    summaryMizo: 'Creator KYC lehkha verify, Approve/Reject leh content thalo endiktu.',
   },
   CREATOR: {
     role: 'CREATOR',
-    title: 'Verified Bawm Creator',
+    title: 'Verified Creator',
     shortTitle: 'Creator',
-    badge: 'CREATOR',
-    badgeColor: 'bg-emerald-600 text-white',
-    badgeBg: 'bg-emerald-950/80',
-    badgeBorder: 'border-emerald-500/80',
-    badgeText: 'text-emerald-300',
+    mizoTitle: 'QR & Bawm Creator',
+    description: 'Verified content/service provider allowed to publish campaigns, create QRs, and manage member rolls.',
+    badgeBg: 'bg-amber-900',
+    badgeText: 'text-amber-200',
+    badgeBorder: 'border-amber-700',
+    badgeColor: 'bg-amber-900 text-amber-200 border-amber-700',
+    badge: '🌟 CREATOR',
+    accentColor: '#d97706',
     iconName: 'Sparkles',
-    description: 'Content/service providers requiring verification to publish Bawm campaigns, manage member rolls, and receive collections.',
-    responsibilities: [
-      'Create and manage verified Bawm campaigns (Ralna, Kumtluang, etc.)',
-      'Manage Kumtluang / Khawlsak member master rolls',
-      'Track offline and online collection records',
-      'Generate printable statements and QR standees'
-    ]
+    summaryMizo: 'Bawm siam, QR siam leh Thawhlawm/Member roll enkawltu.',
   },
   MEMBER: {
     role: 'MEMBER',
-    title: 'Community Member / Donor',
+    title: 'Registered Member',
     shortTitle: 'Member',
-    badge: 'MEMBER',
-    badgeColor: 'bg-amber-500 text-slate-950 font-black',
-    badgeBg: 'bg-amber-950/60',
-    badgeBorder: 'border-amber-500/60',
-    badgeText: 'text-amber-300',
+    mizoTitle: 'Customer / Member',
+    description: 'Standard registered end-user with donation history, pledge tracking, receipts, and profile tools.',
+    badgeBg: 'bg-indigo-900',
+    badgeText: 'text-indigo-200',
+    badgeBorder: 'border-indigo-700',
+    badgeColor: 'bg-indigo-900 text-indigo-200 border-indigo-700',
+    badge: '👤 MEMBER',
+    accentColor: '#4f46e5',
     iconName: 'User',
-    description: 'Standard registered end-user/customer. Can scan and pay, top up RonPay wallet, track giving history.',
-    responsibilities: [
-      'Scan & pay to any community Bawm QR',
-      'Manage personal RonPay wallet & bank transfers',
-      'View individual Sulhnu giving receipts',
-      'Register for community member rolls'
-    ]
+    summaryMizo: 'Bawm a sum chhunglut, receipt download leh thawhpek sulhnu vawngtu.',
   },
   GUEST: {
     role: 'GUEST',
     title: 'Guest Visitor',
     shortTitle: 'Guest',
-    badge: 'GUEST',
-    badgeColor: 'bg-slate-700 text-slate-200',
-    badgeBg: 'bg-slate-900',
+    mizoTitle: 'Mikhual / Guest',
+    description: 'Unauthenticated visitor exploring public campaigns and making one-off UPI contributions.',
+    badgeBg: 'bg-slate-800',
+    badgeText: 'text-slate-300',
     badgeBorder: 'border-slate-700',
-    badgeText: 'text-slate-400',
-    iconName: 'Globe',
-    description: 'Unauthenticated visitor. Can browse public explorer and view public campaigns.',
-    responsibilities: [
-      'Browse public Bawm explorer',
-      'Scan campaign QR to make instant online payments',
-      'View public announcement banners'
-    ]
-  }
-};
-
-/**
- * Definitive Permissions Matrix by Role
- */
-export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
-  SUPER_ADMIN: {
-    canAccessCreatorVerification: true,
-    canModerateContent: true,
-    canViewFinancialReports: true,
-    canManagePlatformFinancials: true,
-    canManagePayoutConfigs: true,
-    canManageAdminAccounts: true,
-    canManageSystemBackups: true,
-    canManageAnnouncements: true,
-    canCreateCampaigns: true,
-    canAccessAdminConsole: true,
-  },
-  ADMIN: {
-    canAccessCreatorVerification: true,
-    canModerateContent: true,
-    canViewFinancialReports: true,
-    canManagePlatformFinancials: false, // Strictly SUPER_ADMIN
-    canManagePayoutConfigs: false,      // Strictly SUPER_ADMIN
-    canManageAdminAccounts: false,      // Strictly SUPER_ADMIN
-    canManageSystemBackups: false,      // Strictly SUPER_ADMIN
-    canManageAnnouncements: true,
-    canCreateCampaigns: true,
-    canAccessAdminConsole: true,
-  },
-  MODERATOR: {
-    canAccessCreatorVerification: true,
-    canModerateContent: true,
-    canViewFinancialReports: false,
-    canManagePlatformFinancials: false, // Strictly SUPER_ADMIN
-    canManagePayoutConfigs: false,      // Strictly SUPER_ADMIN
-    canManageAdminAccounts: false,      // Strictly SUPER_ADMIN
-    canManageSystemBackups: false,      // Strictly SUPER_ADMIN
-    canManageAnnouncements: false,
-    canCreateCampaigns: false,
-    canAccessAdminConsole: true,        // Restricted Moderation View
-  },
-  CREATOR: {
-    canAccessCreatorVerification: false,
-    canModerateContent: false,
-    canViewFinancialReports: false,
-    canManagePlatformFinancials: false,
-    canManagePayoutConfigs: false,
-    canManageAdminAccounts: false,
-    canManageSystemBackups: false,
-    canManageAnnouncements: false,
-    canCreateCampaigns: true,
-    canAccessAdminConsole: false,
-  },
-  MEMBER: {
-    canAccessCreatorVerification: false,
-    canModerateContent: false,
-    canViewFinancialReports: false,
-    canManagePlatformFinancials: false,
-    canManagePayoutConfigs: false,
-    canManageAdminAccounts: false,
-    canManageSystemBackups: false,
-    canManageAnnouncements: false,
-    canCreateCampaigns: false,
-    canAccessAdminConsole: false,
-  },
-  GUEST: {
-    canAccessCreatorVerification: false,
-    canModerateContent: false,
-    canViewFinancialReports: false,
-    canManagePlatformFinancials: false,
-    canManagePayoutConfigs: false,
-    canManageAdminAccounts: false,
-    canManageSystemBackups: false,
-    canManageAnnouncements: false,
-    canCreateCampaigns: false,
-    canAccessAdminConsole: false,
+    badgeColor: 'bg-slate-800 text-slate-300 border-slate-700',
+    badge: '👁️ GUEST',
+    accentColor: '#64748b',
+    iconName: 'Eye',
+    summaryMizo: 'App en kual leh direct QR scan a sum thawh zawk theitu.',
   },
 };
 
+export const ROLE_METAS = ROLE_DEFINITIONS;
+
 /**
- * Determine a user's exact UserRole from their profile
- * with full backwards-compatibility for legacy flags (isAdmin, isApproved, etc.)
+ * Granular Permission Matrix for each Role
  */
-export const getUserRole = (profile?: CreatorProfile | null): UserRole => {
-  if (!profile) return 'GUEST';
+export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
+  SUPER_ADMIN: [
+    'MANAGE_STAFF_ACCOUNTS',
+    'MANAGE_PLATFORM_CONFIGS',
+    'MANAGE_PAYOUT_RATES',
+    'VIEW_FINANCIAL_REPORTS',
+    'HANDLE_DISPUTES',
+    'APPROVE_CAMPAIGNS',
+    'DELETE_ANY_CAMPAIGN',
+    'VERIFY_CREATOR_KYC',
+    'MODERATE_CONTENT',
+    'REVIEW_REPORTS',
+    'CREATE_CAMPAIGNS',
+    'MANAGE_MEMBER_ROLLS',
+    'MAKE_DONATIONS',
+    'VIEW_OWN_HISTORY',
+    'BACKUP_RESTORE_DB',
+  ],
+  ADMIN: [
+    'VIEW_FINANCIAL_REPORTS',
+    'HANDLE_DISPUTES',
+    'APPROVE_CAMPAIGNS',
+    'DELETE_ANY_CAMPAIGN',
+    'VERIFY_CREATOR_KYC',
+    'MODERATE_CONTENT',
+    'REVIEW_REPORTS',
+    'CREATE_CAMPAIGNS',
+    'MANAGE_MEMBER_ROLLS',
+    'MAKE_DONATIONS',
+    'VIEW_OWN_HISTORY',
+  ],
+  MODERATOR: [
+    'VERIFY_CREATOR_KYC',
+    'MODERATE_CONTENT',
+    'REVIEW_REPORTS',
+    'APPROVE_CAMPAIGNS',
+    'MAKE_DONATIONS',
+    'VIEW_OWN_HISTORY',
+  ],
+  CREATOR: [
+    'CREATE_CAMPAIGNS',
+    'MANAGE_MEMBER_ROLLS',
+    'MAKE_DONATIONS',
+    'VIEW_OWN_HISTORY',
+  ],
+  MEMBER: [
+    'MAKE_DONATIONS',
+    'VIEW_OWN_HISTORY',
+  ],
+  GUEST: [
+    'MAKE_DONATIONS',
+  ],
+};
 
-  // Explicit role string check
-  if (profile.role) {
-    const r = profile.role.toString().toUpperCase().trim();
-    if (r === 'SUPER_ADMIN' || r === 'SUPERADMIN' || r === 'SUPER ADMIN') return 'SUPER_ADMIN';
-    if (r === 'ADMIN' || r === 'ADMINISTRATOR') return 'ADMIN';
-    if (r === 'MODERATOR' || r === 'MOD') return 'MODERATOR';
-    if (r === 'CREATOR' || r === 'TREASURER') return 'CREATOR';
-    if (r === 'MEMBER' || r === 'USER') return 'MEMBER';
-    if (r === 'GUEST') return 'GUEST';
-  }
+/**
+ * Sample Staff Accounts for Initial RBAC Seeding & Quick Testing
+ */
+export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = [
+  {
+    id: 'staff-super-1',
+    name: 'RonPay System Architect',
+    email: 'superadmin@ronpay.com',
+    phone: '9862000001',
+    role: 'SUPER_ADMIN',
+    designation: 'Chief Technology Officer (CTO)',
+    assignedAt: '2026-01-01T00:00:00.000Z',
+    assignedBy: 'System Root',
+    isActive: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    lastLogin: new Date().toISOString(),
+  },
+  {
+    id: 'staff-admin-1',
+    name: 'Lalrinchhana (Finance & Ops)',
+    email: 'admin@ronpay.com',
+    phone: '9862000002',
+    role: 'ADMIN',
+    designation: 'Operations & Finance Manager',
+    assignedAt: '2026-02-15T00:00:00.000Z',
+    assignedBy: 'superadmin@ronpay.com',
+    isActive: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    lastLogin: new Date(Date.now() - 3600000 * 4).toISOString(),
+  },
+  {
+    id: 'staff-mod-1',
+    name: 'Zonunmawii (Creator KYC Desk)',
+    email: 'moderator@ronpay.com',
+    phone: '9862000003',
+    role: 'MODERATOR',
+    designation: 'Creator Verification & KYC Officer',
+    assignedAt: '2026-03-01T00:00:00.000Z',
+    assignedBy: 'admin@ronpay.com',
+    isActive: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
+    lastLogin: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+];
 
-  // Fallback checks from legacy fields
-  if (profile.isAdmin) {
-    const adminConfig = getStoredAdminSecurityConfig();
-    // If designated as Platform HQ or phone is system admin phone, consider SUPER_ADMIN
-    if (
-      profile.phone === adminConfig.primarySuperAdminPhone ||
-      adminConfig.adminPhoneList?.includes(profile.phone || '') ||
-      profile.phone === '9436001234' || 
-      profile.orgName?.includes('HQ') || 
-      profile.orgName?.includes('Master Console')
-    ) {
-      return 'SUPER_ADMIN';
+/**
+ * Check if a role has a specific permission
+ */
+export function hasPermission(role: UserRole = 'GUEST', permission: PermissionKey): boolean {
+  const permissions = ROLE_PERMISSIONS_MAP[role] || [];
+  return permissions.includes(permission);
+}
+
+/**
+ * Check if current role satisfies minimum required rank
+ */
+export function hasMinimumRole(currentRole: UserRole = 'GUEST', requiredRole: UserRole): boolean {
+  return (ROLE_RANKS[currentRole] || 1) >= (ROLE_RANKS[requiredRole] || 1);
+}
+
+/**
+ * Extracts UserRole from a profile, string, or role object safely
+ */
+export function getUserRole(profileOrRole?: any): UserRole {
+  if (!profileOrRole) return 'GUEST';
+  if (typeof profileOrRole === 'string') {
+    if (['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole)) {
+      return profileOrRole as UserRole;
     }
-    return 'ADMIN';
+    return 'GUEST';
   }
-
-  if (profile.isApproved || (profile.approvedCategories && profile.approvedCategories.length > 0)) {
-    return 'CREATOR';
+  if (typeof profileOrRole === 'object') {
+    if (profileOrRole.role && ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole.role)) {
+      return profileOrRole.role as UserRole;
+    }
+    if (profileOrRole.isAdmin) return 'ADMIN';
+    if (profileOrRole.phone) return 'CREATOR';
   }
-
-  if (profile.phone || profile.name) {
-    return 'MEMBER';
-  }
-
   return 'GUEST';
-};
+}
 
 /**
- * Check if user profile has at least the minimum role level
+ * Specific clearance checks required by the user prompt
  */
-export const hasMinimumRole = (profile: CreatorProfile | null | undefined, minRole: UserRole): boolean => {
-  const userRole = getUserRole(profile);
-  return ROLE_HIERARCHY_LEVEL[userRole] >= ROLE_HIERARCHY_LEVEL[minRole];
-};
 
-/**
- * Check if user profile has one of the allowed roles
- */
-export const hasAnyRole = (profile: CreatorProfile | null | undefined, allowedRoles: UserRole[]): boolean => {
-  const userRole = getUserRole(profile);
-  return allowedRoles.includes(userRole);
-};
-
-/**
- * Get the full permission set for a profile or role
- */
-export const getRolePermissions = (roleOrProfile?: UserRole | CreatorProfile | null): RolePermissions => {
-  if (!roleOrProfile) return ROLE_PERMISSIONS.GUEST;
-  const role: UserRole = typeof roleOrProfile === 'string' ? (roleOrProfile as UserRole) : getUserRole(roleOrProfile);
-  return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.GUEST;
-};
-
-/**
- * 1. Allow SUPER_ADMIN, ADMIN, and MODERATOR to access Creator Verification & KYC Approval
- */
-export const canAccessCreatorVerification = (profile?: CreatorProfile | null): boolean => {
-  const role = getUserRole(profile);
+// 1. Allow SUPER_ADMIN, ADMIN, and MODERATOR to access Creator KYC Verification
+export function canAccessCreatorVerification(roleOrProfile?: any): boolean {
+  const role = typeof roleOrProfile === 'object' && roleOrProfile !== null
+    ? getUserRole(roleOrProfile)
+    : (roleOrProfile || 'GUEST');
   return role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MODERATOR';
-};
+}
 
-/**
- * 2. Restrict platform financial configs (fees, rates, payment gateways) solely to SUPER_ADMIN
- */
-export const canManagePlatformFinancials = (profile?: CreatorProfile | null): boolean => {
-  return getUserRole(profile) === 'SUPER_ADMIN';
-};
-
-/**
- * 3. Restrict Admin & Moderator account management solely to SUPER_ADMIN
- */
-export const canManageAdminAccounts = (profile?: CreatorProfile | null): boolean => {
-  return getUserRole(profile) === 'SUPER_ADMIN';
-};
-
-/**
- * 4. Content and campaign moderation (SUPER_ADMIN, ADMIN, MODERATOR)
- */
-export const canModerateContent = (profile?: CreatorProfile | null): boolean => {
-  const role = getUserRole(profile);
-  return role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MODERATOR';
-};
-
-/**
- * 5. View financial summaries and reports (SUPER_ADMIN, ADMIN)
- */
-export const canViewFinancialReports = (profile?: CreatorProfile | null): boolean => {
-  const role = getUserRole(profile);
+// 2. Allow SUPER_ADMIN and ADMIN to access Financial reports and dispute operations
+export function canAccessFinancialReports(role: UserRole = 'GUEST'): boolean {
   return role === 'SUPER_ADMIN' || role === 'ADMIN';
-};
+}
+export const canViewFinancialReports = canAccessFinancialReports;
 
-/**
- * 6. Access admin console (SUPER_ADMIN, ADMIN, MODERATOR)
- */
-export const canAccessAdminConsole = (profile?: CreatorProfile | null): boolean => {
-  const role = getUserRole(profile);
+// 3. Restrict platform financial configs, fee rates, and staff admin management solely to SUPER_ADMIN
+export function canManagePlatformConfigs(role: UserRole = 'GUEST'): boolean {
+  return role === 'SUPER_ADMIN';
+}
+export const canManagePlatformPricing = canManagePlatformConfigs;
+
+export function canManageStaffAccounts(role: UserRole = 'GUEST'): boolean {
+  return role === 'SUPER_ADMIN';
+}
+
+// 4. Content and campaign moderation
+export function canModerateContent(role: UserRole = 'GUEST'): boolean {
   return role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MODERATOR';
-};
+}
 
-/**
- * 7. Can create and publish new campaigns
- */
-export const canCreateCampaigns = (profile?: CreatorProfile | null): boolean => {
-  const role = getUserRole(profile);
+// 5. Creator Publishing permission
+export function canCreateCampaign(role: UserRole = 'GUEST', isApproved: boolean = false): boolean {
   if (role === 'SUPER_ADMIN' || role === 'ADMIN') return true;
-  if (role === 'CREATOR') return Boolean(profile?.isApproved);
+  if (role === 'CREATOR' && isApproved) return true;
   return false;
-};
+}
 
 /**
- * Route protection validator
+ * Role badge and formatting helpers
  */
-export const validateRouteAccess = (
-  profile: CreatorProfile | null | undefined, 
-  route: 'admin_dashboard' | 'creator_verification' | 'financial_rates' | 'create_qr' | 'staff_management'
-): { allowed: boolean; reason?: string } => {
-  const role = getUserRole(profile);
+export function getRoleBadgeInfo(role: UserRole = 'GUEST') {
+  const meta = ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.GUEST;
+  return {
+    role,
+    name: meta.title,
+    mizoName: meta.mizoTitle,
+    rank: ROLE_RANKS[role] || 1,
+    badgeBg: meta.badgeBg,
+    badgeText: meta.badgeText,
+    badgeBorder: meta.badgeBorder,
+    badgeColor: `${meta.badgeBg} ${meta.badgeText} ${meta.badgeBorder}`,
+    description: meta.description,
+    summaryMizo: meta.summaryMizo,
+    accentColor: meta.accentColor
+  };
+}
 
-  switch (route) {
-    case 'admin_dashboard':
-      if (canAccessAdminConsole(profile)) return { allowed: true };
-      return { allowed: false, reason: 'Staff clearance level (Moderator, Admin, or Super Admin) is required to access the administrative console.' };
-    
-    case 'creator_verification':
-      if (canAccessCreatorVerification(profile)) return { allowed: true };
-      return { allowed: false, reason: 'Only Super Admin, Admin, and Compliance Moderators can perform Creator KYC verifications.' };
+export function getRoleMetadata(role: UserRole = 'GUEST'): RoleMetadata {
+  return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS.GUEST;
+}
 
-    case 'financial_rates':
-    case 'staff_management':
-      if (canManagePlatformFinancials(profile)) return { allowed: true };
-      return { allowed: false, reason: 'Restricted Action: Only Super Administrator accounts have clearance to manage platform fees, payout configs, and staff accounts.' };
-
-    case 'create_qr':
-      if (canCreateCampaigns(profile)) return { allowed: true };
-      return { allowed: false, reason: 'Creator verification required: Please complete Creator Registration and KYC approval before publishing campaigns.' };
-
-    default:
-      return { allowed: true };
-  }
-};
+export function normalizeUserRole(rawRole?: string): UserRole {
+  if (!rawRole) return 'GUEST';
+  const upper = rawRole.toUpperCase();
+  if (upper === 'SUPER_ADMIN' || upper === 'SUPERADMIN' || upper === 'ROOT') return 'SUPER_ADMIN';
+  if (upper === 'ADMIN' || upper === 'ADMINISTRATOR') return 'ADMIN';
+  if (upper === 'MODERATOR' || upper === 'MOD' || upper === 'KYC_MOD') return 'MODERATOR';
+  if (upper === 'CREATOR' || upper === 'MERCHANT' || upper === 'PASTOR' || upper === 'SECRETARY') return 'CREATOR';
+  if (upper === 'MEMBER' || upper === 'USER' || upper === 'DONOR') return 'MEMBER';
+  return 'GUEST';
+}

@@ -3,7 +3,6 @@ import { INITIAL_CAMPAIGNS } from '../data/initialData';
 import { getStoredCampaigns, getStoredTransactions } from './storage';
 
 export interface ParsedRoute {
-  view?: 'website' | 'app';
   screen?: ScreenId;
   campaignId?: string;
   campaign?: Campaign;
@@ -14,6 +13,7 @@ export interface ParsedRoute {
   memberRollCampaignId?: string;
   isAdminOpen?: boolean;
   isWalletOpen?: boolean;
+  view?: 'website' | 'app';
   isPhonePeOpen?: boolean;
 }
 
@@ -27,7 +27,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const url = new URL(window.location.href);
     const searchParams = new URLSearchParams(url.search);
 
-    // Also check hash for parameters e.g. #/?campaign=xxx, #campaign=xxx, #/c/xxx, #/post/xxx, #/app
+    // Also check hash for parameters e.g. #/?campaign=xxx, #campaign=xxx, #/c/xxx, #/post/xxx
     if (window.location.hash) {
       const rawHash = window.location.hash.replace(/^#\/?/, '');
       if (rawHash.includes('?') || rawHash.includes('=')) {
@@ -43,14 +43,11 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         if (match && match[1] && !searchParams.has('campaign')) {
           searchParams.set('campaign', match[1]);
         }
-      } else if (rawHash === 'app' || rawHash.startsWith('app/')) {
-        searchParams.set('view', 'app');
       }
     }
 
-    // Also check pathname for /app, /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
+    // Also check pathname for /campaign/:id, /c/:id, /bawm/:id, /post/:id, /p/:id
     const pathname = window.location.pathname;
-    const isAppPath = pathname === '/app' || pathname.startsWith('/app/');
     const campPathMatch = pathname.match(/\/(?:campaign|c|bawm|post|p)\/([a-zA-Z0-9_-]+)/i);
     if (campPathMatch && campPathMatch[1] && !searchParams.has('campaign')) {
       searchParams.set('campaign', campPathMatch[1]);
@@ -67,44 +64,21 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const receiptId = searchParams.get('receipt') || 
                       searchParams.get('tx') || 
                       searchParams.get('txn') || 
-                      searchParams.get('tx_id') || 
-                      searchParams.get('txnRef') || 
-                      searchParams.get('tr') || 
                       searchParams.get('receiptId');
-
-    const paymentStatus = searchParams.get('payment_status') || 
-                          searchParams.get('status') || 
-                          searchParams.get('upi_status') || 
-                          searchParams.get('responseCode');
 
     const rollId = searchParams.get('roll') || 
                    searchParams.get('member_roll') || 
                    searchParams.get('memberRoll');
 
-    const screenParam = searchParams.get('screen') || searchParams.get('page') || searchParams.get('view');
+    const screenParam = searchParams.get('screen') || searchParams.get('page');
+    const viewParam = searchParams.get('view');
+    const phonepeParam = searchParams.get('phonepe') || searchParams.get('pg');
     const catParam = searchParams.get('cat') || searchParams.get('category');
     const sulhnuParam = searchParams.get('sulhnu') || searchParams.get('history');
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
-    const phonepeParam = searchParams.get('phonepe') || searchParams.get('uat') || searchParams.get('pg');
-
-    // 0. If PhonePe UAT / PG parameter is present: Route directly to checkout & open PhonePe portal
-    if (phonepeParam) {
-      const allCampaigns = [
-        ...(campaignsList || []),
-        ...getStoredCampaigns(),
-        ...INITIAL_CAMPAIGNS
-      ];
-      const defaultCamp = allCampaigns[0] || INITIAL_CAMPAIGNS[0];
-      return {
-        view: 'app',
-        screen: 'checkout',
-        campaignId: defaultCamp?.id,
-        campaign: defaultCamp,
-        category: defaultCamp?.category,
-        isPhonePeOpen: true,
-      };
-    }
+    const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') ? viewParam : undefined;
+    const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1';
 
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {
@@ -119,7 +93,6 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       
       if (existing) {
         return {
-          view: 'app',
           screen: 'checkout',
           campaignId: existing.id,
           campaign: existing,
@@ -169,7 +142,6 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
 
       return {
-        view: 'app',
         screen: 'checkout',
         campaignId: cleanId,
         campaign: reconstructed,
@@ -180,7 +152,6 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 2. If Receipt ID is present
     if (receiptId) {
       return {
-        view: 'app',
         screen: 'success',
         receiptId: decodeURIComponent(receiptId).trim(),
       };
@@ -189,7 +160,6 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 3. If Member Roll is requested
     if (rollId) {
       return {
-        view: 'app',
         isMemberRollOpen: true,
         memberRollCampaignId: decodeURIComponent(rollId).trim(),
       };
@@ -198,26 +168,17 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 4. If Sulhnu history is requested
     if (sulhnuParam === 'true' || sulhnuParam === '1') {
       return {
-        view: 'app',
         isSulhnuOpen: true,
       };
     }
 
     // 5. If specific screen or category requested
     if (screenParam) {
-      const validScreens: ScreenId[] = ['home', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'cash_pending'];
+      const validScreens: ScreenId[] = ['home', 'website', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'cash_pending'];
       const matched = validScreens.find(s => s === screenParam.toLowerCase());
       if (matched) {
         return {
-          view: 'app',
           screen: matched,
-          category: (catParam as BawmCategory) || undefined,
-        };
-      }
-      if (screenParam === 'app') {
-        return {
-          view: 'app',
-          screen: 'home',
           category: (catParam as BawmCategory) || undefined,
         };
       }
@@ -225,7 +186,6 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     if (catParam) {
       return {
-        view: 'app',
         screen: 'explorer',
         category: catParam as BawmCategory,
       };
@@ -233,151 +193,57 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     if (adminParam === 'true') {
       return {
-        view: 'app',
         isAdminOpen: true,
       };
     }
 
     if (walletParam === 'true') {
       return {
-        view: 'app',
         isWalletOpen: true,
       };
     }
 
-    // Explicit override checks in query parameters
-    const explicitView = searchParams.get('view');
-    const isExplicitWebsite = explicitView === 'website' || searchParams.get('website') === 'true' || searchParams.get('site') === 'true';
-    const isExplicitApp = explicitView === 'app' || 
-                          searchParams.get('app') === 'true' || 
-                          searchParams.get('platform') === 'android' ||
-                          searchParams.get('source') === 'android' ||
-                          isAppPath;
-
-    // 1. Explicit request for Website takes top precedence (e.g. user clicked "Website" button on mobile)
-    if (isExplicitWebsite) {
+    if (parsedView || isPhonePeOpen) {
       return {
-        view: 'website',
+        view: parsedView,
+        isPhonePeOpen,
       };
     }
 
-    // 2. Explicit request for App
-    if (isExplicitApp) {
-      return {
-        view: 'app',
-        screen: 'home',
-      };
-    }
-
-    // 3. Android Mobile App / Mobile Environment Check:
-    // When opened from a Mobile App (Android APK, Android WebView, PWA, or Android phone):
-    // The App dashboard (Khualmi Guest mode) launches directly without showing promotional web home.
-    if (isAndroidOrMobileApp()) {
-      return {
-        view: 'app',
-        screen: 'home',
-      };
-    }
-
-    // 4. Default for Desktop / Web Browsers accessing the root domain (e.g. www.ronpay.com):
-    // Shows the comprehensive RonPay Marketing & BBPS information website.
-    return {
-      view: 'website',
-    };
+    return null;
   } catch (err) {
     console.error('Error parsing route URL:', err);
-    return { view: isAndroidOrMobileApp() ? 'app' : 'website' };
+    return null;
   }
 }
 
-/**
- * Detects whether the current environment is a Mobile App, Android device, Android WebView, or standalone PWA.
- * On Mobile App / Android environments, the user expects to see the actual App directly (Bawm suites, Guest mode)
- * rather than the marketing website landing page.
- */
 export function isAndroidOrMobileApp(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-
   const ua = navigator.userAgent || '';
-  const win = window as any;
-
-  // 1. Injected Android or mobile native app bridge objects (Cordova, Capacitor, React Native, custom WebView)
-  if (
-    win.Android !== undefined ||
-    win.AndroidBridge !== undefined ||
-    win.Capacitor !== undefined ||
-    win.ReactNativeWebView !== undefined ||
-    win.flutter_inappwebview !== undefined ||
-    win._ronpay_android === true
-  ) {
-    return true;
-  }
-
-  // 2. Android device detection (all Android phones, tablets, Android APK wrappers, Android WebViews)
-  if (/Android/i.test(ua)) {
-    return true;
-  }
-
-  // 3. Standalone / Installed PWA / WebAPK / TWA (Trusted Web Activity)
-  try {
-    const isStandalone = 
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-      (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) ||
-      (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) ||
-      (navigator as any).standalone === true;
-    if (isStandalone) {
-      return true;
-    }
-  } catch {}
-
-  // 4. Android app intent referrer (e.g. android-app://com.ronpay.app)
-  if (typeof document !== 'undefined' && document.referrer && document.referrer.startsWith('android-app://')) {
-    return true;
-  }
-
-  // 5. Generic mobile device user agents (iPhone, iPad, Windows Phone, etc.)
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
-    return true;
-  }
-
-  return false;
+  const isAndroid = /Android/i.test(ua);
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+  return isAndroid || isStandalone || (isMobile && window.innerWidth < 768);
 }
 
-/**
- * Switch between Website and App views with full browser history & URL update
- */
-export function updateBrowserView(view: 'website' | 'app', screen: ScreenId = 'home') {
+export function updateBrowserView(view: 'website' | 'app', screen?: ScreenId) {
   if (typeof window === 'undefined') return;
   try {
     const url = new URL(window.location.href);
-    if (view === 'website') {
-      // Switch to website, set view=website explicitly so mobile devices know user intended to view website
-      url.pathname = '/';
-      url.searchParams.set('view', 'website');
-      url.searchParams.delete('screen');
-      url.searchParams.delete('app');
-      url.hash = '';
-      const newUrl = url.searchParams.toString() ? `${url.pathname}?${url.searchParams.toString()}` : url.pathname;
-      window.history.pushState({ view: 'website' }, '', newUrl);
-    } else {
-      // Switch to /app
-      if (!url.pathname.startsWith('/app')) {
-        url.pathname = '/app';
-      }
-      url.searchParams.delete('view');
-      url.searchParams.delete('website');
-      url.searchParams.delete('site');
+    if (view === 'app') {
+      url.searchParams.set('view', 'app');
       if (screen && screen !== 'home') {
         url.searchParams.set('screen', screen);
-      } else {
-        url.searchParams.delete('screen');
       }
-      const queryStr = url.searchParams.toString();
-      const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
-      window.history.pushState({ view: 'app', screen }, '', newUrl);
+    } else {
+      url.searchParams.delete('view');
     }
-  } catch {}
+    window.history.replaceState({}, '', url.toString());
+  } catch {
+    // Ignore history state errors
+  }
 }
+
 
 /**
  * Updates the browser URL without reloading page, enabling shareable URLs

@@ -45,7 +45,7 @@ export const formatDateTimeDDMMYYYY = (dateInput?: string | Date | number | null
 };
 
 export const isCampaignExpired = (validityDate?: string, status?: string): boolean => {
-  if (status === 'expired') return true;
+  if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected') return true;
   if (!validityDate) return false;
   try {
     const deadline = new Date(validityDate).getTime();

@@ -13,8 +13,7 @@ import {
   RefreshCw,
   ArrowRight,
   Info,
-  Download,
-  AlertCircle
+  Download
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 import {
@@ -79,7 +78,6 @@ export function UPIIntentModal({
   const [qrLoading, setQrLoading] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [utrInput, setUtrInput] = useState<string>('');
-  const [utrError, setUtrError] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [hasReturnedFromApp, setHasReturnedFromApp] = useState<boolean>(false);
 
@@ -206,13 +204,6 @@ export function UPIIntentModal({
   };
 
   const handleConfirmSuccess = () => {
-    setUtrError(null);
-    const cleanUtr = utrInput.replace(/[^0-9a-zA-Z]/g, '').trim();
-    if (!cleanUtr || cleanUtr.length < 8) {
-      setUtrError('Khawngaihin i UPI app (GPay / PhonePe / Paytm) receipt-a 12-digit Bank UTR / Reference No. kha chhut lut rawh le. UTR tel lovin verification thehluh theih a ni lo.');
-      return;
-    }
-
     setIsConfirming(true);
 
     setTimeout(() => {
@@ -232,18 +223,16 @@ export function UPIIntentModal({
         platformFee: platformFee,
         totalAmount: totalPayable,
         paymentMethod: 'online',
-        status: 'pending_verification',
-        remark: remark?.trim() 
-          ? `${remark.trim()} (UPI UTR: ${cleanUtr} - Enfeh Mek)` 
-          : `UPI UTR: ${cleanUtr} - Awaiting Creator/Admin Verification`,
+        status: 'completed',
+        remark: remark?.trim() || undefined,
         subCategoryBreakdown: campaign.category === 'kumtluang' ? subcatAmounts : undefined,
         periodType: campaign.category === 'kumtluang' ? periodType : undefined,
         periodMonth: campaign.category === 'kumtluang' ? periodMonth : undefined,
         periodYear: campaign.category === 'kumtluang' ? periodYear : undefined,
         periodLabel: campaign.category === 'kumtluang' ? periodLabel : undefined,
         timestamp: new Date().toISOString(),
-        txHash: cleanUtr,
-        utrRef: cleanUtr,
+        txHash: 'UPI' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        utrRef: utrInput.trim() || undefined,
         payerUPI: selectedApp?.name || 'UPI Intent',
       };
 
@@ -279,9 +268,9 @@ export function UPIIntentModal({
           </button>
 
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full flex items-center gap-1.5">
-              <img src="/ronpay-logo.png" alt="RonPay" className="w-3.5 h-3.5 rounded object-cover" referrerPolicy="no-referrer" />
-              RonPay Instant Payment
+            <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <Smartphone className="w-3 h-3 text-amber-300" />
+              UPI Instant Payment
             </span>
             <span className="text-[10px] font-bold text-slate-300">
               Ref: <span className="text-amber-300 font-mono">{txRef}</span>
@@ -379,7 +368,7 @@ export function UPIIntentModal({
                   <div>
                     <p className="font-bold">UPI ID copy fel a ni ta!</p>
                     <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
-                      I GPay emaw PhonePe hawng la, <b>"Pay to UPI ID"</b> (emaw <b>"To UPI ID"</b>)-ah paste la, <b>₹{totalPayable}</b> pe rawh le. I pek zawh veleh he tah let lehin i <b>12-digit UTR Number</b> kha chhut lutin verification atan thehlut rawh le.
+                      I GPay emaw PhonePe hawng la, <b>"Pay to UPI ID"</b> (emaw <b>"To UPI ID"</b>)-ah paste la, <b>₹{totalPayable}</b> pe rawh le. I pek zawh veleh he tah let lehin <b>"Ka Pe Zo Tawh"</b> i hmet dawn nia.
                     </p>
                   </div>
                 </div>
@@ -420,6 +409,22 @@ export function UPIIntentModal({
               {/* TAB 1: Direct UPI App Launch (Default) */}
               {payMethodTab === 'apps' && (
                 <div className="space-y-3 animate-fadeIn">
+                  {/* SBI & Bank Limit Advisory Notice */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
+                    <div className="flex items-start gap-2">
+                      <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block text-amber-950">
+                          SBI / Bank Thenkhat Hriattirna:
+                        </span>
+                        <p className="text-[11px] text-amber-900 leading-relaxed mt-0.5">
+                          SBI account hmangte tan, web link atanga personal UPI ID-a direct luh hi bank security-in <b>"Exceeded bank limit"</b> tiin a block thin a.
+                          Chutiang a lo nih chuan a piah <b>"QR Code & Gallery"</b> tab hmang la, <b>100% buaina awm loin a tlang nghal e.</b>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Primary Universal App Launcher */}
                   <button
                     type="button"
@@ -567,68 +572,45 @@ export function UPIIntentModal({
                         <b>Google Pay</b> emaw <b>PhonePe</b> hawngin <b>QR Scanner</b> hmet la, <b>Gallery icon</b> atangin thlang la, ₹{totalPayable} pe rawh (100% tlang nghal ang).
                       </li>
                       <li>
-                        I pek zawh veleh a hnuaiah i <b>12-digit UTR Number</b> kha chhut lut la, verification atan thehlut rawh le.
+                        I pek zawh veleh a hnuai chiah ami <b>"Ka Pe Zo Tawh"</b> hmetin receipt la nghal rawh le.
                       </li>
                     </ol>
                   </div>
 
-                  {/* UTR Input */}
-                  <div className="text-left pt-1 space-y-1">
-                    <label className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                      <span>Bank UTR / UPI Ref No. (12-digit): <span className="text-rose-600">*</span></span>
-                      <span className="text-[10px] text-slate-400 font-normal">GPay / PhonePe receipt-a UTR</span>
+                  {/* UTR Optional Input */}
+                  <div className="text-left pt-1">
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Bank UTR / Ref No. (Optional):
                     </label>
                     <input
                       type="text"
                       value={utrInput}
-                      onChange={(e) => {
-                        setUtrInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''));
-                        if (utrError) setUtrError(null);
-                      }}
-                      placeholder="e.g. 423589123456 (12-digit UTR)"
+                      onChange={(e) => setUtrInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                      placeholder="e.g. 423589123456"
                       maxLength={22}
-                      className={`w-full px-3 py-2 text-xs font-mono bg-white border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none ${
-                        utrError ? 'border-rose-400 ring-2 ring-rose-300' : 'border-slate-300'
-                      }`}
+                      className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                     />
-                    {utrError && (
-                      <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>{utrError}</span>
-                      </p>
+                  </div>
+
+                  {/* Confirm Payment Button right on QR tab */}
+                  <button
+                    type="button"
+                    onClick={handleConfirmSuccess}
+                    disabled={isConfirming}
+                    className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-98 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isConfirming ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Verifying & Generating Receipt...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Ka Pe Zo Tawh (Receipt La Rawh)</span>
+                      </>
                     )}
-                  </div>
-
-                  {/* Submit Verification Button right on QR tab */}
-                  <div className="space-y-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleConfirmSuccess}
-                      disabled={isConfirming}
-                      className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 active:scale-98 transition cursor-pointer disabled:opacity-50"
-                    >
-                      {isConfirming ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Thehlut Mek E...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-4 h-4" />
-                          <span>UTR Thehlut Rawh (Verification Atan)</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>Ka Pe Rih Lo / Cancel (Kir Leh Rawh)</span>
-                    </button>
-                  </div>
+                  </button>
                 </div>
               )}
             </>
@@ -641,22 +623,22 @@ export function UPIIntentModal({
                 <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3 flex items-center gap-2.5 text-xs text-emerald-950 animate-fadeIn shadow-xs">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span className="leading-snug">
-                    UPI App aṭangin RonPay-ah i lo let leh ta! Pawisa i pe fel tawh a nih chuan i receipt-a <b>12-digit UTR</b> kha chhut lut la thehlut rawh le.
+                    UPI App aṭangin RonPay-ah i lo let leh ta! Pawisa i pe fel tawh a nih chuan a hnuaia <b>"Ka Pe Zo Tawh"</b> button hi hmet rawh le.
                   </span>
                 </div>
               )}
 
-              <div className="bg-indigo-50/90 border-2 border-indigo-200 rounded-2xl p-4 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md animate-pulse">
-                  <Smartphone className="w-6 h-6" />
+              <div className="bg-indigo-50 border-2 border-indigo-300 rounded-2xl p-4 text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md animate-pulse">
+                  <Smartphone className="w-7 h-7" />
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-black text-indigo-950">
+                  <h3 className="text-base font-black text-indigo-950">
                     {selectedApp?.name || 'UPI App'} Hawn Mek A Ni
                   </h3>
                   <p className="text-xs text-indigo-800 mt-1 max-w-sm mx-auto leading-relaxed">
-                    Khawngaihin i UPI app-ah <b>₹{totalPayable.toLocaleString('en-IN')}</b> kha pe zo la, i receipt-a <b>12-digit UTR</b> kha chhut lutin thehlut rawh le.
+                    Khawngaihin i UPI app-ah <b>₹{totalPayable.toLocaleString('en-IN')}</b> kha pe zo la, pek zawh veleh a hnuaia <b>"Ka Pe Zo Tawh"</b> button hi hmet rawh le.
                   </p>
                 </div>
 
@@ -670,84 +652,73 @@ export function UPIIntentModal({
                     <span className="font-mono font-bold text-amber-700">{txRef}</span>
                   </div>
                 </div>
+
+                {/* Helpful Troubleshooting tip for GPay/PhonePe account visibility & bank limit */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-left text-[11px] text-amber-900 space-y-2">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                    <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>"Exceeded Bank Limit" emaw Account a lan loh chuan:</span>
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    SBI leh bank thenkhat hian browser link atanga personal UPI a luh hi security vanga an block thin avangin, <b>QR Code Scan</b> hmangin pe rawh le. QR Code Scan hi chu 100% a tlang ngei ngei ang.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMethodTab('qr');
+                      setStep('select');
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>QR Code Scan & Gallery Hmang Rawh (100% Tlang)</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Security Verification Notice */}
-              <div className="bg-amber-50 border border-amber-300/80 rounded-xl p-3 text-left space-y-1 text-xs">
-                <p className="font-bold text-amber-950 flex items-center gap-1.5 text-[11px]">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                  <span>Online Verification Policy (Creator & Admin Enfeh Tur):</span>
-                </p>
-                <p className="text-[11px] text-amber-900 leading-relaxed">
-                  Direct UPI transfer a nih avangin, i 12-digit UTR thehluh hi Bawm Siamtu / Admin hian an bank account-ah an verify hnuah chauh official receipt a chhuak ang. Pawisa pe lovin thehluh theih a ni lo.
-                </p>
-              </div>
-
-              {/* Mandatory UTR Input */}
-              <div className="space-y-1 text-left">
-                <label className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                  <span>Bank UTR / Ref No. (12-digit): <span className="text-rose-600">*</span></span>
+              {/* Optional UTR / Bank Reference input for extra record keeping */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span>Bank UTR / Ref No. (Optional):</span>
                   <span className="text-[10px] text-slate-400 font-normal">UPI receipt-a 12-digit number</span>
                 </label>
                 <input
                   type="text"
                   value={utrInput}
-                  onChange={(e) => {
-                    setUtrInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''));
-                    if (utrError) setUtrError(null);
-                  }}
-                  placeholder="e.g. 423589123456 (12-digit UTR)"
-                  maxLength={22}
-                  className={`w-full bg-white border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    utrError ? 'border-rose-400 ring-2 ring-rose-300' : 'border-slate-300'
-                  }`}
+                  onChange={(e) => setUtrInput(e.target.value)}
+                  placeholder="e.g. 423589123456 (Optional)"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                {utrError && (
-                  <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-1">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{utrError}</span>
-                  </p>
-                )}
               </div>
 
               {/* Action Buttons */}
-              <div className="space-y-2 pt-1">
+              <div className="space-y-2 pt-2">
                 <button
                   type="button"
                   onClick={handleConfirmSuccess}
                   disabled={isConfirming}
-                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl font-black text-xs shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 disabled:opacity-70"
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 disabled:opacity-70"
                 >
                   {isConfirming ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verification Thehlut Mek...</span>
+                      <span>Recording Payment in RonPay...</span>
                     </>
                   ) : (
                     <>
-                      <ShieldCheck className="w-4 h-4 text-white" />
-                      <span>UTR Thehlut Rawh (Verification Atan Thawn)</span>
+                      <CheckCircle2 className="w-5 h-5 text-white" />
+                      <span>Ka Pe Zo Tawh (Confirm & Get Receipt)</span>
                     </>
                   )}
                 </button>
 
-                {/* Clear Option to cancel without paying */}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Pawisa Ka Pe Rih Lo / Cancel Payment (Kir Leh Rawh)</span>
-                </button>
-
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       if (selectedApp) handleLaunchUpiApp(selectedApp);
                     }}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Hawng Nawn Leh Rawh</span>
@@ -756,7 +727,7 @@ export function UPIIntentModal({
                   <button
                     type="button"
                     onClick={() => setStep('select')}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
                   >
                     App Dang Thlang Rawh
                   </button>

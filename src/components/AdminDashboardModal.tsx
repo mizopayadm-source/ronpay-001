@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ShieldCheck, 
@@ -43,11 +43,9 @@ import {
   Save,
   RotateCcw,
   Tag,
-  Info,
   Coins,
   Receipt,
   AlertCircle,
-  Banknote,
   Trophy,
   Crown,
   Medal,
@@ -84,12 +82,10 @@ import {
   AnnouncementBanner,
   AnnouncementItem,
   UserRole,
-  PaymentGatewayConfig,
-  PGProvider,
-  PGMode,
-  PGEnvironment
+  StaffAccount,
+  FeeOptionMode
 } from '../types';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
+import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { 
   exportFullDatabaseBackup, 
@@ -104,14 +100,21 @@ import {
   derivePrefixFromText,
   migrateCampaignMembersPrefix,
   getStoredCreatorsList,
-  saveStoredCreatorsList,
-  saveStoredCreatorProfile,
-  approveCashTransaction,
-  rejectCashTransaction,
-  getStoredPGConfig,
-  saveStoredPGConfig
+  getStoredStaffAccounts,
+  saveStaffAccount,
+  deleteStaffAccount
 } from '../utils/storage';
-import { PGComplianceModal } from './PGComplianceModal';
+import { 
+  ROLE_DEFINITIONS, 
+  ROLE_RANKS, 
+  hasMinimumRole, 
+  canManageStaffAccounts, 
+  canManagePlatformConfigs, 
+  canAccessFinancialReports, 
+  canAccessCreatorVerification,
+  getRoleBadgeInfo
+} from '../utils/rbac';
+import { StaffManagementTab } from './StaffManagementTab';
 import { 
   pushAllLocalDataToFirestore,
   getFirestoreConnectionStatus,
@@ -127,21 +130,6 @@ import {
   ANNOUNCEMENT_HEIGHT_PRESETS
 } from '../utils/media';
 import { compressImageFile } from '../utils/imageCompressor';
-import { CampaignSafetyModal } from './CampaignSafetyModal';
-import { getCampaignFinancialStats, canHardDeleteCampaign } from '../utils/campaignSafety';
-import { 
-  getUserRole, 
-  ROLE_METAS, 
-  canManagePlatformFinancials, 
-  canManageAdminAccounts, 
-  canAccessCreatorVerification, 
-  canViewFinancialReports,
-  canModerateContent,
-  getRolePermissions
-} from '../utils/rbac';
-import { BiometricAuthModal } from './BiometricAuthModal';
-
-export type AdminTabId = 'campaigns' | 'creators' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'staff';
 
 interface AdminDashboardModalProps {
   isOpen: boolean;
@@ -152,10 +140,10 @@ interface AdminDashboardModalProps {
   pricingConfig: SystemPricingConfig;
   announcement?: AnnouncementBanner;
   auditLogs?: AuditLog[];
-  currentProfile?: CreatorProfile;
+  userRole?: UserRole;
   onUpdatePricingConfig: (config: SystemPricingConfig) => void;
   onUpdateCampaign: (campaign: Campaign) => void;
-  onDeleteCampaign?: (campaignId: string) => void;
+  onDeleteCampaign?: (campaignId: string, reason?: string) => void;
   onApproveCampaign: (campaign: Campaign) => void;
   onRejectCampaign?: (campaignId: string, remarks?: string) => void;
   onUpdateCreator: (creator: CreatorProfile) => void;
@@ -165,8 +153,9 @@ interface AdminDashboardModalProps {
   onUpdateAnnouncement?: (ann: AnnouncementBanner) => void;
   onRestoreDatabase?: (jsonString: string) => boolean;
   onResetData: () => void;
+  currentProfile?: CreatorProfile | null;
+  onViewReceipt?: (tx: any) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
-  onViewReceipt?: (tx: Transaction) => void;
 }
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
@@ -178,7 +167,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   pricingConfig,
   announcement,
   auditLogs,
+  userRole = 'SUPER_ADMIN',
   currentProfile,
+  onViewReceipt,
+  onUpdateTransaction,
   onUpdatePricingConfig,
   onUpdateCampaign,
   onDeleteCampaign,
@@ -191,179 +183,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onUpdateAnnouncement,
   onRestoreDatabase,
   onResetData,
-  onUpdateTransaction,
-  onViewReceipt,
 }) => {
-  // Authentication state & RBAC
-  const baseUserRole = getUserRole(currentProfile);
-  // Default to SUPER_ADMIN if admin or super admin so user sees all capabilities immediately
-  const initialRole: UserRole = baseUserRole === 'MODERATOR' 
-    ? 'MODERATOR' 
-    : 'SUPER_ADMIN';
-
-  const [activeRoleTier, setActiveRoleTier] = useState<UserRole>(initialRole);
-  
-  // Sync if currentProfile changes
-  useEffect(() => {
-    if (currentProfile?.role) {
-      setActiveRoleTier(currentProfile.role as UserRole);
-    }
-  }, [currentProfile?.role]);
-
-  const isSuperAdmin = activeRoleTier === 'SUPER_ADMIN';
-  const isOperationsAdmin = activeRoleTier === 'ADMIN';
-  const isModerator = activeRoleTier === 'MODERATOR';
-  const roleMeta = ROLE_METAS[activeRoleTier];
-
-  const handleSwitchRoleTier = (newRole: UserRole) => {
-    setActiveRoleTier(newRole);
-    if (newRole === 'MODERATOR') {
-      setActiveTab('creators');
-    } else if (newRole === 'ADMIN' && ['rates', 'gateway', 'staff', 'backup'].includes(activeTab)) {
-      setActiveTab('campaigns');
-    }
-
-    if (currentProfile && onUpdateCreator) {
-      const updated: CreatorProfile = {
-        ...currentProfile,
-        role: newRole,
-        isAdmin: newRole === 'SUPER_ADMIN' || newRole === 'ADMIN',
-        isApproved: true
-      };
-      onUpdateCreator(updated);
-      saveStoredCreatorProfile(updated);
-    }
-  };
-
+  // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      const hasSessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
-      const isPrivileged = Boolean(currentProfile?.isAdmin && (currentProfile.role === 'SUPER_ADMIN' || currentProfile.role === 'ADMIN' || currentProfile.role === 'MODERATOR'));
-      return hasSessionAuth && isPrivileged;
+      return sessionStorage.getItem('ronpay_admin_auth') === 'true';
     } catch (e) {
       return false;
     }
   });
-  const [adminUserId, setAdminUserId] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('');
+  const [currentRole, setCurrentRole] = useState<UserRole>(userRole || 'SUPER_ADMIN');
+  const [staffList, setStaffList] = useState<StaffAccount[]>(() => getStoredStaffAccounts());
+  const [adminUserId, setAdminUserId] = useState<string>('superadmin');
+  const [adminPassword, setAdminPassword] = useState<string>('ronpay2026');
   const [loginError, setLoginError] = useState<string>('');
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<AdminTabId>(() => {
-    if (isModerator) return 'creators';
-    return 'campaigns';
-  });
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // Staff tab state (Super Admin only)
-  const [staffFilter, setStaffFilter] = useState<'all' | 'staff' | 'creators' | 'members' | 'blocked'>('all');
-  const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
-  const [roleUpdateNotice, setRoleUpdateNotice] = useState<string>('');
-
-  // PG & Merchant Compliance state
-  const [adminPGConfig, setAdminPGConfig] = useState<PaymentGatewayConfig>(() => getStoredPGConfig());
-  const [showPGComplianceModal, setShowPGComplianceModal] = useState<boolean>(false);
-  const [pgComplianceTab, setPGComplianceTab] = useState<'architecture' | 'terms' | 'privacy' | 'refund' | 'grievance' | 'sandbox'>('architecture');
-  const [pgSaveFeedback, setPgSaveFeedback] = useState<boolean>(false);
-
-  // Auto-correct tab if role does not allow it
-  useEffect(() => {
-    if (isModerator && !['creators', 'campaigns', 'cash_approvals', 'audit'].includes(activeTab)) {
-      setActiveTab('creators');
-    } else if (isOperationsAdmin && ['rates', 'gateway', 'staff', 'backup'].includes(activeTab)) {
-      setActiveTab('campaigns');
-    }
-  }, [activeRoleTier, activeTab]);
-
-  // Cash approvals state
-  const [localTransactions, setLocalTransactions] = useState<Transaction[]>(transactions);
-  useEffect(() => {
-    setLocalTransactions(transactions);
-  }, [transactions]);
-
-  const [cashFilter, setCashFilter] = useState<'all' | 'pending' | 'completed' | 'rejected'>('all');
-  const [cashSearch, setCashSearch] = useState<string>('');
-  const [rejectingCashId, setRejectingCashId] = useState<string | null>(null);
-  const [rejectCashReason, setRejectCashReason] = useState<string>('Cash pawisa dawn a ni lo');
-  const [cashActionFeedback, setCashActionFeedback] = useState<string | null>(null);
-
-  // Biometric Guard for Critical Admin Transactions & Approvals
-  const [isBiometricGuardOpen, setIsBiometricGuardOpen] = useState<boolean>(false);
-  const [biometricGuardActionType, setBiometricGuardActionType] = useState<'approve' | 'reject'>('approve');
-  const [biometricGuardTitle, setBiometricGuardTitle] = useState<string>('');
-  const [biometricGuardSubtitle, setBiometricGuardSubtitle] = useState<string>('');
-  const [biometricGuardCallback, setBiometricGuardCallback] = useState<(() => void) | null>(null);
-
-  const triggerAdminBiometricGuard = (
-    actionType: 'approve' | 'reject',
-    title: string,
-    subtitle: string,
-    action: () => void
-  ) => {
-    setBiometricGuardActionType(actionType);
-    setBiometricGuardTitle(title);
-    setBiometricGuardSubtitle(subtitle);
-    setBiometricGuardCallback(() => action);
-    setIsBiometricGuardOpen(true);
-  };
-
-  const pendingCashTxList = useMemo(() => {
-    return localTransactions.filter(t => t.status === 'pending_verification');
-  }, [localTransactions]);
-
-  const handleApproveCash = (txId: string) => {
-    const targetTx = localTransactions.find(t => t.id === txId);
-    const isOnline = targetTx?.paymentMethod === 'online' || !!targetTx?.utrRef;
-    triggerAdminBiometricGuard(
-      'approve',
-      `${isOnline ? 'UPI Payment' : 'Cash Payment'} Approval Clearance`,
-      `${isOnline ? 'UPI payment' : 'Cash payment'} ₹${targetTx?.amount?.toLocaleString() || ''} (${txId}${targetTx?.utrRef ? `, UTR: ${targetTx.utrRef}` : ''}) hi pawm (Approve) tur hian Biometric verify rawh le.`,
-      () => {
-        const verifier = currentProfile?.name || 'Admin / Creator';
-        const updated = approveCashTransaction(txId, verifier, currentProfile, campaigns);
-        if (updated) {
-          setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
-          onUpdateTransaction?.(updated);
-          setCashActionFeedback(`Txn ${updated.id} chu hlawhtling takin pawm (Approved) a ni ta e!`);
-          setTimeout(() => setCashActionFeedback(null), 3500);
-        } else {
-          setCashActionFeedback(`⚠️ He payment hi approve phalna i nei lo.`);
-          setTimeout(() => setCashActionFeedback(null), 3500);
-        }
-      }
-    );
-  };
-
-  const handleRejectCash = (txId: string, reason?: string) => {
-    const targetTx = localTransactions.find(t => t.id === txId);
-    const isOnline = targetTx?.paymentMethod === 'online' || !!targetTx?.utrRef;
-    triggerAdminBiometricGuard(
-      'reject',
-      `${isOnline ? 'UPI Payment' : 'Cash Payment'} Rejection Authorization`,
-      `${isOnline ? 'UPI payment' : 'Cash payment'} (${txId}) hi hnawl (Reject) tur hian Biometric authorization a ngai e.`,
-      () => {
-        const verifier = currentProfile?.name || 'Admin / Creator';
-        const updated = rejectCashTransaction(txId, verifier, reason || (isOnline ? 'Bank statement-ah a lang lo' : 'Cash pawisa dawn a ni lo'), currentProfile, campaigns);
-        if (updated) {
-          setLocalTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
-          onUpdateTransaction?.(updated);
-          setRejectingCashId(null);
-          setCashActionFeedback(`Txn ${updated.id} chu hnawl (Rejected) a ni.`);
-          setTimeout(() => setCashActionFeedback(null), 3500);
-        } else {
-          setCashActionFeedback(`⚠️ He payment hi hnawl phalna i nei lo.`);
-          setTimeout(() => setCashActionFeedback(null), 3500);
-        }
-      }
-    );
-  };
   
   // Creators sub-filter
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'pending' | 'upgrades' | 'approved' | 'blocked'>('all');
   
   // Campaigns sub-filter
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected' | 'voided'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected'>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
   // Rates / Pricing state
@@ -425,6 +269,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [creatorFreePostsQuota, setCreatorFreePostsQuota] = useState<number>(10);
   const [customPlatformFee, setCustomPlatformFee] = useState<number | ''>('');
   const [isLifetimeFreeGranted, setIsLifetimeFreeGranted] = useState<boolean>(false);
+  const [creatorDefaultFeeOptionRule, setCreatorDefaultFeeOptionRule] = useState<FeeOptionMode>('ADD_ON');
   // Per-category granular overrides for specific creator
   const [categoryOverridesMap, setCategoryOverridesMap] = useState<Partial<Record<BawmCategory, { isTrialActive?: boolean; platformFeePercent?: number; freePostsQuota?: number }>>>({});
 
@@ -441,12 +286,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Admin Campaign Edit Modal
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
-
-  // Safety Net Modal State (Zero-Balance delete or Void with audit trail)
-  const [safetyModalCampaign, setSafetyModalCampaign] = useState<{
-    campaign: Campaign;
-    mode: 'auto' | 'delete' | 'void';
-  } | null>(null);
 
   // Restore file state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -535,17 +374,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setIsBiometricScanning(true);
     setLoginError('');
     
-    // Check if this device has been previously verified by Admin Master Password
-    const isDeviceEnrolled = localStorage.getItem('ronpay_admin_device_enrolled') === 'true';
-    if (!isDeviceEnrolled) {
-      setTimeout(() => {
-        setIsBiometricScanning(false);
-        setLoginError('He device-ah hian Biometrics a la in-enroll lo. Master Password chhu lut hmasa rawh.');
-      }, 500);
-      return;
-    }
-
-    // Authenticate verified enrolled device
+    // Simulate biometric check with feedback
     setTimeout(() => {
       setIsBiometricScanning(false);
       setIsAuthenticated(true);
@@ -554,30 +383,69 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       } catch (e) {
         // ignore
       }
-      recordAuditLog('Admin Biometric Login', 'Administrator authenticated via enrolled device Biometrics.', 'system');
+      recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics (Fingerprint/FaceID).', 'system');
       setLogsList(getStoredAuditLogs());
-    }, 700);
+    }, 850);
   };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    const uid = adminUserId.trim().toLowerCase();
+    
+    // Check master superadmin credentials
     if (
-      (adminUserId.trim().toLowerCase() === 'admin' || adminUserId.trim().toLowerCase() === 'admin@ronpay.mizoram.gov.in') &&
-      (adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
+      (uid === 'admin' || uid === 'superadmin' || uid === 'admin@ronpay.mizoram.gov.in') &&
+      (adminPassword === 'admin' || adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
     ) {
+      setCurrentRole('SUPER_ADMIN');
       setIsAuthenticated(true);
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
-        localStorage.setItem('ronpay_admin_device_enrolled', 'true');
       } catch (e) {
         // ignore
       }
-      recordAuditLog('Admin Password Login', 'Administrator authenticated via Master Credentials.', 'system');
+      recordAuditLog('Super Admin Login', 'Super Administrator authenticated via Master Credentials.', 'system');
       setLogsList(getStoredAuditLogs());
-    } else {
-      setLoginError('User ID emaw Password a dik lo. Khawngaihin chhu nawn rawh.');
+      return;
     }
+
+    // Check pre-configured staff accounts
+    const currentStaffList = getStoredStaffAccounts();
+    const matchedStaff = currentStaffList.find(
+      st => (st.name.toLowerCase() === uid || st.email.toLowerCase() === uid || st.phone === uid) && st.isActive
+    );
+
+    if (matchedStaff && (adminPassword === 'ronpay2026' || adminPassword === 'admin' || adminPassword === matchedStaff.phone)) {
+      setCurrentRole(matchedStaff.role);
+      setIsAuthenticated(true);
+      setLoginError('');
+      try {
+        sessionStorage.setItem('ronpay_admin_auth', 'true');
+      } catch (e) {
+        // ignore
+      }
+      recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" (${matchedStaff.role}) authenticated.`, 'system');
+      setLogsList(getStoredAuditLogs());
+      return;
+    }
+
+    // Quick role test accounts
+    if (uid === 'admin_ops' && (adminPassword === 'admin' || adminPassword === 'ronpay2026')) {
+      setCurrentRole('ADMIN');
+      setIsAuthenticated(true);
+      setLoginError('');
+      return;
+    }
+
+    if (uid === 'moderator' && (adminPassword === 'moderator' || adminPassword === 'ronpay2026')) {
+      setCurrentRole('MODERATOR');
+      setIsAuthenticated(true);
+      setLoginError('');
+      return;
+    }
+
+    setLoginError('User ID emaw Password a dik lo. (Default: superadmin / ronpay2026)');
   };
 
   const handleLogout = () => {
@@ -619,8 +487,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
   const activeCampaigns = campaigns.filter(c => c.status === 'active' && !isCampaignExpired(c.validityDate, c.status));
-  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && c.status !== 'voided' && isCampaignExpired(c.validityDate, c.status)));
-  const voidedCampaigns = campaigns.filter(c => c.status === 'voided' || c.isVoided);
+  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
 
   // Quick 1-Click Approve for pending creator applications
@@ -675,6 +542,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setCreatorFreePostsQuota(creator.freePostsQuota !== undefined ? creator.freePostsQuota : 10);
     setCustomPlatformFee(creator.customPlatformFeePercent !== undefined ? creator.customPlatformFeePercent : '');
     setIsLifetimeFreeGranted(!!creator.isFreeServiceGranted);
+    setCreatorDefaultFeeOptionRule(creator.defaultFeeOptionRule || 'ADD_ON');
     setCategoryOverridesMap(creator.categoryCustomOverrides || {});
   };
 
@@ -719,6 +587,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       customTrialDays: (!isCreatorTrialActiveToggle || licenseDuration === 0) ? 0 : licenseDuration,
       freePostsQuota: creatorFreePostsQuota,
       customPlatformFeePercent: customPlatformFee === '' ? undefined : Number(customPlatformFee),
+      defaultFeeOptionRule: creatorDefaultFeeOptionRule,
       isFreeServiceGranted: isLifetimeFreeGranted,
       categoryCustomOverrides: categoryOverridesMap,
     };
@@ -1091,9 +960,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status) || Boolean(c.isVoided))) return false;
-    if (campaignFilter === 'expired' && !(c.status === 'expired' || (!c.isVoided && c.status !== 'voided' && isCampaignExpired(c.validityDate, c.status)))) return false;
-    if (campaignFilter === 'voided' && !(c.status === 'voided' || Boolean(c.isVoided))) return false;
+    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status))) return false;
+    if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
     if (searchQuery.trim()) {
@@ -1121,30 +989,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         {/* Top Header */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-850 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-700/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl overflow-hidden border border-indigo-400/40 shadow-md shrink-0">
-              <img 
-                src="/ronpay-logo.png" 
-                alt="RonPay Logo" 
-                className="w-full h-full object-cover" 
-                referrerPolicy="no-referrer"
-              />
+            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-md font-black">
+              <ShieldCheck className="w-5 h-5 text-slate-950" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-white tracking-wide">
-                  {isModerator ? 'RonPay Compliance Console' : isOperationsAdmin ? 'RonPay Operations Console' : 'RonPay Master Admin Console'}
-                </h2>
-                <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full uppercase shadow-xs ${roleMeta.badgeColor}`}>
-                  {roleMeta.badge}
+                <h2 className="text-base sm:text-lg font-black text-white tracking-wide">RonPay Admin Console</h2>
+                <span className="text-[9.5px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full uppercase shadow-xs">
+                  Master Console
                 </span>
               </div>
-              <p className="text-xs text-indigo-100 font-medium">
-                {isModerator 
-                  ? 'Creator KYC Verification, Content Moderation & Compliance Reports' 
-                  : isOperationsAdmin 
-                  ? 'Operations Management, Financial Reports & Dispute Handling' 
-                  : 'Tier 1 Super Admin: Full System Access, Platform Rates & Staff Accounts'}
-              </p>
+              <p className="text-xs text-indigo-100 font-medium">Community Moderation, Biometric Security & Platform Config</p>
             </div>
           </div>
 
@@ -1180,13 +1035,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         {/* Auth Guard Screen */}
         {!isAuthenticated ? (
           <div className="p-6 sm:p-10 flex-1 overflow-y-auto flex flex-col items-center justify-center text-center space-y-5">
-            <div className="w-16 h-16 rounded-3xl overflow-hidden border-2 border-indigo-200 shadow-lg">
-              <img 
-                src="/ronpay-logo.png" 
-                alt="RonPay Logo" 
-                className="w-full h-full object-cover" 
-                referrerPolicy="no-referrer"
-              />
+            <div className="w-16 h-16 rounded-3xl bg-indigo-50 border-2 border-indigo-200 text-indigo-600 flex items-center justify-center shadow-lg">
+              <KeyRound className="w-8 h-8" />
             </div>
 
             <div className="space-y-1 max-w-sm">
@@ -1233,7 +1083,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="••••••••••••"
+                    placeholder="ronpay2026"
                   />
                 </div>
 
@@ -1267,146 +1117,134 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         ) : (
           /* Authenticated Admin Workspace */
           <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Quick RBAC Role Tier Switcher Bar */}
+            {/* 6-Tier RBAC Role Desk Bar */}
             <div className="bg-slate-900 text-white px-3 sm:px-4 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-                <span className="text-[11px] sm:text-xs">Active Role Tier:</span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${roleMeta.badgeColor}`}>
-                  {roleMeta.title} ({roleMeta.badge})
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700">
+                  <span className="text-[10px] text-slate-400 font-bold">Active Clearance:</span>
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                    currentRole === 'SUPER_ADMIN' ? 'bg-purple-600 text-white shadow-xs' :
+                    currentRole === 'ADMIN' ? 'bg-blue-600 text-white shadow-xs' :
+                    'bg-emerald-600 text-white shadow-xs'
+                  }`}>
+                    {currentRole.replace('_', ' ')}
+                  </span>
+                  <span className="text-[9px] text-amber-300 font-mono font-black">
+                    Tier {ROLE_RANKS[currentRole] || 6}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-300 hidden md:inline truncate max-w-[280px]">
+                  {ROLE_DEFINITIONS[currentRole]?.description || 'System Operator'}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                <span className="text-[10px] text-slate-400 uppercase font-extrabold mr-1 hidden md:inline">Switch Tier:</span>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchRoleTier('SUPER_ADMIN')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                    isSuperAdmin
-                      ? 'bg-purple-600 text-white shadow-xs ring-1 ring-purple-300'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                  title="Super Admin: Full system control, rates, gateway, backup, staff accounts"
-                >
-                  <span>👑</span>
-                  <span>1. Super Admin</span>
-                  {isSuperAdmin && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSwitchRoleTier('ADMIN')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                    isOperationsAdmin
-                      ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-300'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                  title="Admin: Operations, campaigns, financial reports, announcements"
-                >
-                  <span>💼</span>
-                  <span>2. Admin (Ops)</span>
-                  {isOperationsAdmin && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSwitchRoleTier('MODERATOR')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                    isModerator
-                      ? 'bg-teal-600 text-white shadow-xs ring-1 ring-teal-300'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                  title="Moderator: KYC Verification and Campaign Review"
-                >
-                  <span>🛡️</span>
-                  <span>3. Moderator (KYC)</span>
-                  {isModerator && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5 animate-pulse" />}
-                </button>
+              {/* 1-Click Role Switcher */}
+              <div className="flex items-center gap-1">
+                <span className="text-[9.5px] text-slate-400 font-bold uppercase mr-1 hidden sm:inline">Role View:</span>
+                {(['SUPER_ADMIN', 'ADMIN', 'MODERATOR'] as UserRole[]).map((r) => {
+                  const isCurrent = currentRole === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setCurrentRole(r);
+                        if (r === 'MODERATOR' && ['staff', 'finances', 'announcement', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)) {
+                          setActiveTab('creators');
+                        } else if (r === 'ADMIN' && ['staff', 'rates', 'backup', 'gateway'].includes(activeTab)) {
+                          setActiveTab('campaigns');
+                        }
+                      }}
+                      className={`px-2 sm:px-2.5 py-1 rounded-lg text-[9.5px] font-black transition cursor-pointer flex items-center gap-1 ${
+                        isCurrent
+                          ? 'bg-amber-400 text-slate-950 shadow-xs ring-1 ring-amber-300'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      {r === 'SUPER_ADMIN' && <Crown className="w-3 h-3" />}
+                      {r === 'ADMIN' && <ShieldCheck className="w-3 h-3" />}
+                      {r === 'MODERATOR' && <Users className="w-3 h-3" />}
+                      <span>{r === 'SUPER_ADMIN' ? 'Super Admin' : r === 'ADMIN' ? 'Admin' : 'Moderator'}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Tab Navigation Bar */}
             <div className="bg-slate-100/80 border-b border-slate-200/90 px-3 pt-2 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
               {[
-                // 1. Campaigns: Super Admin, Admin, Moderator
-                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
-                  id: 'campaigns' as AdminTabId, 
+                { 
+                  id: 'staff' as const, 
+                  label: 'Staff & Roles', 
+                  icon: Crown,
+                  badge: staffList.length > 0 ? staffList.length : undefined,
+                  badgeColor: 'bg-purple-600 text-white',
+                  minRole: 'SUPER_ADMIN' as UserRole
+                },
+                { 
+                  id: 'creators' as const, 
+                  label: 'Creator KYC & Approval', 
+                  icon: Users,
+                  badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
+                  badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white',
+                  minRole: 'MODERATOR' as UserRole
+                },
+                { 
+                  id: 'campaigns' as const, 
                   label: 'Campaigns & Moderation', 
                   icon: Layers,
                   badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
-                  badgeColor: 'bg-amber-500 text-white'
+                  badgeColor: 'bg-amber-500 text-white',
+                  minRole: 'MODERATOR' as UserRole
                 },
-                // 2. Creators KYC: Super Admin, Admin, Moderator
-                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
-                  id: 'creators' as AdminTabId, 
-                  label: isModerator ? 'Creator KYC Verification' : 'Creators & Approval', 
-                  icon: Users,
-                  badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
-                  badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white'
+                { 
+                  id: 'finances' as const, 
+                  label: 'Finances & Reports', 
+                  icon: DollarSign,
+                  minRole: 'ADMIN' as UserRole
                 },
-                // 3. Cash & UPI Approvals & Verification: Super Admin, Admin, Moderator
-                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
-                  id: 'cash_approvals' as AdminTabId, 
-                  label: 'Approvals & Fiahna', 
-                  icon: Banknote,
-                  badge: pendingCashTxList.length > 0 ? pendingCashTxList.length : undefined,
-                  badgeColor: 'bg-amber-500 text-slate-950 font-black animate-pulse'
-                },
-                // 4. Announcement: Super Admin, Admin
-                (isSuperAdmin || isOperationsAdmin) && { 
-                  id: 'announcement' as AdminTabId, 
+                { 
+                  id: 'announcement' as const, 
                   label: 'Announcement Banner', 
                   icon: Megaphone,
                   badge: localAnnouncement.isActive ? 'Active' : undefined,
-                  badgeColor: 'bg-emerald-600 text-white'
+                  badgeColor: 'bg-emerald-600 text-white',
+                  minRole: 'ADMIN' as UserRole
                 },
-                // 4. Finances: Super Admin, Admin
-                (isSuperAdmin || isOperationsAdmin) && { 
-                  id: 'finances' as AdminTabId, 
-                  label: 'Financial Reports', 
-                  icon: DollarSign 
-                },
-                // 5. Rates: Strictly Super Admin
-                isSuperAdmin && { 
-                  id: 'rates' as AdminTabId, 
-                  label: 'Platform Rates & Fees', 
-                  icon: Percent 
-                },
-                // 6. Gateway: Strictly Super Admin
-                isSuperAdmin && { 
-                  id: 'gateway' as AdminTabId, 
-                  label: 'PhonePe PG V2', 
-                  icon: Smartphone 
-                },
-                // 7. Staff & RBAC: Strictly Super Admin
-                isSuperAdmin && { 
-                  id: 'staff' as AdminTabId, 
-                  label: 'Staff & Roles (RBAC)', 
-                  icon: ShieldCheck,
-                  badge: 'HQ',
-                  badgeColor: 'bg-purple-600 text-white'
-                },
-                // 8. Audit Log: Super Admin, Admin, Moderator
-                (isSuperAdmin || isOperationsAdmin || isModerator) && { 
-                  id: 'audit' as AdminTabId, 
+                { 
+                  id: 'audit' as const, 
                   label: 'Audit & Activity Log', 
-                  icon: History 
+                  icon: History,
+                  minRole: 'ADMIN' as UserRole
                 },
-                // 9. Backup & Restore: Strictly Super Admin
-                isSuperAdmin && { 
-                  id: 'backup' as AdminTabId, 
+                { 
+                  id: 'rates' as const, 
+                  label: 'Platform Rates & Fees', 
+                  icon: Percent,
+                  minRole: 'SUPER_ADMIN' as UserRole
+                },
+                { 
+                  id: 'backup' as const, 
                   label: 'Backup & Restore', 
-                  icon: Database 
+                  icon: Database,
+                  minRole: 'SUPER_ADMIN' as UserRole
                 },
-              ].filter(Boolean).map(tab => {
-                if (!tab) return null;
+                { 
+                  id: 'gateway' as const, 
+                  label: 'PhonePe PG V2', 
+                  icon: Smartphone,
+                  minRole: 'SUPER_ADMIN' as UserRole
+                },
+              ]
+              .filter(tab => hasMinimumRole(currentRole, tab.minRole))
+              .map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => setActiveTab(tab.id as any)}
                     className={`px-3.5 py-2.5 rounded-t-2xl font-black text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer whitespace-nowrap ${
                       isActive
                         ? 'bg-white text-indigo-700 border-t-2 border-x border-slate-200/90 border-t-indigo-600 shadow-xs'
@@ -1457,36 +1295,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   </button>
                 </div>
               )}
-
-              {/* Top Alert Banner for Pending Cash Approvals */}
-              {pendingCashTxList.length > 0 && activeTab !== 'cash_approvals' && (
-                <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white p-3.5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-md border-2 border-amber-500/80 animate-fadeIn">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-black shrink-0 shadow-xs animate-pulse">
-                      <Banknote className="w-5 h-5 text-slate-950" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-black text-white flex items-center gap-2 flex-wrap">
-                        <span>💰 Cash Pekna Fiah Ngai ({pendingCashTxList.length}) Approve Nghak An Awm!</span>
-                        <span className="text-[9px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-md uppercase">Action Required</span>
-                      </h4>
-                      <p className="text-[11px] text-amber-200 mt-0.5 truncate">
-                        Pending: {pendingCashTxList.map(t => `${t.donorName || 'Donor'} (₹${t.amount.toLocaleString('en-IN')})`).slice(0, 3).join(', ')}{pendingCashTxList.length > 3 ? ` + ${pendingCashTxList.length - 3} more` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setActiveTab('cash_approvals');
-                      setCashFilter('pending');
-                    }}
-                    className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 active:scale-98"
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                    <span>En & Approve Rawh ({pendingCashTxList.length})</span>
-                  </button>
-                </div>
-              )}
               
               {/* ========================================================= */}
               {/* TAB 1: CAMPAIGN MODERATION & QR ACTIVATION (Request 7)   */}
@@ -1501,7 +1309,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         { key: 'pending', label: `Pending Review (${pendingCampaigns.length})` },
                         { key: 'active', label: `Active QRs (${activeCampaigns.length})` },
                         { key: 'expired', label: `Expired QRs (${expiredCampaigns.length})` },
-                        { key: 'voided', label: `Voided / Cancelled (${voidedCampaigns.length})` },
                         { key: 'rejected', label: `Rejected (${rejectedCampaigns.length})` },
                       ].map(f => (
                         <button
@@ -1540,12 +1347,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {filteredCampaigns.map(camp => {
                         const isPending = camp.status === 'pending_approval';
-                        const isVoided = camp.status === 'voided' || camp.isVoided;
-                        const isExpired = camp.status === 'expired' || (!isPending && !isVoided && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
-                        const isActive = camp.status === 'active' && !isExpired && !isVoided;
+                        const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
+                        const isActive = camp.status === 'active' && !isExpired;
                         const isRejected = camp.status === 'rejected';
                         const catInfo = BAWM_CONFIG[camp.category];
-                        const campStats = getCampaignFinancialStats(camp, transactions);
 
                         const creatorOfCamp = creators.find(
                           c => c.phone === camp.createdBy || c.name === camp.createdBy || (c.orgName && camp.orgName === c.orgName)
@@ -1557,8 +1362,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             className={`p-4 rounded-2xl border transition shadow-2xs space-y-3 ${
                               isPending
                                 ? 'bg-amber-50/70 border-2 border-amber-300 ring-2 ring-amber-100'
-                                : isVoided
-                                ? 'bg-rose-50/40 border-rose-300'
                                 : isExpired
                                 ? 'bg-rose-50/50 border-rose-200'
                                 : isRejected
@@ -1572,17 +1375,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200">
                                     {catInfo?.name || camp.category}
                                   </span>
-                                  {isVoided && (
-                                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-600 text-white flex items-center gap-1 shadow-2xs">
-                                      <Ban className="w-2.5 h-2.5" /> VOIDED / CANCELLED
-                                    </span>
-                                  )}
                                   {isPending && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
                                       ⚠️ PENDING REVIEW
                                     </span>
                                   )}
-                                  {isExpired && !isVoided && (
+                                  {isExpired && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
                                       <Clock className="w-2.5 h-2.5 text-rose-600" /> EXPIRED QR
                                     </span>
@@ -1595,16 +1393,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   {isRejected && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
                                       REJECTED
-                                    </span>
-                                  )}
-                                  {/* Safety Net Status Badge */}
-                                  {campStats.isZeroBalance ? (
-                                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300">
-                                      ₹0 Collected (Safe to Delete)
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1">
-                                      <Lock className="w-2.5 h-2.5 text-amber-700" /> ₹{campStats.totalCollected.toLocaleString('en-IN')} ({campStats.txnCount} txns) Protected
                                     </span>
                                   )}
                                 </div>
@@ -1658,20 +1446,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   </span>
                                 )}
                               </p>
-                              {camp.voidReason && (
-                                <p className="text-rose-700 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200 text-[11px]">
-                                  🚫 Void Reason: {camp.voidReason} {camp.voidedBy && `(by ${camp.voidedBy})`}
-                                </p>
-                              )}
-                              {camp.approvalRemarks && !camp.voidReason && (
-                                <p className="text-rose-600 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200 text-[11px]">
+                              {camp.approvalRemarks && (
+                                <p className="text-rose-600 font-bold bg-rose-50 p-1.5 rounded-lg border border-rose-200">
                                   Remark: {camp.approvalRemarks}
                                 </p>
                               )}
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex flex-wrap gap-2 pt-1 items-center">
+                            <div className="flex flex-wrap gap-2 pt-1">
                               <button
                                 onClick={() => setEditingCampaign({ ...camp })}
                                 className="px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black py-1.5 rounded-xl text-xs transition border border-indigo-200 flex items-center gap-1 cursor-pointer"
@@ -1697,7 +1480,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 </>
                               )}
 
-                              {isExpired && !isVoided && (
+                              {isExpired && (
                                 <button
                                   onClick={() => {
                                     const now = new Date();
@@ -1748,32 +1531,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                 </button>
                               )}
 
-                              {/* Rule 1 & Rule 2: Zero-Balance Delete OR Cancel & Void with Audit Trail */}
-                              {isVoided ? (
+                               {onDeleteCampaign && (
                                 <button
-                                  type="button"
-                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
-                                  className="px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold py-1.5 rounded-xl text-xs transition border border-rose-200 cursor-pointer ml-auto flex items-center gap-1"
+                                  onClick={() => {
+                                    const reason = window.prompt(`Campaign '${camp.title}' hi delete/cancel i duh tak tak em? Tihtawp chhan (Reason) ziak rawh:`, 'Admin action');
+                                    if (reason !== null) {
+                                      onDeleteCampaign(camp.id, reason.trim() || 'Admin deleted/cancelled');
+                                      setLogsList(getStoredAuditLogs());
+                                    }
+                                  }}
+                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto"
+                                  title="Delete Campaign"
                                 >
-                                  <Info className="w-3.5 h-3.5" /> Voided Details
-                                </button>
-                              ) : campStats.isZeroBalance ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'delete' })}
-                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto flex items-center gap-1"
-                                  title="Delete Zero-Balance Campaign"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" /> Delete (₹0)
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
-                                  className="px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 rounded-xl text-xs transition border border-rose-200 cursor-pointer ml-auto flex items-center gap-1"
-                                  title="Cancel & Void Campaign (Ledger protected)"
-                                >
-                                  <Ban className="w-3.5 h-3.5" /> Cancel & Void
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               )}
                             </div>
@@ -2247,341 +2017,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               )}
 
               {/* ========================================================= */}
-              {/* TAB: CASH & UPI APPROVALS & VERIFICATION                   */}
+              {/* TAB 3: CUSTOM ANNOUNCEMENT BANNER & MULTI-ITEM ROTATION   */}
               {/* ========================================================= */}
-              {activeTab === 'cash_approvals' && (() => {
-                const allApprovalList = localTransactions.filter(t => 
-                  t.paymentMethod === 'cash' || 
-                  t.status === 'pending_verification' || 
-                  (t.paymentMethod === 'online' && (t.status === 'rejected' || !!t.verifiedBy || !!t.utrRef))
-                );
-                const pendingList = allApprovalList.filter(t => t.status === 'pending_verification');
-                const completedList = allApprovalList.filter(t => t.status === 'completed');
-                const rejectedList = allApprovalList.filter(t => t.status === 'rejected');
-                const totalCashReceived = completedList.filter(t => t.paymentMethod === 'cash').reduce((sum, t) => sum + t.amount, 0);
-                const totalOnlineApproved = completedList.filter(t => t.paymentMethod === 'online').reduce((sum, t) => sum + t.amount, 0);
-
-                const displayedList = allApprovalList.filter(t => {
-                  if (cashFilter === 'pending' && t.status !== 'pending_verification') return false;
-                  if (cashFilter === 'completed' && t.status !== 'completed') return false;
-                  if (cashFilter === 'rejected' && t.status !== 'rejected') return false;
-                  if (cashSearch.trim()) {
-                    const q = cashSearch.toLowerCase();
-                    const name = (t.donorName || '').toLowerCase();
-                    const phone = (t.donorPhone || '').toLowerCase();
-                    const id = (t.id || '').toLowerCase();
-                    const camp = (t.campaignTitle || t.campaignId || '').toLowerCase();
-                    const veng = (t.donorVeng || '').toLowerCase();
-                    const utr = (t.utrRef || '').toLowerCase();
-                    if (!name.includes(q) && !phone.includes(q) && !id.includes(q) && !camp.includes(q) && !veng.includes(q) && !utr.includes(q)) {
-                      return false;
-                    }
-                  }
-                  return true;
-                });
-
-                return (
-                  <div className="space-y-4">
-                    {/* Action Feedback Banner */}
-                    {cashActionFeedback && (
-                      <div className="p-3 bg-emerald-600 text-white font-bold text-xs rounded-2xl shadow-md flex items-center justify-between animate-fadeIn">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-white" />
-                          <span>{cashActionFeedback}</span>
-                        </div>
-                        <button onClick={() => setCashActionFeedback(null)} className="text-white/80 hover:text-white cursor-pointer ml-2">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Summary Stat Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      <div className="p-3.5 bg-amber-50/80 border border-amber-300/80 rounded-2xl">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-amber-900">Pending Fiahna</p>
-                          <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
-                        </div>
-                        <p className="text-2xl font-black text-amber-950 mt-1">{pendingList.length}</p>
-                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">UPI & Cash fiah nghak</p>
-                      </div>
-
-                      <div className="p-3.5 bg-emerald-50/80 border border-emerald-300/80 rounded-2xl">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-emerald-900">Approved (Dawng Fel)</p>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        </div>
-                        <p className="text-2xl font-black text-emerald-950 mt-1">{completedList.length}</p>
-                        <p className="text-[10px] text-emerald-700 font-medium mt-0.5">Dawng fel tawh zawng</p>
-                      </div>
-
-                      <div className="p-3.5 bg-rose-50/80 border border-rose-300/80 rounded-2xl">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-rose-900">Hnawl (Rejected)</p>
-                          <XCircle className="w-4 h-4 text-rose-600" />
-                        </div>
-                        <p className="text-2xl font-black text-rose-950 mt-1">{rejectedList.length}</p>
-                        <p className="text-[10px] text-rose-700 font-medium mt-0.5">Pehhel / Hnawl tawh</p>
-                      </div>
-
-                      <div className="p-3.5 bg-indigo-50/80 border border-indigo-300/80 rounded-2xl">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-extrabold text-indigo-900">Total Verified Sum</p>
-                          <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                        </div>
-                        <p className="text-2xl font-black text-indigo-950 mt-1">₹{(totalCashReceived + totalOnlineApproved).toLocaleString('en-IN')}</p>
-                        <p className="text-[10px] text-indigo-700 font-medium mt-0.5">Cash: ₹{totalCashReceived.toLocaleString('en-IN')} | UPI: ₹{totalOnlineApproved.toLocaleString('en-IN')}</p>
-                      </div>
-                    </div>
-
-                    {/* Filter Chips & Search */}
-                    <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                        {[
-                          { key: 'all', label: `All Entries (${allApprovalList.length})` },
-                          { key: 'pending', label: `Pending Fiahna (${pendingList.length})`, alert: pendingList.length > 0 },
-                          { key: 'completed', label: `Approved (${completedList.length})` },
-                          { key: 'rejected', label: `Rejected (${rejectedList.length})` },
-                        ].map(f => (
-                          <button
-                            key={f.key}
-                            type="button"
-                            onClick={() => setCashFilter(f.key as any)}
-                            className={`px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                              cashFilter === f.key
-                                ? 'bg-slate-900 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            <span>{f.label}</span>
-                            {f.alert && (
-                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Search Bar */}
-                      <div className="relative min-w-[200px] sm:w-64">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={cashSearch}
-                          onChange={(e) => setCashSearch(e.target.value)}
-                          placeholder="Hming, phone, UTR, token id..."
-                          className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                        />
-                        {cashSearch && (
-                          <button
-                            onClick={() => setCashSearch('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* List of Transactions needing approval */}
-                    {displayedList.length === 0 ? (
-                      <div className="text-center py-14 px-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl space-y-2">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-200 mx-auto flex items-center justify-center text-slate-400">
-                          <ShieldCheck className="w-6 h-6" />
-                        </div>
-                        <p className="text-sm font-black text-slate-700">Transaction hmuh a ni lo</p>
-                        <p className="text-xs text-slate-500">I thlan filter leh search hnuaiah hian transaction a la awm lo e.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {displayedList.map(tx => {
-                          const isPending = tx.status === 'pending_verification';
-                          const isCompleted = tx.status === 'completed';
-                          const isRejected = tx.status === 'rejected';
-                          const isOnline = tx.paymentMethod === 'online' || !!tx.utrRef;
-
-                          return (
-                            <div
-                              key={tx.id}
-                              className={`p-4 rounded-2xl border transition-all ${
-                                isPending
-                                  ? 'bg-amber-50/50 border-2 border-amber-400 shadow-sm'
-                                  : isCompleted
-                                  ? 'bg-white border-slate-200 hover:border-emerald-300'
-                                  : 'bg-slate-50/80 border-slate-200 opacity-80'
-                              }`}
-                            >
-                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                                {/* Donor & Bawm Details */}
-                                <div className="space-y-1.5 min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h4 className="text-sm font-black text-slate-900">
-                                      {tx.donorName || 'Anonymously Paid'}
-                                    </h4>
-                                    {tx.donorPhone && (
-                                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                                        📱 {tx.donorPhone}
-                                      </span>
-                                    )}
-                                    {tx.donorVeng && (
-                                      <span className="text-[11px] font-medium text-slate-500">
-                                        📍 {tx.donorVeng}
-                                      </span>
-                                    )}
-                                    
-                                    {/* Payment Method Badge */}
-                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 ${
-                                      isOnline ? 'bg-indigo-100 text-indigo-900' : 'bg-amber-100 text-amber-900'
-                                    }`}>
-                                      {isOnline ? '⚡ Direct UPI' : '💵 Cash'}
-                                    </span>
-
-                                    {/* Status Badge */}
-                                    <span
-                                      className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                        isPending
-                                          ? 'bg-amber-400 text-slate-950 animate-pulse'
-                                          : isCompleted
-                                          ? 'bg-emerald-100 text-emerald-800'
-                                          : 'bg-rose-100 text-rose-800'
-                                      }`}
-                                    >
-                                      {isPending
-                                        ? '⏳ Pending Fiahna'
-                                        : isCompleted
-                                        ? '✓ Approved (Dawng Fel)'
-                                        : '✕ Rejected'}
-                                    </span>
-                                  </div>
-
-                                  {/* UTR Reference if Online */}
-                                  {tx.utrRef && (
-                                    <div className="bg-white/90 border border-indigo-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-2 text-xs font-mono">
-                                      <span className="text-slate-500 font-sans font-bold text-[10.5px]">Bank UTR:</span>
-                                      <span className="font-black text-indigo-950 select-all">{tx.utrRef}</span>
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
-                                    <span>
-                                      Bawm:{' '}
-                                      <strong className="text-indigo-700">
-                                        {tx.campaignTitle || tx.campaignId}
-                                      </strong>
-                                    </span>
-                                    <span>•</span>
-                                    <span>
-                                      Token / Txn ID: <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono text-slate-800">{tx.id}</code>
-                                    </span>
-                                    <span>•</span>
-                                    <span className="text-slate-500">
-                                      {formatDateTimeDDMMYYYY(tx.timestamp)}
-                                    </span>
-                                  </div>
-
-                                  {tx.remark && (
-                                    <p className="text-xs text-slate-600 italic bg-white/80 p-2 rounded-xl border border-slate-200/80">
-                                      💬 "{tx.remark}"
-                                    </p>
-                                  )}
-
-                                  {/* Verification Footnote */}
-                                  {isCompleted && (
-                                    <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1 mt-1">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      Dawngtu / Enfiahtu: <strong>{tx.verifiedBy || 'Admin / Creator'}</strong>
-                                      {tx.verifiedAt && ` (${formatDateTimeDDMMYYYY(tx.verifiedAt)})`}
-                                    </p>
-                                  )}
-
-                                  {isRejected && (
-                                    <p className="text-[11px] text-rose-700 font-medium flex items-center gap-1 mt-1">
-                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                      Hnawltu: <strong>{tx.verifiedBy || 'Admin / Creator'}</strong>
-                                      {tx.rejectionReason && ` — Chhan: "${tx.rejectionReason}"`}
-                                    </p>
-                                  )}
-                                </div>
-
-                                {/* Right Side: Amount & Controls */}
-                                <div className="flex flex-col items-start sm:items-end justify-between gap-3 shrink-0">
-                                  <div className="sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{isOnline ? 'UPI Amount' : 'Cash Amount'}</p>
-                                    <p className="text-2xl font-black text-slate-900">
-                                      ₹{tx.amount.toLocaleString('en-IN')}
-                                    </p>
-                                  </div>
-
-                                  {/* Action Buttons */}
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {isPending ? (
-                                      rejectingCashId === tx.id ? (
-                                        <div className="flex flex-col gap-1.5 p-2 bg-rose-50 border border-rose-300 rounded-xl">
-                                          <input
-                                            type="text"
-                                            value={rejectCashReason}
-                                            onChange={(e) => setRejectCashReason(e.target.value)}
-                                            placeholder={isOnline ? "Hnawl chhan (e.g. Bank statement-ah a lang lo)..." : "Hnawl chhan ziak rawh..."}
-                                            className="bg-white border border-rose-400 rounded-lg px-2.5 py-1 text-xs text-slate-900 w-52"
-                                          />
-                                          <div className="flex gap-1.5">
-                                            <button
-                                              onClick={() => handleRejectCash(tx.id, rejectCashReason)}
-                                              className="flex-1 py-1 px-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer"
-                                            >
-                                              Hnawl Rawh
-                                            </button>
-                                            <button
-                                              onClick={() => setRejectingCashId(null)}
-                                              className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs cursor-pointer"
-                                            >
-                                              Sut
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleApproveCash(tx.id)}
-                                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95"
-                                          >
-                                            <CheckCircle2 className="w-4 h-4 text-white" />
-                                            <span>{isOnline ? 'Bank-ah A Lut Fel (Approve)' : 'Pawisa Ka Dawng Fel (Approve)'}</span>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() => setRejectingCashId(tx.id)}
-                                            className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
-                                          >
-                                            <XCircle className="w-3.5 h-3.5" />
-                                            <span>{isOnline ? 'Bank-ah A Lut Lo (Reject)' : 'Hnawl'}</span>
-                                          </button>
-                                        </>
-                                      )
-                                    ) : null}
-
-                                    {onViewReceipt && (
-                                      <button
-                                        type="button"
-                                        onClick={() => onViewReceipt(tx)}
-                                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition"
-                                      >
-                                        <Receipt className="w-3.5 h-3.5" />
-                                        <span>Receipt</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
               {activeTab === 'announcement' && (() => {
                 const currentItems = localAnnouncement.items && localAnnouncement.items.length > 0
                   ? localAnnouncement.items
@@ -3778,6 +3215,120 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     )}
                   </div>
 
+                  {/* Global Split API Settlement Master Policy */}
+                  <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md border border-indigo-700/50 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-indigo-500/20 border border-indigo-400/30 rounded-xl">
+                          <CreditCard className="w-5 h-5 text-indigo-300" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-white flex items-center gap-2">
+                            Split API Settlement Master Policy
+                            <span className="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full font-bold">
+                              Thuneihna Zau (Admin Control)
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-indigo-200/80">
+                            Bawm zawng zawng leh Creator-te tana system split fee kalphung bulpui (Add-on vs Deduct).
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdatePricingConfig(localPricing);
+                          recordAuditLog('Master Fee Policy Updated', `Updated global fee policy to ${localPricing.defaultFeeOptionRule || 'ADD_ON'}.`, 'pricing');
+                          setLogsList(getStoredAuditLogs());
+                          setSaveSuccessNotice(true);
+                          setTimeout(() => setSaveSuccessNotice(false), 2500);
+                        }}
+                        className="self-start sm:self-auto px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save Master Policy
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                      {/* 100+1 (ADD_ON) */}
+                      <button
+                        type="button"
+                        onClick={() => setLocalPricing(prev => ({
+                          ...prev,
+                          defaultFeeOptionRule: 'ADD_ON'
+                        }))}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          (localPricing.defaultFeeOptionRule === 'ADD_ON' || !localPricing.defaultFeeOptionRule)
+                            ? 'bg-indigo-600/90 border-indigo-400 ring-2 ring-indigo-400/50 text-white'
+                            : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200 hover:bg-indigo-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black">100 + 1 (Add-On)</span>
+                          {(localPricing.defaultFeeOptionRule === 'ADD_ON' || !localPricing.defaultFeeOptionRule) && (
+                            <Check className="w-3.5 h-3.5 text-indigo-200" />
+                          )}
+                        </div>
+                        <p className="text-[10px] mt-1.5 leading-snug opacity-80">
+                          Thawh zat bakah fee a in-add a. <b>Bawm-in 100% full amount</b> a dawng tling ang.
+                        </p>
+                      </button>
+
+                      {/* 99+1 (DEDUCT) */}
+                      <button
+                        type="button"
+                        onClick={() => setLocalPricing(prev => ({
+                          ...prev,
+                          defaultFeeOptionRule: 'DEDUCT'
+                        }))}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          localPricing.defaultFeeOptionRule === 'DEDUCT'
+                            ? 'bg-indigo-600/90 border-indigo-400 ring-2 ring-indigo-400/50 text-white'
+                            : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200 hover:bg-indigo-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black">99 + 1 (Deduct)</span>
+                          {localPricing.defaultFeeOptionRule === 'DEDUCT' && (
+                            <Check className="w-3.5 h-3.5 text-indigo-200" />
+                          )}
+                        </div>
+                        <p className="text-[10px] mt-1.5 leading-snug opacity-80">
+                          Thawh zat atangin fee paih a ni a. <b>Bawm-in net amount</b> a dawng ang.
+                        </p>
+                      </button>
+
+                      {/* DONOR_CHOICE */}
+                      <button
+                        type="button"
+                        onClick={() => setLocalPricing(prev => ({
+                          ...prev,
+                          defaultFeeOptionRule: 'DONOR_CHOICE'
+                        }))}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          localPricing.defaultFeeOptionRule === 'DONOR_CHOICE'
+                            ? 'bg-indigo-600/90 border-indigo-400 ring-2 ring-indigo-400/50 text-white'
+                            : 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200 hover:bg-indigo-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black">Donor Choice</span>
+                          {localPricing.defaultFeeOptionRule === 'DONOR_CHOICE' && (
+                            <Check className="w-3.5 h-3.5 text-indigo-200" />
+                          )}
+                        </div>
+                        <p className="text-[10px] mt-1.5 leading-snug opacity-80">
+                          Payment screen-ah donor-in 100+1 nge 99+1 a duh zawk a thlang ang.
+                        </p>
+                      </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-indigo-800/60 flex items-center justify-between text-[11px] text-indigo-200">
+                      <span>💡 <b>Admin Thuneihna:</b> He master default hi Bawm tin (Campaign post) leh Creator mal tin edit-naah engtiklai pawhin a hran theuhin a override kual vek theih e.</span>
+                    </div>
+                  </div>
+
                   {/* Category Selector */}
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {(['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'] as BawmCategory[]).map(cat => {
@@ -4027,597 +3578,52 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               )}
 
               {/* ========================================================= */}
-              {/* TAB 8: GATEWAY & TSP CONFIG                               */}
+              {/* TAB 0: STAFF & RBAC MANAGEMENT (SUPER_ADMIN ONLY)          */}
               {/* ========================================================= */}
-              {activeTab === 'gateway' && (
-                <div className="space-y-6 max-w-4xl mx-auto animate-fadeIn text-xs text-slate-700">
-                  {/* Header Banner */}
-                  <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-5 rounded-3xl border border-purple-700/60 shadow-lg space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300 shrink-0">
-                          <Smartphone className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-black text-white">Payment Gateway (PG) & Technology Service Provider (TSP)</h3>
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-400 text-purple-950">
-                              Production Ready
-                            </span>
-                          </div>
-                          <p className="text-xs text-purple-200/80 mt-0.5">
-                            Configure PhonePe PG V2 credentials, toggle non-custodial direct routing, and audit compliance policies.
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('architecture');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md transition shrink-0"
-                      >
-                        <ShieldCheck className="w-4 h-4 text-slate-950" />
-                        <span>Compliance & Policies Hub →</span>
-                      </button>
-                    </div>
-
-                    {/* Quick Mode Status Badge */}
-                    <div className="pt-3 border-t border-purple-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-purple-300 font-bold">Active Engine:</span>
-                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase border ${
-                          adminPGConfig.mode === 'direct_upi'
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                        }`}>
-                          {adminPGConfig.mode === 'direct_upi' ? 'Direct P2P / Dynamic QR (Non-Custodial)' : 'Merchant PG Aggregator'}
-                        </span>
-                        <span className="text-purple-400">•</span>
-                        <span className="text-purple-300 font-bold">Environment:</span>
-                        <span className="text-white font-mono uppercase bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
-                          {adminPGConfig.environment}
-                        </span>
-                      </div>
-                      <div className="text-slate-300 font-mono text-[10px]">
-                        Last Updated: {new Date(adminPGConfig.updatedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Feedback Banner */}
-                  {pgSaveFeedback && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Payment Gateway settings saved successfully to local storage!</span>
-                    </div>
-                  )}
-
-                  {/* Operational Mode Toggle Card */}
-                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                    <div>
-                      <h4 className="font-black text-slate-900 text-sm">Payment Architecture Mode</h4>
-                      <p className="text-[11px] text-slate-500">
-                        Choose whether RonPay functions as a pure Non-Custodial Technology Service Provider (TSP) routing directly to creator VPA/QR, or as a Payment Gateway Merchant aggregating payments via PhonePe PG.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Direct UPI Option */}
-                      <button
-                        type="button"
-                        onClick={() => setAdminPGConfig(prev => ({ ...prev, mode: 'direct_upi' }))}
-                        className={`p-4 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
-                          adminPGConfig.mode === 'direct_upi'
-                            ? 'bg-emerald-50/70 border-emerald-500 shadow-xs'
-                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                              Direct P2P Intent & Dynamic QR
-                            </span>
-                            {adminPGConfig.mode === 'direct_upi' && (
-                              <span className="text-[9px] font-black uppercase bg-emerald-600 text-white px-2 py-0.5 rounded-full">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-600 leading-relaxed">
-                            <strong>100% Non-Custodial:</strong> Payments flow directly from donor/payer bank to the Creator's registered VPA via standard UPI deep links and dynamic QR. RonPay never touches funds.
-                          </p>
-                        </div>
-                        <div className="mt-3 pt-2 border-t border-slate-200 text-[10px] font-bold text-emerald-700 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> No RBI Intermediary Escrow required
-                        </div>
-                      </button>
-
-                      {/* PG Merchant Option */}
-                      <button
-                        type="button"
-                        onClick={() => setAdminPGConfig(prev => ({ ...prev, mode: 'pg_merchant' }))}
-                        className={`p-4 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
-                          adminPGConfig.mode === 'pg_merchant'
-                            ? 'bg-purple-50/70 border-purple-500 shadow-xs'
-                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-purple-600" />
-                              Payment Gateway (PhonePe PG V2)
-                            </span>
-                            {adminPGConfig.mode === 'pg_merchant' && (
-                              <span className="text-[9px] font-black uppercase bg-purple-600 text-white px-2 py-0.5 rounded-full">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-600 leading-relaxed">
-                            <strong>Merchant Routing:</strong> Routes through verified PhonePe Merchant ID (MID). Supports Credit/Debit Cards, NetBanking, and UPI Intent with automated server webhooks.
-                          </p>
-                        </div>
-                        <div className="mt-3 pt-2 border-t border-slate-200 text-[10px] font-bold text-purple-700 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" /> Ideal once Merchant Onboarding is approved
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* PG Credentials Configuration Card */}
-                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
-                      <div>
-                        <h4 className="font-black text-slate-900 text-sm">Gateway Provider & Credentials</h4>
-                        <p className="text-[11px] text-slate-500">
-                          Set your Merchant ID, API Salt Key, and Environment provided by the PG Onboarding team.
-                        </p>
-                      </div>
-
-                      {/* Environment Switcher */}
-                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                        <button
-                          type="button"
-                          onClick={() => setAdminPGConfig(prev => ({ ...prev, environment: 'sandbox' }))}
-                          className={`px-3 py-1 rounded-lg font-bold text-[10px] transition cursor-pointer ${
-                            adminPGConfig.environment === 'sandbox'
-                              ? 'bg-amber-400 text-slate-950 shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          SANDBOX (UAT)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAdminPGConfig(prev => ({ ...prev, environment: 'production' }))}
-                          className={`px-3 py-1 rounded-lg font-bold text-[10px] transition cursor-pointer ${
-                            adminPGConfig.environment === 'production'
-                              ? 'bg-purple-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          PRODUCTION (LIVE)
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Provider */}
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Gateway Provider</label>
-                        <select
-                          value={adminPGConfig.provider}
-                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, provider: e.target.value as PGProvider }))}
-                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-purple-600"
-                        >
-                          <option value="phonepe">PhonePe PG (Default)</option>
-                          <option value="razorpay">Razorpay</option>
-                          <option value="payu">PayU</option>
-                          <option value="custom">Custom / Other</option>
-                        </select>
-                      </div>
-
-                      {/* Merchant ID */}
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Merchant ID (MID)</label>
-                        <input
-                          type="text"
-                          value={adminPGConfig.merchantId}
-                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, merchantId: e.target.value }))}
-                          placeholder="e.g. PGTESTPAYUAT86 or RONPAYONLINE"
-                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
-                        />
-                      </div>
-
-                      {/* Salt Key */}
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Salt Key / API Secret</label>
-                        <input
-                          type="password"
-                          value={adminPGConfig.saltKey}
-                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, saltKey: e.target.value }))}
-                          placeholder="Enter PG Salt Key"
-                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
-                        />
-                      </div>
-
-                      {/* Salt Index */}
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Salt Key Index</label>
-                        <input
-                          type="text"
-                          value={adminPGConfig.saltIndex}
-                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, saltIndex: e.target.value }))}
-                          placeholder="1"
-                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
-                        />
-                      </div>
-
-                      {/* Callback URL */}
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] font-extrabold text-slate-600 uppercase">Webhook / Callback URL</label>
-                        <input
-                          type="text"
-                          value={adminPGConfig.callbackUrl}
-                          onChange={(e) => setAdminPGConfig(prev => ({ ...prev, callbackUrl: e.target.value }))}
-                          placeholder="https://www.ronpay.app/api/pg/callback"
-                          className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-purple-600"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('sandbox');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition"
-                      >
-                        <span>🧪 Launch PG Simulation Sandbox</span>
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const configToSave: PaymentGatewayConfig = {
-                              ...adminPGConfig,
-                              updatedAt: new Date().toISOString()
-                            };
-                            saveStoredPGConfig(configToSave);
-                            setAdminPGConfig(configToSave);
-                            setPgSaveFeedback(true);
-                            setTimeout(() => setPgSaveFeedback(false), 3500);
-                          }}
-                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-md transition"
-                        >
-                          <Check className="w-4 h-4" />
-                          <span>Save Gateway Settings</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* PG Auditor & Statutory Policy Links */}
-                  <div className="bg-slate-100 p-5 rounded-3xl border border-slate-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-slate-600" />
-                        Statutory Compliance Documentation for PG Auditors
-                      </h4>
-                      <span className="text-[10px] text-slate-500 font-medium">RBI / NPCI Ready</span>
-                    </div>
-
-                    <p className="text-[11px] text-slate-600">
-                      Payment Gateway compliance teams (PhonePe/Razorpay) require public verification of these mandatory policies before issuing production MIDs:
-                    </p>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('architecture');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
-                      >
-                        <span className="font-bold text-slate-800 text-[11px] block">1. Architecture Note</span>
-                        <span className="text-[9.5px] text-slate-500 block">TSP Non-Custodial Model</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('terms');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
-                      >
-                        <span className="font-bold text-slate-800 text-[11px] block">2. Terms of Service</span>
-                        <span className="text-[9.5px] text-slate-500 block">Acceptable Use & Fees</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('refund');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
-                      >
-                        <span className="font-bold text-slate-800 text-[11px] block">3. Refund Policy</span>
-                        <span className="text-[9.5px] text-slate-500 block">T+2 Direct Creator Reversal</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPGComplianceTab('grievance');
-                          setShowPGComplianceModal(true);
-                        }}
-                        className="p-2.5 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl text-left transition cursor-pointer space-y-0.5"
-                      >
-                        <span className="font-bold text-slate-800 text-[11px] block">4. Grievance Redressal</span>
-                        <span className="text-[9.5px] text-slate-500 block">Officer Contact & Office</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              {activeTab === 'staff' && hasMinimumRole(currentRole, 'SUPER_ADMIN') && (
+                <StaffManagementTab
+                  currentRole={currentRole}
+                  staffList={staffList}
+                  onSaveStaff={(staff) => {
+                    saveStaffAccount(staff);
+                    setStaffList(getStoredStaffAccounts());
+                  }}
+                  onDeleteStaff={(staffId) => {
+                    deleteStaffAccount(staffId);
+                    setStaffList(getStoredStaffAccounts());
+                  }}
+                />
               )}
 
               {/* ========================================================= */}
-              {/* TAB 9: STAFF & RBAC ACCOUNTS (SUPER_ADMIN ONLY)           */}
+              {/* TAB 8: GATEWAY & TSP CONFIG                               */}
               {/* ========================================================= */}
-              {activeTab === 'staff' && (
-                <div className="space-y-4 animate-fadeIn">
-                  {/* Role Hierarchy Header Banner */}
-                  <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 rounded-3xl border border-purple-700/60 shadow-lg space-y-3">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-purple-500/30 border border-purple-400/50 flex items-center justify-center text-purple-200 font-black shadow-inner">
-                          <ShieldCheck className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm sm:text-base font-black text-white">6-Tier Role-Based Access Control (RBAC)</h3>
-                            <span className="text-[9px] font-black bg-purple-400 text-purple-950 px-2 py-0.5 rounded-full uppercase">
-                              Super Admin Only
-                            </span>
-                          </div>
-                          <p className="text-xs text-purple-200/90 font-medium mt-0.5">
-                            Manage permissions, promote moderators, configure operations staff, and assign access tiers.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Role Hierarchy Legend Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-2 border-t border-purple-700/40 text-[10px]">
-                      <div className="bg-purple-950/60 p-2 rounded-xl border border-purple-700/50 space-y-0.5">
-                        <span className="font-black text-purple-300 block">1. SUPER_ADMIN</span>
-                        <p className="text-purple-200/70 text-[9.5px]">Full system, rates & staff accounts</p>
-                      </div>
-                      <div className="bg-indigo-950/60 p-2 rounded-xl border border-indigo-700/50 space-y-0.5">
-                        <span className="font-black text-indigo-300 block">2. ADMIN</span>
-                        <p className="text-indigo-200/70 text-[9.5px]">Platform ops, finances & users</p>
-                      </div>
-                      <div className="bg-teal-950/60 p-2 rounded-xl border border-teal-700/50 space-y-0.5">
-                        <span className="font-black text-teal-300 block">3. MODERATOR</span>
-                        <p className="text-teal-200/70 text-[9.5px]">Creator KYC & content review</p>
-                      </div>
-                      <div className="bg-emerald-950/60 p-2 rounded-xl border border-emerald-700/50 space-y-0.5">
-                        <span className="font-black text-emerald-300 block">4. CREATOR</span>
-                        <p className="text-emerald-200/70 text-[9.5px]">Verified Bawm & QR publisher</p>
-                      </div>
-                      <div className="bg-amber-950/60 p-2 rounded-xl border border-amber-700/50 space-y-0.5">
-                        <span className="font-black text-amber-300 block">5. MEMBER</span>
-                        <p className="text-amber-200/70 text-[9.5px]">Standard registered user/customer</p>
-                      </div>
-                      <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-700/50 space-y-0.5">
-                        <span className="font-black text-slate-300 block">6. GUEST</span>
-                        <p className="text-slate-400 text-[9.5px]">Unauthenticated visitor</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Success Notice */}
-                  {roleUpdateNotice && (
-                    <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{roleUpdateNotice}</span>
-                    </div>
-                  )}
-
-                  {/* Staff List Filter Bar */}
-                  <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                      {[
-                        { key: 'all', label: `All Users (${creators.length})` },
-                        { 
-                          key: 'staff', 
-                          label: `Staff & Admins (${creators.filter(c => {
-                            const r = getUserRole(c);
-                            return r === 'SUPER_ADMIN' || r === 'ADMIN' || r === 'MODERATOR';
-                          }).length})` 
-                        },
-                        { 
-                          key: 'creators', 
-                          label: `Creators (${creators.filter(c => getUserRole(c) === 'CREATOR').length})` 
-                        },
-                        { 
-                          key: 'members', 
-                          label: `Members (${creators.filter(c => getUserRole(c) === 'MEMBER').length})` 
-                        },
-                        { 
-                          key: 'blocked', 
-                          label: `Blocked (${creators.filter(c => c.isBlocked).length})` 
-                        },
-                      ].map(f => (
-                        <button
-                          key={f.key}
-                          onClick={() => setStaffFilter(f.key as any)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
-                            staffFilter === f.key
-                              ? 'bg-purple-900 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="relative min-w-[220px]">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+              {activeTab === 'gateway' && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 max-w-lg mx-auto text-xs">
+                  <h4 className="font-black text-slate-900 flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-purple-600" /> PhonePe PG V2 / TSP Configuration
+                  </h4>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500">Merchant ID (MID)</label>
                       <input
                         type="text"
-                        placeholder="Search name, phone, designation..."
-                        value={staffSearchQuery}
-                        onChange={(e) => setStaffSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-purple-600 focus:outline-none"
+                        readOnly
+                        value="PGTESTPAYUAT86"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-mono text-slate-700"
                       />
                     </div>
-                  </div>
-
-                  {/* Users / Staff Table */}
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
-                            <th className="py-3 px-4">User / Staff Member</th>
-                            <th className="py-3 px-3">Organization & Phone</th>
-                            <th className="py-3 px-3">Current Role Tier</th>
-                            <th className="py-3 px-3">Role Assignment</th>
-                            <th className="py-3 px-4 text-right">Status & Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {creators
-                            .filter(c => {
-                              const r = getUserRole(c);
-                              if (staffFilter === 'staff') {
-                                if (r !== 'SUPER_ADMIN' && r !== 'ADMIN' && r !== 'MODERATOR') return false;
-                              } else if (staffFilter === 'creators') {
-                                if (r !== 'CREATOR') return false;
-                              } else if (staffFilter === 'members') {
-                                if (r !== 'MEMBER') return false;
-                              } else if (staffFilter === 'blocked') {
-                                if (!c.isBlocked) return false;
-                              }
-
-                              if (staffSearchQuery.trim()) {
-                                const q = staffSearchQuery.toLowerCase();
-                                return (
-                                  c.name.toLowerCase().includes(q) ||
-                                  (c.orgName && c.orgName.toLowerCase().includes(q)) ||
-                                  (c.phone && c.phone.includes(q)) ||
-                                  (c.designation && c.designation.toLowerCase().includes(q))
-                                );
-                              }
-                              return true;
-                            })
-                            .map((u) => {
-                              const currentRole = getUserRole(u);
-                              const meta = ROLE_METAS[currentRole];
-
-                              const handleRoleChange = (newRole: UserRole) => {
-                                const isStaff = newRole === 'SUPER_ADMIN' || newRole === 'ADMIN';
-                                const isMod = newRole === 'MODERATOR';
-                                const isCreator = newRole === 'CREATOR';
-
-                                const updated: CreatorProfile = {
-                                  ...u,
-                                  role: newRole,
-                                  isAdmin: isStaff,
-                                  isApproved: isStaff || isMod || isCreator,
-                                  approvedCategories: isStaff || isMod
-                                    ? ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others']
-                                    : isCreator
-                                    ? (u.approvedCategories && u.approvedCategories.length > 0 ? u.approvedCategories : ['ralna', 'khawlsak', 'rikrum'])
-                                    : []
-                                };
-
-                                onUpdateCreator(updated);
-                                recordAuditLog('Staff Role Updated', `Role for ${u.name} (${u.phone}) updated from ${currentRole} to ${newRole} by Super Admin`, 'creator');
-
-                                setRoleUpdateNotice(`${u.name} role chu ${ROLE_METAS[newRole].title} (${newRole})-ah thlak fel a ni e!`);
-                                setTimeout(() => setRoleUpdateNotice(''), 4000);
-                              };
-
-                              return (
-                                <tr key={u.phone || u.name} className="hover:bg-slate-50/60 transition">
-                                  <td className="py-3 px-4">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <img
-                                        src={u.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`}
-                                        alt={u.name}
-                                        className="w-8 h-8 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
-                                      />
-                                      <div className="min-w-0">
-                                        <span className="font-black text-slate-900 block truncate">
-                                          {u.name}
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 truncate block">
-                                          {u.designation || 'Member'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className="font-bold text-slate-800 block truncate">
-                                      {u.orgName || 'RonPay Community'}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500 font-mono">
-                                      +91 {u.phone || 'N/A'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full border ${meta.badgeColor}`}>
-                                      {meta.badge}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <select
-                                      value={currentRole}
-                                      onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                                      className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 focus:bg-white focus:border-purple-600 focus:outline-none cursor-pointer"
-                                    >
-                                      <option value="SUPER_ADMIN">1. SUPER_ADMIN (Platform HQ)</option>
-                                      <option value="ADMIN">2. ADMIN (Operations & Finance)</option>
-                                      <option value="MODERATOR">3. MODERATOR (KYC & Verification)</option>
-                                      <option value="CREATOR">4. CREATOR (Verified Publisher)</option>
-                                      <option value="MEMBER">5. MEMBER (Standard Customer)</option>
-                                    </select>
-                                  </td>
-                                  <td className="py-3 px-4 text-right">
-                                    {onBlockCreator && (
-                                      <button
-                                        type="button"
-                                        onClick={() => onBlockCreator(u.phone, !u.isBlocked)}
-                                        className={`px-2.5 py-1 rounded-xl text-[10.5px] font-black transition cursor-pointer ${
-                                          u.isBlocked
-                                            ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                        }`}
-                                      >
-                                        {u.isBlocked ? 'Blocked (Unblock)' : 'Block User'}
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500">Salt Key Index</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value="1"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-mono text-slate-700"
+                      />
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 font-medium">
+                      Status: <strong className="text-emerald-700">ONLINE (UAT Mode)</strong> with instant UPI intent routing.
                     </div>
                   </div>
                 </div>
@@ -5089,7 +4095,126 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Admin Approval Remarks */}
+                {/* 4. Split API Settlement & Platform Fee Settings (He Bawm Bik Thuneihna) */}
+                <div className="bg-gradient-to-br from-indigo-50/90 to-slate-50 p-4 rounded-2xl border border-indigo-200 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-indigo-600" />
+                      <h4 className="text-[11px] font-black uppercase text-indigo-950 tracking-wider">
+                        Bawm Bik Split API & Platform Fee Control
+                      </h4>
+                    </div>
+                    <span className="text-[9.5px] font-extrabold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                      Granular Admin Control
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-700 uppercase block mb-1.5">
+                      Fee Settlement Policy (He Bawm Tan Bik)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingCampaign({ ...editingCampaign, feeOptionRule: 'ADD_ON' })}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          (editingCampaign.feeOptionRule === 'ADD_ON' || (!editingCampaign.feeOptionRule && !editingCampaign.trxnFeeBearer))
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-300'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-black text-xs">100 + 1 (Add-On)</div>
+                        <div className={`text-[9.5px] mt-1 leading-tight ${
+                          (editingCampaign.feeOptionRule === 'ADD_ON' || (!editingCampaign.feeOptionRule && !editingCampaign.trxnFeeBearer)) ? 'text-indigo-100' : 'text-slate-500'
+                        }`}>
+                          Donor-in fee pe belh se, Bawm-in 100% a pumhlumin dawng rawh se
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditingCampaign({ ...editingCampaign, feeOptionRule: 'DEDUCT' })}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          editingCampaign.feeOptionRule === 'DEDUCT'
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-300'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-black text-xs">99 + 1 (Deduct)</div>
+                        <div className={`text-[9.5px] mt-1 leading-tight ${
+                          editingCampaign.feeOptionRule === 'DEDUCT' ? 'text-indigo-100' : 'text-slate-500'
+                        }`}>
+                          Thawhzat atangin fee paih se, Bawm-in net dawng rawh se
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditingCampaign({ ...editingCampaign, feeOptionRule: 'DONOR_CHOICE' })}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
+                          editingCampaign.feeOptionRule === 'DONOR_CHOICE'
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-300'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-black text-xs">Donor Choice</div>
+                        <div className={`text-[9.5px] mt-1 leading-tight ${
+                          editingCampaign.feeOptionRule === 'DONOR_CHOICE' ? 'text-indigo-100' : 'text-slate-500'
+                        }`}>
+                          Donor-in checkout-ah duh zawk thlang rawh se (100+1 nge 99+1)
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-indigo-100/80">
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-700 uppercase">
+                        Platform Fee Rate (%) Override
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="10"
+                        value={editingCampaign.customPlatformFeePercent !== undefined ? editingCampaign.customPlatformFeePercent : ''}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          setEditingCampaign({ ...editingCampaign, customPlatformFeePercent: val });
+                        }}
+                        className="w-full mt-1 p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                        placeholder="Default (1.0%)"
+                      />
+                      <p className="text-[9px] text-slate-500 mt-0.5">Empty dah chuan category/creator rate a hmang ang</p>
+                    </div>
+
+                    <div className="flex flex-col justify-center">
+                      <label className="text-[10px] font-extrabold text-slate-700 uppercase mb-1">
+                        Special 0% Free Exemption
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setEditingCampaign({
+                          ...editingCampaign,
+                          customFreeTrialActive: !editingCampaign.customFreeTrialActive
+                        })}
+                        className={`p-2 rounded-xl border text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                          editingCampaign.customFreeTrialActive
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{editingCampaign.customFreeTrialActive ? '🎉 0% Free Active (A thlawn)' : 'Standard Fee Active'}</span>
+                        <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded bg-black/15">
+                          {editingCampaign.customFreeTrialActive ? 'ON' : 'OFF'}
+                        </span>
+                      </button>
+                      <p className="text-[9px] text-slate-500 mt-0.5">He Bawm bik tan fee chawi tir loh (0%) a nih chuan ON rawh</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Admin Approval Remarks */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-extrabold text-slate-600 uppercase">Admin Remarks / Moderation Notes</label>
                   <input
@@ -5120,34 +4245,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               </form>
             </div>
           </div>
-        )}
-
-        {/* Campaign Safety Net Modal (Zero-Balance Delete or Void with Audit Trail) */}
-        {safetyModalCampaign && (
-          <CampaignSafetyModal
-            campaign={safetyModalCampaign.campaign}
-            transactions={transactions}
-            initialMode={safetyModalCampaign.mode}
-            onClose={() => setSafetyModalCampaign(null)}
-            onDeleted={(deletedId) => {
-              if (onDeleteCampaign) {
-                onDeleteCampaign(deletedId);
-              }
-              setLogsList(getStoredAuditLogs());
-              setSafetyModalCampaign(null);
-            }}
-            onVoided={(voidedCamp) => {
-              if (onUpdateCampaign) {
-                onUpdateCampaign(voidedCamp);
-              }
-              setLogsList(getStoredAuditLogs());
-              setSafetyModalCampaign(null);
-            }}
-            onEditRequested={(campToEdit) => {
-              setSafetyModalCampaign(null);
-              setEditingCampaign({ ...campToEdit });
-            }}
-          />
         )}
 
         {/* Creator Review, Photo Studio, Inspection & Rights Modal Sheet */}
@@ -5819,6 +4916,41 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </div>
               </div>
 
+              {/* Creator Default Fee Settlement Policy */}
+              <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-black text-indigo-950 text-xs">
+                    <CreditCard className="w-4 h-4 text-indigo-600" />
+                    Creator Default Fee Settlement Mode
+                  </div>
+                  <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                    Account Level Default
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  He Creator-in Bawm thar a siam apianga a default tura i duh thlang rawh (Bawm post edit-naah mal te tein a thlak theih tho bawk):
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['ADD_ON', 'DEDUCT', 'DONOR_CHOICE'] as FeeOptionMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setCreatorDefaultFeeOptionRule(mode)}
+                      className={`p-2.5 rounded-xl text-center text-xs font-black border transition cursor-pointer flex flex-col items-center justify-center ${
+                        creatorDefaultFeeOptionRule === mode
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{mode === 'ADD_ON' ? '100+1 (Add-On)' : mode === 'DEDUCT' ? '99+1 (Deduct)' : 'Donor Choice'}</span>
+                      <span className={`text-[9px] font-medium mt-0.5 ${creatorDefaultFeeOptionRule === mode ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        {mode === 'ADD_ON' ? 'Donor pe belh' : mode === 'DEDUCT' ? 'Thawhzat paih' : 'Donor thlang'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* 8. LIFETIME VIP TOGGLE */}
               <div className="bg-amber-50/80 p-3 rounded-2xl border border-amber-200 flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
@@ -6072,38 +5204,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </div>
           </div>
         )}
-
-        {/* Biometric Guard for Critical Admin Approvals & Rejections */}
-        <BiometricAuthModal
-          isOpen={isBiometricGuardOpen}
-          target="admin_action"
-          actionType={biometricGuardActionType}
-          title={biometricGuardTitle}
-          subtitle={biometricGuardSubtitle}
-          userName={currentProfile?.name}
-          userPhone={currentProfile?.phone}
-          expectedPin={currentProfile?.pin || currentProfile?.password}
-          onClose={() => {
-            setIsBiometricGuardOpen(false);
-            setBiometricGuardCallback(null);
-          }}
-          onSuccess={() => {
-            setIsBiometricGuardOpen(false);
-            if (biometricGuardCallback) {
-              const cb = biometricGuardCallback;
-              setBiometricGuardCallback(null);
-              cb();
-            }
-          }}
-        />
-
-        {/* PG Compliance & Audit Documentation Modal */}
-        <PGComplianceModal
-          isOpen={showPGComplianceModal}
-          onClose={() => setShowPGComplianceModal(false)}
-          initialTab={pgComplianceTab}
-          userLanguage="mizo"
-        />
 
       </div>
     </div>

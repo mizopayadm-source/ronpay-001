@@ -156,7 +156,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   }, []);
 
   const handleShareReceipt = async () => {
-    const receiptLink = webReceiptLink || `https://ronpay.app/?receipt=${transaction?.id || ''}`;
+    const receiptLink = webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`;
     const text = `🎉 *RonPay Official Digital Receipt*\n\n` +
       `🏛️ *Bawm:* ${transaction?.campaignTitle || 'RonPay Community Bawm'}\n` +
       `👤 *Donor:* ${transaction?.isAnonymous ? 'Anonymous' : (transaction?.donorName || 'Consumer User')}\n` +
@@ -495,7 +495,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
         <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl p-1.5 pl-3">
           <span className="text-[10px] font-mono text-slate-300 truncate flex-1 select-all">
-            {webReceiptLink || `https://ronpay.app/?receipt=${transaction?.id || ''}`}
+            {webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`}
           </span>
           <button
             type="button"

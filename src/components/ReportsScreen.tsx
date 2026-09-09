@@ -41,12 +41,7 @@ import {
   Banknote,
   MessageSquare,
   Target,
-  Printer,
-  HeartHandshake,
-  AlertTriangle,
-  Home,
-  HandHeart,
-  Info
+  Printer
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { 
@@ -60,27 +55,10 @@ import {
   computeMonthlyDistribution,
   MonthRangeConfig,
   ALL_MONTH_NAMES_SHORT,
-  TargetExportInfo,
-  GroupedDonorRecord,
-  buildGroupedDonorRecords
+  TargetExportInfo
 } from '../utils/export';
-import { 
-  isTransactionInPeriodFilter, 
-  getTransactionMonthInfo, 
-  ALL_MONTH_NAMES_FULL 
-} from '../utils/monthHelper';
-import { 
-  getMembers, 
-  deleteMember,
-  isCampaignCreator, 
-  saveTransaction, 
-  deleteStoredTransaction, 
-  updateDonorTransactions,
-  saveMultipleTransactions,
-  deleteMultipleTransactions
-} from '../utils/storage';
+import { getMembers, isCampaignCreator } from '../utils/storage';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
-import { DonorPaymentsEditorModal } from './DonorPaymentsEditorModal';
 
 interface ReportsScreenProps {
   transactions: Transaction[];
@@ -109,37 +87,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onOpenImagePreview,
   onOpenMemberRoll,
 }) => {
-  const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [selectedFilter, setSelectedFilter] = useState<string>('kumtluang');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>(() => getCurrentMonthStartString());
+  const [endDate, setEndDate] = useState<string>(() => getCurrentMonthEndString());
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'>('date-desc');
   
   // Transaction Editing State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-
-  // Grouping & Display States (Defaults to Grouped by Donor as requested)
-  const [groupByDonor, setGroupByDonor] = useState<boolean>(true);
-  const [showDateTime, setShowDateTime] = useState<boolean>(true);
-
-  // Multi-Month Donor Payments Editing Modal State
-  const [donorPaymentsModalData, setDonorPaymentsModalData] = useState<{
-    donorName: string;
-    donorMemberId?: string;
-    donorPhone?: string;
-    donorSection?: string;
-    transactions: Transaction[];
-  } | null>(null);
   
   // CSV / Excel Export Feedback Toast State
   const [exportFeedback, setExportFeedback] = useState<{ message: string; count: number } | null>(null);
 
   // PDF & Report Customization State
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
-  const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
-  const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
+  const [chartStartMonth, setChartStartMonth] = useState<string>('Apr');
+  const [chartEndMonth, setChartEndMonth] = useState<string>('Mar');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [showExportOptions, setShowExportOptions] = useState<boolean>(false);
   const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
@@ -152,12 +117,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }), [chartStartMonth, chartEndMonth]);
 
   // Check if current user is an authenticated QR creator
-  const isCreator = Boolean(creatorProfile && (creatorProfile.isApproved || creatorProfile.phone || creatorProfile.isAdmin));
+  const isCreator = Boolean(creatorProfile.isApproved && creatorProfile.phone);
 
   // Filter campaigns strictly owned/created by this creator (no cross-creator leakage)
   const creatorCampaigns = useMemo(() => {
     if (!isCreator) return [];
-    if (creatorProfile.isAdmin) return campaigns;
     return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
   }, [campaigns, isCreator, creatorProfile]);
 
@@ -171,66 +135,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
   }, [isCreator, creatorCampaigns, selectedFilter]);
 
-  // Available periods list for filter dropdown (All months, quarters, years, custom labels)
-  const availablePeriodOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const years = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
-    
-    const monthlyList: { value: string; label: string }[] = [];
-    ALL_MONTH_NAMES_FULL.forEach(m => {
-      monthlyList.push({
-        value: `${m} ${currentYear}`,
-        label: `📅 ${m} ${currentYear}`,
-      });
-    });
-
-    const quartersList = [
-      { value: `Q1 ${currentYear}`, label: `📊 Q1 (Jan - Mar) ${currentYear}` },
-      { value: `Q2 ${currentYear}`, label: `📊 Q2 (Apr - Jun) ${currentYear}` },
-      { value: `Q3 ${currentYear}`, label: `📊 Q3 (Jul - Sep) ${currentYear}` },
-      { value: `Q4 ${currentYear}`, label: `📊 Q4 (Oct - Dec) ${currentYear}` },
-    ];
-
-    const yearsList = years.map(yr => ({
-      value: `${yr}`,
-      label: `🗓️ ${yr} Full Year (Kumtluan)`,
-    }));
-
-    const customList: { value: string; label: string }[] = [];
-    transactions.forEach(t => {
-      if (t.periodLabel && t.periodLabel.trim()) {
-        const val = t.periodLabel.trim();
-        const exists = monthlyList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
-          quartersList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
-          yearsList.some(o => o.value.toLowerCase() === val.toLowerCase()) ||
-          customList.some(o => o.value.toLowerCase() === val.toLowerCase());
-        if (!exists) {
-          customList.push({
-            value: val,
-            label: `🏷️ ${val}`,
-          });
-        }
-      }
-    });
-
-    return {
-      monthlyList,
-      quartersList,
-      yearsList,
-      customList,
-    };
-  }, [transactions]);
-
   // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation)
   const filteredTransactions = useMemo(() => {
-    if (!isCreator) return [];
+    if (!isCreator || creatorCampaignIds.size === 0) return [];
 
     return transactions.filter(t => {
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's own verified campaigns
-      if (!creatorProfile.isAdmin) {
-        if (creatorCampaignIds.size > 0 && !creatorCampaignIds.has(t.campaignId)) {
-          return false;
-        }
+      if (!creatorCampaignIds.has(t.campaignId)) {
+        return false;
       }
 
       // 2. Category filter
@@ -243,19 +155,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (t.campaignId !== selectedCampaignId) return false;
       }
 
-      // 4. Period / Month filter (using robust month, quarter, year, and label matching)
+      // 4. Period / Month filter
       if (selectedPeriodFilter !== 'all') {
-        if (!isTransactionInPeriodFilter(t, selectedPeriodFilter)) {
+        if (t.periodLabel && !t.periodLabel.toLowerCase().includes(selectedPeriodFilter.toLowerCase())) {
           return false;
         }
       }
 
-      // 5. Date range filter (only applied when startDate or endDate is explicitly set)
-      if (startDate || endDate) {
-        const txDate = t.timestamp.slice(0, 10);
-        if (startDate && txDate < startDate) return false;
-        if (endDate && txDate > endDate) return false;
-      }
+      // 5. Date range filter
+      const txDate = t.timestamp.slice(0, 10);
+      if (startDate && txDate < startDate) return false;
+      if (endDate && txDate > endDate) return false;
 
       // 6. Search query filter
       if (searchQuery.trim()) {
@@ -263,13 +173,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         const matchesTitle = (t.campaignTitle || '').toLowerCase().includes(q);
         const matchesDonor = (t.donorName || '').toLowerCase().includes(q);
         const matchesId = (t.id || '').toLowerCase().includes(q);
-        const matchesPeriod = isTransactionInPeriodFilter(t, q);
+        const matchesPeriod = t.periodLabel ? t.periodLabel.toLowerCase().includes(q) : false;
         if (!matchesTitle && !matchesDonor && !matchesId && !matchesPeriod) return false;
       }
 
       return true;
     });
-  }, [transactions, isCreator, creatorProfile, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -297,120 +207,32 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
   const grandTotal = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // Selected campaign display name
-  const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
-  const currentCampaignDisplayName = selectedCampaignObj 
-    ? selectedCampaignObj.title 
-    : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
-
   // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
   const isKumtluang = selectedFilter === 'kumtluang';
   const kumtluangMatrix = useMemo(() => {
-    return buildKumtluangMatrix(filteredTransactions, sortOrder, selectedCampaignObj?.subCategories);
-  }, [filteredTransactions, sortOrder, selectedCampaignObj?.subCategories]);
-
-  // Grouped donor records computation (Mi pakhat tlar khatah belhkhawm)
-  const groupedDonorRecords = useMemo(() => {
-    return buildGroupedDonorRecords(sortedTransactions, sortOrder);
-  }, [sortedTransactions, sortOrder]);
+    return buildKumtluangMatrix(filteredTransactions, sortOrder);
+  }, [filteredTransactions, sortOrder]);
 
   // Scoped members for the current selected campaign
   const scopedMembers = useMemo(() => {
     return getMembers(selectedCampaignId);
   }, [selectedCampaignId]);
 
-  // Helper to get formatted display metadata for any Bawm category
-  const getCategoryDisplayInfo = (cat: string) => {
-    switch (cat) {
-      case 'kumtluang':
-        return {
-          title: 'Kumtluang & Thlatin Bawm',
-          shortLabel: 'Kumtluang',
-          subtitle: 'Kohhran, YMA leh Pawl Thawhlawm / Membership Collections',
-          gradient: 'from-indigo-950 via-purple-950 to-slate-900',
-          borderColor: 'border-indigo-400/60',
-          accentColor: 'text-indigo-300',
-          badgeBg: 'bg-indigo-500/20 text-indigo-200 border-indigo-400/40'
-        };
-      case 'ralna':
-        return {
-          title: 'Ralna Bawm (Chhiatni)',
-          shortLabel: 'Ralna',
-          subtitle: 'Chhiatni, Sunna leh Ralna Pual Collections',
-          gradient: 'from-slate-950 via-rose-950 to-slate-900',
-          borderColor: 'border-rose-400/60',
-          accentColor: 'text-rose-300',
-          badgeBg: 'bg-rose-500/20 text-rose-200 border-rose-400/40'
-        };
-      case 'khawlsak':
-        return {
-          title: 'Khawlsak Bawm (Riangvai & In sak)',
-          shortLabel: 'Khawlsak',
-          subtitle: 'In sak, Damlo leh Riangvai Tanpuina Collections',
-          gradient: 'from-slate-950 via-emerald-950 to-slate-900',
-          borderColor: 'border-emerald-400/60',
-          accentColor: 'text-emerald-300',
-          badgeBg: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
-        };
-      case 'rikrum':
-        return {
-          title: 'Rikrum Bawm (Emergency)',
-          shortLabel: 'Rikrum',
-          subtitle: 'Emergency, Chhiatrupna leh Accident Collections',
-          gradient: 'from-slate-950 via-amber-950 to-slate-900',
-          borderColor: 'border-amber-400/60',
-          accentColor: 'text-amber-300',
-          badgeBg: 'bg-amber-500/20 text-amber-200 border-amber-400/40'
-        };
-      case 'others':
-        return {
-          title: 'Bawm Dangte (Others & Bills)',
-          shortLabel: 'Dangte',
-          subtitle: 'Utility Bills, Special Projects leh General Collections',
-          gradient: 'from-slate-950 via-sky-950 to-slate-900',
-          borderColor: 'border-sky-400/60',
-          accentColor: 'text-sky-300',
-          badgeBg: 'bg-sky-500/20 text-sky-200 border-sky-400/40'
-        };
-      default:
-        return {
-          title: 'All My Created Categories',
-          shortLabel: 'All Bawm',
-          subtitle: 'Consolidated Collections across all Categories',
-          gradient: 'from-indigo-950 via-slate-900 to-indigo-900',
-          borderColor: 'border-amber-400/60',
-          accentColor: 'text-amber-300',
-          badgeBg: 'bg-amber-400/20 text-amber-200 border-amber-400/40'
-        };
-    }
-  };
+  // Selected campaign display name
+  const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
+  const currentCampaignDisplayName = selectedCampaignObj 
+    ? selectedCampaignObj.title 
+    : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
 
-  // 1. Text chung ber atan: NGO / Church / Hming / Title
+  // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
   const headerTitle = useMemo(() => {
     if (selectedCampaignObj) {
       return selectedCampaignObj.title || selectedCampaignObj.orgName || creatorProfile.orgName || creatorProfile.name || 'RonPay Community';
     }
-    if (selectedFilter !== 'all') {
-      const catInfo = getCategoryDisplayInfo(selectedFilter);
-      return catInfo.title;
-    }
-    return creatorProfile.orgName 
-      ? `${creatorProfile.orgName} (Consolidated Report)` 
-      : 'All My Created Categories (Consolidated Report)';
+    return creatorProfile.orgName || creatorProfile.name || (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM`);
   }, [selectedCampaignObj, creatorProfile, selectedFilter]);
 
-  // Subtitle / context
-  const headerSubtitle = useMemo(() => {
-    if (selectedCampaignObj) {
-      return selectedCampaignObj.orgName || creatorProfile.orgName || 'RonPay Verified Campaign';
-    }
-    if (selectedFilter !== 'all') {
-      return `${creatorProfile.orgName || creatorProfile.name || 'RonPay'} • All ${availableCampaigns.length} Campaigns in this Bawm`;
-    }
-    return `Consolidated Report • ${creatorCampaigns.length} Total Campaigns Across Categories`;
-  }, [selectedCampaignObj, creatorProfile, selectedFilter, availableCampaigns, creatorCampaigns]);
-
-  // 2. A hnuai ah: Veng / Khua / Location
+  // 2. A hnuai ah: Veng / Khua / Location (Creator-in a dah luh)
   const headerLocation = useMemo(() => {
     if (selectedCampaignObj?.location) {
       return selectedCampaignObj.location;
@@ -421,10 +243,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return 'Mizoram, India';
   }, [selectedCampaignObj, creatorProfile]);
 
-  // Active uploaded image associated with campaign / QR:
-  // ONLY display an image if a SPECIFIC campaign is selected AND THAT specific campaign has an imageUrl!
-  // NEVER fall back to another random campaign's photo when viewing all campaigns or an entire category!
-  const activeCampaignImage = selectedCampaignId !== 'all' ? (selectedCampaignObj?.imageUrl || undefined) : undefined;
+  // Active uploaded image associated with campaign / QR
+  const activeCampaignImage = selectedCampaignObj?.imageUrl || (availableCampaigns.find(c => Boolean(c.imageUrl))?.imageUrl);
 
   const dateRangeText = startDate && endDate
     ? `${formatDateDDMMYYYY(startDate)} to ${formatDateDDMMYYYY(endDate)}`
@@ -437,19 +257,54 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     address: headerLocation
   } : undefined;
 
-  // Active target information for the current campaign:
-  // ONLY show target progress when a SPECIFIC campaign is selected AND that campaign has a configured target!
-  // Unrelated campaigns across different categories or categories as a whole MUST NEVER be artificially summed up!
+  // Active target information for the current campaign or filter context
   const activeTargetInfo: TargetExportInfo | null = useMemo(() => {
-    if (selectedCampaignId !== 'all' && selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
-      const targetAmount = selectedCampaignObj.targetAmount;
-      const targetPeriod = selectedCampaignObj.targetPeriod;
+    // 1. When a specific campaign is selected (selectedCampaignId !== 'all')
+    if (selectedCampaignId !== 'all') {
+      if (selectedCampaignObj?.targetAmount && selectedCampaignObj.targetAmount > 0) {
+        const targetAmount = selectedCampaignObj.targetAmount;
+        const targetPeriod = selectedCampaignObj.targetPeriod;
+        const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
+        const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
+        const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
+        const isCompleted = grandTotal >= targetAmount;
+        const remaining = Math.max(0, targetAmount - grandTotal);
+        const surplus = Math.max(0, grandTotal - targetAmount);
+
+        return {
+          targetAmount,
+          targetPeriod,
+          periodLabel,
+          periodSuffix,
+          progressPct,
+          isCompleted,
+          remaining,
+          surplus,
+          campaignTitle: selectedCampaignObj.title
+        };
+      }
+      // If the selected specific campaign has no target configured, DO NOT show/mix targets from other campaigns!
+      return null;
+    }
+
+    // 2. Only when "All My Campaigns in this Bawm" is selected (selectedCampaignId === 'all')
+    const targetedCampaigns = (selectedFilter === 'all' 
+      ? creatorCampaigns 
+      : creatorCampaigns.filter(c => c.category === selectedFilter)
+    ).filter(c => Boolean(c.targetAmount && c.targetAmount > 0));
+
+    if (targetedCampaigns.length === 1) {
+      const c = targetedCampaigns[0];
+      const targetAmount = c.targetAmount!;
+      const targetPeriod = c.targetPeriod;
       const periodLabel = targetPeriod === 'monthly' ? 'Thla tin' : targetPeriod === 'yearly' ? 'Kum tin' : 'Overall Target';
       const periodSuffix = targetPeriod === 'monthly' ? '/thla' : targetPeriod === 'yearly' ? '/kum' : '';
-      const progressPct = targetAmount > 0 ? Math.round((grandTotal / targetAmount) * 100) : 0;
-      const isCompleted = grandTotal >= targetAmount;
-      const remaining = Math.max(0, targetAmount - grandTotal);
-      const surplus = Math.max(0, grandTotal - targetAmount);
+      const campTxns = filteredTransactions.filter(t => t.campaignId === c.id || t.campaignTitle === c.title);
+      const campTotal = campTxns.reduce((sum, t) => sum + t.amount, 0);
+      const progressPct = targetAmount > 0 ? Math.round((campTotal / targetAmount) * 100) : 0;
+      const isCompleted = campTotal >= targetAmount;
+      const remaining = Math.max(0, targetAmount - campTotal);
+      const surplus = Math.max(0, campTotal - targetAmount);
 
       return {
         targetAmount,
@@ -460,62 +315,30 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         isCompleted,
         remaining,
         surplus,
-        campaignTitle: selectedCampaignObj.title
+        campaignTitle: c.title
+      };
+    } else if (targetedCampaigns.length > 1) {
+      const combinedTarget = targetedCampaigns.reduce((sum, c) => sum + (c.targetAmount || 0), 0);
+      const progressPct = combinedTarget > 0 ? Math.round((grandTotal / combinedTarget) * 100) : 0;
+      const isCompleted = grandTotal >= combinedTarget;
+      const remaining = Math.max(0, combinedTarget - grandTotal);
+      const surplus = Math.max(0, grandTotal - combinedTarget);
+
+      return {
+        targetAmount: combinedTarget,
+        targetPeriod: undefined,
+        periodLabel: `${targetedCampaigns.length} Bawm Targets Combined`,
+        periodSuffix: '',
+        progressPct,
+        isCompleted,
+        remaining,
+        surplus,
+        campaignTitle: `${targetedCampaigns.length} Bawm Targets`
       };
     }
 
     return null;
-  }, [selectedCampaignId, selectedCampaignObj, grandTotal]);
-
-  // Online vs Cash breakdown calculations
-  const onlineTotal = useMemo(() => {
-    return filteredTransactions.filter(t => t.paymentMethod === 'online').reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
-
-  const cashTotal = useMemo(() => {
-    return filteredTransactions.filter(t => t.paymentMethod === 'cash').reduce((sum, t) => sum + t.amount, 0);
-  }, [filteredTransactions]);
-
-  const campaignsWithTargetCount = useMemo(() => {
-    return availableCampaigns.filter(c => Boolean(c.targetAmount && c.targetAmount > 0)).length;
-  }, [availableCampaigns]);
-
-  // Category breakdown metrics for the consolidated overview card
-  const categoryOverviewStats = useMemo(() => {
-    const cats: { 
-      key: BawmCategory | 'others'; 
-      label: string; 
-      count: number; 
-      total: number; 
-      campaignCount: number;
-      badgeColor: string;
-    }[] = [
-      { key: 'kumtluang', label: 'Kumtluang & Thlatin', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-indigo-500/20 text-indigo-200 border-indigo-400/40' },
-      { key: 'ralna', label: 'Ralna (Chhiatni)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-rose-500/20 text-rose-200 border-rose-400/40' },
-      { key: 'khawlsak', label: 'Khawlsak (Riangvai)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' },
-      { key: 'rikrum', label: 'Rikrum (Emergency)', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-amber-500/20 text-amber-200 border-amber-400/40' },
-      { key: 'others', label: 'Bawm Dangte', count: 0, total: 0, campaignCount: 0, badgeColor: 'bg-sky-500/20 text-sky-200 border-sky-400/40' },
-    ];
-
-    const catMap = new Map(cats.map(c => [c.key, c]));
-
-    creatorCampaigns.forEach(c => {
-      const entry = catMap.get(c.category as any) || catMap.get('others');
-      if (entry) {
-        entry.campaignCount++;
-      }
-    });
-
-    filteredTransactions.forEach(t => {
-      const entry = catMap.get(t.category as any) || catMap.get('others');
-      if (entry) {
-        entry.count++;
-        entry.total += t.amount;
-      }
-    });
-
-    return cats.filter(c => c.campaignCount > 0 || c.total > 0);
-  }, [creatorCampaigns, filteredTransactions]);
+  }, [selectedCampaignId, selectedCampaignObj, grandTotal, selectedFilter, creatorCampaigns, filteredTransactions]);
 
   // Compute monthly trend for the live banner & reports with customizable month range
   const monthlyDistribution = useMemo(() => {
@@ -524,7 +347,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   const showExportSuccessToast = (type: string, count: number) => {
     setExportFeedback({
-      message: `📥 ${type} download fel a ni! (${count} records - Phone Downloads / Files-ah a lut e)`,
+      message: `${type} export hlawhtling ta! (${count} records saved)`,
       count,
     });
     setTimeout(() => {
@@ -611,7 +434,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : (kumtluangMatrix.categories.length > 0 ? kumtluangMatrix.categories : ['General Collection']);
+        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
       if (m) {
         exportMemberCategoryMatrixPrint(
           m, 
@@ -635,7 +458,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : (kumtluangMatrix.categories.length > 0 ? kumtluangMatrix.categories : ['General Collection']);
+        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
       if (m) {
         exportMemberPassbookVerticalPrint(
           m, 
@@ -655,11 +478,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       alert('⚠️ He filter-ah hian transaction hmuh tur a awm rih lo.');
       return;
     }
-    const isMultiCategoryMode = isKumtluang || Boolean(selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 1);
     printTransactionsPDF(
       sortedTransactions, 
       `${headerTitle} - Financial Audit Statement`, 
-      isMultiCategoryMode,
+      isKumtluang,
       headerTitle,
       dateRangeText,
       activeCampaignImage,
@@ -669,80 +491,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         includeMonthlyChart,
         monthRangeConfig,
         includeSignatures,
-        targetInfo: activeTargetInfo || undefined,
-        groupByDonor,
-        showDateTime,
-        members: scopedMembers
+        targetInfo: activeTargetInfo || undefined
       }
     );
-    showExportSuccessToast('Format 1: Official Financial Statement PDF', sortedTransactions.length);
+    showExportSuccessToast('Format 2: Official Financial Statement PDF', sortedTransactions.length);
   };
 
   const toggleNameSort = () => {
     setSortOrder(prev => prev === 'name-asc' ? 'name-desc' : 'name-asc');
   };
 
-  // State for deleting entire donor's record from Matrix
-  const [deletingDonorInfo, setDeletingDonorInfo] = useState<{ donorName: string; total: number; txCount: number } | null>(null);
-
-  // Open Multi-Month / Multi-Payment Donor Editor Modal
+  // Find a transaction by donor name for Kumtluang matrix row edit
   const handleEditDonorRow = (donorName: string) => {
-    const txs = filteredTransactions.filter(t => (t.donorName || '').toLowerCase().trim() === donorName.toLowerCase().trim());
-    if (txs.length > 0) {
-      const member = scopedMembers.find(m => m.name.toLowerCase().trim() === donorName.toLowerCase().trim());
-      const firstTx = txs[0];
-      setDonorPaymentsModalData({
-        donorName: firstTx.donorName || donorName,
-        donorMemberId: member?.id || firstTx.memberId,
-        donorPhone: member?.phoneLast4 || member?.fullPhone || firstTx.donorPhone,
-        donorSection: member?.section || firstTx.donorVeng,
-        transactions: txs,
-      });
+    const tx = filteredTransactions.find(t => t.donorName === donorName);
+    if (tx) {
+      setEditingTransaction(tx);
     } else {
       alert('Transaction record hmuh a ni lo.');
     }
-  };
-
-  // Save all donor transactions from DonorPaymentsEditorModal
-  const handleSaveAllDonorPayments = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    updateDonorTransactions(
-      donorPaymentsModalData?.donorName || '',
-      updatedTxs,
-      deletedIds
-    );
-    // Notify parent handlers for live state sync
-    if (deletedIds && deletedIds.length > 0 && onDeleteTransaction) {
-      deletedIds.forEach(id => onDeleteTransaction(id));
-    }
-    if (updatedTxs && updatedTxs.length > 0 && onUpdateTransaction) {
-      updatedTxs.forEach(tx => onUpdateTransaction(tx));
-    }
-    setDonorPaymentsModalData(null);
-    showExportSuccessToast(`Siamthatna hlawhtling ta! (${updatedTxs.length} records updated)`, updatedTxs.length);
-  };
-
-  const handleDeleteDonorRow = (donorName: string, total: number) => {
-    const txs = filteredTransactions.filter(t => t.donorName === donorName);
-    setDeletingDonorInfo({ donorName, total, txCount: txs.length });
-  };
-
-  const handleConfirmDeleteDonorTxs = () => {
-    if (!deletingDonorInfo) return;
-    const cleanName = (deletingDonorInfo.donorName || '').toLowerCase().trim();
-    const txs = filteredTransactions.filter(t => (t.donorName || '').toLowerCase().trim() === cleanName);
-    deleteMultipleTransactions(txs.map(t => t.id));
-    
-    // Also clean up any member record with matching name or memberId if present
-    const matchingMem = scopedMembers.find(m => (m.name || '').toLowerCase().trim() === cleanName);
-    if (matchingMem) {
-      deleteMember(matchingMem.id, selectedCampaignId !== 'all' ? selectedCampaignId : undefined);
-    }
-    
-    if (onDeleteTransaction) {
-      txs.forEach(t => onDeleteTransaction(t.id));
-    }
-    setDeletingDonorInfo(null);
-    showExportSuccessToast(`"${deletingDonorInfo.donorName}" record leh transactions chu paih bo fel a ni ta!`, txs.length);
   };
 
   return (
@@ -794,10 +560,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             </p>
           </div>
 
-          <div className="pt-2 flex items-center justify-center">
+          <div className="pt-2">
             <button
               onClick={onOpenLogin}
-              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer flex items-center gap-1.5"
+              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
             >
               Creator Login / Verify Account
             </button>
@@ -881,12 +647,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   }}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition text-xs"
                 >
-                  <option value="all">🌟 All My Created Categories (Zawng zawng)</option>
-                  <option value="kumtluang">Kumtluang & Thlatin Bawm (Matrix View)</option>
-                  <option value="ralna">Ralna Bawm (Chhiatni / Sunna)</option>
-                  <option value="khawlsak">Khawlsak Bawm (Riangvai & In sak)</option>
+                  <option value="kumtluang">Kumtluang Bawm (Category Matrix View)</option>
+                  <option value="ralna">Ralna Bawm (Chhiatni)</option>
+                  <option value="khawlsak">Khawlsak Bawm (Riangvai)</option>
                   <option value="rikrum">Rikrum Bawm (Emergency)</option>
-                  <option value="others">Bawm Dangte (Others & Bills)</option>
+                  <option value="all">All My Created Categories</option>
                 </select>
               </div>
 
@@ -926,29 +691,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   onChange={(e) => setSelectedPeriodFilter(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
                 >
-                  <option value="all">🌟 All Months & Periods (Zawng zawng)</option>
-                  <optgroup label="Thla tin (Monthly Selection)">
-                    {availablePeriodOptions.monthlyList.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Quarters (Thla 3 dan zela pek)">
-                    {availablePeriodOptions.quartersList.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Kumtluan (Full Year)">
-                    {availablePeriodOptions.yearsList.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </optgroup>
-                  {availablePeriodOptions.customList.length > 0 && (
-                    <optgroup label="Other / Custom Records">
-                      {availablePeriodOptions.customList.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </optgroup>
-                  )}
+                  <option value="all">All Months & Periods</option>
+                  <option value="August">August 2026</option>
+                  <option value="July">July 2026</option>
+                  <option value="June">June 2026</option>
+                  <option value="Q3">Q3 (Jul - Sep)</option>
+                  <option value="Q2">Q2 (Apr - Jun)</option>
+                  <option value="2026">2026 Full Year</option>
                 </select>
               </div>
 
@@ -983,72 +732,25 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* Date pickers with quick presets */}
-            <div className="space-y-1.5">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">End Date</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                  />
-                </div>
+            {/* Date pickers */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                />
               </div>
-
-              {/* Quick Date Presets */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate('');
-                    setEndDate('');
-                    setSelectedPeriodFilter('all');
-                  }}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
-                    !startDate && !endDate && selectedPeriodFilter === 'all'
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                  }`}
-                >
-                  🌟 All Time
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartDate(getCurrentMonthStartString());
-                    setEndDate(getCurrentMonthEndString());
-                  }}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
-                    startDate === getCurrentMonthStartString() && endDate === getCurrentMonthEndString()
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                  }`}
-                >
-                  📅 This Month
-                </button>
-                {(startDate || endDate) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStartDate('');
-                      setEndDate('');
-                    }}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
-                  >
-                    ✕ Clear Date
-                  </button>
-                )}
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                />
               </div>
             </div>
 
@@ -1076,7 +778,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             {/* Active Report Focus Banner with Uploaded Campaign Image (Spacious & High-Visibility) */}
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5.5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div className="flex items-start sm:items-center gap-3.5 sm:gap-4.5 min-w-0 flex-1">
-                {/* Vei lamah: Creator-in Thlalak a dah sa emaw Official Emblem */}
+                {/* Vei lamah: Creator-in Thlalak a dah sa */}
                 {activeCampaignImage ? (
                   <div 
                     onClick={() => onOpenImagePreview && onOpenImagePreview(
@@ -1100,78 +802,32 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       </span>
                     </div>
                   </div>
-                ) : selectedCampaignObj ? (
-                  /* Specific Campaign selected, but has NO uploaded photo */
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-950/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md p-1 text-center">
-                    <ImageIcon className="w-7 h-7 text-indigo-400" />
-                    <span className="text-[8px] text-indigo-300 font-bold uppercase tracking-wider leading-none">No Photo</span>
-                    <span className="text-[7.5px] text-slate-400 font-semibold leading-none truncate max-w-[76px] mt-0.5">{selectedCampaignObj.category.toUpperCase()}</span>
-                  </div>
-                ) : selectedFilter !== 'all' ? (
-                  /* Category Selected, but "All Campaigns in this Bawm" */
-                  (() => {
-                    const catInfo = getCategoryDisplayInfo(selectedFilter);
-                    return (
-                      <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br ${catInfo.gradient} border-2 ${catInfo.borderColor} flex flex-col items-center justify-center shrink-0 p-1 text-center shadow-md select-none`}>
-                        {selectedFilter === 'kumtluang' ? (
-                          <Layers className="w-7 h-7 text-indigo-300" />
-                        ) : selectedFilter === 'ralna' ? (
-                          <HeartHandshake className="w-7 h-7 text-rose-300" />
-                        ) : selectedFilter === 'khawlsak' ? (
-                          <Home className="w-7 h-7 text-emerald-300" />
-                        ) : selectedFilter === 'rikrum' ? (
-                          <AlertTriangle className="w-7 h-7 text-amber-300" />
-                        ) : (
-                          <Sparkles className="w-7 h-7 text-sky-300" />
-                        )}
-                        <span className={`text-[8.5px] font-black uppercase tracking-wide mt-1 leading-tight ${catInfo.accentColor}`}>
-                          {catInfo.shortLabel}
-                        </span>
-                        <span className="text-[7px] font-bold bg-white/15 text-white px-1.5 py-0.5 rounded-md border border-white/20 mt-0.5">
-                          Category
-                        </span>
-                      </div>
-                    );
-                  })()
                 ) : (
-                  /* "All My Created Categories" & "All Campaigns" */
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border-2 border-amber-400/70 flex flex-col items-center justify-center shrink-0 p-1 text-center shadow-md select-none">
-                    <BarChart3 className="w-7 h-7 text-amber-400" />
-                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-300 mt-1 leading-tight">
-                      ALL BAWM
-                    </span>
-                    <span className="text-[7px] font-bold bg-amber-400/20 text-amber-200 px-1.5 py-0.5 rounded-md border border-amber-400/30 mt-0.5">
-                      Overview
-                    </span>
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
+                    <ImageIcon className="w-8 h-8 text-indigo-400" />
+                    <span className="text-[8.5px] text-indigo-300 font-bold uppercase tracking-wider">No Photo</span>
                   </div>
                 )}
 
                 {/* Thlalak sir / hrul ah: Text Hierarchy */}
                 <div className="space-y-1 min-w-0 flex-1">
-                  {/* 1. Chung ber atan: NGO / Church / Hming / Title */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-tight break-words">
-                      {headerTitle}
-                    </h3>
-                    {selectedFilter !== 'all' && selectedCampaignId === 'all' && (
-                      <span className="text-[9px] font-extrabold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded-md">
-                        {availableCampaigns.length} Campaigns
-                      </span>
-                    )}
-                  </div>
+                  {/* 1. Chung ber atan: NGO / Church / Hming / Title (Hawrawp Font Size lian hlek) */}
+                  <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-tight break-words">
+                    {headerTitle}
+                  </h3>
 
-                  {/* 2. Subtitle / Context */}
-                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5 truncate">
-                    <span>{headerSubtitle}</span>
-                  </p>
-
-                  {/* 3. Location */}
-                  <p className="text-[11px] sm:text-xs font-semibold text-slate-300 leading-normal flex items-center gap-1.5">
+                  {/* 2. A hnuai ah: Veng / Khua / etc Creatorin a dah luh kha (Hawrawp te deuh zawk) */}
+                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>{headerLocation}</span>
                   </p>
 
-                  {/* 4. Trxn Date */}
+                  {/* 3. A hnuaiah: Reports & Financial Statements */}
+                  <p className="text-[11px] sm:text-xs font-bold text-sky-400 tracking-wide">
+                    Reports & Financial Statements
+                  </p>
+
+                  {/* 4. A hnuai leh ah: Trxn Date */}
                   <p className="text-[10.5px] sm:text-[11px] font-medium text-slate-300 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
                     <span>Trxn Date: <b className="text-white font-bold">{dateRangeText}</b></span>
@@ -1195,9 +851,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* TARGET & COLLECTION PROGRESS OR CONSOLIDATED STATS CARD */}
-            {activeTargetInfo && activeTargetInfo.targetAmount > 0 ? (
-              /* SPECIFIC CAMPAIGN TARGET PROGRESS */
+            {/* TARGET & COLLECTION PROGRESS CARD (When Target is Configured) */}
+            {activeTargetInfo && activeTargetInfo.targetAmount > 0 && (
               <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border-2 border-indigo-500/60 p-3.5 sm:p-4.5 rounded-2xl text-white shadow-md space-y-2.5 animate-fadeIn">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-800/40 pb-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1277,106 +932,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   </div>
                 </div>
               </div>
-            ) : (
-              /* CONSOLIDATED / CATEGORY OVERVIEW STATS CARD */
-              <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border-2 border-indigo-500/40 p-3.5 sm:p-4 rounded-2xl text-white shadow-md space-y-3 animate-fadeIn">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-800/40 pb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/40 shrink-0">
-                      <BarChart3 className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <div>
-                      <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wide">
-                        {selectedCampaignObj 
-                          ? `${selectedCampaignObj.title} • Performance Stats`
-                          : selectedFilter !== 'all' 
-                          ? `${getCategoryDisplayInfo(selectedFilter).shortLabel} Bawm • Overview Stats` 
-                          : 'All Categories Consolidated Stats'}
-                      </span>
-                      <p className="text-[10px] text-slate-300 font-medium">
-                        {selectedCampaignObj 
-                          ? 'Continuous / Open Collection (No Fixed Target Cap)'
-                          : `${availableCampaigns.length} Campaigns • Verified Audit & Collection Breakdown`}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <span className="text-[10.5px] font-extrabold bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xs">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      Total: <b className="text-emerald-300 font-black">₹{grandTotal.toLocaleString('en-IN')}</b>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Metrics 4-box Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
-                    <span className="text-[9.5px] text-indigo-300 font-bold uppercase block">📦 Active Campaigns</span>
-                    <span className="text-sm sm:text-base font-black text-white block mt-0.5">
-                      {selectedCampaignObj ? '1 Campaign' : `${availableCampaigns.length} Bawm`}
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
-                    <span className="text-[9.5px] text-sky-400 font-bold uppercase block">👥 Donors & Txns</span>
-                    <span className="text-sm sm:text-base font-black text-white block mt-0.5">
-                      {uniqueDonorsCount} <span className="text-[10.5px] text-slate-300 font-medium">({totalCount} Txns)</span>
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
-                    <span className="text-[9.5px] text-indigo-300 font-bold uppercase block">⚡ Online (UPI)</span>
-                    <span className="text-sm sm:text-base font-black text-indigo-200 block mt-0.5">
-                      ₹{onlineTotal.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-900/80 border border-indigo-500/30 p-2.5 rounded-xl">
-                    <span className="text-[9.5px] text-amber-400 font-bold uppercase block">💵 Cash (Counter)</span>
-                    <span className="text-sm sm:text-base font-black text-amber-200 block mt-0.5">
-                      ₹{cashTotal.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Category breakdown pills when "All Categories" is selected */}
-                {selectedFilter === 'all' && selectedCampaignId === 'all' && categoryOverviewStats.length > 0 && (
-                  <div className="pt-1 border-t border-indigo-950/80 space-y-1.5">
-                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Category Distribution:
-                    </span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {categoryOverviewStats.map(cat => (
-                        <button
-                          key={cat.key}
-                          type="button"
-                          onClick={() => {
-                            setSelectedFilter(cat.key);
-                            setSelectedCampaignId('all');
-                          }}
-                          className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition hover:scale-105 cursor-pointer flex items-center gap-1.5 ${cat.badgeColor}`}
-                          title={`Click to filter by ${cat.label}`}
-                        >
-                          <span>{cat.label}:</span>
-                          <b className="font-black text-white">₹{cat.total.toLocaleString('en-IN')}</b>
-                          <span className="text-[8.5px] opacity-80">({cat.count} txns)</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Helpful guidance note */}
-                {selectedCampaignId === 'all' && campaignsWithTargetCount > 0 && (
-                  <div className="text-[10px] text-slate-300/90 bg-indigo-950/50 border border-indigo-800/40 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span>
-                      Campaign {campaignsWithTargetCount}-in target ruahman a nei. Individual Target Progress leh completion rate en turin a chunga <b>"My Specific Campaign / QR"</b> ah campaign duh bik thlang rawh le.
-                    </span>
-                  </div>
-                )}
-              </div>
             )}
 
             {/* LIVE MONTHLY TREND BAR CHART (TOGGLEABLE & CUSTOMIZABLE WITH CLEAN FROM - UPTO MONTHS) */}
@@ -1404,36 +959,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     </div>
                   </div>
 
-                  {/* Clean From - Upto Month Selectors, Quick Presets & Paih Button */}
+                  {/* Clean From - Upto Month Selectors & Paih Button */}
                   <div className="flex items-center gap-1.5 flex-wrap justify-between sm:justify-end text-xs">
-                    {/* Quick 1-Click Range Presets */}
-                    <div className="flex items-center gap-1 bg-slate-900/90 border border-indigo-500/30 rounded-xl p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
-                        className={`text-[9.5px] px-2 py-1 rounded-lg font-black transition cursor-pointer ${
-                          chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="Jan – Dec (Calendar Year - Default)"
-                      >
-                        Jan–Dec (Default)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
-                        className={`text-[9.5px] px-2 py-1 rounded-lg font-black transition cursor-pointer ${
-                          chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                        }`}
-                        title="Apr – Mar (Financial Year)"
-                      >
-                        Apr–Mar (Fin Year)
-                      </button>
-                    </div>
-
                     <div className="flex items-center gap-1 bg-slate-900 border border-indigo-500/40 rounded-xl px-2 py-1">
                       <span className="text-[10px] text-indigo-300 font-bold">From:</span>
                       <select
@@ -1619,36 +1146,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
                     {includeMonthlyChart && (
                       <div className="pt-2 border-t border-slate-100 pl-6 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <label className="text-[10.5px] font-bold text-slate-700 block">
-                            Thla Tin Trend Hun Thlanna (From – Upto):
-                          </label>
-                          {/* Quick Range Presets */}
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => { setChartStartMonth('Jan'); setChartEndMonth('Dec'); }}
-                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
-                                chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                              }`}
-                            >
-                              Jan–Dec (Default)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setChartStartMonth('Apr'); setChartEndMonth('Mar'); }}
-                              className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
-                                chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                              }`}
-                            >
-                              Apr–Mar (Fin Year)
-                            </button>
-                          </div>
-                        </div>
+                        <label className="text-[10.5px] font-bold text-slate-700 block">
+                          Thla Tin Trend Hun Thlanna (From – Upto):
+                        </label>
                         <div className="grid grid-cols-2 gap-2 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
                           <div>
                             <label className="text-[10px] font-bold text-indigo-950 block mb-1">From (Start Month)</label>
@@ -1681,40 +1181,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       </div>
                     )}
                   </div>
-
-                  {/* Group By Donor Option (Format 1) */}
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-slate-800">Mi pakhat tlar khatah belhkhawm (Group by Donor)</p>
-                        <p className="text-[10px] text-slate-500">Mi pakhatin vawi tam tak a pek pawhin PDF-ah tlar khatah a total tarlanna</p>
-                      </div>
-                    </div>
-                    <input 
-                      type="checkbox" 
-                      checked={groupByDonor} 
-                      onChange={(e) => setGroupByDonor(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
-                    />
-                  </label>
-
-                  {/* Show Date and Time Option */}
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-slate-800">Date & Hun Column Tarlan (Show Date / Time)</p>
-                        <p className="text-[10px] text-slate-500">PDF table-ah Date & Time / Thla pek hun column dah lan duh tan</p>
-                      </div>
-                    </div>
-                    <input 
-                      type="checkbox" 
-                      checked={showDateTime} 
-                      onChange={(e) => setShowDateTime(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
-                    />
-                  </label>
 
                   {/* Digital Signature Toggle */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 cursor-pointer hover:bg-indigo-50/40 transition">
@@ -1937,22 +1403,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             {row.total.toLocaleString('en-IN')}
                           </td>
                           <td className="py-2 px-2.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => handleEditDonorRow(row.donorName)}
-                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs"
-                                title="Mimal Categories an pek dan siamtha rawh"
-                              >
-                                <Edit3 className="w-3 h-3" /> Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteDonorRow(row.donorName, row.total)}
-                                className="px-1.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-rose-200 shadow-2xs"
-                                title="He donor record leh payment zawng zawng hi paih rawh"
-                              >
-                                <Trash2 className="w-3 h-3 text-rose-600" /> Paih
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => handleEditDonorRow(row.donorName)}
+                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200 shadow-2xs"
+                              title="Mimal Categories an pek dan siamtha rawh"
+                            >
+                              <Edit3 className="w-3 h-3" /> Edit
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1977,56 +1434,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               )}
             </div>
           ) : (
-            /* STANDARD / GROUPED TRANSACTIONS VIEW */
+            /* STANDARD DETAILED TRANSACTIONS LIST VIEW */
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-              {/* View Mode & Column Visibility Toolbar */}
               <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 mr-1">
-                    <Receipt className="w-4 h-4 text-indigo-600" />
-                    <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                      {groupByDonor ? `Donors (${groupedDonorRecords.length})` : `Transactions (${sortedTransactions.length})`}
-                    </h3>
-                  </div>
-                  
-                  {/* Group By Donor Switcher */}
-                  <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-xs">
-                    <button
-                      onClick={() => setGroupByDonor(true)}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer flex items-center gap-1 ${
-                        groupByDonor ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                      title="Mi pakhat pek zawng zawng tlar khatah belhkhawm (Group by donor)"
-                    >
-                      <Users className="w-3 h-3" />
-                      <span>👥 Group by Donor</span>
-                    </button>
-                    <button
-                      onClick={() => setGroupByDonor(false)}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer flex items-center gap-1 ${
-                        !groupByDonor ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                      title="Transaction zawng zawng a mal malin tarlanna (Itemized view)"
-                    >
-                      <Receipt className="w-3 h-3" />
-                      <span>📋 Itemized</span>
-                    </button>
-                  </div>
-
-                  {/* Date Column Toggle */}
-                  <button
-                    onClick={() => setShowDateTime(!showDateTime)}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
-                      showDateTime ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200'
-                    }`}
-                    title="Toggle Date & Time display"
-                  >
-                    <Calendar className="w-3 h-3" />
-                    <span>{showDateTime ? '🕒 Date: Lang' : '🕒 Date: Hliah'}</span>
-                  </button>
+                <div className="flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-indigo-600" />
+                  <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                    Transaction Records ({sortedTransactions.length})
+                  </h3>
                 </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={toggleNameSort}
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
@@ -2059,150 +1476,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   <p className="text-xs font-bold text-slate-700">No transactions match your filters</p>
                   <p className="text-[10px] text-slate-400">Try selecting a different date range or category.</p>
                 </div>
-              ) : groupByDonor ? (
-                /* GROUPED BY DONOR TABLE VIEW */
-                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-800 font-extrabold border-b border-slate-200 text-[11px]">
-                        <th className="py-2.5 px-3 text-center w-10 border-r border-slate-200 text-slate-500">#</th>
-                        <th className="py-2.5 px-3 border-r border-slate-200">
-                          <button
-                            onClick={toggleNameSort}
-                            className="flex items-center gap-1.5 font-black text-slate-900 hover:text-indigo-600 transition cursor-pointer"
-                          >
-                            <span>Petu Hming (Donor)</span>
-                            {sortOrder === 'name-asc' ? (
-                              <ArrowUp className="w-3 h-3 text-indigo-600" />
-                            ) : sortOrder === 'name-desc' ? (
-                              <ArrowDown className="w-3 h-3 text-indigo-600" />
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                            )}
-                          </button>
-                        </th>
-                        <th className="py-2.5 px-2.5 text-center border-r border-slate-200 whitespace-nowrap text-[10px] text-slate-600">Mode</th>
-                        {showDateTime && (
-                          <th className="py-2.5 px-3 border-r border-slate-200 text-slate-700 whitespace-nowrap text-[10.5px]">
-                            Date / Thla Pek Zat
-                          </th>
-                        )}
-                        <th className="py-2.5 px-3 border-r border-slate-200 text-slate-700 text-[10.5px]">
-                          Hman Chhan / Breakdown
-                        </th>
-                        <th className="py-2.5 px-3 text-right bg-indigo-100 text-indigo-950 font-black whitespace-nowrap text-xs">
-                          Total (₹)
-                        </th>
-                        <th className="py-2.5 px-2.5 text-center bg-slate-100 text-slate-700 font-black text-[10.5px] w-24">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 font-medium text-slate-700 text-xs">
-                      {groupedDonorRecords.map((row, idx) => {
-                        const member = scopedMembers.find(m => m.name.toLowerCase().trim() === row.donorName.toLowerCase().trim());
-                        const displayVeng = row.donorSection || member?.section;
-                        const displayId = row.donorMemberId || member?.id;
-
-                        return (
-                          <tr key={idx} className="hover:bg-indigo-50/30 transition-colors">
-                            <td className="py-2.5 px-3 text-center font-mono text-[10px] text-slate-400 border-r border-slate-200">
-                              {idx + 1}
-                            </td>
-                            <td className="py-2.5 px-3 border-r border-slate-200">
-                              <div className="font-bold text-slate-900">{row.donorName}</div>
-                              {(displayVeng || displayId) && (
-                                <div className="text-[10px] text-slate-500 font-normal">
-                                  {displayVeng && <span>{displayVeng}</span>}
-                                  {displayVeng && displayId && <span> • </span>}
-                                  {displayId && <span className="font-mono text-indigo-600 font-bold">#{displayId}</span>}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-2 text-center border-r border-slate-200 whitespace-nowrap">
-                              {row.paymentMethodLabel === 'CASH' ? (
-                                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded">💵 Cash</span>
-                              ) : row.paymentMethodLabel === 'ONLINE' ? (
-                                <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[9px] font-bold px-1.5 py-0.5 rounded">⚡ Online</span>
-                              ) : (
-                                <span className="bg-slate-100 text-slate-800 border border-slate-300 text-[8.5px] font-bold px-1.5 py-0.5 rounded">⚡+💵 Mix ({row.txCount || row.transactionsCount || 1})</span>
-                              )}
-                            </td>
-                            {showDateTime && (
-                              <td className="py-2.5 px-3 border-r border-slate-200 text-[11px] text-slate-600">
-                                {Array.isArray(row.datesPaid) && row.datesPaid.length > 0 && (
-                                  <div className="font-mono text-[10px] text-slate-500">{row.datesPaid.join(', ')}</div>
-                                )}
-                                {Array.isArray(row.monthsPaid) && row.monthsPaid.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {row.monthsPaid.map((m: string) => (
-                                      <span key={m} className="bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded text-[9px] font-bold border border-indigo-100">
-                                        {m}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </td>
-                            )}
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-[11px]">
-                              {row.categoryBreakdown && Object.keys(row.categoryBreakdown).length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {Object.entries(row.categoryBreakdown).map(([cat, amt]) => (
-                                    <span key={cat} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[9.5px] font-medium">
-                                      {cat}: <strong className="font-mono text-slate-900">₹{Number(amt || 0).toLocaleString('en-IN')}</strong>
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-slate-500 italic text-[10px]">General / Uncategorized</span>
-                              )}
-                              {Array.isArray(row.remarks) && row.remarks.length > 0 && (
-                                <div className="text-[10px] text-slate-500 italic mt-0.5 flex items-center gap-1">
-                                  <MessageSquare className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
-                                  <span>{row.remarks.join('; ')}</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-black font-mono text-indigo-950 bg-indigo-50/40 text-xs">
-                              ₹{row.totalAmount.toLocaleString('en-IN')}
-                            </td>
-                            <td className="py-2.5 px-2 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => handleEditDonorRow(row.donorName)}
-                                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs active:scale-95"
-                                  title="Edit all payments, dates and months for this donor"
-                                >
-                                  <Edit3 className="w-3 h-3" /> Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteDonorRow(row.donorName, row.totalAmount)}
-                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-extrabold transition cursor-pointer border border-rose-200 shadow-2xs active:scale-95"
-                                  title="Paih (Delete all payments for this donor)"
-                                >
-                                  <Trash2 className="w-3 h-3 text-rose-600" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-900 text-white font-black text-xs">
-                        <td colSpan={showDateTime ? 5 : 4} className="py-2.5 px-3 uppercase tracking-wider text-right">
-                          GRAND TOTAL ({groupedDonorRecords.length} Donors, {sortedTransactions.length} Payments):
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-emerald-400 bg-slate-950 font-black text-sm">
-                          ₹{groupedDonorRecords.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-2.5 px-2 bg-slate-950"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
               ) : (
-                /* ITEMIZED INDIVIDUAL TRANSACTIONS VIEW */
                 <div className="space-y-2">
                   {sortedTransactions.map((tx) => (
                     <div 
@@ -2228,11 +1502,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             ₹{tx.amount.toLocaleString('en-IN')}
                           </span>
                           <button
-                            onClick={() => handleEditDonorRow(tx.donorName)}
-                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs active:scale-95"
-                            title="Edit transaction / categories / months"
+                            onClick={() => setEditingTransaction(tx)}
+                            className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                            title="Edit transaction / categories"
                           >
-                            <Edit3 className="w-3 h-3" /> Edit
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -2295,93 +1569,25 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         </>
       )}
 
-      {/* MULTI-MONTH & MULTI-PAYMENT DONOR EDITOR MODAL */}
-      {donorPaymentsModalData && (
-        <DonorPaymentsEditorModal
-          donorName={donorPaymentsModalData.donorName}
-          donorMemberId={donorPaymentsModalData.donorMemberId}
-          donorPhone={donorPaymentsModalData.donorPhone}
-          donorSection={donorPaymentsModalData.donorSection}
-          transactions={donorPaymentsModalData.transactions}
-          campaigns={campaigns}
-          activeCampaignId={selectedCampaignId}
-          onClose={() => setDonorPaymentsModalData(null)}
-          onSaveAll={handleSaveAllDonorPayments}
-        />
-      )}
-
-      {/* SINGLE TRANSACTION BACKUP EDIT MODAL */}
+      {/* TRANSACTION & CATEGORY BREAKDOWN EDIT MODAL */}
       {editingTransaction && (
         <EditTransactionModal
           transaction={editingTransaction}
           campaigns={campaigns}
           onClose={() => setEditingTransaction(null)}
           onSave={(updatedTx) => {
-            saveTransaction(updatedTx);
             if (onUpdateTransaction) {
               onUpdateTransaction(updatedTx);
             }
             setEditingTransaction(null);
           }}
           onDelete={(id) => {
-            deleteStoredTransaction(id);
             if (onDeleteTransaction) {
               onDeleteTransaction(id);
             }
             setEditingTransaction(null);
           }}
         />
-      )}
-
-      {/* CONFIRM DELETE DONOR'S ALL TRANSACTIONS MODAL */}
-      {deletingDonorInfo && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-xs animate-fadeIn text-slate-800">
-          <div className="bg-white border border-rose-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl relative my-auto text-center space-y-4">
-            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            
-            <div>
-              <h3 className="text-base font-black text-slate-900">Donor Record Paih I Chiang Em?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                He donor <span className="font-bold text-slate-800">"{deletingDonorInfo.donorName}"</span> record leh transaction zawng zawng ({deletingDonorInfo.txCount} record, Total ₹{deletingDonorInfo.total.toLocaleString('en-IN')}) hi database atangin paih hlen a ni dawn e.
-              </p>
-            </div>
-
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-left text-xs font-medium space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-bold">Donor Hming:</span>
-                <span className="font-black text-rose-950">{deletingDonorInfo.donorName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-bold">Pek Zat Total:</span>
-                <span className="font-black text-rose-950 font-mono">₹{deletingDonorInfo.total.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-rose-700 font-bold">Records Zat:</span>
-                <span className="font-bold text-rose-900">{deletingDonorInfo.txCount} tx</span>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setDeletingDonorInfo(null)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeleteDonorTxs}
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Paih Bo Rawh</span>
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
@@ -2405,48 +1611,21 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onSave,
   onDelete,
 }) => {
-  const initialMonthInfo = getTransactionMonthInfo(transaction);
   const [donorName, setDonorName] = useState<string>(transaction.donorName || '');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(transaction.isAnonymous || false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
   const [status, setStatus] = useState<'completed' | 'pending_verification'>((transaction.status as any) || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
   
-  // Period & Month Editing States
-  const [periodType, setPeriodType] = useState<string>(transaction.periodType || 'monthly');
-  const [periodMonth, setPeriodMonth] = useState<string>(transaction.periodMonth || initialMonthInfo.fullMonth);
-  const [periodQuarter, setPeriodQuarter] = useState<string>(
-    transaction.periodMonth && transaction.periodMonth.includes('Q') ? transaction.periodMonth : 'Q1 (Jan - Mar)'
-  );
-  const [periodYear, setPeriodYear] = useState<string>(transaction.periodYear || initialMonthInfo.year || '2026');
-
   // Breakdown state
   const campaign = campaigns.find(c => c.id === transaction.campaignId);
-  const campaignSubcats = campaign?.subCategories && campaign.subCategories.length > 0 
+  const defaultCategories = campaign?.subCategories && campaign.subCategories.length > 0 
     ? campaign.subCategories 
-    : [];
+    : ['Pathian Ram', 'Mission', 'Building Fund'];
 
-  const initialBreakdown: { [key: string]: number } = {};
-  if (transaction.subCategoryBreakdown && Object.keys(transaction.subCategoryBreakdown).length > 0) {
-    Object.entries(transaction.subCategoryBreakdown).forEach(([k, v]) => {
-      initialBreakdown[k] = Number(v) || 0;
-    });
-  } else if (transaction.subCategory) {
-    initialBreakdown[transaction.subCategory] = transaction.amount || 0;
-  } else if (campaignSubcats.length > 0) {
-    campaignSubcats.forEach((cat, idx) => {
-      initialBreakdown[cat] = idx === 0 ? (transaction.amount || 0) : 0;
-    });
-  } else {
-    initialBreakdown['General Collection'] = transaction.amount || 0;
-  }
-
-  // Also include any campaign defined categories that might not be in the breakdown yet with 0
-  campaignSubcats.forEach(cat => {
-    if (initialBreakdown[cat] === undefined) {
-      initialBreakdown[cat] = 0;
-    }
-  });
+  const initialBreakdown: { [key: string]: number } = transaction.subCategoryBreakdown || {
+    [defaultCategories[0]]: transaction.amount || 0
+  };
 
   const [breakdown, setBreakdown] = useState<{ [key: string]: number }>(initialBreakdown);
   const [newCatName, setNewCatName] = useState<string>('');
@@ -2456,14 +1635,6 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [flatAmount, setFlatAmount] = useState<string>(transaction.amount.toString());
 
   const isKumtluang = transaction.category === 'kumtluang';
-
-  // Compute live computed preview label
-  const livePeriodLabel = useMemo(() => {
-    if (periodType === 'monthly') return `${periodMonth} ${periodYear}`;
-    if (periodType === 'quarterly') return `${periodQuarter} ${periodYear}`;
-    if (periodType === 'yearly') return `${periodYear} (Kumtluan)`;
-    return `${periodMonth} ${periodYear}`;
-  }, [periodType, periodMonth, periodQuarter, periodYear]);
 
   const handleAmountChange = (catName: string, val: string) => {
     const num = parseFloat(val) || 0;
@@ -2499,54 +1670,34 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const platformFee: number = Math.round(currentSubtotal * 0.01);
   const totalAmount: number = currentSubtotal + platformFee;
 
-  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (currentSubtotal <= 0) {
-      const wantDelete = window.confirm('Pek zat hi ₹0 a ni a, he transaction record hi paih (delete) i duh em?');
-      if (wantDelete) {
-        handleConfirmDelete();
-      }
+      alert('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
       return;
     }
 
-    // Filter out 0-amount categories from breakdown to keep data clean
-    const cleanBreakdown: { [k: string]: number } = {};
-    Object.entries(breakdown).forEach(([k, v]) => {
-      const n = Number(v) || 0;
-      if (n > 0) {
-        cleanBreakdown[k] = n;
-      }
-    });
-
-    const primaryCat = Object.keys(cleanBreakdown)[0] || Object.keys(breakdown)[0] || 'General';
-    const finalMonth = periodType === 'monthly' ? periodMonth : periodType === 'quarterly' ? periodQuarter : 'All Months';
-
     const updated: Transaction = {
       ...transaction,
-      donorName: donorName.trim() || 'Unknown Donor',
+      donorName: donorName.trim(),
       isAnonymous: isAnonymous,
       amount: currentSubtotal,
       platformFee: platformFee,
       totalAmount: totalAmount,
       paymentMethod: paymentMethod,
       status: status,
-      subCategory: isKumtluang ? primaryCat : transaction.subCategory,
       remark: remark.trim() || undefined,
-      periodType: periodType,
-      periodMonth: finalMonth,
-      periodYear: periodYear,
-      periodLabel: livePeriodLabel,
-      subCategoryBreakdown: isKumtluang ? (Object.keys(cleanBreakdown).length > 0 ? cleanBreakdown : breakdown) : undefined,
+      subCategoryBreakdown: isKumtluang ? breakdown : undefined,
     };
 
     onSave(updated);
   };
 
-  const handleConfirmDelete = () => {
-    onDelete(transaction.id);
+  const handleDeleteClick = () => {
+    if (window.confirm(`I chiang maw? He transaction (Donor: ${transaction.donorName}, Amount: ₹${transaction.amount}) hi paih hlen a ni dawn e.`)) {
+      onDelete(transaction.id);
+    }
   };
 
   return (
@@ -2593,84 +1744,6 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             />
             <span>Hming thup (Anonymous Donation)</span>
           </label>
-
-          {/* PEK HUN THLA BI / PERIOD SELECTOR */}
-          <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Pek Hun / Thla Bi (Payment Month & Period)</span>
-              </span>
-              <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
-                {livePeriodLabel}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {/* Frequency */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Pek Dan (Type)</label>
-                <select
-                  value={periodType}
-                  onChange={(e) => setPeriodType(e.target.value)}
-                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
-                >
-                  <option value="monthly">Thla tin (Monthly)</option>
-                  <option value="quarterly">Thla 3 dan (Quarterly)</option>
-                  <option value="yearly">Kumtluan (Yearly)</option>
-                  <option value="one_time">Vawi khat pek (One-time)</option>
-                </select>
-              </div>
-
-              {/* Target Year */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Kum (Year)</label>
-                <select
-                  value={periodYear}
-                  onChange={(e) => setPeriodYear(e.target.value)}
-                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
-                >
-                  <option value="2024">2024</option>
-                  <option value="2025">2025</option>
-                  <option value="2026">2026</option>
-                  <option value="2027">2027</option>
-                  <option value="2028">2028</option>
-                  <option value="2029">2029</option>
-                  <option value="2030">2030</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Target Month or Quarter */}
-            {periodType === 'monthly' || periodType === 'one_time' ? (
-              <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Pek Thla (Target Month)</label>
-                <select
-                  value={periodMonth}
-                  onChange={(e) => setPeriodMonth(e.target.value)}
-                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
-                >
-                  {ALL_MONTH_NAMES_FULL.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            ) : periodType === 'quarterly' ? (
-              <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">Quarter (Thla 3 Bi)</label>
-                <select
-                  value={periodQuarter}
-                  onChange={(e) => setPeriodQuarter(e.target.value)}
-                  className="w-full bg-white border border-indigo-200 rounded-xl p-2 font-bold text-slate-900 text-xs focus:border-indigo-600"
-                >
-                  <option value="Q1 (Jan - Mar)">Q1 (Jan - Mar)</option>
-                  <option value="Q2 (Apr - Jun)">Q2 (Apr - Jun)</option>
-                  <option value="Q3 (Jul - Sep)">Q3 (Jul - Sep)</option>
-                  <option value="Q4 (Oct - Dec)">Q4 (Oct - Dec)</option>
-                </select>
-              </div>
-            ) : null}
-          </div>
 
           {/* KUMTLUANG SUB-CATEGORIES ALLOCATION */}
           {isKumtluang ? (
@@ -2815,37 +1888,13 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </button>
             </div>
 
-            {confirmDelete ? (
-              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-center space-y-2 animate-fadeIn">
-                <p className="text-xs font-bold text-rose-900">
-                  I chiang chiah em? He transaction record (₹{transaction.amount?.toLocaleString('en-IN')}) hi paih hlen a ni dawn e.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="flex-1 bg-white border border-slate-200 text-slate-700 font-bold py-1.5 rounded-lg text-xs hover:bg-slate-50 transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmDelete}
-                    className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Paih Bo Rawh
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
+            </button>
           </div>
         </form>
       </div>

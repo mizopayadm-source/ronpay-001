@@ -1,5 +1,6 @@
 export type ScreenId = 
   | 'home' 
+  | 'website'
   | 'explorer' 
   | 'checkout' 
   | 'create_qr' 
@@ -12,7 +13,7 @@ export type BawmCategory = 'ralna' | 'khawlsak' | 'rikrum' | 'kumtluang' | 'othe
 
 export type PaymentStatus = 'paid' | 'pending' | 'pending_verification' | 'partial' | 'completed' | 'failed' | 'rejected';
 
-export type PaymentMethod = 'phonepe' | 'online' | 'cash' | 'upi' | 'bank_transfer' | 'qr_scan';
+export type PaymentMethod = 'online' | 'cash' | 'upi' | 'bank_transfer' | 'qr_scan' | 'phonepe';
 
 export interface BawmInfo {
   key: BawmCategory;
@@ -25,6 +26,8 @@ export interface BawmInfo {
   textDark: string;
   accent: string;
 }
+
+export type FeeOptionMode = 'ADD_ON' | 'DEDUCT' | 'DONOR_CHOICE';
 
 export interface Campaign {
   id: string;
@@ -44,7 +47,9 @@ export interface Campaign {
   vuiHun?: string;
   vuitu?: string;
   validityDate?: string;
-  status?: 'active' | 'completed' | 'expired' | 'pending' | 'pending_approval' | 'rejected' | 'voided' | 'cancelled' | string;
+  status?: 'active' | 'completed' | 'expired' | 'pending' | 'pending_approval' | 'rejected' | 'cancelled' | 'archived' | string;
+  deletionReason?: string;
+  cancelledAt?: string;
   createdAt?: string;
   createdBy?: string;
   creatorName?: string;
@@ -58,6 +63,7 @@ export interface Campaign {
   subCategories?: string[];
   trxnFeeBearer?: 'user_paid' | 'creator_paid' | string;
   kumtluangFeeBearer?: string;
+  feeOptionRule?: FeeOptionMode;
   sectionLabel?: string;
   definedSections?: string[];
   contactPerson?: string;
@@ -72,11 +78,10 @@ export interface Campaign {
   targetPeriod?: string;
   customPlatformFeePercent?: number;
   customFreeTrialActive?: boolean;
-  // Safety Net & Audit fields
   isVoided?: boolean;
+  voidReason?: string;
   voidedAt?: string;
   voidedBy?: string;
-  voidReason?: string;
   updatedAt?: string;
   lastEditedBy?: string;
   lastEditReason?: string;
@@ -98,6 +103,8 @@ export interface Transaction {
   amount: number;
   platformFee?: number;
   platformFeeBearer?: string;
+  feeOption?: 'ADD_ON' | 'DEDUCT' | string;
+  campaignNetReceived?: number;
   totalAmount?: number;
   paymentMethod: PaymentMethod | string;
   status: 'completed' | 'pending' | 'pending_verification' | 'failed' | 'rejected' | string;
@@ -114,15 +121,14 @@ export interface Transaction {
   referenceNo?: string;
   utrRef?: string;
   utr?: string;
+  rejectionReason?: string;
+  rejectedAt?: string;
   payerUPI?: string;
   billServiceType?: string;
   billConsumerNumber?: string;
   billOperator?: string;
   verifiedBy?: string;
   verifiedAt?: string;
-  rejectedBy?: string;
-  rejectedAt?: string;
-  rejectionReason?: string;
 }
 
 export interface CategoryRequest {
@@ -135,27 +141,6 @@ export interface CategoryRequest {
   status?: 'pending' | 'approved' | 'rejected';
 }
 
-export type UserRole = 
-  | 'SUPER_ADMIN' 
-  | 'ADMIN' 
-  | 'MODERATOR' 
-  | 'CREATOR' 
-  | 'MEMBER' 
-  | 'GUEST';
-
-export interface RolePermissions {
-  canAccessCreatorVerification: boolean;
-  canModerateContent: boolean;
-  canViewFinancialReports: boolean;
-  canManagePlatformFinancials: boolean;
-  canManagePayoutConfigs: boolean;
-  canManageAdminAccounts: boolean;
-  canManageSystemBackups: boolean;
-  canManageAnnouncements: boolean;
-  canCreateCampaigns: boolean;
-  canAccessAdminConsole: boolean;
-}
-
 export interface CreatorProfile {
   phone: string;
   name: string;
@@ -163,7 +148,7 @@ export interface CreatorProfile {
   orgName?: string;
   location?: string;
   upiId?: string;
-  role?: UserRole | string;
+  role?: string;
   isApproved?: boolean;
   isAdmin?: boolean;
   isPhoneVerified?: boolean;
@@ -194,6 +179,7 @@ export interface CreatorProfile {
   authDocUrl?: string;
   logoUrl?: string;
   avatarUrl?: string;
+  defaultFeeOptionRule?: FeeOptionMode;
 }
 
 export interface SystemPricingConfig {
@@ -201,6 +187,8 @@ export interface SystemPricingConfig {
   globalTrialDays?: number;
   fixedFeePerTxn?: number;
   percentageFeePerTxn?: number;
+  defaultFeeOptionRule?: FeeOptionMode;
+  allowDonorFeeChoice?: boolean;
   maxFreeCampaigns?: number;
   standardMonthlyCost?: number;
   premiumYearlyCost?: number;
@@ -223,10 +211,92 @@ export interface AuditLog {
   id: string;
   action: string;
   details: string;
-  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement';
+  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement' | 'staff' | 'report';
   targetId?: string;
   performedBy: string;
   timestamp: string;
+}
+
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'CREATOR' | 'MEMBER' | 'GUEST';
+
+export type PermissionKey =
+  | 'MANAGE_STAFF_ACCOUNTS'
+  | 'MANAGE_PLATFORM_CONFIGS'
+  | 'MANAGE_PAYOUT_RATES'
+  | 'VIEW_FINANCIAL_REPORTS'
+  | 'HANDLE_DISPUTES'
+  | 'APPROVE_CAMPAIGNS'
+  | 'DELETE_ANY_CAMPAIGN'
+  | 'VERIFY_CREATOR_KYC'
+  | 'MODERATE_CONTENT'
+  | 'REVIEW_REPORTS'
+  | 'CREATE_CAMPAIGNS'
+  | 'MANAGE_MEMBER_ROLLS'
+  | 'MAKE_DONATIONS'
+  | 'VIEW_OWN_HISTORY'
+  | 'BACKUP_RESTORE_DB'
+  | 'system:full_control'
+  | 'system:backup_restore'
+  | 'pricing:manage'
+  | 'staff:manage'
+  | 'campaigns:manage'
+  | 'campaigns:review_qr'
+  | 'campaigns:approve'
+  | 'campaigns:delete'
+  | 'campaigns:suspend'
+  | 'creators:verify_kyc'
+  | 'creators:manage'
+  | 'creators:assign_plan'
+  | 'moderation:reports_desk'
+  | 'moderation:ban_users'
+  | 'finances:view_reports'
+  | 'finances:export_data'
+  | 'finances:manage_payouts'
+  | 'announcements:manage'
+  | 'audit:view_logs'
+  | 'campaigns:create'
+  | 'campaigns:manage_own'
+  | 'members:manage_roll'
+  | 'members:import_export'
+  | 'payments:make'
+  | 'history:view_own'
+  | 'profile:manage_own'
+  | 'public:browse_campaigns'
+  | 'public:scan_qr';
+
+export interface StaffAccount {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  designation?: string;
+  isActive: boolean;
+  assignedZone?: string;
+  assignedAt?: string;
+  assignedBy?: string;
+  avatarUrl?: string;
+  notes?: string;
+  lastLogin?: string;
+  lastLoginAt?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export interface ContentReport {
+  id: string;
+  targetType: 'campaign' | 'creator' | 'member';
+  targetId: string;
+  targetTitle: string;
+  reason: 'fraud' | 'misleading' | 'inappropriate' | 'unauthorized_collection' | 'offensive' | 'other';
+  description: string;
+  reporterName: string;
+  reporterPhone: string;
+  status: 'pending' | 'resolved' | 'dismissed';
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  resolutionNotes?: string;
 }
 
 export interface AnnouncementItem {
@@ -389,43 +459,28 @@ export interface AIHriatpuiVerificationReport {
   remarksInMizo: string;
 }
 
-export type PGProvider = 'phonepe_pg' | 'razorpay' | 'cashfree' | 'payu' | 'custom_upi' | 'phonepe' | 'custom';
-export type PGMode = 'direct_upi' | 'pg_merchant';
-export type PGEnvironment = 'sandbox' | 'production';
+export type PGMode = 'direct_upi' | 'pg_merchant' | 'SANDBOX' | 'PRODUCTION';
+export type PGProvider = 'phonepe_pg' | 'razorpay' | 'cashfree' | 'payu' | 'custom_upi' | 'PHONEPE';
+export type PGEnvironment = 'sandbox' | 'production' | 'UAT' | 'SIMULATOR';
 
 export interface PaymentGatewayConfig {
-  mode: PGMode;
-  provider: PGProvider;
-  environment: PGEnvironment;
+  mode: PGMode | string;
+  provider: PGProvider | string;
+  environment: PGEnvironment | string;
   merchantId: string;
   keyId: string;
   keySecret: string;
-  saltKey?: string;
-  saltIndex?: string;
-  callbackUrl?: string;
-  webhookSecret: string;
   webhookEndpoint: string;
-  isKycSubmitted: boolean;
-  kycStatus: 'draft' | 'under_review' | 'verified' | 'action_required';
-  businessPan?: string;
-  businessGst?: string;
-  settlementAccount?: string;
-  settlementIfsc?: string;
-  autoRefundDuplicateMinutes: number;
+  saltKey?: string;
+  saltIndex?: number;
+  webhookSecret?: string;
+  isEnabled?: boolean;
+  isAutoSplitEnabled?: boolean;
+  ronpaySplitPercent?: number;
+  minTransactionAmount?: number;
+  maxTransactionAmount?: number;
+  callbackUrl?: string;
   updatedAt?: string;
-}
-
-export interface RonPayNativeBridge {
-  getBase64FromBlobData?: (base64Data: string, mimeType: string, fileName: string) => void;
-  shareFileToWhatsApp?: (base64Data: string, mimeType: string, fileName: string, summaryText: string) => void;
-}
-
-declare global {
-  interface Window {
-    RonPayBridge?: RonPayNativeBridge;
-    AndroidBlobDownloader?: RonPayNativeBridge;
-    AndroidDownloader?: RonPayNativeBridge;
-  }
 }
 
 

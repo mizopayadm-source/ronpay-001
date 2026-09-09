@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Ribbon, 
@@ -31,17 +31,14 @@ import {
   Save,
   Receipt,
   Smartphone,
-  Ban
+  Percent
 } from 'lucide-react';
-import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent } from '../types';
+import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { getMembers, addOrUpdateMember } from '../utils/storage';
-import { UPIIntentModal } from './UPIIntentModal';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
-import { validateUpiId } from '../utils/upi';
-import { ALL_MONTH_NAMES_FULL } from '../utils/monthHelper';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -53,8 +50,8 @@ interface CheckoutScreenProps {
   onOpenPhonePePortal?: () => void;
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
   language?: Language;
-  initialOpenPhonePeCheckout?: boolean;
   initialAmount?: number;
+  initialOpenPhonePeCheckout?: boolean;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -67,27 +64,64 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   onOpenPhonePePortal,
   onPreviewImage,
   language = 'mizo',
-  initialOpenPhonePeCheckout = false,
   initialAmount,
+  initialOpenPhonePeCheckout,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
-  const [standardAmount, setStandardAmount] = useState<number>(() => initialAmount || (campaign?.customAmount && campaign.customAmount > 0 ? campaign.customAmount : 100));
-  const [donorName, setDonorName] = useState<string>(() => initialOpenPhonePeCheckout ? 'PhonePe UAT Reviewer' : '');
-  const [remark, setRemark] = useState<string>(() => initialOpenPhonePeCheckout ? 'UAT End-to-End Test Transaction' : '');
+  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
+
+  useEffect(() => {
+    if (initialOpenPhonePeCheckout) {
+      setPaymentMethod('phonepe');
+      setIsPhonePeCheckoutOpen(true);
+    }
+  }, [initialOpenPhonePeCheckout]);
+
+  // Multi-tier Fee Mode resolution:
+  // Level 1: Bawm / Campaign specific override (campaign.feeOptionRule)
+  // Level 2: System / PricingConfig default (pricingConfig.defaultFeeOptionRule)
+  // Level 3: Fallback 'ADD_ON'
+  const effectiveFeeMode: FeeOptionMode = useMemo(() => {
+    if (campaign?.feeOptionRule) {
+      return campaign.feeOptionRule;
+    }
+    if (pricingConfig?.defaultFeeOptionRule) {
+      return pricingConfig.defaultFeeOptionRule;
+    }
+    return 'ADD_ON';
+  }, [campaign?.feeOptionRule, pricingConfig?.defaultFeeOptionRule]);
+
+  const [feeBearerOption, setFeeBearerOption] = useState<'ADD_ON' | 'DEDUCT'>(() => {
+    if (campaign?.feeOptionRule === 'DEDUCT' || pricingConfig?.defaultFeeOptionRule === 'DEDUCT') {
+      return 'DEDUCT';
+    }
+    return 'ADD_ON';
+  });
+
+  useEffect(() => {
+    if (effectiveFeeMode === 'ADD_ON') {
+      setFeeBearerOption('ADD_ON');
+    } else if (effectiveFeeMode === 'DEDUCT') {
+      setFeeBearerOption('DEDUCT');
+    }
+  }, [effectiveFeeMode]);
+  const [standardAmount, setStandardAmount] = useState<number>(() => initialAmount || 500);
+  const [donorName, setDonorName] = useState<string>('');
+  const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
-  const [donorSection, setDonorSection] = useState<string>('');
+  const [donorSection, setDonorSection] = useState<string>('Bial 1 (Vengchhak)');
   const [phoneSearchQuery, setPhoneSearchQuery] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId (e.g. EBE-1460-01)
   const [isNewMemberMode, setIsNewMemberMode] = useState<boolean>(false);
   const [newRegName, setNewRegName] = useState<string>('');
   const [newRegPhone, setNewRegPhone] = useState<string>('');
-  const [newRegSection, setNewRegSection] = useState<string>('');
+  const [newRegSection, setNewRegSection] = useState<string>('Bial 1 (Vengchhak)');
   const [isCustomSection, setIsCustomSection] = useState<boolean>(false);
   const [customSectionText, setCustomSectionText] = useState<string>('');
   const [newDependentName, setNewDependentName] = useState<string>('');
@@ -106,37 +140,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const t = TRANSLATIONS[language];
 
-  // Dynamic date calculations for Current Month, Quarter, and Year
-  const now = new Date();
-  const currentMonthIdx = now.getMonth();
-  const currentMonthName = ALL_MONTH_NAMES_FULL[currentMonthIdx] || 'September';
-  const currentYearNum = now.getFullYear();
-  const currentYearStr = String(currentYearNum);
-  const currentQuarterName = currentMonthIdx <= 2 
-    ? 'Q1 (Jan - Mar)' 
-    : currentMonthIdx <= 5 
-    ? 'Q2 (Apr - Jun)' 
-    : currentMonthIdx <= 8 
-    ? 'Q3 (Jul - Sep)' 
-    : 'Q4 (Oct - Dec)';
-
-  // Selectable years: Past years (for clearing past dues/records) + Current Year + Upcoming Years
-  const availableYears = [
-    String(currentYearNum - 4), // 2022
-    String(currentYearNum - 3), // 2023
-    String(currentYearNum - 2), // 2024
-    String(currentYearNum - 1), // 2025
-    currentYearStr,             // 2026 (Current)
-    String(currentYearNum + 1), // 2027
-    String(currentYearNum + 2), // 2028
-    String(currentYearNum + 3), // 2029
-  ];
-
-  // Kumtluang period & frequency selection (Defaults to Current Month and Current Year)
+  // Kumtluang period & frequency selection
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthName);
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => currentQuarterName);
-  const [selectedYear, setSelectedYear] = useState<string>(() => currentYearStr);
+  const [selectedMonth, setSelectedMonth] = useState<string>('August');
+  const [selectedQuarter, setSelectedQuarter] = useState<string>('Q3 (Jul - Sep)');
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
 
   // Kumtluang subcategory breakdown
   const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
@@ -145,24 +153,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     'Building Fund': 200,
   });
 
-  const [isUPIIntentOpen, setIsUPIIntentOpen] = useState<boolean>(false);
-  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => initialOpenPhonePeCheckout);
-  const [pendingDonorDetails, setPendingDonorDetails] = useState<{
-    donorName: string;
-    donorPhone?: string;
-    donorVeng?: string;
-    memberId?: string;
-    subId?: string;
-    isDependent?: boolean;
-  }>({
-    donorName: initialOpenPhonePeCheckout ? 'PhonePe UAT Reviewer' : 'Valued Donor',
-    donorPhone: initialOpenPhonePeCheckout ? '9862300000' : undefined,
-    donorVeng: initialOpenPhonePeCheckout ? 'Aizawl' : undefined
-  });
-
   const config = BAWM_CONFIG[category];
-  const isVoided = campaign?.status === 'voided' || !!campaign?.isVoided;
-  const isExpired = !isVoided && isCampaignExpired(campaign?.validityDate, campaign?.status);
+  const isExpired = isCampaignExpired(campaign?.validityDate, campaign?.status);
   const isPendingApproval = campaign?.status === 'pending_approval';
   const isRejected = campaign?.status === 'rejected';
 
@@ -317,21 +309,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setEditMemberPhone(selectedMember.fullPhone || selectedMember.phoneLast4);
     
     const currentSec = selectedMember.section || '';
-    const hasDefinedSections = Boolean(campaign?.definedSections && campaign.definedSections.length > 0);
+    const isCustom = campaign?.definedSections && campaign.definedSections.length > 0
+      ? !campaign.definedSections.includes(currentSec)
+      : false;
     
-    if (hasDefinedSections) {
-      const isCustom = !campaign!.definedSections!.includes(currentSec);
-      if (isCustom && currentSec) {
-        setIsEditCustomSection(true);
-        setEditCustomSectionText(currentSec);
-        setEditMemberSection('__custom__');
-      } else {
-        setIsEditCustomSection(false);
-        setEditMemberSection(currentSec || campaign!.definedSections![0]);
-      }
+    if (isCustom && currentSec) {
+      setIsEditCustomSection(true);
+      setEditCustomSectionText(currentSec);
+      setEditMemberSection('__custom__');
     } else {
       setIsEditCustomSection(false);
-      setEditMemberSection(currentSec || '');
+      setEditMemberSection(currentSec || campaign?.definedSections?.[0] || 'General');
     }
 
     setEditMemberDependents(selectedMember.dependents ? JSON.parse(JSON.stringify(selectedMember.dependents)) : []);
@@ -346,9 +334,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     const cleanPhone = editMemberPhone.replace(/\D/g, '');
     const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : selectedMember.phoneLast4;
-    const finalSection = campaign?.definedSections && campaign.definedSections.length > 0
-      ? (isEditCustomSection ? editCustomSectionText.trim() : editMemberSection.trim())
-      : (selectedMember.section || undefined);
+    const finalSection = isEditCustomSection 
+      ? (editCustomSectionText.trim() || 'General') 
+      : (editMemberSection || 'General');
 
     const updated: MemberRecord = {
       ...selectedMember,
@@ -421,7 +409,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   let feeRatePercent = 0;
   let fixedFee = 0;
 
-  if (paymentMethod === 'online' || paymentMethod === 'phonepe') {
+  const isOnlinePayment = paymentMethod === 'online' || paymentMethod === 'phonepe';
+
+  if (isOnlinePayment) {
     if (isFreeTrial) {
       feeRatePercent = 0;
       fixedFee = 0;
@@ -442,8 +432,25 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     fixedFee = 0;
   }
 
-  const platformFee = Math.round((subtotal * (feeRatePercent / 100)) + fixedFee);
-  const totalPayable = subtotal + platformFee;
+  const basePlatformFee = feeRatePercent > 0 
+    ? Math.max(1, Math.round((subtotal * (feeRatePercent / 100)) + fixedFee))
+    : 0;
+  const platformFee = (isOnlinePayment && feeRatePercent > 0) ? basePlatformFee : 0;
+
+  // Split API rule:
+  // ADD_ON: Donor pays subtotal + fee (e.g. 100 + 1 = 101), Campaign receives full 100
+  // DEDUCT: Donor pays subtotal (e.g. 100 = 99 + 1), Campaign receives 99 (net), fee 1
+  const totalPayable = paymentMethod === 'cash'
+    ? subtotal
+    : feeBearerOption === 'ADD_ON'
+      ? subtotal + platformFee
+      : subtotal;
+
+  const campaignNetReceived = paymentMethod === 'cash'
+    ? subtotal
+    : feeBearerOption === 'ADD_ON'
+      ? subtotal
+      : Math.max(0, subtotal - platformFee);
 
   const openGoogleMaps = () => {
     const coords = campaign?.gpsCoords || "23.7271, 92.7176";
@@ -463,10 +470,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const handleProcessPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isVoided) {
-      alert('⛔ He Bawm (Campaign) hi cancel & void a nih tawh avangin sum pek luh theih a ni tawh lo.');
-      return;
-    }
     if (isPendingApproval) {
       alert('⚠️ He Bawm / QR Code hi Admin-in a la approve loh avangin sum thawh theih a la ni rih lo. Admin approve a nih veleh a active nghal ang.');
       return;
@@ -527,33 +530,52 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     if (paymentMethod === 'phonepe') {
       setIsProcessing(false);
-      setPendingDonorDetails({
-        donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-        donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
-        donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
-        memberId: isAnonymous ? undefined : resolvedMemberId,
-        subId: isAnonymous ? undefined : resolvedSubId,
-        isDependent: isAnonymous ? false : resolvedIsDependent,
-      });
       setIsPhonePeCheckoutOpen(true);
       return;
     }
 
+    setIsProcessing(true);
+
     if (paymentMethod === 'online') {
-      setIsProcessing(false);
-      setPendingDonorDetails({
-        donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-        donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
-        donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
-        memberId: isAnonymous ? undefined : resolvedMemberId,
-        subId: isAnonymous ? undefined : resolvedSubId,
-        isDependent: isAnonymous ? false : resolvedIsDependent,
-      });
-      setIsUPIIntentOpen(true);
-      return;
+      setPhonePeStatus('CALLING_PG');
+
+      setTimeout(() => {
+        setPhonePeStatus('SUCCESS');
+
+        setTimeout(() => {
+          const transaction: Transaction = {
+            id: 'RPAY-' + Math.floor(100000 + Math.random() * 900000),
+            campaignId: campaign?.id || `cmp-${category}-custom`,
+            campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
+            category: category,
+            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+            memberId: isAnonymous ? undefined : resolvedMemberId,
+            subId: isAnonymous ? undefined : resolvedSubId,
+            isDependent: isAnonymous ? false : resolvedIsDependent,
+            isAnonymous: isAnonymous,
+            amount: subtotal,
+            platformFee: platformFee,
+            feeOption: feeBearerOption,
+            campaignNetReceived: campaignNetReceived,
+            totalAmount: totalPayable,
+            paymentMethod: 'online',
+            status: 'completed',
+            remark: remark.trim() || undefined,
+            subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
+            periodType: category === 'kumtluang' ? periodType : undefined,
+            periodLabel: category === 'kumtluang' ? periodLabel : undefined,
+            timestamp: new Date().toISOString(),
+            txHash: 'UPI' + Math.random().toString(36).substring(2, 12).toUpperCase(),
+          };
+
+          setIsProcessing(false);
+          onPaymentSuccess(transaction);
+        }, 900);
+      }, 1200);
     } else {
       // Cash payment
-      setIsProcessing(true);
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
         campaignId: campaign?.id || `cmp-${category}-custom`,
@@ -574,8 +596,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         remark: remark.trim() || undefined,
         subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
-        periodMonth: category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined,
-        periodYear: category === 'kumtluang' ? selectedYear : undefined,
         periodLabel: category === 'kumtluang' ? periodLabel : undefined,
         timestamp: new Date().toISOString(),
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
@@ -610,22 +630,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {config.name}
         </span>
       </div>
-
-      {/* Voided / Cancelled Notice */}
-      {isVoided && (
-        <div className="bg-rose-50 border-2 border-rose-400 p-4 rounded-2xl shadow-xs space-y-1 text-rose-950">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-rose-600 text-white rounded-xl">
-              <Ban className="w-4 h-4" />
-            </span>
-            <h4 className="text-xs font-black uppercase text-rose-950">Bawm (Campaign) Tihtawp / Cancel A Ni</h4>
-          </div>
-          <p className="text-xs font-medium text-rose-900 leading-snug">
-            He Bawm (Campaign) hi tihtawp (voided & cancelled) a ni tawh a, pawisa chhun luh / thawh theih a ni tawh lo.
-            {campaign?.voidReason ? ` (Chhan: ${campaign.voidReason})` : ''}
-          </p>
-        </div>
-      )}
 
       {/* Pending Approval / Inactive Notice (Request 7) */}
       {isPendingApproval && (
@@ -781,26 +785,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <p className="text-[11px] text-slate-600 bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100 font-medium">
               {translateDynamicText(campaign?.cause || 'Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.', language)}
             </p>
-            {(Boolean(campaign?.targetAmount && campaign.targetAmount > 0) || Boolean(campaign?.maxLimit && campaign.maxLimit > 0)) && (
-              <div className={`grid gap-2 text-center text-[11px] ${
-                (campaign?.targetAmount && campaign.targetAmount > 0) && (campaign?.maxLimit && campaign.maxLimit > 0)
-                  ? 'grid-cols-2'
-                  : 'grid-cols-1'
-              }`}>
-                {Boolean(campaign?.targetAmount && campaign.targetAmount > 0) && (
-                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
-                    <span className="font-black text-slate-900">₹{campaign!.targetAmount!.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                {Boolean(campaign?.maxLimit && campaign.maxLimit > 0) && (
-                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
-                    <span className="font-black text-slate-900">₹{campaign!.maxLimit!.toLocaleString('en-IN')}</span>
-                  </div>
-                )}
+            <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'TARGET GOAL' : 'TARGET AMOUNT'}</span>
+                <span className="font-black text-slate-900">₹{(campaign?.targetAmount || 50000).toLocaleString('en-IN')}</span>
               </div>
-            )}
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                <span className="text-[9px] text-slate-400 block font-bold">{language === 'english' ? 'MAX LIMIT / DONOR' : 'MAX LIMIT / DONOR'}</span>
+                <span className="font-black text-slate-900">₹{(campaign?.maxLimit || 100000).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1106,32 +1100,33 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                         </div>
                       </div>
 
-                      {campaign?.definedSections && campaign.definedSections.length > 0 && (
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                            {campaign?.sectionLabel || 'Bial / Section / Veng'}
-                          </label>
-                          <select
-                            value={isEditCustomSection ? '__custom__' : editMemberSection}
-                            onChange={(e) => {
-                              if (e.target.value === '__custom__') {
-                                setIsEditCustomSection(true);
-                              } else {
-                                setIsEditCustomSection(false);
-                                setEditMemberSection(e.target.value);
-                              }
-                            }}
-                            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
-                          >
-                            {campaign.definedSections.map((sec, idx) => (
-                              <option key={idx} value={sec}>
-                                {sec}
-                              </option>
-                            ))}
-                            <option value="__custom__">+ Custom (Ziah luh thar)...</option>
-                          </select>
-                        </div>
-                      )}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                        </label>
+                        <select
+                          value={isEditCustomSection ? '__custom__' : editMemberSection}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setIsEditCustomSection(true);
+                            } else {
+                              setIsEditCustomSection(false);
+                              setEditMemberSection(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                        >
+                          {(campaign?.definedSections && campaign.definedSections.length > 0
+                            ? campaign.definedSections
+                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>
+                              {sec}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                        </select>
+                      </div>
 
                       {isEditCustomSection && (
                         <div>
@@ -1371,37 +1366,37 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                           className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
                         />
                       </div>
-                      {campaign?.definedSections && campaign.definedSections.length > 0 && (
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                            {campaign?.sectionLabel || 'Bial / Section / Veng'}
-                          </label>
-                          <select
-                            value={isCustomSection ? '__custom__' : newRegSection}
-                            onChange={(e) => {
-                              if (e.target.value === '__custom__') {
-                                setIsCustomSection(true);
-                              } else {
-                                setIsCustomSection(false);
-                                setNewRegSection(e.target.value);
-                                setDonorSection(e.target.value);
-                              }
-                            }}
-                            className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
-                          >
-                            <option value="">-- Thlang Rawh ({campaign.sectionLabel || 'Bial / Section'}) --</option>
-                            {campaign.definedSections.map((sec, idx) => (
-                              <option key={idx} value={sec}>
-                                {sec}
-                              </option>
-                            ))}
-                            <option value="__custom__">+ Custom (Ziah luh thar)...</option>
-                          </select>
-                        </div>
-                      )}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          {campaign?.sectionLabel || 'Bial / Section / Veng'}
+                        </label>
+                        <select
+                          value={isCustomSection ? '__custom__' : newRegSection}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setIsCustomSection(true);
+                            } else {
+                              setIsCustomSection(false);
+                              setNewRegSection(e.target.value);
+                              setDonorSection(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
+                        >
+                          {(campaign?.definedSections && campaign.definedSections.length > 0
+                            ? campaign.definedSections
+                            : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                          ).map((sec, idx) => (
+                            <option key={idx} value={sec}>
+                              {sec}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Custom (Ziah luh thar)...</option>
+                        </select>
+                      </div>
                     </div>
 
-                    {campaign?.definedSections && campaign.definedSections.length > 0 && isCustomSection && (
+                    {isCustomSection && (
                       <div className="pt-1">
                         <label className="text-[10px] font-bold text-blue-900 block mb-0.5">
                           Custom {campaign?.sectionLabel || 'Bial / Section'} Hming Ziak Rawh:
@@ -1477,31 +1472,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 />
               </div>
             )
-          )}
-
-          {category !== 'kumtluang' && !isAnonymous && (
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block mb-1">
-                WhatsApp Phone Number (Receipt dawn nan - Optional)
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
-                  +91
-                </div>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  value={donorPhone}
-                  onChange={(e) => setDonorPhone(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 9862300000 (WhatsApp Digital Receipt a thleng ang)"
-                  className="w-full pl-11 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
-                />
-              </div>
-              <p className="text-[9.5px] text-emerald-700 mt-1 flex items-center gap-1 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]"></span>
-                <span>Payment i tihfel veleh official WhatsApp Digital Receipt i dawng nghal theih nan.</span>
-              </p>
-            </div>
           )}
 
           {category !== 'kumtluang' && (
@@ -1584,12 +1554,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     <select
                       value={selectedMonth}
                       onChange={(e) => setSelectedMonth(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                     >
-                      {ALL_MONTH_NAMES_FULL.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
+                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                        <option key={m} value={m}>{m}</option>
                       ))}
                     </select>
                   </div>
@@ -1601,7 +1569,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     <select
                       value={selectedQuarter}
                       onChange={(e) => setSelectedQuarter(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                     >
                       <option value="Q1 (Jan - Mar)">Q1 (January - March)</option>
                       <option value="Q2 (Apr - Jun)">Q2 (April - June)</option>
@@ -1616,12 +1584,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600 shadow-xs"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
                   >
-                    {availableYears.map(yr => (
-                      <option key={yr} value={yr}>
-                        {yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}
-                      </option>
+                    {['2025', '2026', '2027', '2028'].map(yr => (
+                      <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -1684,111 +1650,94 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         </div>
 
         {/* Payment Method Selector */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs space-y-3">
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
           <div className="flex items-center justify-between">
             <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-              Payment Mode (PG / UPI / Cash)
+              Payment Mode
             </h4>
-            <span className="text-[9.5px] bg-purple-100 text-purple-900 font-extrabold px-2 py-0.5 rounded-full border border-purple-300">
-              ⚡ PhonePe PG V2 Live
+            <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-bold">
+              PhonePe TSP Verified
             </span>
           </div>
 
-          {/* PhonePe Partner UAT Notice Ribbon */}
-          <div className="bg-purple-50/70 border border-purple-200 rounded-2xl p-2.5 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-[#5f259f] text-white flex items-center justify-center shrink-0">
-                <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-              </div>
-              <div className="leading-tight">
-                <p className="text-[10.5px] font-extrabold text-purple-950">PhonePe Payment Gateway (PG V2)</p>
-                <p className="text-[9px] text-purple-700 font-medium">MID: TSPMIZOPAYUAT • TSP Headers & Webhook Active</p>
-              </div>
-            </div>
-
-            {onOpenPhonePePortal && (
-              <button
-                type="button"
-                onClick={onOpenPhonePePortal}
-                className="text-[9.5px] font-extrabold text-[#5f259f] hover:underline bg-white px-2 py-1 rounded-xl border border-purple-200 shadow-2xs cursor-pointer shrink-0"
-              >
-                TSP Specs
-              </button>
-            )}
-          </div>
-
           <div className="grid grid-cols-3 gap-2">
-            {/* Option 1: PhonePe PG V2 */}
+            {/* 1. PhonePe PG V2 */}
             <button
               type="button"
-              onClick={() => setPaymentMethod('phonepe')}
-              className={`p-2.5 sm:p-3 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between relative ${
+              onClick={() => {
+                setPaymentMethod('phonepe');
+              }}
+              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'phonepe'
-                  ? 'bg-purple-50/90 border-[#5f259f] ring-2 ring-[#5f259f] shadow-xs text-purple-950'
+                  ? 'bg-purple-50/90 border-purple-600 shadow-xs text-purple-950 ring-2 ring-purple-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="w-5 h-5 rounded-md bg-[#5f259f] text-white flex items-center justify-center">
-                  <Zap className="w-3 h-3 text-amber-300 fill-amber-300" />
-                </div>
-                {paymentMethod === 'phonepe' && <CheckCircle2 className="w-4 h-4 text-[#5f259f]" />}
+              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
+                paymentMethod === 'phonepe' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+              }`}>
+                <Smartphone className="w-4 h-4" />
               </div>
-              <div>
-                <span className="text-[8.5px] bg-purple-200/80 text-purple-950 font-black px-1.5 py-0.2 rounded uppercase">
-                  Official PG
-                </span>
-                <p className="font-extrabold text-[11.5px] mt-0.5 leading-tight">PhonePe PG</p>
-                <p className="text-[9px] text-slate-500 mt-0.5 leading-tight">Cards, UPI, Bank</p>
-              </div>
+              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
+                PhonePe PG
+              </p>
+              <span className="text-[9px] text-purple-700 font-bold mt-0.5">
+                UAT Active
+              </span>
             </button>
 
-            {/* Option 2: Direct UPI */}
+            {/* 2. Direct Online UPI Apps */}
             <button
               type="button"
               onClick={() => setPaymentMethod('online')}
-              className={`p-2.5 sm:p-3 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
+              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'online'
-                  ? 'bg-indigo-50/80 border-indigo-600 ring-2 ring-indigo-600 shadow-xs text-indigo-950'
+                  ? 'bg-indigo-50/90 border-indigo-600 shadow-xs text-indigo-950 ring-2 ring-indigo-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className="flex justify-between items-center mb-1.5">
-                <Smartphone className="w-5 h-5 text-indigo-600" />
-                {paymentMethod === 'online' && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
+                paymentMethod === 'online' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+              }`}>
+                <CreditCard className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-extrabold text-[11.5px] leading-tight">Direct UPI</p>
-                <p className="text-[9px] text-slate-500 mt-0.5 leading-tight">GPay, Paytm, QR</p>
-              </div>
+              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
+                UPI Apps
+              </p>
+              <span className="text-[9px] text-slate-500 font-medium mt-0.5">
+                GPay / Paytm
+              </span>
             </button>
 
-            {/* Option 3: Cash */}
+            {/* 3. Cash Pekna */}
             <button
               type="button"
               onClick={() => setPaymentMethod('cash')}
-              className={`p-2.5 sm:p-3 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
+              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'cash'
-                  ? 'bg-amber-50/80 border-amber-600 ring-2 ring-amber-600 shadow-xs text-amber-950'
+                  ? 'bg-amber-50/90 border-amber-600 shadow-xs text-amber-950 ring-2 ring-amber-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className="flex justify-between items-center mb-1.5">
-                <Banknote className="w-5 h-5 text-amber-600" />
-                {paymentMethod === 'cash' && <CheckCircle2 className="w-4 h-4 text-amber-600" />}
+              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
+                paymentMethod === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+              }`}>
+                <Banknote className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-extrabold text-[11.5px] leading-tight">Cash Pekna</p>
-                <p className="text-[9px] text-slate-500 mt-0.5 leading-tight">Treasurer Slip</p>
-              </div>
+              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
+                Cash Pekna
+              </p>
+              <span className="text-[9px] text-slate-500 font-medium mt-0.5">
+                Treasurer Slip
+              </span>
             </button>
           </div>
         </div>
 
         {/* Bill Summary Breakdown */}
-        <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2 text-xs shadow-md">
+        <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2.5 text-xs shadow-md">
           <div className="flex justify-between text-slate-300 font-medium">
-            <span>Donation Subtotal:</span>
+            <span>Thawh Zat (Donation Amount):</span>
             <span className="font-mono font-bold text-white">₹{subtotal.toLocaleString('en-IN')}</span>
           </div>
 
@@ -1801,18 +1750,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </span>
           </div>
 
+          {isOnlinePayment && platformFee > 0 && (
+            <div className="flex justify-between text-slate-300 font-medium items-center text-[11px] bg-slate-800/80 p-2 rounded-xl border border-slate-700/60">
+              <span>Bawm Dawng Tur (Net to Bawm):</span>
+              <span className="font-mono font-bold text-amber-300">₹{campaignNetReceived.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+
           <div className="border-t border-slate-800 pt-2 flex justify-between items-center text-sm font-black">
-            <span>Grand Total Payable:</span>
+            <span>Grand Total I Pek Tur (Total Payable):</span>
             <span className="font-mono text-emerald-400 text-base">₹{totalPayable.toLocaleString('en-IN')}</span>
           </div>
 
           {paymentMethod === 'cash' ? (
-            <p className="text-[10px] text-slate-300 italic pt-1.5 border-t border-slate-800/80 leading-relaxed">
+            <p className="text-[10px] text-slate-400 italic pt-1.5 border-t border-slate-800/80 leading-relaxed">
               * Cash a pek hian Platform Fee a ngai lo (₹0.00).
             </p>
           ) : (
-            <p className="text-[10px] text-slate-300 italic pt-1.5 border-t border-slate-800/80 leading-relaxed">
-              * Online payment (PhonePe PG / UPI) ah hian Platform Settlement Fee (1%) chhut tel a ni.
+            <p className="text-[10px] text-slate-400 pt-1.5 border-t border-slate-800/80 leading-relaxed flex items-center justify-between">
+              <span>* PhonePe TSP & 256-bit encrypted NPCI rails</span>
+              <span className="text-emerald-400 font-bold">100% Secure</span>
             </p>
           )}
         </div>
@@ -1825,7 +1782,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             isExpired
               ? 'bg-slate-700 hover:bg-slate-700'
               : paymentMethod === 'phonepe'
-              ? 'bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6]'
+              ? 'bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-600 hover:to-indigo-600'
               : paymentMethod === 'online'
               ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600'
               : 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600'
@@ -1834,7 +1791,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {isProcessing ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              {paymentMethod === 'phonepe' ? 'Launching PhonePe PG Checkout...' : paymentMethod === 'online' ? 'Connecting UPI Gateway...' : 'Recording Cash Entry...'}
+              {paymentMethod === 'phonepe' ? 'Opening PhonePe PG V2...' : paymentMethod === 'online' ? 'Connecting UPI Gateway...' : 'Recording Cash Entry...'}
             </>
           ) : isExpired ? (
             <>
@@ -1845,13 +1802,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <>
               {paymentMethod === 'phonepe' ? (
                 <>
-                  <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG</span>
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG (UAT)</span>
                 </>
               ) : paymentMethod === 'online' ? (
                 <>
-                  <Smartphone className="w-4 h-4 text-white" />
-                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via UPI App</span>
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via UPI</span>
                 </>
               ) : (
                 <>
@@ -1864,74 +1821,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         </button>
       </form>
 
-      {/* PhonePe PG V2 Standard Checkout Modal */}
-      {isPhonePeCheckoutOpen && (
-        <PhonePeCheckoutModal
-          isOpen={isPhonePeCheckoutOpen}
-          onClose={() => setIsPhonePeCheckoutOpen(false)}
-          campaign={campaign}
-          amount={subtotal}
-          platformFee={platformFee}
-          donorName={pendingDonorDetails.donorName}
-          donorPhone={pendingDonorDetails.donorPhone}
-          donorVeng={pendingDonorDetails.donorVeng}
-          memberId={pendingDonorDetails.memberId}
-          subId={pendingDonorDetails.subId}
-          isDependent={pendingDonorDetails.isDependent}
-          isAnonymous={isAnonymous}
-          remark={remark.trim() || undefined}
-          subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
-          periodType={category === 'kumtluang' ? periodType : undefined}
-          periodMonth={category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined}
-          periodYear={category === 'kumtluang' ? selectedYear : undefined}
-          periodLabel={category === 'kumtluang' ? periodLabel : undefined}
-          onPaymentSuccess={(tx) => {
-            setIsPhonePeCheckoutOpen(false);
-            onPaymentSuccess(tx);
-          }}
-        />
-      )}
-
-      {/* UPI App Chooser Intent Modal */}
-      {isUPIIntentOpen && (
-        <UPIIntentModal
-          isOpen={isUPIIntentOpen}
-          onClose={() => setIsUPIIntentOpen(false)}
-          campaign={campaign || {
-            id: `cmp-${category}-custom`,
-            category,
-            title: category === 'ralna' ? 'Ralna Bawm' : config.name,
-            upiId: 'ronpay.bawm@okhdfcbank',
-            targetUpiId: 'ronpay.bawm@okhdfcbank',
-            orgName: 'RonPay Community Bawm',
-            location: 'Mizoram',
-            createdAt: new Date().toISOString()
-          }}
-          amount={subtotal}
-          platformFee={platformFee}
-          donorName={pendingDonorDetails.donorName}
-          donorPhone={pendingDonorDetails.donorPhone}
-          donorVeng={pendingDonorDetails.donorVeng}
-          memberId={pendingDonorDetails.memberId}
-          subId={pendingDonorDetails.subId}
-          isDependent={pendingDonorDetails.isDependent}
-          isAnonymous={isAnonymous}
-          subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
-          periodType={category === 'kumtluang' ? periodType : undefined}
-          periodMonth={category === 'kumtluang' ? (periodType === 'monthly' ? selectedMonth : periodType === 'quarterly' ? selectedQuarter : 'All Months') : undefined}
-          periodYear={category === 'kumtluang' ? selectedYear : undefined}
-          periodLabel={category === 'kumtluang' ? periodLabel : undefined}
-          remark={remark.trim() || undefined}
-          onPaymentSuccess={(tx) => {
-            setIsUPIIntentOpen(false);
-            if (tx.status === 'pending_verification') {
-              onCashPending(tx);
-            } else {
-              onPaymentSuccess(tx);
-            }
-          }}
-        />
-      )}
+      {/* Embedded PhonePe PG Checkout Modal */}
+      <PhonePeCheckoutModal
+        isOpen={isPhonePeCheckoutOpen}
+        onClose={() => setIsPhonePeCheckoutOpen(false)}
+        campaign={campaign}
+        amount={subtotal}
+        platformFee={platformFee}
+        feeOption={feeBearerOption}
+        donorName={isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor')}
+        donorPhone={donorPhone.trim() || undefined}
+        donorVeng={donorSection.trim() || undefined}
+        memberId={selectedMember?.id}
+        subId={selectedPayerType !== 'primary' ? selectedPayerType : undefined}
+        isDependent={selectedPayerType !== 'primary'}
+        isAnonymous={isAnonymous}
+        remark={remark.trim() || undefined}
+        subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+        periodType={category === 'kumtluang' ? periodType : undefined}
+        periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
+        periodYear={category === 'kumtluang' ? selectedYear : undefined}
+        periodLabel={category === 'kumtluang' ? periodLabel : undefined}
+        onPaymentSuccess={(transaction) => {
+          setIsPhonePeCheckoutOpen(false);
+          onPaymentSuccess(transaction);
+        }}
+      />
     </div>
   );
 };

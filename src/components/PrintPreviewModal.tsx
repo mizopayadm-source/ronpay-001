@@ -20,11 +20,9 @@ import {
   MessageCircle,
   Sparkles,
   Maximize2,
-  RotateCcw,
-  SlidersHorizontal,
-  ExternalLink
+  RotateCcw
 } from 'lucide-react';
-import { downloadFileUniversal, shareFileToWhatsAppUniversal } from '../utils/export';
+import { downloadFileUniversal } from '../utils/export';
 import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
 
 export interface PrintModalData {
@@ -50,7 +48,6 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [viewMode, setViewMode] = useState<'phone-flow' | 'a4-sheet'>('phone-flow');
   const [fitMode, setFitMode] = useState<'fit-width' | 'actual' | 'custom'>('fit-width');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [pageOrientation, setPageOrientation] = useState<'portrait' | 'landscape'>('portrait');
   
   // PDF Generation & Print states
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
@@ -58,29 +55,9 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const [pdfSuccessResult, setPdfSuccessResult] = useState<PDFExportResult | null>(null);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
   const [waToast, setWaToast] = useState<string>('');
-  const [showHintBanner, setShowHintBanner] = useState<boolean>(true);
-
-  // Clean, smart parsing of document title & subtitle for mobile headers
-  const parsedTitle = useMemo(() => {
-    if (!modalData?.docTitle) {
-      return { main: 'RonPay Statement', sub: 'Print & PDF Statement' };
-    }
-    const parts = modalData.docTitle.split(/\s*[-•–]\s*/);
-    if (parts.length >= 2) {
-      return {
-        main: parts[0].trim(),
-        sub: parts.slice(1).join(' • ').trim(),
-      };
-    }
-    return {
-      main: modalData.docTitle,
-      sub: 'Print & PDF Statement',
-    };
-  }, [modalData?.docTitle]);
   
   // Container & Sheet Dimensions for responsive scaling
-  // Standard A4 base width: Portrait = 794px, Landscape = 1123px
-  const A4_BASE_WIDTH = pageOrientation === 'landscape' ? 1123 : 794;
+  const A4_BASE_WIDTH = 794; // Standard A4 base width in px
   const [containerWidth, setContainerWidth] = useState<number>(800);
   const [measuredPaperHeight, setMeasuredPaperHeight] = useState<number>(1123);
   
@@ -88,44 +65,15 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const printableRootRef = useRef<HTMLDivElement>(null);
   const touchStateRef = useRef<{ initialDist: number; initialScale: number } | null>(null);
 
-  const detectOrientation = (htmlContent: string): 'portrait' | 'landscape' => {
-    if (!htmlContent) return 'portrait';
-    if (
-      htmlContent.includes('data-default-orientation="landscape"') ||
-      htmlContent.includes('size: A4 landscape') ||
-      htmlContent.includes('size: landscape') ||
-      htmlContent.includes('x-report-orientation" content="landscape"') ||
-      htmlContent.includes('report-orientation-landscape') ||
-      htmlContent.includes('orientation: landscape')
-    ) {
-      return 'landscape';
-    }
-    if (
-      htmlContent.includes('data-default-orientation="portrait"') ||
-      htmlContent.includes('size: A4 portrait') ||
-      htmlContent.includes('x-report-orientation" content="portrait"')
-    ) {
-      return 'portrait';
-    }
-    // Column count heuristic: 7+ table header columns (e.g. multi-category ledger) => Landscape
-    const thMatches = htmlContent.match(/<th\b[^>]*>/gi) || [];
-    if (thMatches.length >= 7) {
-      return 'landscape';
-    }
-    return 'portrait';
-  };
-
   // Sync prop changes
   useEffect(() => {
     if (propIsOpen && propHtml) {
-      const detected = detectOrientation(propHtml);
       setModalData({
         html: propHtml,
         docTitle: propDocTitle || 'Financial Statement',
       });
-      setPageOrientation(detected);
-      // Landscape reports display best in A4 Paper view with fit-width
-      setViewMode(detected === 'landscape' ? 'a4-sheet' : (window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet'));
+      // Default to phone-flow on smaller screens, a4-sheet on desktop
+      setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
       setFitMode('fit-width');
       setZoomLevel(100);
       setPdfSuccessResult(null);
@@ -139,13 +87,11 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     const handleOpenEvent = (e: Event) => {
       const customEvent = e as CustomEvent<PrintModalData>;
       if (customEvent.detail && customEvent.detail.html) {
-        const detected = detectOrientation(customEvent.detail.html);
         setModalData({
           html: customEvent.detail.html,
           docTitle: customEvent.detail.docTitle || 'RonPay Financial Statement',
         });
-        setPageOrientation(detected);
-        setViewMode(detected === 'landscape' ? 'a4-sheet' : (window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet'));
+        setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
         setFitMode('fit-width');
         setZoomLevel(100);
         setPdfSuccessResult(null);
@@ -198,7 +144,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     const padding = window.innerWidth < 640 ? 12 : 24;
     const avail = Math.max(260, containerWidth - padding);
     return Math.min(1.0, Number((avail / A4_BASE_WIDTH).toFixed(3)));
-  }, [containerWidth, A4_BASE_WIDTH]);
+  }, [containerWidth]);
 
   const currentScale = useMemo(() => {
     if (viewMode === 'phone-flow') return 1.0;
@@ -254,7 +200,6 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     if (!rootElement || !modalData) return;
 
     setIsGeneratingPdf(true);
-    setPdfStatusText('PDF snapshot siam mek a ni...');
     setPdfSuccessResult(null);
 
     const cleanTitle = (modalData.docTitle || 'RonPay_Statement')
@@ -265,8 +210,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       const result = await exportElementToPDF(
         rootElement,
         fileName,
-        (status) => setPdfStatusText(status),
-        { orientation: pageOrientation }
+        (status) => setPdfStatusText(status)
       );
 
       if (result.success) {
@@ -286,17 +230,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   // Open generated PDF or re-download on mobile
   const handleOpenPdfBlob = () => {
-    if (pdfSuccessResult?.blob) {
-      downloadFileUniversal(
-        pdfSuccessResult.blob,
-        pdfSuccessResult.fileName,
-        'application/pdf',
-        modalData?.docTitle || 'RonPay Statement PDF'
-      );
-    } else if (pdfSuccessResult?.blobUrl) {
-      try {
-        window.open(pdfSuccessResult.blobUrl, '_blank');
-      } catch {}
+    if (pdfSuccessResult?.blobUrl) {
       const a = document.createElement('a');
       a.href = pdfSuccessResult.blobUrl;
       a.download = pdfSuccessResult.fileName;
@@ -312,76 +246,62 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     }
   };
 
-  // Universal WhatsApp Share Trigger (Direct Android Bridge -> Web Share -> Fallback)
+  // Universal WhatsApp Share Trigger (Always available)
   const handleShareToWhatsApp = async () => {
-    const rootElement = printableRootRef.current || document.getElementById('ronpay-printable-preview-root');
     const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement PDF';
     const cleanDate = new Date().toLocaleDateString('en-GB');
     const totalText = documentSummary.total ? `\n💰 Total: *${documentSummary.total}*` : '';
-    const cleanTitle = (modalData?.docTitle || 'RonPay_Statement').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const fileName = `${cleanTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
     
     const summaryText = `*RonPay Financial Report*\n📄 Document: *${title}*${totalText}\n📅 Ni thla: ${cleanDate}\n\n_RonPay Community & Church Portal atanga generate a ni e._`;
 
-    // 1. Ensure PDF is generated if not yet ready
-    let currentPdfResult = pdfSuccessResult;
-    if (!currentPdfResult?.dataUri && !currentPdfResult?.blob && rootElement) {
-      setIsGeneratingPdf(true);
-      setPdfStatusText('WhatsApp-a share turin PDF snapshot lak mek a ni...');
+    // 1. Copy summary text to clipboard
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(summaryText);
+        setWaToast('Summary text copy a ni e! WhatsApp a in hawng mek...');
+        setTimeout(() => setWaToast(''), 3000);
+      }
+    } catch {}
+
+    // 2. Try Native Web Share with file if PDF is ready
+    if (pdfSuccessResult?.blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
-        const result = await exportElementToPDF(
-          rootElement,
-          fileName,
-          (status) => setPdfStatusText(status),
-          { orientation: pageOrientation, autoDownload: false }
-        );
-        if (result.success) {
-          currentPdfResult = result;
-          setPdfSuccessResult(result);
+        const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title,
+            text: summaryText,
+            files: [file],
+          });
+          return;
         }
-      } catch (genErr) {
-        console.warn('Auto PDF generation before WhatsApp share failed:', genErr);
-      } finally {
-        setIsGeneratingPdf(false);
-        setPdfStatusText('');
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
       }
     }
 
-    setWaToast('WhatsApp share buatsaih mek a ni...');
-
-    // 2. Universal WhatsApp Share (Checks Android Native Bridge window.RonPayBridge.shareFileToWhatsApp)
-    const shareResult = await shareFileToWhatsAppUniversal({
-      content: currentPdfResult?.blob,
-      base64Data: currentPdfResult?.dataUri,
-      fileName,
-      mimeType: 'application/pdf',
-      summaryText,
-      title,
-    });
-
-    if (shareResult.method === 'native_bridge') {
-      setWaToast('Android App: WhatsApp-ah PDF Document a in thawn fel e!');
-    } else if (shareResult.method === 'web_share') {
-      setWaToast('Share dialog a in hawng e!');
-    } else {
-      setWaToast('PDF download a ni e! WhatsApp-ah attachment telh rawh le.');
+    // 3. Direct WhatsApp URI (works across Android WhatsApp app, iOS, and WhatsApp Web)
+    try {
+      const encoded = encodeURIComponent(summaryText);
+      const waUrl = `https://wa.me/?text=${encoded}`;
+      const waLink = document.createElement('a');
+      waLink.href = waUrl;
+      waLink.target = '_blank';
+      waLink.rel = 'noopener noreferrer';
+      document.body.appendChild(waLink);
+      waLink.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(waLink);
+        } catch {}
+      }, 1000);
+    } catch (e) {
+      console.warn('WhatsApp launch error', e);
     }
-
-    setTimeout(() => {
-      setWaToast('');
-    }, 4000);
   };
 
   // Native Android / Mobile Apps Share
   const handleShareNative = async () => {
-    // If running in Android App with native bridge, invoke WhatsApp/native direct share
-    const w = typeof window !== 'undefined' ? (window as any) : null;
-    const nativeBridge = w?.RonPayBridge || w?.AndroidBlobDownloader;
-    if (nativeBridge && typeof nativeBridge.shareFileToWhatsApp === 'function') {
-      await handleShareToWhatsApp();
-      return;
-    }
-
     const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement';
     const cleanDate = new Date().toLocaleDateString('en-GB');
     const summaryText = `*${title}*\n📅 Date: ${cleanDate}\n${documentSummary.total ? `💰 Total: ${documentSummary.total}` : ''}`;
@@ -424,7 +344,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     setIsPrinting(true);
     
     try {
-      executePrintSafely(modalData.html, modalData.docTitle, pageOrientation);
+      executePrintSafely(modalData.html, modalData.docTitle);
     } catch (err) {
       console.warn('Print command fallback', err);
       window.print();
@@ -491,168 +411,33 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       
       {/* Dynamic Native Print CSS to ensure physical print only prints the document */}
       <style>{`
-        @page {
-          size: ${pageOrientation === 'landscape' ? 'landscape' : 'portrait'};
-          margin: ${pageOrientation === 'landscape' ? '8mm' : '10mm'};
-        }
         @media print {
-          /* 1. Global Multi-Page Paging Reset for Android WebView & Chromium */
-          html, body, #root {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            overflow-x: visible !important;
-            overflow-y: visible !important;
-            position: static !important;
-            margin: 0 !important;
-            padding: 0 !important;
+          body {
             background: #ffffff !important;
             color: #000000 !important;
-            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-
-          /* Hide all UI elements without breaking DOM layout */
-          .no-print,
-          header.no-print,
-          footer.no-print {
-            display: none !important;
-            height: 0 !important;
+          body * {
             visibility: hidden !important;
           }
-
-          /* Unset modal fixed viewport box so it flows naturally across Page 1, Page 2, etc. */
-          #ronpay-print-preview-modal {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            background: #ffffff !important;
-            inset: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            z-index: auto !important;
+          #ronpay-printable-preview-root, #ronpay-printable-preview-root * {
+            visibility: visible !important;
           }
-
-          #ronpay-print-preview-modal > main {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            background: #ffffff !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-
-          #ronpay-print-preview-modal > main > div {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            transform: none !important;
-          }
-
-          /* Printable Root in in-flow normal block layout (NEVER absolute in @media print) */
           #ronpay-printable-preview-root {
-            position: static !important;
-            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
-            max-width: 100% !important;
-            min-height: 0 !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #0f172a !important;
             box-shadow: none !important;
             border: none !important;
-            border-radius: 0 !important;
-            transform: none !important;
           }
-
-          /* Table and Page Break Pagination Rules */
-          table {
-            display: table !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            table-layout: auto !important;
-            border-collapse: collapse !important;
-            page-break-inside: auto !important;
-            break-inside: auto !important;
-          }
-
-          thead {
-            display: table-header-group !important;
-          }
-
-          tbody {
-            display: table-row-group !important;
-          }
-
-          tfoot {
-            display: table-footer-group !important;
-          }
-
-          tr {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          th, td {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .header-banner {
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .summary-bar,
-          .target-bar {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-          }
-
-          .sign-grid,
-          .footer,
-          .report-footer {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .page-break,
-          .break-before-page,
-          .print-page-break {
-            page-break-before: always !important;
-            break-before: page !important;
-          }
-
-          .page-break-after {
-            page-break-after: always !important;
-            break-after: page !important;
+          .no-print {
+            display: none !important;
           }
         }
 
@@ -695,215 +480,172 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       )}
 
       {/* 1. TOP NAVIGATION / ACTION BAR (NO-PRINT) */}
-      <header className="no-print w-full bg-slate-900 border-b border-slate-800 px-2.5 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2 shrink-0 shadow-md text-slate-100 z-20">
+      <header className="no-print w-full bg-slate-900/95 border-b border-slate-700/80 px-2.5 sm:px-4 py-2 sm:py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0 shadow-lg text-slate-100 z-10">
         
         {/* Left Side: Prominent Back (Kirleh) Button */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <button
             id="print-preview-back-btn"
             onClick={handleClose}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-xs rounded-xl border border-slate-700 shadow-xs cursor-pointer transition shrink-0"
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs rounded-xl border border-slate-600 shadow-xs cursor-pointer transition active:scale-95 shrink-0"
             title="Kirleh / Hnunglam"
           >
-            <ArrowLeft className="w-4 h-4 text-indigo-400" />
-            <span>Kirleh</span>
+            <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="font-extrabold">Kirleh</span>
           </button>
 
-          {/* Document Identity: Name & Subtitle */}
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xs sm:text-sm font-black text-white truncate leading-snug" title={modalData.docTitle}>
-              {parsedTitle.main}
-            </h1>
-            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-              <span className="truncate">{parsedTitle.sub}</span>
+          <div className="min-w-0 flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/40 hidden sm:flex items-center justify-center text-indigo-400 shrink-0">
+              <FileText className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-black text-white truncate max-w-[130px] xs:max-w-[190px] sm:max-w-[280px]">
+                {modalData.docTitle}
+              </h1>
+              <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Print & PDF Statement</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Quick Actions + Always-Visible Kharna / Close Button */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Desktop-only Action Buttons */}
-          <div className="hidden md:flex items-center gap-1.5">
-            <button
-              onClick={handleShareToWhatsApp}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition active:scale-95"
-              title="Share document details & statement to WhatsApp"
-            >
-              <MessageCircle className="w-3.5 h-3.5 text-white" />
-              <span>WhatsApp</span>
-            </button>
-
-            <button
-              id="save-as-pdf-btn-header"
-              onClick={handleSaveAsPDF}
-              disabled={isGeneratingPdf}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer transition active:scale-95"
-            >
-              {isGeneratingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-              <span>PDF Save</span>
-            </button>
-
-            <button
-              id="execute-modal-print-header-btn"
-              onClick={handlePrint}
-              disabled={isPrinting}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer transition active:scale-95"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
-            </button>
-          </div>
-
-          {/* Close X (Kharna) Button - High contrast, clearly visible on all screen sizes */}
-          <button
-            onClick={handleClose}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-slate-200 hover:text-white rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/90 shadow-xs transition cursor-pointer active:scale-95 text-xs font-bold shrink-0"
-            title="Kharna (Close Preview)"
-            aria-label="Kharna (Close Preview)"
-          >
-            <X className="w-4 h-4 text-rose-400" />
-            <span className="hidden xs:inline">Kharna</span>
-          </button>
-        </div>
-      </header>
-
-      {/* 2. FORMAT & VIEW CONTROLS TOOLBAR (NO-PRINT): Perfectly proportioned for mobile, no overflow */}
-      <div className="no-print w-full bg-slate-950/95 border-b border-slate-800/80 px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 shrink-0 z-10 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0">
+        {/* Center / Right: View Mode Toggle & Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto flex-wrap">
           
           {/* View Mode Switcher: Phone vs A4 Paper */}
-          <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
+          <div className="flex items-center bg-slate-950/90 rounded-xl border border-slate-700 p-0.5 shadow-xs">
             <button
               onClick={() => setViewMode('phone-flow')}
-              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-black flex items-center gap-1 sm:gap-1.5 transition cursor-pointer whitespace-nowrap ${
+              className={`px-2 py-1 rounded-lg text-[10.5px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
                 viewMode === 'phone-flow'
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Phone View: Responsive easy reading mode for mobile screens"
             >
-              <Smartphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-300" />
+              <Smartphone className="w-3 h-3 text-indigo-300" />
               <span>Phone</span>
             </button>
 
             <button
               onClick={() => setViewMode('a4-sheet')}
-              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-black flex items-center gap-1 sm:gap-1.5 transition cursor-pointer whitespace-nowrap ${
+              className={`px-2 py-1 rounded-lg text-[10.5px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
                 viewMode === 'a4-sheet'
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               title="A4 Paper View: Exact printable sheet with zoom controls"
             >
-              <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
+              <Layers className="w-3 h-3 text-emerald-300" />
               <span>A4 Paper</span>
             </button>
           </div>
 
-          {/* In A4 Paper Mode: Orientation & Compact Zoom Controls (Fits comfortably without cutting off) */}
+          {/* Zoom Controls (Active in A4 Sheet mode) */}
           {viewMode === 'a4-sheet' && (
-            <>
-              {/* Orientation Switcher: Ding (Portrait) vs Phek (Landscape) */}
-              <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
-                <button
-                  onClick={() => setPageOrientation('portrait')}
-                  className={`px-1.5 sm:px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 transition cursor-pointer whitespace-nowrap ${
-                    pageOrientation === 'portrait'
-                      ? 'bg-slate-800 text-indigo-300 shadow-xs border border-indigo-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="Ding (Portrait A4)"
-                >
-                  <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-400" />
-                  <span>Ding</span>
-                </button>
-
-                <button
-                  onClick={() => setPageOrientation('landscape')}
-                  className={`px-1.5 sm:px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center gap-1 transition cursor-pointer whitespace-nowrap ${
-                    pageOrientation === 'landscape'
-                      ? 'bg-emerald-700 text-white shadow-xs border border-emerald-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="Phek (Landscape A4)"
-                >
-                  <SlidersHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-300" />
-                  <span>Phek</span>
-                </button>
-              </div>
-
-              {/* Compact Zoom Controls */}
-              <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700/90 p-0.5 shadow-xs shrink-0">
-                <button
-                  onClick={() => {
-                    const nextZoom = Math.max(30, (fitMode === 'custom' ? zoomLevel : displayPercent) - 15);
-                    setFitMode('custom');
-                    setZoomLevel(nextZoom);
-                  }}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
-                  title="Zoom Out (-)"
-                >
-                  <ZoomOut className="w-3 h-3" />
-                </button>
-                <span className="text-[10px] font-mono font-bold px-1 text-slate-300 min-w-[32px] text-center">
-                  {displayPercent}%
-                </span>
-                <button
-                  onClick={() => {
-                    const nextZoom = Math.min(220, (fitMode === 'custom' ? zoomLevel : displayPercent) + 15);
-                    setFitMode('custom');
-                    setZoomLevel(nextZoom);
-                  }}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
-                  title="Zoom In (+)"
-                >
-                  <ZoomIn className="w-3 h-3" />
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* In Phone Flow Mode: Informational Badge */}
-          {viewMode === 'phone-flow' && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-indigo-950/60 border border-indigo-500/30 rounded-lg text-[10px] text-indigo-300 font-bold shrink-0">
-              <Smartphone className="w-3 h-3 text-indigo-400" />
-              <span>Mobile Reading Mode</span>
+            <div className="flex items-center bg-slate-950/80 rounded-xl border border-slate-700 p-0.5">
+              <button
+                onClick={() => {
+                  const nextZoom = Math.max(30, (fitMode === 'custom' ? zoomLevel : displayPercent) - 15);
+                  setFitMode('custom');
+                  setZoomLevel(nextZoom);
+                }}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                title="Zoom Out (-)"
+              >
+                <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              </button>
+              <span className="text-[9.5px] font-mono font-bold px-1 text-slate-300 min-w-[32px] text-center">
+                {displayPercent}%
+              </span>
+              <button
+                onClick={() => {
+                  const nextZoom = Math.min(220, (fitMode === 'custom' ? zoomLevel : displayPercent) + 15);
+                  setFitMode('custom');
+                  setZoomLevel(nextZoom);
+                }}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                title="Zoom In (+)"
+              >
+                <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              </button>
             </div>
           )}
+
+          {/* WhatsApp Direct Share Button */}
+          <button
+            onClick={handleShareToWhatsApp}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-900/40 cursor-pointer transition active:scale-95 shrink-0"
+            title="Share document details & statement to WhatsApp"
+          >
+            <MessageCircle className="w-3.5 h-3.5 text-white" />
+            <span className="hidden xs:inline">WhatsApp</span>
+          </button>
+
+          {/* Save as PDF Button */}
+          <button
+            id="save-as-pdf-btn"
+            onClick={handleSaveAsPDF}
+            disabled={isGeneratingPdf}
+            className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-black text-xs rounded-xl shadow-md shadow-rose-600/30 cursor-pointer transition active:scale-95 shrink-0"
+            title="Download direct .PDF file to phone storage"
+          >
+            {isGeneratingPdf ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                <span className="text-[11px]">Siam mek...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="w-3.5 h-3.5 text-white" />
+                <span>PDF Save</span>
+              </>
+            )}
+          </button>
+
+          {/* Print Button */}
+          <button
+            id="execute-modal-print-command-btn"
+            onClick={handlePrint}
+            disabled={isPrinting}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl shadow-md shadow-indigo-600/30 cursor-pointer transition active:scale-95 shrink-0"
+            title="System Print / Android Print Spooler"
+          >
+            <Printer className="w-3.5 h-3.5 text-white" />
+            <span className="hidden sm:inline">{isPrinting ? '...' : 'Print'}</span>
+          </button>
+
+          {/* Close X */}
+          <button
+            onClick={handleClose}
+            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. SUB-BANNER / WHATSAPP TOAST & HOW-TO GUIDE (NO-PRINT) */}
+      <div className="no-print w-full bg-slate-900 border-b border-slate-800 px-3 py-1.5 text-[10.5px] sm:text-xs text-slate-300 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Eye className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <span className="truncate">
+            {viewMode === 'phone-flow' ? (
+              <span><b>📱 Phone View:</b> Mobile screen-ah a lang rem chang vek e. Table scroll phei theih a ni.</span>
+            ) : (
+              <span><b>📄 A4 Paper View:</b> Exact print preview. Zoom (+) / (-) emaw pinch-zoom hmang rawh.</span>
+            )}
+          </span>
         </div>
 
-        {/* Right side toast message */}
         {waToast && (
           <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/40 text-[10px] animate-fadeIn shrink-0">
             {waToast}
           </span>
         )}
       </div>
-
-      {/* 3. SUB-BANNER / HOW-TO GUIDE (NO-PRINT): Slim, clear & dismissible */}
-      {showHintBanner && (
-        <div className="no-print w-full bg-slate-900/95 border-b border-slate-800 px-2.5 sm:px-4 py-1 text-[10px] sm:text-xs text-slate-300 flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Eye className="w-3 h-3 text-indigo-400 shrink-0" />
-            <span className="truncate">
-              {viewMode === 'phone-flow' ? (
-                <span><b>📱 Phone View:</b> Mobile screen-ah a lang rem chang vek e. Table scroll phei theih a ni.</span>
-              ) : (
-                <span><b>📄 A4 Paper View:</b> Exact print preview. Zoom (+) / (-) emaw pinch-zoom hmang rawh.</span>
-              )}
-            </span>
-          </div>
-
-          <button
-            onClick={() => setShowHintBanner(false)}
-            className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer shrink-0"
-            title="Hide hint"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
 
       {/* 3. MAIN PREVIEW CANVAS / VIEWPORT */}
       <main 
@@ -974,52 +716,39 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
       {/* 4. SUCCESS / DIRECT PDF ACTION BOTTOM SHEET (IF DOWNLOADED) */}
       {pdfSuccessResult && (
-        <div className="no-print w-full bg-emerald-950 border-t border-emerald-500/50 p-3 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl animate-slideUp z-20">
-          <div className="flex items-center gap-2.5 min-w-0 text-left w-full md:w-auto">
+        <div className="no-print w-full bg-emerald-950 border-t border-emerald-500/50 p-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl animate-slideUp z-20">
+          <div className="flex items-center gap-2 min-w-0 text-left">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs font-black text-white flex items-center gap-1.5 flex-wrap">
-                <span>PDF Download Fel Ta!</span>
-                <span className="text-emerald-300 font-bold truncate max-w-[200px]">({pdfSuccessResult.fileName})</span>
+              <p className="text-xs font-black text-white">
+                PDF Download Fel Ta! <span className="text-emerald-300 font-bold">({pdfSuccessResult.fileName})</span>
               </p>
-              <p className="text-[10.5px] text-emerald-200/90 flex items-center gap-1">
-                <FolderDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>I phone <b>Downloads / Files</b> folder-ah a in-save e. A lo awm loh chuan a hnuaia button te hi hmet rawh le:</span>
+              <p className="text-[10px] text-emerald-200/90 flex items-center gap-1">
+                <FolderDown className="w-3 h-3 text-emerald-400 shrink-0" />
+                I phone <b>Downloads / Files</b> folder-ah a in-save e.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-end flex-wrap">
-            {/* Native Android / Mobile File Save */}
-            <button
-              onClick={handleShareNative}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
-              title="Save to Phone Storage or Share"
-            >
-              <Share2 className="w-3.5 h-3.5 text-slate-950" />
-              <span>Phone-ah Save / Share</span>
-            </button>
-
-            {/* Direct Open PDF in Browser Tab */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             {pdfSuccessResult.blobUrl && (
               <button
                 onClick={handleOpenPdfBlob}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
-                title="Open PDF Viewer"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+                title="Download another copy"
               >
-                <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
-                <span>PDF Hawng Rawh</span>
+                <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Download Nawn</span>
               </button>
             )}
 
-            {/* WhatsApp Share */}
             <button
               onClick={handleShareToWhatsApp}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-emerald-900/50 transition cursor-pointer"
               title="Share report summary and status to WhatsApp"
             >
               <MessageCircle className="w-3.5 h-3.5 text-white" />
-              <span>WhatsApp</span>
+              <span>WhatsApp Share</span>
             </button>
 
             <button
@@ -1033,24 +762,23 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         </div>
       )}
 
-      {/* 5. BOTTOM ACTION BAR (NO-PRINT): Clean, comfortable on narrow mobile screens */}
-      <footer className="no-print w-full bg-slate-900 border-t border-slate-800 px-2.5 sm:px-4 py-2 flex items-center justify-between gap-1.5 text-xs text-slate-400 shrink-0 z-20">
-        <div className="flex items-center">
+      {/* 5. BOTTOM ACTION BAR (NO-PRINT) */}
+      <footer className="no-print w-full bg-slate-900/95 border-t border-slate-800 px-3 py-2 sm:py-2.5 flex items-center justify-between text-xs text-slate-400 shrink-0">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={handleClose}
-            className="flex items-center gap-1 text-slate-200 hover:text-white font-black cursor-pointer py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition active:scale-95 text-xs shrink-0 whitespace-nowrap"
-            title="Kirleh / Hnunglam"
+            className="flex items-center gap-1.5 text-slate-200 hover:text-white font-extrabold cursor-pointer py-1.5 px-2.5 sm:px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl transition active:scale-95 text-xs"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
             <span>Kirleh</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* WhatsApp Direct Share Button */}
           <button
             onClick={handleShareToWhatsApp}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-emerald-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition cursor-pointer active:scale-95 text-xs"
             title="Share via WhatsApp"
           >
             <MessageCircle className="w-3.5 h-3.5" />
@@ -1061,19 +789,17 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           <button
             onClick={handleSaveAsPDF}
             disabled={isGeneratingPdf}
-            className="bg-rose-600 hover:bg-rose-500 text-white font-black px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-rose-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
-            title="Download PDF File"
+            className="bg-rose-600 hover:bg-rose-500 text-white font-black px-3 sm:px-4 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-rose-600/30 transition cursor-pointer active:scale-95 text-xs"
           >
             {isGeneratingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            <span>Save PDF</span>
+            <span>Save PDF (.pdf)</span>
           </button>
 
           {/* System Print */}
           <button
             onClick={handlePrint}
             disabled={isPrinting}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-2.5 sm:px-3.5 py-1.5 rounded-xl flex items-center gap-1 shadow-md shadow-indigo-950/40 transition cursor-pointer active:scale-95 text-xs shrink-0 whitespace-nowrap"
-            title="System Print / Spooler"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3 sm:px-4 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer active:scale-95 text-xs"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print</span>

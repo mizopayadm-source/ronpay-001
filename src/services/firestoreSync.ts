@@ -232,23 +232,8 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
 
       if (remoteTxList.length > 0) {
-        let deletedTxIds = new Set<string>();
-        try {
-          const rawDel = localStorage.getItem('ronpay_deleted_transaction_ids_v1');
-          if (rawDel) {
-            const arr = JSON.parse(rawDel);
-            if (Array.isArray(arr)) {
-              deletedTxIds = new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
-            }
-          }
-        } catch {}
-
-        const filteredRemote = remoteTxList.filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
-        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS)
-          .filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
-        const merged = smartMerge(localTx, filteredRemote, 'id')
-          .filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
-
+        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS);
+        const merged = smartMerge(localTx, remoteTxList, 'id');
         setLocalJson('ronpay_transactions_v2', merged);
         if (callbacks.onTransactionsUpdate) {
           callbacks.onTransactionsUpdate(merged);
@@ -281,23 +266,8 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
 
       if (remoteCampaigns.length > 0) {
-        let deletedIds = new Set<string>();
-        try {
-          const rawDel = localStorage.getItem('ronpay_deleted_campaign_ids_v1');
-          if (rawDel) {
-            const arr = JSON.parse(rawDel);
-            if (Array.isArray(arr)) {
-              deletedIds = new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
-            }
-          }
-        } catch {}
-
-        const filteredRemote = remoteCampaigns.filter(c => c && c.id && !deletedIds.has(String(c.id).toLowerCase().trim()));
-        const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS)
-          .filter(c => c && c.id && !deletedIds.has(String(c.id).toLowerCase().trim()));
-        const merged = smartMerge(localCamps, filteredRemote, 'id')
-          .filter(c => c && c.id && !deletedIds.has(String(c.id).toLowerCase().trim()));
-
+        const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS);
+        const merged = smartMerge(localCamps, remoteCampaigns, 'id');
         // Always sort newest first so all devices (Android, web, preview) display the exact same deterministic list
         const sorted = [...merged].sort((a, b) => {
           const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -488,10 +458,9 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
     });
     const docRef = doc(db, 'transactions', tx.id);
     await setDoc(docRef, cleanTx, { merge: true });
-  } catch (err: any) {
-    if (err?.code !== 'resource-exhausted') {
-      console.warn('[Firestore] Transaction sync note:', err?.message || err);
-    }
+    console.log('[Firestore] Transaction successfully synced:', tx.id);
+  } catch (err) {
+    console.error('Firebase Error:', err);
   }
 }
 
@@ -507,10 +476,9 @@ export async function syncCampaignToFirestore(campaign: Campaign): Promise<void>
     });
     const docRef = doc(db, 'campaigns', campaign.id);
     await setDoc(docRef, cleanCampaign, { merge: true });
-  } catch (err: any) {
-    if (err?.code !== 'resource-exhausted') {
-      console.warn('[Firestore] Campaign sync note:', err?.message || err);
-    }
+    console.log('[Firestore] Campaign successfully synced:', campaign.id);
+  } catch (err) {
+    console.error('Firebase Error:', err);
   }
 }
 
@@ -526,10 +494,9 @@ export async function syncMemberToFirestore(member: MemberRecord): Promise<void>
     });
     const docRef = doc(db, 'members', member.id);
     await setDoc(docRef, cleanMember, { merge: true });
-  } catch (err: any) {
-    if (err?.code !== 'resource-exhausted') {
-      console.warn('[Firestore] Member sync note:', err?.message || err);
-    }
+    console.log('[Firestore] Member successfully synced:', member.id);
+  } catch (err) {
+    console.error('[Firestore] Error saving member:', err);
   }
 }
 
@@ -541,8 +508,9 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
   try {
     const docRef = doc(db, 'members', memberId);
     await deleteDoc(docRef);
-  } catch (err: any) {
-    console.warn('[Firestore] Member delete note:', err?.message || err);
+    console.log('[Firestore] Member deleted:', memberId);
+  } catch (err) {
+    console.error('[Firestore] Error deleting member:', err);
   }
 }
 
@@ -554,8 +522,9 @@ export async function deleteCampaignFromFirestore(campaignId: string): Promise<v
   try {
     const docRef = doc(db, 'campaigns', campaignId);
     await deleteDoc(docRef);
-  } catch (err: any) {
-    console.warn('[Firestore] Campaign delete note:', err?.message || err);
+    console.log('[Firestore] Campaign deleted:', campaignId);
+  } catch (err) {
+    console.error('[Firestore] Error deleting campaign:', err);
   }
 }
 
@@ -567,8 +536,9 @@ export async function deleteTransactionFromFirestore(transactionId: string): Pro
   try {
     const docRef = doc(db, 'transactions', transactionId);
     await deleteDoc(docRef);
-  } catch (err: any) {
-    console.warn('[Firestore] Transaction delete note:', err?.message || err);
+    console.log('[Firestore] Transaction deleted:', transactionId);
+  } catch (err) {
+    console.error('[Firestore] Error deleting transaction:', err);
   }
 }
 
@@ -584,10 +554,9 @@ export async function syncCreatorToFirestore(creator: CreatorProfile): Promise<v
     });
     const docRef = doc(db, 'creators', creator.phone);
     await setDoc(docRef, cleanCreator, { merge: true });
-  } catch (err: any) {
-    if (err?.code !== 'resource-exhausted') {
-      console.warn('[Firestore] Creator sync note:', err?.message || err);
-    }
+    console.log('[Firestore] Creator successfully synced:', creator.phone);
+  } catch (err) {
+    console.error('[Firestore] Error saving creator:', err);
   }
 }
 
@@ -603,8 +572,9 @@ export async function syncAnnouncementToFirestore(announcement: AnnouncementBann
     });
     const docRef = doc(db, 'systemConfig', 'announcement');
     await setDoc(docRef, cleanAnnouncement, { merge: true });
-  } catch (err: any) {
-    console.warn('[Firestore] Announcement sync note:', err?.message || err);
+    console.log('[Firestore] Announcement config synced');
+  } catch (err) {
+    console.error('[Firestore] Error saving announcement:', err);
   }
 }
 
@@ -620,8 +590,9 @@ export async function syncPricingConfigToFirestore(pricingConfig: SystemPricingC
     });
     const docRef = doc(db, 'systemConfig', 'pricing');
     await setDoc(docRef, cleanPricing, { merge: true });
-  } catch (err: any) {
-    console.warn('[Firestore] Pricing sync note:', err?.message || err);
+    console.log('[Firestore] Pricing config synced');
+  } catch (err) {
+    console.error('[Firestore] Error saving pricing config:', err);
   }
 }
 
@@ -637,13 +608,13 @@ export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void>
     });
     const docRef = doc(db, 'auditLogs', auditLog.id);
     await setDoc(docRef, cleanLog, { merge: true });
-  } catch (err: any) {
-    // Audit logs non-critical
+  } catch (err) {
+    console.warn('[Firestore] Audit log save note:', err);
   }
 }
 
 /**
- * Push all local records to Firebase Firestore using atomic writeBatches
+ * Push all local records to Firebase Firestore (manual bulk push & migration)
  */
 export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean; count: number }> {
   try {
@@ -669,87 +640,57 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     const localAuditLogs: AuditLog[] = rawLogs ? JSON.parse(rawLogs) : [];
 
     let count = 0;
-    let currentBatch = writeBatch(db);
-    let batchOps = 0;
 
-    const commitAndResetBatch = async () => {
-      if (batchOps > 0) {
-        await currentBatch.commit();
-        currentBatch = writeBatch(db);
-        batchOps = 0;
-      }
-    };
-
-    // 1. Campaigns Batch
+    // Batch upload campaigns
     for (const c of localCampaigns) {
       if (c && c.id) {
-        const docRef = doc(db, 'campaigns', c.id);
-        currentBatch.set(docRef, sanitizeForFirestore({ ...c, updatedAt: new Date().toISOString() }), { merge: true });
+        await syncCampaignToFirestore(c);
         count++;
-        batchOps++;
-        if (batchOps >= 400) await commitAndResetBatch();
       }
     }
 
-    // 2. Transactions Batch
+    // Batch upload transactions
     for (const t of localTransactions) {
       if (t && t.id) {
-        const docRef = doc(db, 'transactions', t.id);
-        currentBatch.set(docRef, sanitizeForFirestore({ ...t, updatedAt: new Date().toISOString() }), { merge: true });
+        await syncTransactionToFirestore(t);
         count++;
-        batchOps++;
-        if (batchOps >= 400) await commitAndResetBatch();
       }
     }
 
-    // 3. Members Batch
+    // Batch upload members
     for (const m of localMembers) {
       if (m && m.id) {
-        const docRef = doc(db, 'members', m.id);
-        currentBatch.set(docRef, sanitizeForFirestore({ ...m, updatedAt: new Date().toISOString() }), { merge: true });
+        await syncMemberToFirestore(m);
         count++;
-        batchOps++;
-        if (batchOps >= 400) await commitAndResetBatch();
       }
     }
 
-    // 4. Creators Batch
+    // Batch upload creators
     for (const cr of localCreators) {
       if (cr && cr.phone) {
-        const docRef = doc(db, 'creators', cr.phone);
-        currentBatch.set(docRef, sanitizeForFirestore({ ...cr, updatedAt: new Date().toISOString() }), { merge: true });
+        await syncCreatorToFirestore(cr);
         count++;
-        batchOps++;
-        if (batchOps >= 400) await commitAndResetBatch();
       }
     }
 
-    // 5. System configs
+    // System configs
     if (localAnnouncement) {
-      const docRef = doc(db, 'systemConfig', 'announcement');
-      currentBatch.set(docRef, sanitizeForFirestore({ ...localAnnouncement, updatedAt: new Date().toISOString() }), { merge: true });
+      await syncAnnouncementToFirestore(localAnnouncement);
       count++;
-      batchOps++;
     }
 
     if (localPricing) {
-      const docRef = doc(db, 'systemConfig', 'pricing');
-      currentBatch.set(docRef, sanitizeForFirestore({ ...localPricing, updatedAt: new Date().toISOString() }), { merge: true });
+      await syncPricingConfigToFirestore(localPricing);
       count++;
-      batchOps++;
     }
 
-    for (const log of localAuditLogs.slice(0, 30)) {
+    for (const log of localAuditLogs.slice(0, 50)) {
       if (log && log.id) {
-        const docRef = doc(db, 'auditLogs', log.id);
-        currentBatch.set(docRef, sanitizeForFirestore({ ...log, updatedAt: new Date().toISOString() }), { merge: true });
+        await syncAuditLogToFirestore(log);
         count++;
-        batchOps++;
-        if (batchOps >= 400) await commitAndResetBatch();
       }
     }
 
-    await commitAndResetBatch();
     return { success: true, count };
   } catch (err) {
     console.error('Failed pushing local data to Firestore:', err);

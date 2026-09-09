@@ -38,10 +38,7 @@ import {
   UserPlus,
   CreditCard,
   Printer,
-  RefreshCw,
-  Ban,
-  ShieldAlert,
-  Info
+  RefreshCw
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -50,8 +47,6 @@ import { Language } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
-import { CampaignSafetyModal } from './CampaignSafetyModal';
-import { getCampaignFinancialStats } from '../utils/campaignSafety';
 
 interface CreateQRScreenProps {
   onBack: () => void;
@@ -65,7 +60,7 @@ interface CreateQRScreenProps {
   campaigns?: Campaign[];
   transactions?: Transaction[];
   onUpdateCampaign?: (campaign: Campaign) => void;
-  onDeleteCampaign?: (campaignId: string) => void;
+  onDeleteCampaign?: (campaignId: string, reason?: string) => void;
   onSelectCampaign?: (campaign: Campaign) => void;
   onUpdateCreatorProfile?: (updated: CreatorProfile) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
@@ -108,10 +103,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
   const [manageFilter, setManageFilter] = useState<string>('all');
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
-  const [safetyModalCampaign, setSafetyModalCampaign] = useState<{
-    campaign: Campaign;
-    mode: 'auto' | 'delete' | 'void';
-  } | null>(null);
+  const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null);
+  const [deleteReasonText, setDeleteReasonText] = useState<string>('');
 
   // Default to first approved category or ralna
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(
@@ -156,9 +149,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [prefixUserEdited, setPrefixUserEdited] = useState<boolean>(false);
   const [kumtluangSubcats, setKumtluangSubcats] = useState<string[]>([]);
   const [newSubcatName, setNewSubcatName] = useState<string>('');
-  const [enableKumtluangSections, setEnableKumtluangSections] = useState<boolean>(false);
   const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>('Bial / Unit');
-  const [kumtluangSections, setKumtluangSections] = useState<string[]>([]);
+  const [kumtluangSections, setKumtluangSections] = useState<string[]>([
+    'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung'
+  ]);
   const [newSectionName, setNewSectionName] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
@@ -288,18 +282,32 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   };
 
   const handleDetectGPS = () => {
-    if (navigator.geolocation) {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = pos.coords.latitude.toFixed(4);
-          const lng = pos.coords.longitude.toFixed(4);
+          const lat = pos.coords.latitude.toFixed(6);
+          const lng = pos.coords.longitude.toFixed(6);
+          const accuracy = Math.round(pos.coords.accuracy || 0);
           setGpsCoords(`${lat}, ${lng}`);
-          alert(`📍 GPS Location hmuhchhuah a ni ta: ${lat}, ${lng}`);
+          alert(`📍 Live GPS dik tak hmuh a ni ta!\nCoordinates: ${lat}, ${lng}\nAccuracy: ~${accuracy} meters.`);
         },
         (err) => {
-          setGpsCoords("23.7271, 92.7176");
-          alert("📍 Location standard Aizawl (23.7271, 92.7176) a set a ni.");
-        }
+          // Fallback if satellite GPS is slow indoors, try network location
+          navigator.geolocation.getCurrentPosition(
+            (pos2) => {
+              const lat = pos2.coords.latitude.toFixed(5);
+              const lng = pos2.coords.longitude.toFixed(5);
+              setGpsCoords(`${lat}, ${lng}`);
+              alert(`📍 Location hmuh a ni e (Network/Cell): ${lat}, ${lng}`);
+            },
+            () => {
+              setGpsCoords("23.7271, 92.7176");
+              alert("📍 GPS signal a hmuh theih rih loh avangin Aizawl standard coordinates (23.7271, 92.7176) a set rih a ni e. Manual-in i thlak thei e.");
+            },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+          );
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
       );
     } else {
       alert("⚠️ Geolocation hi i browser/device-in a support lo.");
@@ -455,12 +463,13 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       urgencyDeadline: selectedCategory === 'rikrum' ? rikrumDeadline : undefined,
 
       orgName: selectedCategory === 'kumtluang' ? kumtluangOrg : undefined,
-      subCategories: selectedCategory === 'kumtluang' && kumtluangSubcats.length > 0 
-        ? kumtluangSubcats 
-        : undefined,
+      subCategories: selectedCategory === 'kumtluang' ? kumtluangSubcats : undefined,
       trxnFeeBearer: selectedCategory === 'kumtluang' ? kumtluangFeeBearer : undefined,
-      sectionLabel: selectedCategory === 'kumtluang' && enableKumtluangSections ? (kumtluangSectionLabel.trim() || 'Bial / Unit') : undefined,
-      definedSections: selectedCategory === 'kumtluang' && enableKumtluangSections && kumtluangSections.length > 0 ? kumtluangSections : undefined,
+      sectionLabel: selectedCategory === 'kumtluang' ? kumtluangSectionLabel : undefined,
+      definedSections: selectedCategory === 'kumtluang' ? kumtluangSections : undefined,
+
+      // Fee Option Policy: Inherit creator default, system default, or ADD_ON
+      feeOptionRule: creatorProfile.defaultFeeOptionRule || pricingConfig?.defaultFeeOptionRule || 'ADD_ON',
 
       // Per-Creator Category Rate Overrides (e.g. Mr A Ralna=0%, Rikrum=0.5%)
       customPlatformFeePercent: creatorProfile.categoryCustomOverrides?.[selectedCategory]?.platformFeePercent !== undefined
@@ -1395,231 +1404,163 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
               </div>
 
               {/* Fund Heads / Sub-Categories */}
-              <div className="space-y-1.5 bg-white p-3 rounded-2xl border border-blue-200">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10.5px] font-black text-blue-950 uppercase tracking-wider">
-                    Fund Heads / Categories ({kumtluangSubcats.length})
-                  </label>
-                  <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">Multi-Category</span>
-                </div>
-
-                {/* Preset Quick Category Chooser */}
-                <div className="flex items-center gap-1.5 flex-wrap pb-1">
-                  <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setKumtluangSubcats(['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']);
-                    }}
-                    className="text-[9.5px] font-bold px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-200 transition cursor-pointer"
-                  >
-                    ⛪ Kohhran Heads (Pathian Ram Zauna etc.)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setKumtluangSubcats(['Fund Raiser', 'Relief Fund', 'Building Fund', 'Tlawmngaihna']);
-                    }}
-                    className="text-[9.5px] font-bold px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 transition cursor-pointer"
-                  >
-                    🏛️ YMA / NGO Heads
-                  </button>
-                  {!kumtluangSubcats.includes('Pathian Ram Zauna') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setKumtluangSubcats([...kumtluangSubcats, 'Pathian Ram Zauna']);
-                      }}
-                      className="text-[9.5px] font-bold px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 transition cursor-pointer"
-                    >
-                      + Pathian Ram Zauna
-                    </button>
-                  )}
+                  <label className="text-[10.5px] font-bold text-slate-700">Sub-Categories / Fund Heads</label>
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex flex-wrap gap-1.5">
-                    {kumtluangSubcats.map((head, idx) => (
-                      <span 
-                        key={idx} 
-                        className="bg-blue-50 border border-blue-200 text-blue-950 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs"
+                  {kumtluangSubcats.map((head, idx) => (
+                    <div key={idx} className="flex gap-1.5 items-center">
+                      <input
+                        type="text"
+                        value={head}
+                        onChange={(e) => {
+                          const updated = [...kumtluangSubcats];
+                          updated[idx] = e.target.value;
+                          setKumtluangSubcats(updated);
+                        }}
+                        className="flex-1 min-w-0 bg-white border border-slate-300 rounded-xl p-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSubcategory(idx)}
+                        className="w-7 h-7 shrink-0 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center text-xs hover:bg-rose-200 transition cursor-pointer"
                       >
-                        <span>{head}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSubcategory(idx)}
-                          className="text-rose-500 hover:text-rose-700 ml-1 font-black cursor-pointer"
-                          title="Paih rawh"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
 
                   <div className="flex gap-1.5 items-center pt-1">
                     <input
                       type="text"
                       value={newSubcatName}
                       onChange={(e) => setNewSubcatName(e.target.value)}
-                      placeholder="+ Category/Fund Head hming thar (e.g. Pathian Ram Zauna)..."
-                      className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddSubcategory();
-                        }
-                      }}
+                      placeholder="+ Sub-category hming thar..."
+                      className="flex-1 min-w-0 bg-white border border-dashed border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                     <button
                       type="button"
                       onClick={handleAddSubcategory}
-                      className="px-3 py-2 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer flex items-center gap-1 shadow-xs"
+                      className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Dah Belh
+                      Add
                     </button>
                   </div>
                 </div>
               </div>
 
               {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}
-              <div className="bg-white p-3.5 rounded-2xl border border-blue-200 space-y-3 overflow-hidden">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="enable-sections-toggle"
-                      checked={enableKumtluangSections}
-                      onChange={(e) => setEnableKumtluangSections(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                    />
-                    <label htmlFor="enable-sections-toggle" className="text-xs font-black text-slate-900 cursor-pointer flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      <span>Bial / Section Dropdown Hman Duh Em?</span>
-                    </label>
-                  </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                    enableKumtluangSections ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {enableKumtluangSections ? 'Enabled (Dropdown List)' : 'Disabled (No Sections)'}
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Bial / Section Dropdown Setup</span>
+                  </label>
+                  <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Pre-defined Dropdown
                   </span>
                 </div>
 
-                {!enableKumtluangSections ? (
-                  <p className="text-[10px] text-slate-500 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-dashed border-slate-200">
-                    Bial / Section hman a nih loh chuan, Member register laiin Bial thlanna dropdown a awm lo ang a, Member zawng zawng Bawm pui ber hnuaiah an lut tlang ang.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 pt-1 border-t border-slate-100 animate-fadeIn">
-                    <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                      Member-ten spelling error an neih loh nan leh data sorting a fel fai sa nan, dropdown a an thlan tur Bial / Section list duansa a ni.
-                    </p>
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Member-ten spelling error an neih loh nan leh data sorting a fel fai sa nan, dropdown a an thlan tur Bial / Section list duansa a ni.
+                </p>
 
-                    {/* Preset Quick Chooser */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                {/* Preset Quick Chooser */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Bial / Unit');
+                      setKumtluangSections(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                  >
+                    ⛪ Kohhran (Bial 1-4)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Section / Veng');
+                      setKumtluangSections(['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    🏛️ YMA / NGO (Section A-D)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKumtluangSectionLabel('Veng / Area');
+                      setKumtluangSections(['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General']);
+                    }}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition cursor-pointer"
+                  >
+                    🏘️ Veng / Area
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Label Hming (Dynamic Label)
+                    </label>
+                    <input
+                      type="text"
+                      value={kumtluangSectionLabel}
+                      onChange={(e) => setKumtluangSectionLabel(e.target.value)}
+                      placeholder="e.g. Bial / Unit emaw Section / Veng"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Add New ({kumtluangSections.length} sections)
+                    </label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                        placeholder="+ Bial/Section..."
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                      />
                       <button
                         type="button"
                         onClick={() => {
-                          setKumtluangSectionLabel('Bial / Unit');
-                          setKumtluangSections(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']);
+                          if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
+                            setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
+                            setNewSectionName('');
+                          }
                         }}
-                        className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                        className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
                       >
-                        ⛪ Kohhran (Bial 1-4)
+                        +
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setKumtluangSectionLabel('Section / Veng');
-                          setKumtluangSections(['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung']);
-                        }}
-                        className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
-                      >
-                        🏛️ YMA / NGO (Section A-D)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setKumtluangSectionLabel('Veng / Area');
-                          setKumtluangSections(['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General']);
-                        }}
-                        className="text-[9.5px] font-bold px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition cursor-pointer"
-                      >
-                        🏘️ Veng / Area
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 pt-1">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Label Hming (Dynamic Label)
-                        </label>
-                        <input
-                          type="text"
-                          value={kumtluangSectionLabel}
-                          onChange={(e) => setKumtluangSectionLabel(e.target.value)}
-                          placeholder="e.g. Bial / Unit emaw Section / Veng"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Add New ({kumtluangSections.length} sections)
-                        </label>
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={newSectionName}
-                            onChange={(e) => setNewSectionName(e.target.value)}
-                            placeholder="+ Bial/Section..."
-                            className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
-                                  setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
-                                  setNewSectionName('');
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
-                                setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
-                                setNewSectionName('');
-                              }
-                            }}
-                            className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section List Tags */}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {kumtluangSections.map((sec, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
-                        >
-                          <span className="truncate">{sec}</span>
-                          <button
-                            type="button"
-                            onClick={() => setKumtluangSections(kumtluangSections.filter((_, i) => i !== idx))}
-                            className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ))}
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Section List Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangSections.map((sec, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
+                    >
+                      <span className="truncate">{sec}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangSections(kumtluangSections.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* Optional Target (Per Month / Per Year / Overall) */}
@@ -1903,44 +1844,26 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                             }`}>
                               {camp.category}
                             </span>
-                            {camp.status === 'voided' || camp.isVoided ? (
-                              <span className="text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase bg-rose-600 text-white flex items-center gap-1 shadow-2xs">
-                                <Ban className="w-2.5 h-2.5" /> VOIDED
-                              </span>
-                            ) : (
-                              <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                            <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                              camp.status === 'active' 
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : camp.status === 'pending_approval'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-300 font-black'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
                                 camp.status === 'active' 
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : camp.status === 'pending_approval'
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-300 font-black'
-                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${
-                                  camp.status === 'active' 
-                                    ? 'bg-emerald-500 animate-pulse' 
-                                    : camp.status === 'pending_approval' 
-                                    ? 'bg-amber-500 animate-ping' 
-                                    : 'bg-slate-400'
-                                }`} />
-                                {camp.status === 'active' 
-                                  ? 'ACTIVE' 
-                                  : camp.status === 'pending_approval'
-                                  ? 'PENDING APPROVAL'
-                                  : 'EXPIRED'}
-                              </span>
-                            )}
-                            {(() => {
-                              const stats = getCampaignFinancialStats(camp, transactions);
-                              return stats.isZeroBalance ? (
-                                <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                  ₹0 Collected
-                                </span>
-                              ) : (
-                                <span className="text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
-                                  <Lock className="w-2.5 h-2.5 text-amber-700" /> ₹{stats.totalCollected.toLocaleString('en-IN')} Protected
-                                </span>
-                              );
-                            })()}
+                                  ? 'bg-emerald-500 animate-pulse' 
+                                  : camp.status === 'pending_approval' 
+                                  ? 'bg-amber-500 animate-ping' 
+                                  : 'bg-slate-400'
+                              }`} />
+                              {camp.status === 'active' 
+                                ? 'ACTIVE' 
+                                : camp.status === 'pending_approval'
+                                ? 'PENDING APPROVAL'
+                                : 'EXPIRED'}
+                            </span>
                           </div>
                           <h4 className="font-black text-slate-900 text-xs truncate mt-0.5">
                             {camp.title}
@@ -1952,7 +1875,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         </div>
                       </div>
 
-                      {/* Actions: Edit, Zero-Balance Delete, or Cancel & Void with Safety Net */}
+                      {/* Actions: Edit and Delete */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
@@ -1961,43 +1884,19 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                         >
                           <Edit3 className="w-3.5 h-3.5" /> Edit
                         </button>
-                        {(() => {
-                          const stats = getCampaignFinancialStats(camp, transactions);
-                          const isVoided = camp.status === 'voided' || camp.isVoided;
-                          if (isVoided) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-2 py-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center gap-1"
-                              >
-                                <Info className="w-3.5 h-3.5" /> Void Info
-                              </button>
-                            );
-                          }
-                          if (stats.isZeroBalance) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'delete' })}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold p-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center justify-center"
-                                title="Delete Zero-Balance Campaign"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setSafetyModalCampaign({ campaign: camp, mode: 'void' })}
-                              className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2 py-1.5 rounded-xl text-xs border border-amber-200 transition cursor-pointer flex items-center gap-1"
-                              title="Cancel & Void Campaign (Ledger protected)"
-                            >
-                              <Ban className="w-3.5 h-3.5" /> Void
-                            </button>
-                          );
-                        })()}
+                        {onDeleteCampaign && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeletingCampaign(camp);
+                              setDeleteReasonText('');
+                            }}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold p-1.5 rounded-xl text-xs border border-rose-200 transition cursor-pointer flex items-center justify-center"
+                            title="Delete / Cancel Campaign"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -2160,30 +2059,99 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
         />
       )}
 
-      {/* SAFETY NET MODAL (Zero-Balance Delete or Void with Audit Trail) */}
-      {safetyModalCampaign && (
-        <CampaignSafetyModal
-          campaign={safetyModalCampaign.campaign}
-          transactions={transactions}
-          initialMode={safetyModalCampaign.mode}
-          onClose={() => setSafetyModalCampaign(null)}
-          onDeleted={(deletedId) => {
-            if (onDeleteCampaign) {
-              onDeleteCampaign(deletedId);
-            }
-            setSafetyModalCampaign(null);
-          }}
-          onVoided={(voidedCamp) => {
-            if (onUpdateCampaign) {
-              onUpdateCampaign(voidedCamp);
-            }
-            setSafetyModalCampaign(null);
-          }}
-          onEditRequested={(campToEdit) => {
-            setSafetyModalCampaign(null);
-            setEditingCampaign(campToEdit);
-          }}
-        />
+      {/* DELETE / CANCEL CAMPAIGN MODAL (Siam Sual Paihna / Tihtawpna) */}
+      {deletingCampaign && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 border border-slate-200 shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-black text-slate-900 text-sm">Bawm Siam Sual / Delete Dilna</h3>
+                <p className="text-[10px] text-slate-500 font-medium truncate">{deletingCampaign.title}</p>
+              </div>
+            </div>
+
+            {(() => {
+              const campTxns = transactions.filter(t => t.campaignId === deletingCampaign.id || t.campaignTitle === deletingCampaign.title);
+              const totalRaised = campTxns.reduce((sum, t) => sum + t.amount, 0);
+              const hasPayments = campTxns.length > 0;
+
+              return (
+                <div className="space-y-3 text-xs">
+                  {hasPayments ? (
+                    <div className="bg-amber-50 border border-amber-300 p-3 rounded-2xl space-y-1.5 text-amber-950">
+                      <div className="flex items-center gap-1.5 font-black text-xs text-amber-900">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Sum Lo Lut Tawh ({campTxns.length} Txns - ₹{totalRaised.toLocaleString('en-IN')})</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-amber-900">
+                        He Bawm-ah hian thawhlawm/sum ₹{totalRaised.toLocaleString('en-IN')} a lo luh tawh avangin, donor-te Sulhnu leh Audit History him nan <strong>Paih bo hlen (Hard Delete) lovin Chhunzawm loh (Cancelled & Archived)</strong>-ah dah a ni ang a, QR a tawp nghal bawk ang.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-50 border border-rose-200 p-3 rounded-2xl space-y-1 text-rose-950">
+                      <p className="font-bold text-rose-900 text-xs">Sum a la lut lo (₹0 Raised)</p>
+                      <p className="text-[11px] text-rose-800 leading-relaxed">
+                        He Bawm siam sual palh hi application pum leh database atangin a reh nghal vek ang.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                      Tihtawp / Paih chhan (Reason) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={deleteReasonText}
+                      onChange={(e) => setDeleteReasonText(e.target.value)}
+                      placeholder="e.g. Account number/Hming ziah sual palh, duplicate siam..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 text-xs focus:bg-white focus:border-rose-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeletingCampaign(null);
+                        setDeleteReasonText('');
+                      }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!deleteReasonText.trim()) {
+                          alert('Khawngaihin Tihtawp / Paih chhan (Reason) ziak rawh le.');
+                          return;
+                        }
+                        if (onDeleteCampaign) {
+                          onDeleteCampaign(deletingCampaign.id, deleteReasonText.trim());
+                        }
+                        const wasArchived = hasPayments;
+                        setDeletingCampaign(null);
+                        setDeleteReasonText('');
+                        alert(wasArchived 
+                          ? `🔒 BAWM CANCELLED & ARCHIVED!\n\nSum lo lut tawh record him tlat siin he QR hi tihtawp a ni a, public list-ah a lang tawh lo ang.`
+                          : `✅ BAWM DELETED!\n\nHe Bawm siam sual hi hlawhtling takin paih reh a ni e.`
+                        );
+                      }}
+                      className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" /> {hasPayments ? 'Cancel & Archive' : 'Paih Bo / Delete'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       )}
 
       {/* EDIT CREATOR PROFILE MODAL */}
@@ -2346,24 +2314,11 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
     campaign.orgCode || derivePrefixFromText(campaign.orgName || campaign.title || 'BAW')
   );
   const [subCategories, setSubCategories] = useState<string[]>(
-    campaign.subCategories && Array.isArray(campaign.subCategories) 
+    campaign.subCategories && campaign.subCategories.length > 0 
       ? campaign.subCategories 
-      : []
+      : ['Pathian Ram', 'Mission', 'Building Fund']
   );
   const [newSubCatInput, setNewSubCatInput] = useState<string>('');
-  
-  // Kumtluang Bial / Section Management
-  const [hasSections, setHasSections] = useState<boolean>(
-    Boolean(campaign.definedSections && Array.isArray(campaign.definedSections) && campaign.definedSections.length > 0)
-  );
-  const [sectionLabel, setSectionLabel] = useState<string>(campaign.sectionLabel || 'Bial / Unit');
-  const [definedSections, setDefinedSections] = useState<string[]>(
-    campaign.definedSections && Array.isArray(campaign.definedSections) && campaign.definedSections.length > 0
-      ? campaign.definedSections
-      : []
-  );
-  const [newSectionInput, setNewSectionInput] = useState<string>('');
-
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>(
     (campaign.kumtluangFeeBearer as any) || 'org_paid'
   );
@@ -2394,12 +2349,25 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   };
 
   const handleDetectGPS = () => {
-    if (navigator.geolocation) {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setGpsCoords(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+          const lat = pos.coords.latitude.toFixed(6);
+          const lng = pos.coords.longitude.toFixed(6);
+          const accuracy = Math.round(pos.coords.accuracy || 0);
+          setGpsCoords(`${lat}, ${lng}`);
+          alert(`📍 Live GPS dik tak hmuh a ni e!\nCoordinates: ${lat}, ${lng}\nAccuracy: ~${accuracy} meters.`);
         },
-        () => alert('Live GPS coordinates detect theih a ni lo.')
+        () => {
+          navigator.geolocation.getCurrentPosition(
+            (pos2) => {
+              setGpsCoords(`${pos2.coords.latitude.toFixed(5)}, ${pos2.coords.longitude.toFixed(5)}`);
+            },
+            () => alert('Live GPS coordinates detect theih a ni lo. I phone/computer Location phalsak a nih leh nih loh enfiah la, emaw coordinates hi manual-in chhu lut mai rawh le.'),
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+          );
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
       );
     }
   };
@@ -2456,9 +2424,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       urgencyLevel: campaign.category === 'rikrum' ? urgencyLevel : undefined,
       
       orgName: campaign.category === 'kumtluang' ? (orgName.trim() || undefined) : campaign.orgName,
-      subCategories: campaign.category === 'kumtluang' ? (subCategories.length > 0 ? subCategories : undefined) : campaign.subCategories,
-      sectionLabel: campaign.category === 'kumtluang' && hasSections ? (sectionLabel.trim() || 'Bial / Unit') : undefined,
-      definedSections: campaign.category === 'kumtluang' && hasSections && definedSections.length > 0 ? definedSections : undefined,
+      subCategories: campaign.category === 'kumtluang' ? subCategories : campaign.subCategories,
       kumtluangFeeBearer: campaign.category === 'kumtluang' ? kumtluangFeeBearer : undefined,
     };
 
@@ -2873,53 +2839,16 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
               </div>
 
               {/* Fund Heads List */}
-              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10.5px] font-black text-blue-950 uppercase tracking-wider">
-                    Category / Fund Heads ({subCategories.length})
-                  </label>
-                  <span className="text-[9px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">Multi-Category</span>
-                </div>
-
-                {/* Preset Quick Category Chooser */}
-                <div className="flex items-center gap-1.5 flex-wrap pb-1">
-                  <span className="text-[9px] font-bold text-slate-500">Presets:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubCategories(['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']);
-                    }}
-                    className="text-[9px] font-bold px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-200 transition cursor-pointer"
-                  >
-                    ⛪ Kohhran Heads
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubCategories(['Fund Raiser', 'Relief Fund', 'Building Fund', 'Tlawmngaihna']);
-                    }}
-                    className="text-[9px] font-bold px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 transition cursor-pointer"
-                  >
-                    🏛️ YMA / NGO
-                  </button>
-                  {!subCategories.includes('Pathian Ram Zauna') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubCategories([...subCategories, 'Pathian Ram Zauna']);
-                      }}
-                      className="text-[9px] font-bold px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-800 rounded-lg border border-purple-200 transition cursor-pointer"
-                    >
-                      + Pathian Ram Zauna
-                    </button>
-                  )}
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-blue-950 block">
+                  Category / Fund Heads ({subCategories.length})
+                </label>
                 
                 <div className="flex flex-wrap gap-1.5">
                   {subCategories.map((head, idx) => (
                     <span 
-                      key={idx} 
-                      className="bg-blue-50 border border-blue-200 text-blue-950 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs"
+                      key={idx}
+                      className="bg-white border border-blue-300 text-blue-900 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shadow-2xs"
                     >
                       <span>{head}</span>
                       <button
@@ -2939,8 +2868,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     type="text"
                     value={newSubCatInput}
                     onChange={(e) => setNewSubCatInput(e.target.value)}
-                    placeholder="Head thar hming (e.g. Pathian Ram Zauna)..."
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 font-bold text-slate-900 text-xs focus:outline-none focus:bg-white focus:border-blue-600"
+                    placeholder="Head thar hming (e.g. Relief Fund)..."
+                    className="flex-1 bg-white border border-blue-300 rounded-xl px-2.5 py-1.5 font-medium text-slate-900 text-xs focus:outline-none focus:border-blue-600"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -2956,142 +2885,6 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     <Plus className="w-3.5 h-3.5" /> Dah Belh
                   </button>
                 </div>
-              </div>
-
-              {/* Bial / Section / Veng Management in Edit Modal */}
-              <div className="bg-white p-3.5 rounded-2xl border border-blue-200 space-y-3 overflow-hidden">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="edit-sections-toggle"
-                      checked={hasSections}
-                      onChange={(e) => setHasSections(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                    />
-                    <label htmlFor="edit-sections-toggle" className="text-xs font-black text-slate-900 cursor-pointer flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      <span>Bial / Section Dropdown Hman Duh Em?</span>
-                    </label>
-                  </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                    hasSections ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {hasSections ? 'Enabled' : 'Disabled (No Sections)'}
-                  </span>
-                </div>
-
-                {!hasSections ? (
-                  <p className="text-[10px] text-slate-500 leading-relaxed bg-slate-50 p-2 rounded-xl border border-dashed border-slate-200">
-                    Bial / Section hi disable a nih chuan, Member-ten Bial thlan tur dropdown an nei lo ang a, report leh matrix-ah pawh Section hran a awm lo ang.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 pt-1 border-t border-slate-100 animate-fadeIn">
-                    {/* Presets */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9px] font-bold text-slate-500">Quick Presets:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSectionLabel('Bial / Unit');
-                          setDefinedSections(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']);
-                        }}
-                        className="text-[9px] font-bold px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
-                      >
-                        ⛪ Kohhran (Bial 1-4)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSectionLabel('Section / Veng');
-                          setDefinedSections(['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung']);
-                        }}
-                        className="text-[9px] font-bold px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
-                      >
-                        🏛️ YMA / NGO
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSectionLabel('Veng / Area');
-                          setDefinedSections(['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General']);
-                        }}
-                        className="text-[9px] font-bold px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition cursor-pointer"
-                      >
-                        🏘️ Veng / Area
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Label Hming (Dynamic Label)
-                        </label>
-                        <input
-                          type="text"
-                          value={sectionLabel}
-                          onChange={(e) => setSectionLabel(e.target.value)}
-                          placeholder="e.g. Bial / Unit"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Add New ({definedSections.length} sections)
-                        </label>
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={newSectionInput}
-                            onChange={(e) => setNewSectionInput(e.target.value)}
-                            placeholder="+ Bial/Section..."
-                            className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:border-blue-600"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (newSectionInput.trim() && !definedSections.includes(newSectionInput.trim())) {
-                                  setDefinedSections([...definedSections, newSectionInput.trim()]);
-                                  setNewSectionInput('');
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (newSectionInput.trim() && !definedSections.includes(newSectionInput.trim())) {
-                                setDefinedSections([...definedSections, newSectionInput.trim()]);
-                                setNewSectionInput('');
-                              }
-                            }}
-                            className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section Tags */}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {definedSections.map((sec, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
-                        >
-                          <span className="truncate">{sec}</span>
-                          <button
-                            type="button"
-                            onClick={() => setDefinedSections(definedSections.filter((_, i) => i !== idx))}
-                            className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Target (Per Month / Year / Total) for Kumtluang */}

@@ -24,7 +24,6 @@ import { MemberRecord, Transaction, Campaign, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { isCampaignCreator } from '../utils/storage';
-import { isTransactionInMonth } from '../utils/monthHelper';
 
 export type PreviewReportFormat = 'style1_master' | 'style4_audit' | 'style2_matrix' | 'style3_passbook';
 
@@ -181,20 +180,8 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
     if (activeCampaign?.subCategories && activeCampaign.subCategories.length > 0) {
       return activeCampaign.subCategories;
     }
-    return [];
+    return ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
   }, [activeCampaign]);
-
-  const displayCategories = useMemo(() => {
-    if (categories.length > 0) return categories;
-    const txSubcats = Array.from(new Set(
-      scopedTransactions
-        .filter(t => (t.donorName && t.donorName.toLowerCase().trim() === activeMember?.name?.toLowerCase()?.trim()) || (t.remark && activeMember && t.remark.includes(activeMember.id)))
-        .map(t => t.subCategory)
-        .filter((s): s is string => Boolean(s && s.trim()))
-    ));
-    if (txSubcats.length > 0) return txSubcats;
-    return [activeCampaign?.title || 'Thawhlawm / Collection'];
-  }, [categories, scopedTransactions, activeMember, activeCampaign]);
 
   // Master Ledger Data calculations
   const ledgerData = useMemo(() => {
@@ -212,7 +199,11 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
       const monthAmounts: { [month: string]: number } = {};
 
       months.forEach(m => {
-        const monthTxns = memberTxns.filter(t => isTransactionInMonth(t, m));
+        const monthTxns = memberTxns.filter(t => {
+          if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+          const d = new Date(t.timestamp);
+          return months[d.getMonth()] === m;
+        });
         const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
         monthAmounts[m] = sum;
         rowTotal += sum;
@@ -297,21 +288,8 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
               .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }
               .header-left { display: flex; align-items: center; gap: 12px; }
               @media print {
-                html, body {
-                  width: 100% !important;
-                  height: auto !important;
-                  min-height: 0 !important;
-                  max-height: none !important;
-                  overflow: visible !important;
-                  overflow-x: visible !important;
-                  overflow-y: visible !important;
-                  position: static !important;
-                }
-                thead { display: table-header-group !important; }
-                tbody { display: table-row-group !important; }
-                tfoot { display: table-footer-group !important; }
-                tr, th, td { page-break-inside: avoid !important; break-inside: avoid !important; }
-                .header, .footer { page-break-inside: avoid !important; break-inside: avoid !important; }
+                thead { display: table-row-group !important; }
+                tr { page-break-inside: avoid !important; break-inside: avoid !important; }
               }
             </style>
           </head>
@@ -881,7 +859,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {displayCategories.map((cat, idx) => {
+                    {categories.map((cat, idx) => {
                       const memberTxns = scopedTransactions.filter(t => 
                         ((t.donorName && t.donorName.toLowerCase().trim() === activeMember.name.toLowerCase().trim()) ||
                          (t.remark && t.remark.includes(activeMember.id))) &&
@@ -893,7 +871,11 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                           <td className="p-2 border border-slate-200 font-bold text-slate-800">{cat}</td>
                           {months.map(m => {
-                            const sum = memberTxns.filter(t => isTransactionInMonth(t, m)).reduce((acc, t) => acc + (t.amount || 0), 0);
+                            const sum = memberTxns.filter(t => {
+                              if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
+                              const d = new Date(t.timestamp);
+                              return months[d.getMonth()] === m;
+                            }).reduce((acc, t) => acc + (t.amount || 0), 0);
                             catTotal += sum;
                             return (
                               <td key={m} className="p-2 border border-slate-200 text-right font-mono font-bold text-slate-700">
@@ -956,7 +938,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                     const memberTxns = scopedTransactions.filter(t => 
                       ((t.donorName && t.donorName.toLowerCase().trim() === activeMember.name.toLowerCase().trim()) ||
                        (t.remark && t.remark.includes(activeMember.id))) &&
-                      isTransactionInMonth(t, m)
+                      (t.periodMonth?.toLowerCase() === m.toLowerCase() || months[new Date(t.timestamp).getMonth()] === m)
                     );
                     const sum = memberTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
                     return (

@@ -26,6 +26,7 @@ interface PhonePeCheckoutModalProps {
   campaign?: Campaign;
   amount: number;
   platformFee?: number;
+  feeOption?: 'ADD_ON' | 'DEDUCT';
   donorName: string;
   donorPhone?: string;
   donorVeng?: string;
@@ -50,6 +51,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   campaign,
   amount,
   platformFee = 0,
+  feeOption = 'ADD_ON',
   donorName,
   donorPhone,
   donorVeng,
@@ -66,6 +68,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   onPaymentSuccess
 }) => {
   const [activeTab, setActiveTab] = useState<PaymentTab>('upi');
+  const [currentFeeOption, setCurrentFeeOption] = useState<'ADD_ON' | 'DEDUCT'>(feeOption);
   const [selectedUpiApp, setSelectedUpiApp] = useState<string>('phonepe');
   const [customUpiId, setCustomUpiId] = useState<string>('testdonor@phonepe');
   
@@ -88,10 +91,12 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [copiedTxn, setCopiedTxn] = useState<boolean>(false);
   const [redirectSimulatorUrl, setRedirectSimulatorUrl] = useState<string>('');
 
-  const totalPayable = amount + platformFee;
+  const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
+  const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
+  const campaignShare = currentFeeOption === 'ADD_ON' ? amount : Math.max(0, amount - effectiveFee);
   const campaignName = campaign?.orgName || campaign?.title || 'RonPay Community Bawm';
 
-  // Initialize session when modal opens
+  // Initialize session when modal opens or fee option changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -112,7 +117,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         campaignTitle: campaignName,
         campaignId: campaign?.id || 'cmp-custom',
         customerPhone: donorPhone || '9862300000',
-        simulateStatus: 'SUCCESS'
+        simulateStatus: 'SUCCESS',
+        feeOption: currentFeeOption,
+        baseAmountInRupees: amount
       })
     })
       .then(res => res.json())
@@ -125,7 +132,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         }
       })
       .catch(err => console.error('PhonePe session error:', err));
-  }, [isOpen, totalPayable, campaignName, campaign?.id, donorName, donorPhone, isAnonymous]);
+  }, [isOpen, totalPayable, campaignName, campaign?.id, donorName, donorPhone, isAnonymous, currentFeeOption, amount]);
 
   if (!isOpen) return null;
 
@@ -187,7 +194,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           isDependent: isAnonymous ? false : isDependent,
           isAnonymous,
           amount,
-          platformFee,
+          platformFee: effectiveFee,
+          feeOption: currentFeeOption,
+          campaignNetReceived: campaignShare,
           totalAmount: totalPayable,
           paymentMethod: 'phonepe',
           status: 'verified',
@@ -228,7 +237,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           isDependent: isAnonymous ? false : isDependent,
           isAnonymous,
           amount,
-          platformFee,
+          platformFee: effectiveFee,
+          feeOption: currentFeeOption,
+          campaignNetReceived: campaignShare,
           totalAmount: totalPayable,
           paymentMethod: 'phonepe',
           status: 'verified',
@@ -326,6 +337,40 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
             </div>
           </div>
 
+          {/* Split API Fee Choice Toggle: 100+1 vs 99+1 */}
+          <div className="mt-2.5 bg-black/30 backdrop-blur-md rounded-2xl p-2 border border-white/15">
+            <div className="flex items-center justify-between text-[10px] text-purple-200 mb-1.5 px-1 font-medium">
+              <span>Split Settlement Fee Mode:</span>
+              <span className="font-bold text-amber-300">
+                {currentFeeOption === 'ADD_ON' ? 'Donor Pek Belh (100+1)' : 'Thawhzat Atanga Paih (99+1)'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setCurrentFeeOption('ADD_ON')}
+                className={`py-1.5 px-2 rounded-xl font-bold transition text-center cursor-pointer border ${
+                  currentFeeOption === 'ADD_ON'
+                    ? 'bg-white text-[#5f259f] border-white shadow-xs font-black'
+                    : 'bg-white/10 text-purple-200 border-white/15 hover:bg-white/15'
+                }`}
+              >
+                100+1 (Pe belh: ₹{(amount + effectiveFee).toLocaleString('en-IN')})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentFeeOption('DEDUCT')}
+                className={`py-1.5 px-2 rounded-xl font-bold transition text-center cursor-pointer border ${
+                  currentFeeOption === 'DEDUCT'
+                    ? 'bg-white text-[#5f259f] border-white shadow-xs font-black'
+                    : 'bg-white/10 text-purple-200 border-white/15 hover:bg-white/15'
+                }`}
+              >
+                99+1 (Paih rawh: ₹{amount.toLocaleString('en-IN')})
+              </button>
+            </div>
+          </div>
+
           {/* Reviewer Notice Ribbon */}
           <div className="mt-2.5 flex items-center justify-between text-[10px] bg-purple-900/50 px-2.5 py-1 rounded-xl border border-purple-400/20 text-purple-200">
             <span className="flex items-center gap-1">
@@ -382,7 +427,11 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     </div>
                     <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-1.5">
                       <span>Split Settlement:</span>
-                      <span className="text-indigo-700 font-bold">99% Campaign + 1% RonPay Fee</span>
+                      <span className="text-indigo-700 font-bold">
+                        {currentFeeOption === 'ADD_ON'
+                          ? `₹${campaignShare.toLocaleString('en-IN')} (100% Bawm) + ₹${effectiveFee} (RonPay 1% Fee)`
+                          : `₹${campaignShare.toLocaleString('en-IN')} (Net to Bawm) + ₹${effectiveFee} (RonPay 1% Fee)`}
+                      </span>
                     </div>
                   </div>
 

@@ -40,7 +40,7 @@ export const TRANSLATIONS = {
     expired: 'Expired',
     pending: 'Pending',
     reports: 'Report & Export',
-    noAppNeeded: 'RonPay Apps download kher a ngai lo, web & UPI apps dang atanga pe mai theih e.',
+    noAppNeeded: 'RonPay Apps download kher a ngai lo, web & UPI apps dang atangin a pek nghal mai theih e.',
     downloadApp: 'Download RonPay App',
     fetchLiveBill: 'Fetch / Check Live Bill',
     officialPortal: 'Official Department Portal',

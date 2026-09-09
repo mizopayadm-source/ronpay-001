@@ -17,7 +17,7 @@
     position: relative;
     margin: 0;
     padding: 0;
-    background-color: #070f1e;
+    background-color: #f1f5f9;
     color: #0f172a;
     -webkit-overflow-scrolling: touch;
   }
@@ -25,11 +25,9 @@
     width: 100%;
     max-width: 100vw;
     min-height: 100vh;
-    min-height: 100dvh;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    background-color: #f8fafc;
   }
 }
 
@@ -64,72 +62,4 @@
 /* Safe area insets for mobile devices */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* =========================================================================
-   WebView & Mobile Multi-Page Print Architecture:
-   Ensures Android WebView, Chromium print spooler, and WebKit paginate 
-   seamlessly across multiple pages without clipping to page 1.
-   ========================================================================= */
-@media print {
-  html, body, #root {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-height: 0 !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    overflow-x: visible !important;
-    overflow-y: visible !important;
-    position: static !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: #ffffff !important;
-    background: #ffffff !important;
-    color: #000000 !important;
-    display: block !important;
-  }
-
-  .no-print {
-    display: none !important;
-    height: 0 !important;
-    visibility: hidden !important;
-  }
-
-  /* Universal Page Break Utilities */
-  .page-break,
-  .break-before-page,
-  .print-page-break {
-    page-break-before: always !important;
-    break-before: page !important;
-  }
-
-  .page-break-after {
-    page-break-after: always !important;
-    break-after: page !important;
-  }
-
-  .avoid-break,
-  .break-inside-avoid {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  table {
-    page-break-inside: auto !important;
-    break-inside: auto !important;
-  }
-
-  tr, th, td {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  thead {
-    display: table-header-group !important;
-  }
-
-  tfoot {
-    display: table-footer-group !important;
-  }
 }

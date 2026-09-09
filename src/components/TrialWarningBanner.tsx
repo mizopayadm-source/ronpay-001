@@ -103,7 +103,7 @@ Ka Creator Trial / Subscription Plan renew ka duh e.
 
 Khawngaihin renew dan tur leh discount min lo hrilh thei em?`;
 
-  const whatsappUrl = `https://wa.me/917005153902?text=${encodeURIComponent(queryMessage)}`;
+  const whatsappUrl = `https://wa.me/919862300000?text=${encodeURIComponent(queryMessage)}`;
   const mailtoUrl = `mailto:${adminEmail}?subject=${encodeURIComponent(`Plan Renewal Request - ${creatorProfile.name}`)}&body=${encodeURIComponent(queryMessage)}`;
 
   // IF DISMISSED by user, show a compact floating warning bar so it's never forgotten

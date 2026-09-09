@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { getUserRole, ROLE_METAS, canAccessAdminConsole } from '../utils/rbac';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -165,7 +164,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </button>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-center justify-center gap-1.5">
                 <h3 className="font-black text-slate-900 text-base sm:text-lg">{creatorProfile.name || 'RonPay User'}</h3>
                 <button
@@ -177,21 +176,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              {/* 6-Tier Role Badge */}
-              <div className="flex items-center justify-center">
-                {(() => {
-                  const role = getUserRole(creatorProfile);
-                  const meta = ROLE_METAS[role];
-                  return (
-                    <span className={`inline-flex items-center gap-1 text-[9.5px] font-black px-2.5 py-0.5 rounded-full ${meta.badgeColor}`}>
-                      <ShieldCheck className="w-3 h-3" />
-                      {meta.title} ({meta.badge})
-                    </span>
-                  );
-                })()}
-              </div>
-
               <p className="text-xs text-slate-600 font-medium">
                 {creatorProfile.designation || 'Creator Member'} • <strong className="text-slate-900">{creatorProfile.orgName || 'Mizoram Branch'}</strong>
               </p>
@@ -443,21 +427,27 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Master Admin Console Trigger (Only visible to verified Administrators) */}
-        {onOpenAdmin && Boolean(creatorProfile.isAdmin) && (
+        {/* Master Admin & RBAC Console Trigger */}
+        {onOpenAdmin && (
           <button
+            id="profile-admin-console-btn"
             onClick={() => {
               onClose();
               onOpenAdmin();
             }}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-md"
+            className="w-full bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 hover:from-slate-800 hover:to-purple-900 text-white p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-md border border-indigo-500/30 group"
           >
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              RonPay Admin Console
-            </span>
-            <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full font-black uppercase">
-              Admin
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="text-left">
+                <p className="font-black text-white text-xs">RonPay Admin & Role Desk</p>
+                <p className="text-[9.5px] text-slate-300">Super Admin • Admin • Moderator (RBAC)</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-1 rounded-full font-black uppercase shadow-xs group-hover:scale-105 transition-transform">
+              Open Portal
             </span>
           </button>
         )}
@@ -473,7 +463,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 }}
                 className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer shadow-2xs"
               >
-                <Sparkles className="w-4 h-4 text-indigo-600" /> Profile Dang / Switch Account
+                <Sparkles className="w-4 h-4 text-indigo-600" /> Switch Account / Test User Dang
               </button>
             )}
 
@@ -485,7 +475,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 }}
                 className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer"
               >
-                <LogOut className="w-4 h-4 text-rose-600" /> Logout (Khualmi / Guest User-ah let rawh)
+                <LogOut className="w-4 h-4 text-rose-600" /> Creator Logout (Standard User-ah let rawh)
               </button>
             )}
           </div>
@@ -498,14 +488,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               }}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer active:scale-[0.99]"
             >
-              <LogIn className="w-4 h-4" /> Citizen & Member Login
+              <LogIn className="w-4 h-4" /> Creator Login / Test Account Switcher
             </button>
           )
         )}
 
         <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 text-center">
           <p className="text-[10.5px] text-amber-950 font-bold">
-            RonPay Community Platform V1.0
+            RonPay Community Platform v2.5
           </p>
           <p className="text-[10px] text-amber-800">Protected with Biometrics & End-to-End Integrity</p>
         </div>
@@ -515,7 +505,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             onClick={onResetData}
             className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh App Data
+            <RefreshCw className="w-3.5 h-3.5" /> Reset Demo
           </button>
           <button
             onClick={onClose}
