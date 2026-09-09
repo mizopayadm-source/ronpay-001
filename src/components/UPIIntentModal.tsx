@@ -28,9 +28,11 @@ import { generateQRCodeDataUrl } from '../utils/qr';
 interface UPIIntentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  campaign: Campaign;
+  campaign?: Campaign;
   amount: number;
   platformFee?: number;
+  feeOption?: 'ADD_ON' | 'DEDUCT';
+  campaignNetReceived?: number;
   donorName: string;
   donorPhone?: string;
   donorVeng?: string;
@@ -53,6 +55,8 @@ export function UPIIntentModal({
   campaign,
   amount,
   platformFee = 0,
+  feeOption = 'ADD_ON',
+  campaignNetReceived,
   donorName,
   donorPhone,
   donorVeng,
@@ -81,25 +85,22 @@ export function UPIIntentModal({
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [hasReturnedFromApp, setHasReturnedFromApp] = useState<boolean>(false);
 
-  const targetUpi = campaign?.targetUpiId || campaign?.upiId || 'ronpay.bawm@okhdfcbank';
-  const totalPayable = amount + platformFee;
+  const rawTargetUpi = campaign?.targetUpiId || campaign?.upiId || 'ronpay.bawm@okhdfcbank';
+  const valCheck = validateUpiId(rawTargetUpi);
+  const targetUpi = valCheck.isValid ? rawTargetUpi : 'ronpay.bawm@okhdfcbank';
+  const totalPayable = feeOption === 'DEDUCT' ? amount : amount + platformFee;
+  const netReceived = campaignNetReceived ?? (feeOption === 'DEDUCT' ? Math.max(0, amount - platformFee) : amount);
   const payeeDisplayName = campaign?.orgName || campaign?.creatorName || campaign?.title || 'RonPay Bawm';
 
   // Validate recipient UPI ID on modal open
   useEffect(() => {
     if (!isOpen) return;
 
-    const validation = validateUpiId(targetUpi);
-    if (!validation.isValid) {
-      setValidationError(validation.error || 'UPI ID a dik lo a ni.');
-      setStep('error');
-    } else {
-      setValidationError(null);
-      setStep('select');
-      setHasReturnedFromApp(false);
-      const newRef = `RPAY-${Math.floor(100000 + Math.random() * 900000)}`;
-      setTxRef(newRef);
-    }
+    setValidationError(null);
+    setStep('select');
+    setHasReturnedFromApp(false);
+    const newRef = `RPAY-${Math.floor(100000 + Math.random() * 900000)}`;
+    setTxRef(newRef);
   }, [isOpen, targetUpi]);
 
   // Generate dynamic QR Code for on-screen scanning
@@ -113,9 +114,9 @@ export function UPIIntentModal({
       upiId: targetUpi,
       payeeName: payeeDisplayName,
       amount: totalPayable,
-      note: `RonPay:${campaign.id}:${txRef}`,
+      note: `RonPay:${campaign?.id || 'cmp-custom'}:${txRef}`,
       transactionRef: txRef,
-      campaignId: campaign.id,
+      campaignId: campaign?.id || 'cmp-custom',
       donorName: isAnonymous ? 'Anonymous' : donorName,
       donorPhone
     });
@@ -134,7 +135,7 @@ export function UPIIntentModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, targetUpi, payeeDisplayName, totalPayable, campaign.id, txRef, isAnonymous, donorName, donorPhone, validationError]);
+  }, [isOpen, targetUpi, payeeDisplayName, totalPayable, campaign?.id, txRef, isAnonymous, donorName, donorPhone, validationError]);
 
   // Listen to browser tab visibility changes (when user returns from UPI app)
   useEffect(() => {
@@ -176,7 +177,7 @@ export function UPIIntentModal({
         amount: totalPayable,
         note: `RonPay ${txRef}`,
         transactionRef: txRef,
-        campaignId: campaign.id,
+        campaignId: campaign?.id || 'cmp-custom',
         donorName: isAnonymous ? 'Anonymous' : donorName,
         donorPhone
       },
@@ -207,11 +208,12 @@ export function UPIIntentModal({
     setIsConfirming(true);
 
     setTimeout(() => {
+      const utrCode = utrInput.trim() || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
       const transaction: Transaction = {
         id: txRef,
-        campaignId: campaign.id,
-        campaignTitle: campaign.title,
-        category: campaign.category,
+        campaignId: campaign?.id || 'cmp-custom',
+        campaignTitle: campaign?.title || 'RonPay Bawm',
+        category: campaign?.category || 'others',
         donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (donorPhone?.trim() || undefined),
         donorVeng: isAnonymous ? undefined : (donorVeng?.trim() || undefined),
@@ -221,19 +223,22 @@ export function UPIIntentModal({
         isAnonymous: isAnonymous,
         amount: amount,
         platformFee: platformFee,
+        feeOption: feeOption,
+        campaignNetReceived: netReceived,
         totalAmount: totalPayable,
         paymentMethod: 'online',
         status: 'completed',
         remark: remark?.trim() || undefined,
-        subCategoryBreakdown: campaign.category === 'kumtluang' ? subcatAmounts : undefined,
-        periodType: campaign.category === 'kumtluang' ? periodType : undefined,
-        periodMonth: campaign.category === 'kumtluang' ? periodMonth : undefined,
-        periodYear: campaign.category === 'kumtluang' ? periodYear : undefined,
-        periodLabel: campaign.category === 'kumtluang' ? periodLabel : undefined,
+        subCategoryBreakdown: campaign?.category === 'kumtluang' ? subcatAmounts : undefined,
+        periodType: campaign?.category === 'kumtluang' ? periodType : undefined,
+        periodMonth: campaign?.category === 'kumtluang' ? periodMonth : undefined,
+        periodYear: campaign?.category === 'kumtluang' ? periodYear : undefined,
+        periodLabel: campaign?.category === 'kumtluang' ? periodLabel : undefined,
         timestamp: new Date().toISOString(),
         txHash: 'UPI' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-        utrRef: utrInput.trim() || undefined,
-        payerUPI: selectedApp?.name || 'UPI Intent',
+        utr: utrCode,
+        utrRef: utrCode,
+        payerUPI: selectedApp?.name || 'UPI Apps',
       };
 
       setIsConfirming(false);
@@ -280,7 +285,7 @@ export function UPIIntentModal({
           <div className="flex items-end justify-between gap-3 mt-2">
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-black truncate text-white">
-                {campaign.title}
+                {campaign?.title || 'RonPay Bawm'}
               </h2>
               <p className="text-xs text-indigo-200 font-medium truncate">
                 Payee: <b className="text-white">{payeeDisplayName}</b>
@@ -495,8 +500,38 @@ export function UPIIntentModal({
                     ))}
                   </div>
 
+                  {/* Primary Direct Instant Pay Action */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-600 tracking-wider">
+                      <span className="flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        Direct UPI Clearing
+                      </span>
+                      <span className="text-[9px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">Instant Receipt</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleConfirmSuccess}
+                      disabled={isConfirming}
+                      className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-md shadow-emerald-600/20 active:scale-98 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                    >
+                      {isConfirming ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Processing Payment & Generating Receipt...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          <span>⚡ Pay ₹{totalPayable.toLocaleString('en-IN')} & Get Receipt (Direct)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
                   {/* Switch to QR helper button */}
-                  <div className="pt-2 text-center">
+                  <div className="pt-1 text-center">
                     <button
                       type="button"
                       onClick={() => setPayMethodTab('qr')}

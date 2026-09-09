@@ -39,6 +39,7 @@ import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '.
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
+import { UPIIntentModal } from './UPIIntentModal';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -69,6 +70,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
+  const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialOpenPhonePeCheckout) {
@@ -534,47 +536,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       return;
     }
 
+    if (paymentMethod === 'online') {
+      setIsProcessing(false);
+      setIsUPICheckoutOpen(true);
+      return;
+    }
+
     setIsProcessing(true);
 
-    if (paymentMethod === 'online') {
-      setPhonePeStatus('CALLING_PG');
-
-      setTimeout(() => {
-        setPhonePeStatus('SUCCESS');
-
-        setTimeout(() => {
-          const transaction: Transaction = {
-            id: 'RPAY-' + Math.floor(100000 + Math.random() * 900000),
-            campaignId: campaign?.id || `cmp-${category}-custom`,
-            campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
-            category: category,
-            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-            donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
-            donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
-            memberId: isAnonymous ? undefined : resolvedMemberId,
-            subId: isAnonymous ? undefined : resolvedSubId,
-            isDependent: isAnonymous ? false : resolvedIsDependent,
-            isAnonymous: isAnonymous,
-            amount: subtotal,
-            platformFee: platformFee,
-            feeOption: feeBearerOption,
-            campaignNetReceived: campaignNetReceived,
-            totalAmount: totalPayable,
-            paymentMethod: 'online',
-            status: 'completed',
-            remark: remark.trim() || undefined,
-            subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
-            periodType: category === 'kumtluang' ? periodType : undefined,
-            periodLabel: category === 'kumtluang' ? periodLabel : undefined,
-            timestamp: new Date().toISOString(),
-            txHash: 'UPI' + Math.random().toString(36).substring(2, 12).toUpperCase(),
-          };
-
-          setIsProcessing(false);
-          onPaymentSuccess(transaction);
-        }, 900);
-      }, 1200);
-    } else {
+    if (paymentMethod === 'cash') {
       // Cash payment
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
@@ -1844,6 +1814,34 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         periodLabel={category === 'kumtluang' ? periodLabel : undefined}
         onPaymentSuccess={(transaction) => {
           setIsPhonePeCheckoutOpen(false);
+          onPaymentSuccess(transaction);
+        }}
+      />
+
+      {/* Embedded Direct UPI Apps (GPay, Paytm, PhonePe) Modal */}
+      <UPIIntentModal
+        isOpen={isUPICheckoutOpen}
+        onClose={() => setIsUPICheckoutOpen(false)}
+        campaign={campaign}
+        amount={subtotal}
+        platformFee={platformFee}
+        feeOption={feeBearerOption}
+        campaignNetReceived={campaignNetReceived}
+        donorName={isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor')}
+        donorPhone={donorPhone.trim() || undefined}
+        donorVeng={donorSection.trim() || undefined}
+        memberId={selectedMember?.id}
+        subId={selectedPayerType !== 'primary' ? selectedPayerType : undefined}
+        isDependent={selectedPayerType !== 'primary'}
+        isAnonymous={isAnonymous}
+        remark={remark.trim() || undefined}
+        subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+        periodType={category === 'kumtluang' ? periodType : undefined}
+        periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
+        periodYear={category === 'kumtluang' ? selectedYear : undefined}
+        periodLabel={category === 'kumtluang' ? periodLabel : undefined}
+        onPaymentSuccess={(transaction) => {
+          setIsUPICheckoutOpen(false);
           onPaymentSuccess(transaction);
         }}
       />
