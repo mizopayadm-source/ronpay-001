@@ -60,6 +60,7 @@ interface HomeScreenProps {
   onShowBalance: () => void;
   onShowBankTransfer: () => void;
   onOpenPhonePePortal?: () => void;
+  onOpenPhonePeCheckout?: (amount?: number) => void;
   onSelectCampaign?: (campaign: Campaign) => void;
   language?: Language;
   onOpenHistory?: () => void;
@@ -85,6 +86,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onShowBalance,
   onShowBankTransfer,
   onOpenPhonePePortal,
+  onOpenPhonePeCheckout,
   onSelectCampaign,
   language = 'mizo',
   onOpenHistory,
@@ -446,12 +448,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onOpenPhonePePortal}
-          className="bg-white hover:bg-purple-50 text-purple-950 font-black px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0"
-        >
-          View API & Test
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onOpenPhonePeCheckout && (
+            <button
+              type="button"
+              id="home-phonepe-checkout-btn"
+              onClick={() => onOpenPhonePeCheckout(100)}
+              className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-2.5 sm:px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 whitespace-nowrap"
+              title="Open PhonePe PG Checkout Page"
+            >
+              <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+              <span>Checkout (₹100)</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onOpenPhonePePortal}
+            className="bg-white hover:bg-purple-50 text-purple-950 font-black px-2.5 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
+          >
+            API & Logs
+          </button>
+        </div>
       </div>
 
       {/* 3. Community Collection Hubs - RONPAY SERVICES */}

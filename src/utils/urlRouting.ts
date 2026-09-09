@@ -64,7 +64,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const receiptId = searchParams.get('receipt') || 
                       searchParams.get('tx') || 
                       searchParams.get('txn') || 
-                      searchParams.get('receiptId');
+                      searchParams.get('receiptId') ||
+                      searchParams.get('phonepe_txn_id');
 
     const rollId = searchParams.get('roll') || 
                    searchParams.get('member_roll') || 
@@ -72,13 +73,17 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     const screenParam = searchParams.get('screen') || searchParams.get('page');
     const viewParam = searchParams.get('view');
-    const phonepeParam = searchParams.get('phonepe') || searchParams.get('pg');
+    const phonepeParam = searchParams.get('phonepe') || 
+                         searchParams.get('pg') || 
+                         searchParams.get('phonepe_checkout') || 
+                         searchParams.get('checkout');
     const catParam = searchParams.get('cat') || searchParams.get('category');
     const sulhnuParam = searchParams.get('sulhnu') || searchParams.get('history');
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
     const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') ? viewParam : undefined;
-    const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1';
+    const isPhonePePath = pathname.toLowerCase() === '/checkout' || pathname.toLowerCase() === '/phonepe';
+    const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1' || phonepeParam === 'phonepe' || isPhonePePath;
 
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {
