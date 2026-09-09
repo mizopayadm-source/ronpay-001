@@ -198,8 +198,21 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   }, [safeTransactions, directionFilter, filterCategory, searchQuery, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
   const totalAmount = useMemo(() => {
-    return filtered.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
-  }, [filtered]);
+    return filtered.reduce((sum, t) => {
+      if (!t) return sum;
+      const dir = getTxDirection(t);
+      const isRec = dir === 'received';
+      const base = Number(t.amount) || 0;
+      const fee = Number(t.platformFee) || 0;
+      if (isRec && t.feeOption === 'DEDUCT') {
+        return sum + (Number(t.campaignNetReceived) || Math.max(0, base - fee));
+      }
+      if (!isRec && t.feeOption === 'ADD_ON') {
+        return sum + (Number(t.totalAmount) || (base + fee));
+      }
+      return sum + (Number(t.totalAmount) || base);
+    }, 0);
+  }, [filtered, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
   if (!isOpen) return null;
 
@@ -209,6 +222,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       const categoryLabel = effectiveCat === 'others' 
         ? 'OTHERS (BILLS & RECHARGE)' 
         : String(effectiveCat).toUpperCase() + ' BAWM';
+
+      const isPhonePe = tx.paymentMethod === 'phonepe' || (typeof tx.id === 'string' && tx.id.startsWith('RPAY_TXN_'));
+      const isOnline = tx.paymentMethod === 'online' || isPhonePe;
+      const baseAmt = Number(tx.amount) || 0;
+      const fee = Number(tx.platformFee) || 0;
+      const totalAmt = Number(tx.totalAmount) || (tx.feeOption === 'ADD_ON' ? (baseAmt + fee) : baseAmt);
+      const netAmt = Number(tx.campaignNetReceived) || (tx.feeOption === 'DEDUCT' ? Math.max(0, baseAmt - fee) : baseAmt);
 
       const subcatsHtml = tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0
         ? `<div style="margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
@@ -250,9 +270,24 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               </div>
 
               <div class="amount-box">
-                <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">Pek Zat (Amount)</div>
-                <div class="amount-val">₹${(Number(tx.amount) || 0).toLocaleString('en-IN')}</div>
+                <div style="font-size: 11px; color: #64748b; font-weight: bold; text-transform: uppercase;">Pek Zat (Amount Paid)</div>
+                <div class="amount-val">₹${totalAmt.toLocaleString('en-IN')}</div>
               </div>
+
+              ${fee > 0 ? `
+              <div class="row" style="background: #f8fafc; padding: 6px 8px; border-radius: 8px; margin: 6px 0;">
+                <span class="label">Bawm Thawh Zat:</span>
+                <span class="val font-mono">₹${(tx.feeOption === 'DEDUCT' ? netAmt : baseAmt).toLocaleString('en-IN')}</span>
+              </div>
+              <div class="row" style="background: #f8fafc; padding: 6px 8px; border-radius: 8px; margin: 6px 0;">
+                <span class="label">RonPay PG Fee (1%):</span>
+                <span class="val font-mono">₹${fee.toLocaleString('en-IN')} (${tx.feeOption === 'ADD_ON' ? 'Donor Pek Belh' : 'Thawhzat Atanga Paih'})</span>
+              </div>
+              <div class="row" style="font-weight: bold; border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 6px;">
+                <span class="label">Total Paid (Pek Pumhlum):</span>
+                <span class="val font-mono" style="color: #047857; font-size: 14px;">₹${totalAmt.toLocaleString('en-IN')}</span>
+              </div>
+              ` : ''}
 
               <div class="row">
                 <span class="label">Receipt No / TX ID:</span>
@@ -287,7 +322,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               </div>` : ''}
               <div class="row">
                 <span class="label">Payment Mode:</span>
-                <span class="val" style="text-transform: uppercase;">${tx.paymentMethod === 'online' ? '⚡ ONLINE UPI' : '💵 CASH DEPOSIT'}</span>
+                <span class="val" style="text-transform: uppercase; color: ${isPhonePe ? '#5f259f' : '#4338ca'}; font-weight: 800;">
+                  ${isPhonePe ? '⚡ PHONEPE PG V2' : isOnline ? '⚡ ONLINE UPI' : '💵 CASH DEPOSIT'}
+                </span>
               </div>
               ${tx.remark ? `
                 <div class="row">
@@ -622,6 +659,38 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               const direction = getTxDirection(tx);
               const isReceived = direction === 'received';
 
+              const isPhonePe = tx.paymentMethod === 'phonepe' || (typeof tx.id === 'string' && tx.id.startsWith('RPAY_TXN_'));
+              const isOnline = tx.paymentMethod === 'online' || isPhonePe;
+              const isCash = tx.paymentMethod === 'cash';
+              const isVerified = tx.status === 'completed' || tx.status === 'verified';
+
+              // Compute actual display amounts based on feeOption
+              const baseAmt = Number(tx.amount) || 0;
+              const fee = Number(tx.platformFee) || 0;
+              const totalAmt = Number(tx.totalAmount) || (tx.feeOption === 'ADD_ON' ? (baseAmt + fee) : baseAmt);
+              const netAmt = Number(tx.campaignNetReceived) || (tx.feeOption === 'DEDUCT' ? Math.max(0, baseAmt - fee) : baseAmt);
+
+              let effectiveDisplayAmount = baseAmt;
+              let splitBadge = '';
+
+              if (isReceived) {
+                // Recipient (Bawm Dawngtu) view: what Bawm actually received
+                effectiveDisplayAmount = tx.feeOption === 'DEDUCT' ? netAmt : baseAmt;
+                if (fee > 0) {
+                  splitBadge = tx.feeOption === 'DEDUCT'
+                    ? `Pek zat: ₹${totalAmt} (₹${fee} fee paih)`
+                    : `Donor pek belh: ₹${fee} fee`;
+                }
+              } else {
+                // Donor (Thawhtu) view: what donor actually paid
+                effectiveDisplayAmount = totalAmt;
+                if (fee > 0) {
+                  splitBadge = tx.feeOption === 'ADD_ON'
+                    ? `₹${baseAmt} Bawm + ₹${fee} Fee (Pek belh)`
+                    : `₹${netAmt} Bawm + ₹${fee} Fee (Paih)`;
+                }
+              }
+
               return (
                 <div
                   key={tx.id}
@@ -663,8 +732,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
                     <div className="text-right">
                       <div className={`font-black text-sm ${isReceived ? 'text-emerald-800' : 'text-slate-900'}`}>
-                        {isReceived ? '+' : ''}₹{(Number(tx.amount) || 0).toLocaleString('en-IN')}
+                        {isReceived ? '+' : ''}₹{effectiveDisplayAmount.toLocaleString('en-IN')}
                       </div>
+                      {splitBadge && (
+                        <div className="text-[9px] font-bold text-indigo-700 bg-indigo-50/90 px-1.5 py-0.5 rounded border border-indigo-100 mt-0.5 inline-block">
+                          {splitBadge}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -725,7 +799,12 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                   {/* Actions & Payment Mode */}
                   <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/60">
                     <div className="flex items-center gap-1.5">
-                      {tx.paymentMethod === 'online' ? (
+                      {isPhonePe ? (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-purple-50 text-[#5f259f] border border-purple-200" title="PhonePe PG Payment">
+                          <Zap className="w-2.5 h-2.5 text-[#5f259f] fill-[#5f259f]" />
+                          <span>PhonePe</span>
+                        </span>
+                      ) : isOnline ? (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200" title="Online UPI Payment">
                           <Zap className="w-2.5 h-2.5 text-amber-500" />
                           <span>Online</span>
@@ -736,8 +815,10 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                           <span>Cash</span>
                         </span>
                       )}
-                      <span className="text-[9px] font-bold text-slate-400">
-                        {tx.status === 'completed' ? '• Verified' : '• Pending'}
+                      <span className={`text-[9px] font-bold ${
+                        isVerified ? 'text-emerald-600' : 'text-amber-500'
+                      }`}>
+                        {isVerified ? '• Verified' : '• Pending'}
                       </span>
                     </div>
 

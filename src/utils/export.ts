@@ -347,7 +347,7 @@ export const exportFormattedExcel = (
   const location = creatorInfo?.address?.trim() || 'Mizoram, India';
   const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
 
-  const onlineTransactions = transactions.filter(t => t.paymentMethod === 'online');
+  const onlineTransactions = transactions.filter(t => t.paymentMethod !== 'cash');
   const cashTransactions = transactions.filter(t => t.paymentMethod === 'cash');
   const onlineTotal = onlineTransactions.reduce((sum, t) => sum + t.amount, 0);
   const cashTotal = cashTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -484,7 +484,7 @@ export const exportFormattedExcel = (
         remarks = remarks ? `${remarks} (${parts.join(', ')})` : parts.join(', ');
       }
 
-      const modeText = t.paymentMethod === 'cash' ? '💵 CASH' : '⚡ ONLINE';
+      const modeText = t.paymentMethod === 'phonepe' ? '⚡ PHONEPE' : t.paymentMethod === 'cash' ? '💵 CASH' : '⚡ ONLINE';
 
       return `
         <tr class="${idx % 2 === 0 ? 'row-even' : 'row-odd'}">
@@ -732,7 +732,7 @@ export const exportDetailedTransactionsCSV = (
   targetInfo?: TargetExportInfo
 ) => {
   const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const onlineTransactions = transactions.filter(t => t.paymentMethod === 'online');
+  const onlineTransactions = transactions.filter(t => t.paymentMethod !== 'cash');
   const cashTransactions = transactions.filter(t => t.paymentMethod === 'cash');
   const onlineTotal = onlineTransactions.reduce((sum, t) => sum + t.amount, 0);
   const cashTotal = cashTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -855,7 +855,7 @@ export const generateTransactionsPDFHtml = (
   options: PDFExportOptions = { includeMonthlyChart: true, includeSignatures: true }
 ): string => {
   const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const onlineTransactions = transactions.filter(t => t.paymentMethod === 'online');
+  const onlineTransactions = transactions.filter(t => t.paymentMethod !== 'cash');
   const cashTransactions = transactions.filter(t => t.paymentMethod === 'cash');
   const onlineTotal = onlineTransactions.reduce((sum, t) => sum + t.amount, 0);
   const cashTotal = cashTransactions.reduce((sum, t) => sum + t.amount, 0);

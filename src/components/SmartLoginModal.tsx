@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Lock, 
@@ -20,7 +20,8 @@ import {
   Crown,
   ChevronRight,
   ShieldAlert,
-  User
+  User,
+  LogIn
 } from 'lucide-react';
 import { CreatorProfile, UserRole } from '../types';
 import { INITIAL_REGISTERED_CREATORS } from '../data/initialData';
@@ -170,12 +171,80 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   const [googleCustomPhone, setGoogleCustomPhone] = useState<string>('');
   const [googleIsNewUser, setGoogleIsNewUser] = useState<boolean>(false);
 
+  // 5-click secret dev toggle
+  const [testerSecretClicks, setTesterSecretClicks] = useState<number>(0);
+  const [isTesterUnlocked, setIsTesterUnlocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('ronpay_tester_unlocked') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [testerNotice, setTesterNotice] = useState<string>('');
+  const testerClickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Phone submode ('mpin' or 'otp')
+  const [phoneSubMode, setPhoneSubMode] = useState<'mpin' | 'otp'>('mpin');
+  const [otpCodeInput, setOtpCodeInput] = useState<string>('');
+  const [isOtpSent, setIsOtpSent] = useState<boolean>(false);
+  const [rememberDevice, setRememberDevice] = useState<boolean>(true);
+
+  const handleHeaderSecretClick = () => {
+    if (testerClickTimerRef.current) clearTimeout(testerClickTimerRef.current);
+    const newCount = testerSecretClicks + 1;
+    if (newCount >= 5) {
+      setIsTesterUnlocked(true);
+      try {
+        sessionStorage.setItem('ronpay_tester_unlocked', 'true');
+      } catch {}
+      setTesterSecretClicks(0);
+      setActiveMethod('demo');
+      setTesterNotice('Internal Console Unlocked: Developer & Tester Hub is now accessible.');
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate([40, 50, 60]); } catch {}
+      }
+    } else {
+      setTesterSecretClicks(newCount);
+      testerClickTimerRef.current = setTimeout(() => {
+        setTesterSecretClicks(0);
+      }, 2500);
+    }
+  };
+
+  const handleLockAndHide = () => {
+    setIsTesterUnlocked(false);
+    try {
+      sessionStorage.removeItem('ronpay_tester_unlocked');
+    } catch {}
+    if (activeMethod === 'demo') {
+      setActiveMethod('credentials');
+    }
+    setTesterNotice('Tester (Dev) Console chu thuhruk fel a ni ta.');
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate([30, 40]); } catch {}
+    }
+  };
+
+  const handleSendOtp = () => {
+    const rawUser = userInput.trim();
+    if (!rawUser) {
+      setErrorMessage('Khawngaihin Phone Number chhu lut hmasa rawh.');
+      return;
+    }
+    setIsOtpSent(true);
+    setOtpCodeInput('123456');
+    setTesterNotice('Test SMS OTP: 123456 thawn fel a ni e.');
+    triggerHaptic();
+  };
+
   // Auto focus / initialize
   useEffect(() => {
     if (isOpen) {
       setErrorMessage('');
       setSuccessNotice('');
       setPasswordInput('');
+      setOtpCodeInput('');
+      setIsOtpSent(false);
       if (currentProfile?.phone && currentProfile.phone !== '9436001234' && currentProfile.phone !== '9862000001') {
         setUserInput(currentProfile.phone);
       } else {
@@ -201,15 +270,21 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     const rawUser = userInput.trim();
     const cleanUser = rawUser.toLowerCase();
     const cleanPhone = rawUser.replace(/\D/g, '');
-    const pwd = passwordInput.trim();
+    const isOtp = phoneSubMode === 'otp';
+    const pwd = isOtp ? (otpCodeInput.trim() || '1234') : passwordInput.trim();
 
     if (!rawUser) {
-      setErrorMessage('Khawngaihin User ID, Phone Number emaw Email chhu lut rawh.');
+      setErrorMessage('Khawngaihin Phone Number chhu lut rawh.');
       return;
     }
 
-    if (!pwd) {
-      setErrorMessage('Khawngaihin Password emaw Security PIN chhu lut rawh.');
+    if (!isOtp && !pwd) {
+      setErrorMessage('Khawngaihin 4-Digit Security MPIN chhu lut rawh.');
+      return;
+    }
+
+    if (isOtp && (!otpCodeInput.trim() || otpCodeInput.trim().length < 4)) {
+      setErrorMessage('Khawngaihin 6-Digit SMS OTP chhu lut rawh (e.g. 123456).');
       return;
     }
 
@@ -464,29 +539,49 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[94vh] flex flex-col text-slate-900 animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Gradient Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-5 flex items-center justify-between border-b border-indigo-900/60 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/90 text-white flex items-center justify-center shadow-md border border-indigo-400/40">
+        {/* Top Gradient Header (Secret 5-Click Trigger) */}
+        <div 
+          onClick={handleHeaderSecretClick}
+          className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-900/60 shrink-0 cursor-pointer select-none group"
+          title="RonPay Security Login (Protected)"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600/90 text-white flex items-center justify-center shadow-md border border-indigo-400/40 group-active:scale-95 transition shrink-0">
               <Lock className="w-5 h-5 text-indigo-100" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
-                  RonPay Unified Login
+                  RonPay Security Login
                 </h2>
-                <span className="text-[9px] bg-amber-400/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-400/40">
-                  ALL ROLES
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 font-black px-2 py-0.5 rounded-full border border-emerald-500/40 tracking-wider">
+                  PROTECTED
                 </span>
+                {isTesterUnlocked && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLockAndHide();
+                    }}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[9.5px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition cursor-pointer"
+                  >
+                    <Lock className="w-2.5 h-2.5" /> INTERNAL - HIDE
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-indigo-200/80 font-medium">
-                Admin • Moderator • Creator • Member
+              <p className="text-xs text-indigo-200/80 font-medium truncate mt-0.5">
+                Biometric & MPIN Fast Authentication
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
@@ -496,32 +591,35 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         {/* Method Switcher Tabs */}
         <div className="flex border-b border-slate-200 bg-slate-50/90 p-1.5 gap-1 shrink-0 text-xs font-bold text-slate-600">
           <button
+            type="button"
             onClick={() => { setActiveMethod('credentials'); setErrorMessage(''); }}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeMethod === 'credentials'
                 ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
             }`}
           >
-            <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
-            <span>ID & Password</span>
+            <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Phone & OTP</span>
           </button>
 
           <button
-            onClick={() => { setActiveMethod('demo'); setErrorMessage(''); }}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeMethod === 'demo'
+            type="button"
+            onClick={() => { setActiveMethod('biometric'); setErrorMessage(''); }}
+            className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeMethod === 'biometric'
                 ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
             }`}
           >
-            <Crown className="w-3.5 h-3.5 text-amber-600" />
-            <span>1-Tap Demo</span>
+            <Fingerprint className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Biometric / MPIN</span>
           </button>
 
           <button
+            type="button"
             onClick={() => { setActiveMethod('google'); setErrorMessage(''); }}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeMethod === 'google'
                 ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
@@ -530,10 +628,53 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             <span className="font-black text-rose-600">G</span>
             <span>Google</span>
           </button>
+
+          {/* HIDDEN FROM GUEST USERS: Unlocked only by 5 clicks */}
+          {isTesterUnlocked && (
+            <button
+              type="button"
+              onClick={() => { setActiveMethod('demo'); setErrorMessage(''); }}
+              className={`py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer font-black ${
+                activeMethod === 'demo'
+                  ? 'bg-amber-400 text-slate-950 shadow-xs ring-1 ring-amber-500'
+                  : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+              }`}
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-900" />
+              <span>Tester (Dev)</span>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLockAndHide();
+                }}
+                className="ml-1 hover:bg-amber-500 rounded p-0.5 text-slate-800 hover:text-white"
+                title="Lock & Hide"
+              >
+                <X className="w-3 h-3" />
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Content Body */}
         <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+          {/* Tester Notice Banner (Unlocked or Hidden) */}
+          {testerNotice && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{testerNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTesterNotice('')}
+                className="text-emerald-700 hover:text-emerald-900 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Success Banner */}
           {successNotice && (
             <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2.5 text-xs font-black text-emerald-900 animate-fadeIn">
@@ -550,58 +691,66 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             </div>
           )}
 
-          {/* TAB 1: UNIFIED USER ID / PHONE & PASSWORD / PIN */}
+          {/* TAB 1: PHONE & OTP / MPIN (Clean Guest View) */}
           {activeMethod === 'credentials' && (
-            <form onSubmit={handleCredentialsLogin} className="space-y-4 animate-fadeIn">
-              <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-2xl p-3 text-xs text-indigo-950 flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-black block">Single Gateway for All Users</span>
-                  <span className="text-[11px] text-indigo-900/80 leading-relaxed">
-                    User, Creator, Kohhran Treasurer, Admin leh Moderator zawng zawngte heta tang hian mahni User ID / Phone leh Password in luh vek theih a ni.
+            <form onSubmit={handleCredentialsLogin} className="space-y-3.5 animate-fadeIn">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  Phone Number (India +91)
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 font-bold text-xs text-slate-400 select-none">
+                    +91
                   </span>
+                  <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Entirnan: 9862000000"
+                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                    required
+                  />
                 </div>
               </div>
 
-              <div className="space-y-3">
+              {/* Sub Mode Switch: 4-Digit Security MPIN vs SMS OTP */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setPhoneSubMode('mpin')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-black transition cursor-pointer text-center ${
+                    phoneSubMode === 'mpin'
+                      ? 'bg-white text-indigo-950 shadow-xs border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  4-Digit Security MPIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhoneSubMode('otp')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-black transition cursor-pointer text-center ${
+                    phoneSubMode === 'otp'
+                      ? 'bg-white text-indigo-950 shadow-xs border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  SMS OTP hmangin
+                </button>
+              </div>
+
+              {phoneSubMode === 'mpin' ? (
                 <div>
-                  <label className="text-xs font-black text-slate-700 block mb-1">
-                    User ID / Phone Number / Email
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Security MPIN
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                      <User className="w-4 h-4" />
-                    </span>
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      placeholder="e.g. 9862599881 / superadmin / admin / user"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs font-black text-slate-700">
-                      Password / Security MPIN
-                    </label>
-                    <span className="text-[10px] text-indigo-600 font-bold">
-                      Demo PIN: 1234 / ronpay2026
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                      <Lock className="w-4 h-4" />
-                    </span>
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="Password emaw 4-digit PIN..."
-                      className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-black tracking-wider text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                      placeholder="• • • •"
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black tracking-widest text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
                       required
                     />
                     <button
@@ -613,49 +762,48 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Quick Preset Buttons */}
-              <div className="pt-1">
-                <span className="text-[10.5px] font-bold text-slate-500 block mb-1.5">Quick fill test credentials:</span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserInput('superadmin');
-                      setPasswordInput('ronpay2026');
-                    }}
-                    className="py-1 px-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-[10.5px] font-black text-purple-900 transition cursor-pointer text-center truncate"
-                  >
-                    👑 Super Admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserInput('admin');
-                      setPasswordInput('ronpay2026');
-                    }}
-                    className="py-1 px-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10.5px] font-black text-blue-900 transition cursor-pointer text-center truncate"
-                  >
-                    🛡️ Admin Ops
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUserInput('9862599881');
-                      setPasswordInput('1234');
-                    }}
-                    className="py-1 px-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[10.5px] font-black text-emerald-900 transition cursor-pointer text-center truncate"
-                  >
-                    🎨 Creator / BCM
-                  </button>
+              ) : (
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    SMS OTP (One Time Password)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={otpCodeInput}
+                      onChange={(e) => setOtpCodeInput(e.target.value)}
+                      placeholder="6-Digit OTP"
+                      maxLength={6}
+                      className="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black tracking-widest text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black transition cursor-pointer shrink-0"
+                    >
+                      {isOtpSent ? 'Resend' : 'Send OTP'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
+              {/* Remember device checkbox */}
+              <label className="flex items-center gap-2 text-[11px] text-slate-600 font-medium cursor-pointer pt-0.5 select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                />
+                <span>He device-ah hian Biometric / MPIN vawng reng rawh</span>
+              </label>
+
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-3 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
@@ -663,64 +811,91 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <KeyRound className="w-4 h-4" /> Sign In to RonPay
+                    <KeyRound className="w-4 h-4" /> {phoneSubMode === 'mpin' ? 'Sign In with Phone & MPIN' : 'Sign In with OTP'}
                   </>
                 )}
               </button>
             </form>
           )}
 
-          {/* TAB 2: 1-TAP DEMO PROFILES */}
+          {/* TAB 4: DEVELOPER & TESTER HUB (INTERNAL MODE UNLOCKED) */}
           {activeMethod === 'demo' && (
             <div className="space-y-3 animate-fadeIn">
-              <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3 text-xs text-amber-950 flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-black block">Demo Testing Hub (Role Switcher)</span>
-                  <span className="text-[11px] text-amber-900/80">
-                    A hnuaia Account duh ber hi hmet la, vawi 1 hmehin Super Admin, Admin, Moderator, Creator emaw Member angin i in-thlak kual nghal zung zung thei e.
+              {/* Internal mode yellow card */}
+              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-xs text-amber-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-600" /> Developer & Tester Hub (Internal Mode Unlocked)
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleLockAndHide}
+                    className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <Lock className="w-3 h-3" /> Lock & Hide
+                  </button>
                 </div>
+                <p className="text-[10.5px] text-amber-900/80 leading-relaxed font-medium">
+                  Internal testing atan chauhva hawn a ni e. Super Admin & Admin chu Master Passcode hmanga ven a la ni reng e.
+                </p>
               </div>
 
+              {/* Tester Accounts List */}
               <div className="space-y-2">
-                {DEMO_ACCOUNTS.map((demo) => (
-                  <button
-                    key={demo.id}
-                    onClick={() => handleSelectDemoAccount(demo)}
-                    disabled={isLoading}
-                    className="w-full text-left p-3 rounded-2xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/40 transition group cursor-pointer flex items-center justify-between gap-3 shadow-2xs active:scale-98 disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img
-                        src={demo.avatarUrl}
-                        alt={demo.name}
-                        className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100 group-hover:ring-indigo-400 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-black text-slate-900 truncate">
-                            {demo.name}
-                          </span>
-                          <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full border ${demo.badgeColor}`}>
-                            {demo.roleBadge}
-                          </span>
+                {DEMO_ACCOUNTS.map((demo) => {
+                  const isMasterLocked = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
+                  return (
+                    <div
+                      key={demo.id}
+                      className="p-3 rounded-2xl border border-slate-200/90 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 transition flex items-center justify-between gap-3 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={demo.avatarUrl}
+                          alt={demo.name}
+                          className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {demo.name}
+                            </span>
+                            <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full border ${demo.badgeColor}`}>
+                              {demo.roleBadge}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-500 font-medium truncate mt-0.5">
+                            {demo.orgName} • {demo.phone}
+                          </p>
+                          <p className="text-[9.5px] text-slate-400 truncate mt-0.5">
+                            {demo.description}
+                          </p>
                         </div>
-                        <p className="text-[10.5px] text-slate-500 font-medium truncate mt-0.5">
-                          {demo.orgName} • {demo.phone}
-                        </p>
-                        <p className="text-[9.5px] text-slate-400 truncate mt-0.5">
-                          {demo.description}
-                        </p>
                       </div>
-                    </div>
 
-                    <div className="shrink-0 flex items-center gap-1 bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white px-2.5 py-1.5 rounded-xl transition text-[11px] font-bold text-slate-700">
-                      <span>Login</span>
-                      <ChevronRight className="w-3 h-3" />
+                      <button
+                        type="button"
+                        onClick={() => handleSelectDemoAccount(demo)}
+                        disabled={isLoading}
+                        className={`shrink-0 px-3 py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 ${
+                          isMasterLocked
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                      >
+                        {isMasterLocked ? (
+                          <>
+                            <Lock className="w-3 h-3" /> Unlock
+                          </>
+                        ) : (
+                          <>
+                            <LogIn className="w-3 h-3" /> Login
+                          </>
+                        )}
+                      </button>
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

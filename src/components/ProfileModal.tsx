@@ -488,7 +488,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               }}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer active:scale-[0.99]"
             >
-              <LogIn className="w-4 h-4" /> Creator Login / Test Account Switcher
+              <LogIn className="w-4 h-4" /> Creator / Member Login
             </button>
           )
         )}

@@ -20,7 +20,8 @@ import {
   Image as ImageIcon,
   Building2,
   Trash2,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -68,6 +69,38 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   const [isOtpSent, setIsOtpSent] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
   const [isPhoneVerified, setIsPhoneVerified] = useState<boolean>(creatorProfile.isPhoneVerified || false);
+
+  // 5-click secret dev toggle
+  const [devSecretClicks, setDevSecretClicks] = useState<number>(0);
+  const [isDevUnlocked, setIsDevUnlocked] = useState<boolean>(false);
+  const [devNotice, setDevNotice] = useState<string>('');
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSecretHeaderClick = () => {
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    const newCount = devSecretClicks + 1;
+    if (newCount >= 5) {
+      setIsDevUnlocked(true);
+      setDevSecretClicks(0);
+      setDevNotice('Internal Console Unlocked: Developer & Tester Hub is now accessible.');
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate([40, 50, 60]); } catch {}
+      }
+    } else {
+      setDevSecretClicks(newCount);
+      clickTimerRef.current = setTimeout(() => {
+        setDevSecretClicks(0);
+      }, 2500);
+    }
+  };
+
+  const handleLockAndHide = () => {
+    setIsDevUnlocked(false);
+    setDevNotice('Tester (Dev) Console chu thuhruk fel a ni ta.');
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate([30, 40]); } catch {}
+    }
+  };
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -480,15 +513,51 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
       {/* 1. CREATOR LOGIN VIEW */}
       {authMode === 'login' && (
         <form onSubmit={handleLoginSubmit} className="bg-white p-4.5 rounded-2xl border border-slate-200/90 space-y-4 shadow-xs text-xs">
-          <div className="text-center py-1">
-            <div className="w-12 h-12 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto text-xl mb-1.5 shadow-xs border border-indigo-200">
+          {/* Secret 5-Click Trigger Header */}
+          <div 
+            onClick={handleSecretHeaderClick}
+            className="text-center py-1 cursor-pointer select-none group"
+            title="QR Creator Account Login"
+          >
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto text-xl mb-1.5 shadow-xs border border-indigo-200 group-active:scale-95 transition">
               <Lock className="w-6 h-6" />
             </div>
-            <h3 className="font-black text-slate-900 text-sm">QR Creator Account Login</h3>
+            <div className="flex items-center justify-center gap-1.5">
+              <h3 className="font-black text-slate-900 text-sm">QR Creator Account Login</h3>
+              {isDevUnlocked && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLockAndHide();
+                  }}
+                  className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition"
+                >
+                  <Lock className="w-2.5 h-2.5" /> INTERNAL - HIDE
+                </button>
+              )}
+            </div>
             <p className="text-[10.5px] text-slate-500 mt-0.5">
               QR Code siam turin Creator account-ah lut rawh.
             </p>
           </div>
+
+          {/* Dev/Tester Notice Banner */}
+          {devNotice && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{devNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDevNotice('')}
+                className="text-emerald-700 hover:text-emerald-900 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {loginError && (
             <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl space-y-2 text-xs font-semibold">
@@ -542,86 +611,100 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
             />
           </div>
 
-          {/* 1-Click Fast Test Account Switcher */}
-          <div className="pt-2 border-t border-slate-200/90 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> 1-Click Test Accounts
-              </span>
-              <span className="text-[9.5px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold border border-amber-200">
-                Switch & Test Users
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              Account dang test nan a hnuaia creator i duh zawk hi hmet rawh (Password type a ngai lo):
-            </p>
+          {/* HIDDEN FROM GUEST USERS: Developer & Tester Hub (Unlocked by 5 clicks) */}
+          {isDevUnlocked && (
+            <div className="pt-2 border-t border-amber-200/80 space-y-3 animate-fadeIn">
+              <div className="bg-amber-50/90 border border-amber-300/80 p-3 rounded-2xl flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" /> Developer & Tester Hub (Internal Mode)
+                  </span>
+                  <p className="text-[10px] text-amber-900/80 leading-relaxed">
+                    Internal testing atan chauhva hawn a ni e. Guest user-te hnen atanga thuhruk a ni.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLockAndHide}
+                  className="shrink-0 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <Lock className="w-3 h-3" /> Lock & Hide
+                </button>
+              </div>
 
-            <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-0.5">
-              {getStoredCreatorsList().map((creator, idx) => {
-                const isCurrentActive = creatorProfile.isApproved && creatorProfile.phone === creator.phone;
-                return (
-                  <div
-                    key={creator.phone || idx}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition ${
-                      isCurrentActive
-                        ? 'bg-emerald-50/80 border-emerald-300 shadow-2xs'
-                        : 'bg-slate-50 hover:bg-indigo-50/70 border-slate-200 hover:border-indigo-300'
-                    }`}
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                        isCurrentActive ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
-                      }`}>
-                        {creator.name ? creator.name.charAt(0).toUpperCase() : 'C'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-slate-900 truncate">{creator.name}</p>
-                          {isCurrentActive && (
-                            <span className="text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1 rounded">
-                              ACTIVE
-                            </span>
-                          )}
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  A hnuaia test accounts hi hmet la, password type ngai lovin 1-click in i lut thei ang:
+                </p>
+
+                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-0.5">
+                  {getStoredCreatorsList().map((creator, idx) => {
+                    const isCurrentActive = creatorProfile.isApproved && creatorProfile.phone === creator.phone;
+                    return (
+                      <div
+                        key={creator.phone || idx}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition ${
+                          isCurrentActive
+                            ? 'bg-emerald-50/80 border-emerald-300 shadow-2xs'
+                            : 'bg-slate-50 hover:bg-indigo-50/70 border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        <div className="min-w-0 flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                            isCurrentActive ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
+                          }`}>
+                            {creator.name ? creator.name.charAt(0).toUpperCase() : 'C'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-900 truncate">{creator.name}</p>
+                              {isCurrentActive && (
+                                <span className="text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1 rounded">
+                                  ACTIVE
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[9.5px] text-slate-500 truncate">{creator.orgName}</p>
+                            <p className="text-[8.5px] text-slate-400 font-mono">Ph: {creator.phone}</p>
+                          </div>
                         </div>
-                        <p className="text-[9.5px] text-slate-500 truncate">{creator.orgName}</p>
-                        <p className="text-[8.5px] text-slate-400 font-mono">Ph: {creator.phone}</p>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const targetProfile: CreatorProfile = {
+                              ...creator,
+                              isPhoneVerified: true,
+                              isApproved: true,
+                              approvedCategories: creator.approvedCategories && creator.approvedCategories.length > 0 
+                                ? creator.approvedCategories 
+                                : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
+                            };
+                            const initialCat = (targetProfile.approvedCategories && targetProfile.approvedCategories[0]) || 'ralna';
+                            onSuccess(targetProfile, initialCat);
+                          }}
+                          className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                            isCurrentActive
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active:scale-95'
+                          }`}
+                        >
+                          <LogIn className="w-3 h-3" />
+                          {isCurrentActive ? 'Active (Open)' : '1-Click Login'}
+                        </button>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetProfile: CreatorProfile = {
-                          ...creator,
-                          isPhoneVerified: true,
-                          isApproved: true,
-                          approvedCategories: creator.approvedCategories && creator.approvedCategories.length > 0 
-                            ? creator.approvedCategories 
-                            : ['kumtluang', 'ralna', 'khawlsak', 'rikrum'],
-                        };
-                        const initialCat = (targetProfile.approvedCategories && targetProfile.approvedCategories[0]) || 'ralna';
-                        onSuccess(targetProfile, initialCat);
-                      }}
-                      className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
-                        isCurrentActive
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active:scale-95'
-                      }`}
-                    >
-                      <LogIn className="w-3 h-3" />
-                      {isCurrentActive ? 'Active (Open)' : '1-Click Login'}
-                    </button>
-                  </div>
-                );
-              })}
+              <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200 text-[10px] text-amber-950 font-medium space-y-0.5">
+                <p className="font-bold">Manual Demo Credentials:</p>
+                <p>• Creator: <span className="font-mono font-bold text-indigo-700">9862300000</span> | PIN: <span className="font-mono font-bold text-indigo-700">1234</span></p>
+                <p>• Admin: <span className="font-mono font-bold text-indigo-700">admin</span> | Password: <span className="font-mono font-bold text-indigo-700">ronpay2026</span></p>
+              </div>
             </div>
-          </div>
-
-          <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 text-[10px] text-indigo-950 font-medium space-y-1">
-            <p className="font-bold">Manual Demo Credentials:</p>
-            <p>• Creator: <span className="font-mono font-bold text-indigo-700">9862300000</span> | PIN: <span className="font-mono font-bold text-indigo-700">1234</span></p>
-            <p>• Admin: <span className="font-mono font-bold text-indigo-700">admin</span> | Password: <span className="font-mono font-bold text-indigo-700">ronpay2026</span></p>
-          </div>
+          )}
 
           <button
             type="submit"

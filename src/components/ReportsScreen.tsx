@@ -1060,9 +1060,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 <p className="text-xs sm:text-sm font-black text-indigo-900 mt-0.5">{totalCount} <span className="text-[10px] text-slate-500 font-semibold">({uniqueDonorsCount} Donors)</span></p>
               </div>
               <div className="bg-indigo-50/90 p-2.5 rounded-xl border border-indigo-200">
-                <p className="text-[9px] text-indigo-700 font-bold uppercase flex items-center justify-center gap-1">⚡ Online (UPI)</p>
+                <p className="text-[9px] text-indigo-700 font-bold uppercase flex items-center justify-center gap-1">⚡ Online (UPI / PG)</p>
                 <p className="text-xs sm:text-sm font-black text-indigo-950 mt-0.5">
-                  ₹{filteredTransactions.filter(t => t.paymentMethod === 'online').reduce((s, t) => s + t.amount, 0).toLocaleString('en-IN')}
+                  ₹{filteredTransactions.filter(t => t.paymentMethod !== 'cash').reduce((s, t) => s + (t.campaignNetReceived || t.amount), 0).toLocaleString('en-IN')}
                 </p>
               </div>
               <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
@@ -1498,9 +1498,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-900 text-xs">
-                            ₹{tx.amount.toLocaleString('en-IN')}
-                          </span>
+                          <div className="text-right">
+                            <span className="font-black text-slate-900 text-xs block">
+                              ₹{(tx.totalAmount || (tx.feeOption === 'ADD_ON' && tx.platformFee ? tx.amount + tx.platformFee : tx.amount)).toLocaleString('en-IN')}
+                            </span>
+                            {tx.platformFee && tx.platformFee > 0 ? (
+                              <span className="text-[8.5px] font-bold text-indigo-700 bg-indigo-50/90 px-1 py-0.2 rounded border border-indigo-100 block mt-0.5">
+                                {tx.feeOption === 'ADD_ON'
+                                  ? `₹${tx.amount} + ₹${tx.platformFee} fee`
+                                  : `₹${tx.campaignNetReceived || (tx.amount - tx.platformFee)} + ₹${tx.platformFee} fee`}
+                              </span>
+                            ) : null}
+                          </div>
                           <button
                             onClick={() => setEditingTransaction(tx)}
                             className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
@@ -1546,7 +1555,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       <div className="flex justify-between items-center text-[9px] text-slate-400 pt-1 border-t border-slate-200/60 font-mono">
                         <span>ID: {tx.id}</span>
                         <div className="flex items-center gap-1.5">
-                          {tx.paymentMethod === 'online' ? (
+                          {tx.paymentMethod === 'phonepe' || (typeof tx.id === 'string' && tx.id.startsWith('RPAY_TXN_')) ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-purple-50 text-[#5f259f] border border-purple-200 uppercase">
+                              <Zap className="w-2 h-2 text-[#5f259f] fill-[#5f259f]" />PhonePe
+                            </span>
+                          ) : tx.paymentMethod === 'online' ? (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase">
                               <Zap className="w-2 h-2 text-amber-500" />Online
                             </span>
@@ -1555,7 +1568,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               <Banknote className="w-2 h-2 text-emerald-600" />Cash
                             </span>
                           )}
-                          <span className="text-slate-400 font-bold">• {tx.status}</span>
+                          <span className={`font-bold ${
+                            tx.status === 'completed' || tx.status === 'verified'
+                              ? 'text-emerald-600'
+                              : 'text-amber-500'
+                          }`}>
+                            • {tx.status === 'completed' || tx.status === 'verified' ? 'Verified' : tx.status}
+                          </span>
                         </div>
                       </div>
                     </div>
