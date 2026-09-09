@@ -226,9 +226,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               : 'No app download required. Scan & pay directly with any UPI app on the web.'}
           </p>
         </div>
-        <span className="text-[9px] bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded-full shrink-0 self-center">
-          WEB READY
-        </span>
+        <button
+          type="button"
+          id="web-ready-website-link"
+          onClick={() => {
+            if (onOpenWebsite) {
+              onOpenWebsite();
+            } else if (typeof window !== 'undefined') {
+              window.open('https://ronpay.app', '_blank', 'noopener,noreferrer');
+            }
+          }}
+          className="group inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-[9.5px] sm:text-[10px] font-black rounded-full shrink-0 self-center shadow-xs hover:shadow-sm transition cursor-pointer active:scale-95 border border-emerald-500/40"
+          title={language === 'mizo' ? 'RonPay Website tlawh rawh (ronpay.app)' : 'Visit RonPay Website (ronpay.app)'}
+        >
+          <Globe className="w-3 h-3 text-emerald-100 group-hover:rotate-12 transition-transform" />
+          <span>WEB READY</span>
+          <ExternalLink className="w-2.5 h-2.5 text-emerald-200" />
+        </button>
       </div>
 
       {/* Smart Login & Active User Strip */}
@@ -430,31 +444,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* 2.5 PhonePe TSP & PG V2 Integration Quick Panel */}
-      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-3.5 rounded-2xl text-white shadow-sm border border-purple-700/60 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-600 text-white rounded-xl flex items-center justify-center font-black shadow-md border border-purple-400">
-            <Zap className="w-5 h-5" />
+      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-3 sm:p-3.5 rounded-2xl text-white shadow-sm border border-purple-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-purple-600 text-white rounded-xl flex items-center justify-center font-black shadow-md border border-purple-400 shrink-0">
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-1.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <h3 className="font-extrabold text-xs text-white">PhonePe PG V2 & TSP</h3>
-              <span className="text-[9px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.2 rounded font-mono">
+              <span className="text-[8.5px] sm:text-[9px] bg-emerald-400 text-emerald-950 font-black px-1.5 py-0.2 rounded font-mono shrink-0">
                 UAT READY
               </span>
             </div>
-            <p className="text-[10px] text-purple-200 font-medium">
+            <p className="text-[9.5px] sm:text-[10px] text-purple-200 font-medium truncate">
               MID: <span className="font-mono text-amber-300 font-bold">TSPMIZOPAYUAT</span> • 1% Split Fee
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
           {onOpenPhonePeCheckout && (
             <button
               type="button"
               id="home-phonepe-checkout-btn"
               onClick={() => onOpenPhonePeCheckout(100)}
-              className="bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-2.5 sm:px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 whitespace-nowrap"
+              className="flex-1 sm:flex-initial bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
               title="Open PhonePe PG Checkout Page"
             >
               <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
@@ -463,8 +477,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           )}
           <button
             type="button"
+            id="home-phonepe-api-logs-btn"
             onClick={onOpenPhonePePortal}
-            className="bg-white hover:bg-purple-50 text-purple-950 font-black px-2.5 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap"
+            className="flex-1 sm:flex-initial bg-white hover:bg-purple-50 text-purple-950 font-black px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap text-center"
           >
             API & Logs
           </button>

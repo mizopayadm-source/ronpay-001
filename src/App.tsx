@@ -900,6 +900,7 @@ export default function App() {
               language={language}
               onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
               onOpenLogin={() => setIsLoginModalOpen(true)}
+              onOpenWebsite={handleSwitchToWebsite}
             />
           )}
 
