@@ -36,7 +36,10 @@ import {
   Pause,
   Play,
   Users,
-  Globe
+  Globe,
+  X,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -193,16 +196,50 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  // Recent Created QRs (Strictly sorted newest first by createdAt timestamp)
-  const recentCreatedQRs = useMemo(() => {
-    return [...campaigns]
-      .sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeB - timeA;
-      })
-      .slice(0, 5);
+  // Search and filter state for Existing QRs
+  const [qrSearchQuery, setQrSearchQuery] = useState('');
+  const [qrCategoryFilter, setQrCategoryFilter] = useState<string>('all');
+  const [showAllQRs, setShowAllQRs] = useState(false);
+
+  // All existing QRs sorted newest first
+  const allSortedQRs = useMemo(() => {
+    return [...campaigns].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [campaigns]);
+
+  // Filtered QRs based on search keyword and category filter
+  const filteredQRs = useMemo(() => {
+    let list = allSortedQRs;
+
+    if (qrCategoryFilter !== 'all') {
+      list = list.filter(c => c.category === qrCategoryFilter);
+    }
+
+    const query = qrSearchQuery.trim().toLowerCase();
+    if (query) {
+      list = list.filter(c => {
+        const matchTitle = (c.title || '').toLowerCase().includes(query);
+        const matchLoc = (c.location || '').toLowerCase().includes(query);
+        const matchUpi = (c.upiId || '').toLowerCase().includes(query);
+        const matchDesc = (c.description || '').toLowerCase().includes(query);
+        const matchCat = (c.category || '').toLowerCase().includes(query);
+        return matchTitle || matchLoc || matchUpi || matchDesc || matchCat;
+      });
+    }
+
+    return list;
+  }, [allSortedQRs, qrSearchQuery, qrCategoryFilter]);
+
+  // Displayed QRs (Show 5 by default, expand when searching, filtering, or showAllQRs toggled)
+  const displayedQRs = useMemo(() => {
+    if (qrSearchQuery.trim() || qrCategoryFilter !== 'all' || showAllQRs) {
+      return filteredQRs;
+    }
+    return filteredQRs.slice(0, 5);
+  }, [filteredQRs, qrSearchQuery, qrCategoryFilter, showAllQRs]);
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
@@ -699,14 +736,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* 5. Recent Created QRs Section (Replaces Recent Transactions as requested) */}
-      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-2.5">
+      {/* 5. Recent Created QRs & Search Section */}
+      <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
-            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-            <h3 className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider">
-              Recent Created QRs
+            <QrCode className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-[11px] sm:text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+              {language === 'mizo' ? 'Recent Created QRs & Zawnna' : 'Recent Created QRs & Search'}
             </h3>
+            <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-mono">
+              {campaigns.length}
+            </span>
           </div>
           <button 
             onClick={onCreateQRClick}
@@ -716,15 +756,107 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </button>
         </div>
 
+        {/* Real-time QR Search Bar */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <Search className="w-3.5 h-3.5" />
+          </div>
+          <input
+            type="text"
+            id="home-qr-search-input"
+            value={qrSearchQuery}
+            onChange={(e) => setQrSearchQuery(e.target.value)}
+            placeholder={language === 'mizo' ? 'QR hming, Veng, Khua, UPI emaw Bawm zawng rawh...' : 'Search QR title, location, category, or UPI...'}
+            className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+          />
+          {qrSearchQuery && (
+            <button
+              type="button"
+              onClick={() => setQrSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Quick Category Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[10px] scrollbar-none">
+          {[
+            { id: 'ralna', label: 'Ralna' },
+            { id: 'khawlsak', label: 'Khawlsak' },
+            { id: 'rikrum', label: 'Rikrum' },
+            { id: 'kumtluang', label: 'Kumtluang' }
+          ].map(pill => {
+            const isActive = qrCategoryFilter === pill.id;
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setQrCategoryFilter(prev => prev === pill.id ? 'all' : pill.id)}
+                className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-2xs ring-2 ring-indigo-500/20'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+                }`}
+                title={isActive ? (language === 'mizo' ? 'Filter paih nan hmet nawn rawh' : 'Click again to remove filter') : undefined}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+          {qrCategoryFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setQrCategoryFilter('all')}
+              className="text-[9px] font-bold text-slate-500 hover:text-rose-600 px-1.5 py-0.5 rounded bg-slate-100/80 hover:bg-rose-50 border border-slate-200/60 transition cursor-pointer flex items-center gap-0.5"
+              title="Filter paih bo rawh"
+            >
+              <X className="w-2.5 h-2.5" />
+              <span>{language === 'mizo' ? 'Paih rawh' : 'Clear'}</span>
+            </button>
+          )}
+          {(qrSearchQuery || qrCategoryFilter !== 'all') && (
+            <span className="text-[9.5px] font-bold text-slate-500 ml-auto shrink-0">
+              {filteredQRs.length} {language === 'mizo' ? 'hmuh a ni' : 'found'}
+            </span>
+          )}
+        </div>
+
         <div className="space-y-2.5">
-          {recentCreatedQRs.length === 0 ? (
+          {displayedQRs.length === 0 ? (
             <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/90 text-center space-y-2">
-              <QrCode className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">QR Siam a la awm lo</p>
-              <p className="text-[11px] text-slate-500">QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.</p>
+              <Search className="w-7 h-7 text-slate-400 mx-auto" />
+              <p className="text-xs font-bold text-slate-700">
+                {qrSearchQuery || qrCategoryFilter !== 'all'
+                  ? (language === 'mizo' ? 'Zawn hmuh a awm lo' : 'No matching QRs found')
+                  : (language === 'mizo' ? 'QR Siam a la awm lo' : 'No QRs created yet')}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {qrSearchQuery || qrCategoryFilter !== 'all'
+                  ? (language === 'mizo' 
+                      ? `"${qrSearchQuery || qrCategoryFilter}" nen a inmil QR hmuh a ni lo. Khawngaihin hming emaw veng dang zawn tum rawh.` 
+                      : 'Try adjusting your search or category filter.')
+                  : (language === 'mizo' 
+                      ? 'QR Code thar siam turin "+ Create / Manage QRs" hmet rawh.' 
+                      : 'Click "+ Create / Manage QRs" to create a new QR.')}
+              </p>
+              {(qrSearchQuery || qrCategoryFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrSearchQuery('');
+                    setQrCategoryFilter('all');
+                  }}
+                  className="text-[10.5px] font-bold text-indigo-600 hover:underline cursor-pointer pt-1"
+                >
+                  {language === 'mizo' ? 'Zawnna reset rawh' : 'Reset search filter'}
+                </button>
+              )}
             </div>
           ) : (
-            recentCreatedQRs.map(camp => {
+            displayedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
             const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -872,6 +1004,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             );
           }))}
         </div>
+
+        {/* View All / Collapse toggle button when not actively searching */}
+        {campaigns.length > 5 && !qrSearchQuery.trim() && qrCategoryFilter === 'all' && (
+          <div className="pt-1 text-center">
+            <button
+              type="button"
+              id="home-toggle-all-qrs-btn"
+              onClick={() => setShowAllQRs(!showAllQRs)}
+              className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50/80 active:bg-indigo-100 border border-slate-200/90 hover:border-indigo-200 text-indigo-700 font-extrabold text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-2xs"
+            >
+              {showAllQRs ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>{language === 'mizo' ? 'Tlemte chauh entir rawh (Top 5)' : 'Show Less (Top 5)'}</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'mizo'
+                      ? `QR awm tawh zawng zawng entir rawh (${campaigns.length} awm)`
+                      : `View All Existing QRs (${campaigns.length} available)`}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

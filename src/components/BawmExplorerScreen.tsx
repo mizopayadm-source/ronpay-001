@@ -279,9 +279,10 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
         <button
           onClick={onBack}
-          className="text-xs text-indigo-600 font-bold flex items-center gap-1.5 hover:text-indigo-800 transition cursor-pointer"
+          className="text-xs text-indigo-600 font-extrabold flex items-center gap-1.5 hover:text-indigo-800 transition cursor-pointer px-2 py-1 -ml-1 rounded-lg hover:bg-indigo-50 active:scale-95"
+          title={language === 'english' ? 'Back to Home & Recent QRs' : 'Home screen & Recent QRs awmnaah let leh rawh'}
         >
-          <ArrowLeft className="w-4 h-4" /> {language === 'english' ? 'Back to Home' : 'In lamah let leh rawh'}
+          <ArrowLeft className="w-4 h-4" /> {language === 'english' ? 'Home (Recent QRs)' : 'In lamah let leh (Home / Recent QRs)'}
         </button>
         <div className="flex items-center gap-2">
           <span className="text-[9.5px] uppercase font-black px-2.5 py-1 rounded-md border bg-white text-slate-900 border-slate-300 shadow-2xs">
