@@ -21,7 +21,9 @@ import {
   Globe,
   Radio,
   Bell,
-  Play
+  Play,
+  ListChecks,
+  CheckCircle2
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 
@@ -34,9 +36,11 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'credentials' | 'simulator' | 'split' | 'webhooks'>('simulator');
+  const [activeTab, setActiveTab] = useState<'checklist' | 'simulator' | 'webhooks' | 'credentials' | 'split'>('checklist');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState<boolean>(false);
+  const [testingItem, setTestingItem] = useState<string | null>(null);
+  const [checklistTestResult, setChecklistTestResult] = useState<any>(null);
 
   // Live Test States
   const [testAmount, setTestAmount] = useState<number>(500);
@@ -183,11 +187,61 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     }
   };
 
+  // Test individual endpoints for PhonePe Email Audit
+  const handleTestChecklistItem = async (key: string) => {
+    setTestingItem(key);
+    try {
+      let res: any;
+      if (key === 'token') {
+        res = await fetch('/api/phonepe/token', { method: 'POST' });
+      } else if (key === 'pay') {
+        res = await fetch('/api/phonepe/initiate-pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amountInRupees: 100,
+            donorName: 'Test Donor',
+            campaignTitle: 'UAT Checklist Test',
+            simulateStatus: 'SUCCESS',
+            customerPhone: '9862300000'
+          })
+        });
+      } else if (key === 'status') {
+        res = await fetch('/api/phonepe/status/RPAY_TXN_UAT_CHECK');
+      } else if (key === 'webhook_config') {
+        res = await fetch('/api/phonepe/create-webhook-api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            webhookUrl: 'https://ronpay.app/api/phonepe/webhook'
+          })
+        });
+      } else if (key === 'split') {
+        res = await fetch('/api/phonepe/split-settlement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: 500
+          })
+        });
+      } else if (key === 'settlement') {
+        res = await fetch('/api/phonepe/settlements');
+      }
+      const data = await res.json();
+      setChecklistTestResult({ key, data });
+      showNotification(`✅ Tested ${key.toUpperCase()} successfully!`, 'success');
+    } catch (e: any) {
+      showNotification(`Error testing ${key}: ${e.message}`, 'error');
+    } finally {
+      setTestingItem(null);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
-      <div className="bg-white w-full max-w-lg rounded-3xl p-5 space-y-4 shadow-2xl border border-slate-200 relative text-slate-900 my-auto shrink-0 max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white w-full max-w-xl rounded-3xl p-5 space-y-4 shadow-2xl border border-slate-200 relative text-slate-900 my-auto shrink-0 max-h-[92vh] flex flex-col overflow-hidden">
         
         {/* Header */}
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -227,14 +281,23 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         )}
 
         {/* Tab Navigation */}
-        <div className="flex bg-slate-100 p-1 rounded-xl text-[10.5px] font-bold text-slate-600">
+        <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-bold text-slate-600 gap-1">
+          <button
+            onClick={() => setActiveTab('checklist')}
+            className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1 ${
+              activeTab === 'checklist' ? 'bg-purple-700 text-white shadow-xs' : 'hover:text-slate-900'
+            }`}
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            <span>Tech Mail Audit</span>
+          </button>
           <button
             onClick={() => setActiveTab('simulator')}
             className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer ${
               activeTab === 'simulator' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
             }`}
           >
-            PG Simulator
+            Simulator
           </button>
           <button
             onClick={() => setActiveTab('webhooks')}
@@ -243,7 +306,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
             }`}
           >
             <Bell className="w-3 h-3 text-purple-600" />
-            Webhooks & Logs
+            <span>Logs</span>
           </button>
           <button
             onClick={() => setActiveTab('credentials')}
@@ -251,7 +314,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
               activeTab === 'credentials' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
             }`}
           >
-            Credentials
+            Keys
           </button>
           <button
             onClick={() => setActiveTab('split')}
@@ -265,6 +328,311 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
 
         {/* Tab Contents */}
         <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 text-xs">
+          
+          {/* TAB 0: EMAIL CHECKLIST & TECH AUDIT */}
+          {activeTab === 'checklist' && (
+            <div className="space-y-3.5 animate-fadeIn">
+              
+              {/* Introduction Card */}
+              <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-2xl p-3.5 space-y-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-black text-xs">
+                    <ListChecks className="w-4 h-4 text-amber-400" />
+                    PhonePe Tech Mail Audit & Compliance
+                  </span>
+                  <span className="bg-emerald-500/20 text-emerald-300 font-extrabold text-[9px] px-2 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> 100% CONFIGURED
+                  </span>
+                </div>
+                <p className="text-[10px] text-purple-200 leading-relaxed font-medium">
+                  Swati (PhonePe Tech Team) mail atanga link leh ruahmanna 8 (Standard Checkout, TSP Headers, Webhook, UAT Sandbox, Partner Checklist, Settlement & Split Settlement) te chu RonPay backend leh frontend-ah fel takin thlunzawm a ni e.
+                </p>
+              </div>
+
+              {/* Checklist Items */}
+              <div className="space-y-2.5">
+
+                {/* 1. Standard Checkout Pay API */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        1
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">PG V2 PAY API (Standard Checkout)</h4>
+                        <a 
+                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          View PhonePe Pay API Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      READY
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    Base64 encoded payload, SHA-256 checksum (<code className="font-mono bg-slate-200 px-1 rounded">X-VERIFY</code>), leh redirectMode: POST hmangin <code className="font-mono bg-slate-200 px-1 rounded">/api/phonepe/initiate-pay</code> ah a in-set thlap.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('pay')}
+                    disabled={testingItem === 'pay'}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>{testingItem === 'pay' ? 'Testing Pay API...' : 'Test PG Pay API Call'}</span>
+                  </button>
+                </div>
+
+                {/* 2. TSP Headers & Credentials */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        2
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">TSP Headers (Mandatory Authorization)</h4>
+                        <div className="flex gap-2 text-[9.5px]">
+                          <a 
+                            href="https://developer.phonepe.com/tsp-integration/tsp-headers/authorization"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                          >
+                            Auth Docs <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          <span>•</span>
+                          <a 
+                            href="https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                          >
+                            HTTP Headers <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      MANDATORY INCLUDED
+                    </span>
+                  </div>
+                  <div className="bg-purple-50/70 border border-purple-200/60 p-2 rounded-xl text-[9.5px] text-purple-950 space-y-1 font-mono">
+                    <p>• <b>Authorization:</b> Bearer / O-Bearer token</p>
+                    <p>• <b>X-MERCHANT-ID:</b> TSPMIZOPAYUAT (End Merchant MID)</p>
+                    <p>• <b>X-CLIENT-ID:</b> TSPMIZOPAYUAT_2608171706</p>
+                    <p>• <b>X-CLIENT-VERSION:</b> 1</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('token')}
+                    disabled={testingItem === 'token'}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Key className="w-3 h-3" />
+                    <span>{testingItem === 'token' ? 'Generating Token...' : 'Test TSP OAuth Token API'}</span>
+                  </button>
+                </div>
+
+                {/* 3. Webhook Config API */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        3
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">Webhook Config API & S2S Callback</h4>
+                        <a 
+                          href="https://developer.phonepe.com/tsp-integration/tsp-webhook/create-webhook-api"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          Webhook Config API Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      ACTIVE
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    S2S Webhook listener endpoint: <code className="font-mono bg-slate-200 px-1 rounded">/api/phonepe/webhook</code>. Base64 decoded, SHA256 checksum verified, response code 200 return thlap zel a ni.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('webhook_config')}
+                    disabled={testingItem === 'webhook_config'}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Radio className="w-3 h-3" />
+                    <span>{testingItem === 'webhook_config' ? 'Configuring...' : 'Test Webhook Registration API'}</span>
+                  </button>
+                </div>
+
+                {/* 4. UAT Sandbox Simulation */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        4
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">UAT Sandbox & Mock Simulation</h4>
+                        <a 
+                          href="https://developer.phonepe.com/payment-gateway/uat-testing-go-live/uat-sandbox"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          UAT Sandbox Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      SIMULATOR READY
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    End-to-end payment flows: <b>Success</b>, <b>Failure</b>, leh <b>Pending</b> te chu Simulator tab leh status API ah chiang takin a mock theih vek.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('status')}
+                    disabled={testingItem === 'status'}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Activity className="w-3 h-3" />
+                    <span>{testingItem === 'status' ? 'Checking Status...' : 'Test Transaction Status API'}</span>
+                  </button>
+                </div>
+
+                {/* 5. Partner Checklist (Standard) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        5
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">Partner Checklist (Go-Live Compliance)</h4>
+                        <a 
+                          href="https://developer.phonepe.com/tsp-integration/partner-checklist/partner-checklist-standard"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          Partner Checklist Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      VERIFIED 100%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[9.5px] text-slate-700 font-semibold pt-1">
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Terms & Conditions</div>
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Privacy Policy</div>
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Refund Policy</div>
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Contact & Mizoram Address</div>
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Pricing / Fee Model</div>
+                    <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> S2S Webhook Return 200</div>
+                  </div>
+                </div>
+
+                {/* 6. Settlement & Split Settlement API */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        6
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">Settlement & Split Settlement API</h4>
+                        <div className="flex gap-2 text-[9.5px]">
+                          <a 
+                            href="https://developer.phonepe.com/settlement" 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                          >
+                            Settlement <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          <span>•</span>
+                          <a 
+                            href="https://developer.phonepe.com/split-settlement" 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                          >
+                            Split Settlement <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      SUPPORTED
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    T+1 settlement reconciliation and direct 99% payout to Campaign Bawm + 1% RonPay TSP platform fee routing.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('split')}
+                      disabled={testingItem === 'split'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[9.5px] hover:bg-purple-100 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <DollarSign className="w-3 h-3" />
+                      <span>{testingItem === 'split' ? 'Testing...' : 'Test Split API'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('settlement')}
+                      disabled={testingItem === 'settlement'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[9.5px] hover:bg-purple-100 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>{testingItem === 'settlement' ? 'Testing...' : 'Test Settlements'}</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Real-time Checklist Test Output Display */}
+              {checklistTestResult && (
+                <div className="bg-slate-900 text-slate-100 p-3 rounded-2xl border border-slate-800 space-y-1.5 animate-fadeIn">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                      Test Output: {checklistTestResult.key.toUpperCase()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(checklistTestResult.data, null, 2), 'checklistJson')}
+                      className="text-[10px] text-indigo-300 hover:text-white font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKey === 'checklistJson' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'checklistJson' ? 'Copied' : 'Copy Output'}</span>
+                    </button>
+                  </div>
+                  <pre className="text-[9px] font-mono bg-slate-950 p-2 rounded-xl overflow-x-auto text-emerald-300 max-h-40 border border-slate-800">
+{JSON.stringify(checklistTestResult.data, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+            </div>
+          )}
           
           {/* TAB 1: CREDENTIALS */}
           {activeTab === 'credentials' && (

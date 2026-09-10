@@ -33,7 +33,12 @@ export interface Campaign {
   id: string;
   category: BawmCategory;
   title: string;
+  titleEn?: string;
+  titleMizo?: string;
   subTitle?: string;
+  emergencyTitle?: string;
+  emergencyTitleEn?: string;
+  emergencyTitleMizo?: string;
   orgName?: string;
   orgCode?: string;
   mitthiHming?: string;
@@ -54,10 +59,11 @@ export interface Campaign {
   createdBy?: string;
   creatorName?: string;
   cause?: string;
+  causeEn?: string;
+  causeMizo?: string;
   targetAmount?: number;
   customAmount?: number;
   maxLimit?: number;
-  emergencyTitle?: string;
   urgencyLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | string;
   urgencyDeadline?: string;
   subCategories?: string[];

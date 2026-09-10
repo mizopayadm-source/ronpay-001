@@ -31,12 +31,13 @@ import {
   Save,
   Receipt,
   Smartphone,
-  Percent
+  Percent,
+  Globe
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation } from '../utils/translations';
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
@@ -71,6 +72,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
+
+  // Dynamic Cause Translation when user/donor views in English
+  const { translatedCause, isTranslating: isTranslatingCause } = useCampaignCauseTranslation(campaign, language);
 
   useEffect(() => {
     if (initialOpenPhonePeCheckout) {
@@ -671,7 +675,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </span>
               </div>
               <h3 className="font-extrabold text-slate-900 text-sm truncate mt-1">
-                {campaign?.mitthiHming || campaign?.title || 'Pi Lalhmingliani'}
+                {translateCampaignTitle(campaign, language) || campaign?.mitthiHming || campaign?.title || 'Pi Lalhmingliani'}
               </h3>
               <p className="text-[10.5px] text-slate-600 font-semibold">
                 Kum: {campaign?.age || 74} • {campaign?.location || 'Bungkawn, Aizawl'}
@@ -737,7 +741,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 {t.categories.khawlsak}
               </span>
               <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">
-                {translateDynamicText(campaign?.title || 'Hnuchham Pual Donation', language)}
+                {translateCampaignTitle(campaign, language) || translateDynamicText(campaign?.title || 'Hnuchham Pual Donation', language, campaign)}
               </h3>
               <p className="text-[10px] text-slate-500 font-medium">
                 {campaign?.location || 'Dawrpui, Aizawl, Mizoram'}
@@ -752,8 +756,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           </div>
 
           <div className="border-t border-emerald-100 pt-2.5 space-y-2 text-xs">
-            <p className="text-[11px] text-slate-600 bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100 font-medium">
-              {translateDynamicText(campaign?.cause || 'Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.', language)}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-emerald-950 uppercase tracking-wide">
+                {language === 'english' ? 'Purpose / Cause' : 'Khawlsak Chhan'}
+              </span>
+              {language === 'english' && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                  <Globe className="w-2.5 h-2.5" /> {isTranslatingCause ? 'Translating...' : 'English'}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium leading-relaxed">
+              {translatedCause || translateDynamicText(campaign?.cause || 'Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.', language, campaign)}
             </p>
             <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
@@ -800,7 +814,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </span>
               </div>
               <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">
-                {translateDynamicText(campaign?.emergencyTitle || campaign?.title || 'Kangmei Relief Support', language)}
+                {translateCampaignTitle(campaign, language) || translateDynamicText(campaign?.emergencyTitle || campaign?.title || 'Kangmei Relief Support', language, campaign)}
               </h3>
               <p className="text-[10px] text-slate-500 font-medium">
                 {campaign?.location || 'Kanan Veng, Aizawl, Mizoram'}
@@ -816,9 +830,21 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
           <div className="border-t border-rose-100 pt-2 text-[11px] text-slate-600 space-y-1.5">
             {campaign?.cause && (
-              <p className="text-[11px] text-slate-700 bg-rose-50/60 p-2.5 rounded-xl border border-rose-100 font-medium">
-                {translateDynamicText(campaign.cause, language)}
-              </p>
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-rose-950 uppercase tracking-wide">
+                    {language === 'english' ? 'Emergency Cause & Description' : 'Rikrum thlen Chhan'}
+                  </span>
+                  {language === 'english' && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded-full">
+                      <Globe className="w-2.5 h-2.5" /> {isTranslatingCause ? 'Translating...' : 'English'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-700 bg-rose-50/70 p-2.5 rounded-xl border border-rose-100 font-medium leading-relaxed">
+                  {translatedCause || translateDynamicText(campaign.cause, language, campaign)}
+                </p>
+              </>
             )}
             <div className="flex justify-between bg-rose-50 p-2 rounded-xl text-rose-900 font-bold border border-rose-200/60">
               <span>{language === 'english' ? 'Emergency Deadline:' : 'Emergency Deadline:'}</span>
@@ -857,7 +883,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 Kumtluang Permanent NGO / Church
               </span>
               <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">
-                {campaign?.orgName || campaign?.title || 'BCM Ebenezer, Zobawk'}
+                {translateCampaignTitle(campaign, language) || campaign?.orgName || campaign?.title || 'BCM Ebenezer, Zobawk'}
               </h3>
               <p className="text-[10px] text-slate-500 font-medium">
                 {campaign?.location || 'Zobawk, Lunglei, Mizoram'}

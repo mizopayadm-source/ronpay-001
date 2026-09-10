@@ -26,10 +26,12 @@ import { Campaign, MemberRecord, MemberDependent } from '../types';
 import { createUPIPaymentString } from '../utils/qr';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { getMembers } from '../utils/storage';
+import { Language, translateCampaignCause } from '../utils/translations';
 
 interface ExternalUPILandingModalProps {
   isOpen: boolean;
   campaign: Campaign | null;
+  language?: Language;
   onClose: () => void;
   onProceedRonPay: (campaign: Campaign) => void;
 }
@@ -52,6 +54,7 @@ const MONTHS_LIST = [
 export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = ({
   isOpen,
   campaign,
+  language = 'mizo',
   onClose,
   onProceedRonPay,
 }) => {
@@ -638,13 +641,13 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
 
             {isRikrum && (campaign.emergencyTitle || campaign.cause) && (
               <div className="text-xs font-bold text-rose-900 bg-rose-50 p-2.5 rounded-xl border border-rose-200">
-                🚨 {campaign.emergencyTitle || campaign.cause}
+                🚨 {translateCampaignCause(campaign, language) || campaign.emergencyTitle || campaign.cause}
               </div>
             )}
 
             {isKhawlsak && campaign.cause && (
               <p className="text-xs text-slate-700 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 font-medium leading-relaxed">
-                {campaign.cause}
+                {translateCampaignCause(campaign, language) || campaign.cause}
               </p>
             )}
 

@@ -38,12 +38,14 @@ import {
   UserPlus,
   CreditCard,
   Printer,
-  RefreshCw
+  RefreshCw,
+  Globe,
+  Loader2
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
-import { Language } from '../utils/translations';
+import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator } from '../utils/storage';
 import { TrialWarningBanner } from './TrialWarningBanner';
@@ -353,7 +355,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     }
   };
 
-  const handleGenerateSubmit = (e: React.FormEvent) => {
+  const handleGenerateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!creatorProfile.isApproved) {
@@ -374,6 +376,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     let title = '';
     let location = 'Aizawl, Mizoram';
     let cause: string | undefined = undefined;
+    let causeEn: string | undefined = undefined;
 
     if (selectedCategory === 'ralna') {
       if (!ralnaMitthiHming.trim()) {
@@ -394,6 +397,11 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       title = khawlsakTitle.trim();
       location = khawlsakLocation.trim() || 'Aizawl, Mizoram';
       cause = khawlsakCause.trim();
+      try {
+        causeEn = await translateTextViaApi(cause, 'khawlsak', 'english');
+      } catch {
+        // Handled dynamically on view
+      }
     } else if (selectedCategory === 'rikrum') {
       if (!rikrumTitle.trim()) {
         alert('Khawngaihin Emergency Title chhu lut rawh!');
@@ -406,6 +414,11 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       title = rikrumTitle.trim();
       location = rikrumLocation.trim() || 'Aizawl, Mizoram';
       cause = rikrumCause.trim();
+      try {
+        causeEn = await translateTextViaApi(cause, 'rikrum', 'english');
+      } catch {
+        // Handled dynamically on view
+      }
     } else if (selectedCategory === 'kumtluang') {
       if (!kumtluangOrg.trim()) {
         alert('Khawngaihin Org / Kohhran Hming chhu lut rawh!');
@@ -426,10 +439,25 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       return;
     }
 
+    // Derive bilingual title and cause representations
+    const titleMizo = title;
+    const titleEn = formatMizoTextToEnglish(title);
+
+    let emergencyTitleMizo: string | undefined = undefined;
+    let emergencyTitleEn: string | undefined = undefined;
+    if (selectedCategory === 'rikrum' && rikrumTitle.trim()) {
+      emergencyTitleMizo = rikrumTitle.trim();
+      emergencyTitleEn = formatMizoTextToEnglish(rikrumTitle.trim());
+    }
+
+    const finalCauseEn = causeEn || (cause ? formatMizoTextToEnglish(cause) : undefined);
+
     const newCampaign: Campaign = {
       id: 'cmp-' + Date.now(),
       category: selectedCategory,
       title: title,
+      titleMizo: titleMizo,
+      titleEn: titleEn,
       location: location,
       gpsCoords: gpsCoords,
       upiId: upiId.trim(),
@@ -450,6 +478,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       vuitu: selectedCategory === 'ralna' ? ralnaVuitu : undefined,
       
       cause: cause,
+      causeEn: finalCauseEn,
+      causeMizo: cause,
       targetAmount: selectedCategory === 'khawlsak' && khawlsakTarget ? parseFloat(khawlsakTarget) : 
                     selectedCategory === 'rikrum' && rikrumTarget ? parseFloat(rikrumTarget) : 
                     selectedCategory === 'kumtluang' && kumtluangTarget ? parseFloat(kumtluangTarget) : undefined,
@@ -459,6 +489,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       maxLimit: selectedCategory === 'khawlsak' ? parseFloat(khawlsakMax) : (selectedCategory === 'rikrum' ? parseFloat(rikrumMax) : undefined),
 
       emergencyTitle: selectedCategory === 'rikrum' ? rikrumTitle : undefined,
+      emergencyTitleMizo: emergencyTitleMizo,
+      emergencyTitleEn: emergencyTitleEn,
       urgencyLevel: 'URGENT',
       urgencyDeadline: selectedCategory === 'rikrum' ? rikrumDeadline : undefined,
 
@@ -2398,11 +2430,18 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       remarks = 'Reactivation requested by creator';
     }
 
+    const trimmedCause = cause.trim();
+    if (trimmedCause && trimmedCause !== campaign.cause) {
+      translateTextViaApi(trimmedCause, campaign.category, 'english').catch(() => {});
+    }
+
     const updated: Campaign = {
       ...campaign,
       title: title.trim(),
       location: location.trim(),
-      cause: cause.trim() || undefined,
+      cause: trimmedCause || undefined,
+      causeEn: trimmedCause === campaign.cause ? campaign.causeEn : undefined,
+      causeMizo: trimmedCause || undefined,
       upiId: upiId.trim(),
       validityDate: validityDate,
       status: finalStatus,

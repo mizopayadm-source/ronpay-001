@@ -1363,6 +1363,7 @@ export default function App() {
         <ExternalUPILandingModal
           isOpen={isExternalUPIOpen}
           campaign={externalUPICampaign}
+          language={language}
           onClose={() => {
             setIsExternalUPIOpen(false);
             setExternalUPICampaign(null);

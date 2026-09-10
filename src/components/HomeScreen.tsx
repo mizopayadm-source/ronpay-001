@@ -37,6 +37,7 @@ import {
   Play,
   Users,
   Globe,
+  Activity,
   X,
   ChevronDown,
   ChevronUp
@@ -225,8 +226,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         const matchLoc = (c.location || '').toLowerCase().includes(query);
         const matchUpi = (c.upiId || '').toLowerCase().includes(query);
         const matchDesc = (c.description || '').toLowerCase().includes(query);
+        const matchCause = (c.cause || '').toLowerCase().includes(query) || (c.causeMizo || '').toLowerCase().includes(query) || (c.causeEn || '').toLowerCase().includes(query);
+        const matchCode = (c.orgCode || '').toLowerCase().includes(query);
+        const matchMitthi = (c.mitthiHming || '').toLowerCase().includes(query);
         const matchCat = (c.category || '').toLowerCase().includes(query);
-        return matchTitle || matchLoc || matchUpi || matchDesc || matchCat;
+        return matchTitle || matchLoc || matchUpi || matchDesc || matchCause || matchCode || matchMitthi || matchCat;
       });
     }
 
@@ -499,16 +503,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
           {onOpenPhonePeCheckout && (
             <button
               type="button"
               id="home-phonepe-checkout-btn"
               onClick={() => onOpenPhonePeCheckout(100)}
-              className="flex-1 sm:flex-initial bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
+              className="flex-1 sm:flex-initial h-8 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 text-slate-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1 shrink-0 whitespace-nowrap"
               title="Open PhonePe PG Checkout Page"
             >
-              <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+              <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
               <span>Checkout (₹100)</span>
             </button>
           )}
@@ -516,9 +520,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             type="button"
             id="home-phonepe-api-logs-btn"
             onClick={onOpenPhonePePortal}
-            className="flex-1 sm:flex-initial bg-white hover:bg-purple-50 text-purple-950 font-black px-3 py-1.5 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap text-center"
+            className="flex-1 sm:flex-initial h-8 bg-white hover:bg-purple-50 text-purple-950 font-black px-3 rounded-xl text-[10.5px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 border border-purple-200/80 text-center"
           >
-            API & Logs
+            <Activity className="w-3 h-3 text-purple-700 shrink-0" />
+            <span>API & Logs</span>
           </button>
         </div>
       </div>

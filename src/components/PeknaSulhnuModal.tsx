@@ -69,7 +69,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onOpenScanner,
   onRefreshData,
 }) => {
-  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('received');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -432,27 +432,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
         {/* Creator Scope Switcher (Dawnte vs Thawhte) */}
         {isCreatorAccount && (receivedCount > 0 || sentCount > 0) && (
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
-            <button
-              id="sulhnu-dir-all-btn"
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setDirectionFilter('all');
-              }}
-              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
-                directionFilter === 'all'
-                  ? 'bg-white text-indigo-950 font-black shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span>Zawng zawng</span>
-              <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full font-black">
-                {transactions.length}
-              </span>
-            </button>
-
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
             <button
               id="sulhnu-dir-received-btn"
               type="button"

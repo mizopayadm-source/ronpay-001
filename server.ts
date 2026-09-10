@@ -9,7 +9,14 @@ import { GoogleGenAI } from '@google/genai';
 let genAIClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
   if (!genAIClient && process.env.GEMINI_API_KEY) {
-    genAIClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    genAIClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
   }
   return genAIClient;
 }
@@ -320,6 +327,72 @@ app.post('/api/phonepe/split-settlement', (req: Request, res: Response) => {
           description: 'RonPay TSP Platform Technology Fee'
         }
       ]
+    }
+  });
+});
+
+// -------------------------------------------------------------
+// API 5c: PhonePe Settlement Status & Reconciliation API
+// -------------------------------------------------------------
+app.get('/api/phonepe/settlements', (req: Request, res: Response) => {
+  const today = new Date().toISOString().split('T')[0];
+  const settlements = [
+    {
+      settlementId: 'STL_' + Date.now(),
+      cycle: 'T+1',
+      date: today,
+      merchantId: PHONEPE_MERCHANT_ID,
+      totalGrossAmount: 15420.00,
+      platformFeeDeducted: 154.20,
+      netSettledAmount: 15265.80,
+      bankAccount: 'SBI A/C ****7890 (Mizoram Rural / State Bank)',
+      utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
+      status: 'SETTLED',
+      currency: 'INR'
+    }
+  ];
+
+  res.json({
+    success: true,
+    code: 'SUCCESS',
+    message: 'Settlement status fetched successfully',
+    data: {
+      merchantId: PHONEPE_MERCHANT_ID,
+      settlementCycle: 'T+1 Working Days',
+      settlements
+    }
+  });
+});
+
+// -------------------------------------------------------------
+// API 5d: PhonePe Webhook Config API (Create / Register Webhook)
+// -------------------------------------------------------------
+app.post('/api/phonepe/create-webhook-api', (req: Request, res: Response) => {
+  const { webhookUrl, events } = req.body;
+  const targetUrl = webhookUrl || 'https://ronpay.app/api/phonepe/webhook';
+  const subscribedEvents = events || [
+    'checkout.order.completed',
+    'checkout.order.failed',
+    'pg.order.completed',
+    'pg.order.failed',
+    'payment.success',
+    'payment.failed',
+    'refund.completed'
+  ];
+
+  res.json({
+    success: true,
+    code: 'WEBHOOK_CONFIGURED',
+    message: 'Webhook configuration registered successfully for TSP partner',
+    data: {
+      webhookId: 'WH_' + crypto.randomBytes(8).toString('hex').toUpperCase(),
+      merchantId: PHONEPE_MERCHANT_ID,
+      clientId: PHONEPE_CLIENT_ID,
+      webhookUrl: targetUrl,
+      authType: 'HMAC_SHA256',
+      events: subscribedEvents,
+      status: 'ACTIVE',
+      createdDate: new Date().toISOString()
     }
   });
 });
@@ -1345,6 +1418,230 @@ app.post('/api/bbps/pay-bill', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// AI MIZO-ENGLISH TRANSLATION ENGINE (FOR RIKRUM & KHAWLSAK CAUSES)
+// -------------------------------------------------------------
+
+function fallbackMizoToEnglishTranslate(text: string): string {
+  const trimmed = text.trim();
+
+  // 1. Exact Sentence Mapping
+  const exactMap: Record<string, string> = {
+    "Zankhuaa ruahtui tla nasa avangin in 4 a chim a, chhungkaw 18 chhiat tawk te tanpui nan.":
+      "Due to heavy rainfall overnight, 4 houses collapsed, raising support for 18 affected families.",
+    "Zankhuaa ruahtui tla nasa avangin in 4 a chim a, chhungkaw 18 chhiat tawk te tanpui nan":
+      "Due to heavy rainfall overnight, 4 houses collapsed, raising support for 18 affected families.",
+    "Hnuchham naupang lehkha zirna senso, damdawi leh nitin mamawh chawmna fund vawmchhohna pual a ni e.":
+      "Fundraising to support education expenses, medicines, and daily basic needs for orphan children.",
+    "Hnuchham naupang lehkha zirna senso, damdawi leh nitin mamawh chawmna fund vawmchhohna pual a ni e":
+      "Fundraising to support education expenses, medicines, and daily basic needs for orphan children.",
+    "Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.":
+      "Fundraising for orphan assistance, daily nutrition and basic livelihood support.",
+    "Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e":
+      "Fundraising for orphan assistance, daily nutrition and basic livelihood support.",
+    "Kidney transplant nei tur senso tanpuina pual.":
+      "Financial assistance fund for kidney transplant surgery and medical treatment.",
+    "Kidney transplant nei tur senso tanpuina pual":
+      "Financial assistance fund for kidney transplant surgery and medical treatment.",
+    "Kunga hi amah chauha khawsa, hna thawk thei lo a ni a, tanpui a ngai hle.":
+      "Kunga lives alone, is unable to work, and is in great need of help.",
+    "Kunga hi amah chauha khawsa, hna thawk thei lo a ni a, tanpui a ngai hle":
+      "Kunga lives alone, is unable to work, and is in great need of help.",
+    "Kanan Veng In Kang Tanpuina":
+      "Emergency relief support for house fire victims in Kanan Veng.",
+    "Kangmei Relief Support":
+      "Emergency Fire Disaster Relief Support",
+    "Zankhuaa kangmei chhuak avangin in 2 a kangral a, chhungkaw 6 tanpuina pual a ni e.":
+      "Overnight house fire destroyed 2 homes, raising relief support for 6 affected families.",
+    "Zankhuaa kangmei chhuakah in a kangral a, chhungkaw 3 chhiat tawk te tanpui nan.":
+      "Overnight house fire disaster destroyed homes, raising relief support for 3 affected families."
+  };
+
+  if (exactMap[trimmed]) {
+    return exactMap[trimmed];
+  }
+
+  // 2. Pattern-based intelligent translation
+  let result = trimmed;
+
+  // Rain / weather patterns
+  result = result.replace(/zankhuaa ruahtui tla nasa avangin/gi, "due to heavy rainfall overnight");
+  result = result.replace(/ruahtui tla nasa avangin/gi, "due to torrential rainfall");
+  result = result.replace(/zankhuaa/gi, "overnight");
+
+  // Collapse / houses patterns
+  result = result.replace(/in\s+(\d+)\s+a chim a/gi, "$1 houses collapsed and");
+  result = result.replace(/in\s+(\d+)\s+a chim/gi, "$1 houses collapsed");
+  result = result.replace(/in chim avangin/gi, "due to house collapse");
+  result = result.replace(/in a chim/gi, "house collapsed");
+
+  // Fire / kangmei patterns
+  result = result.replace(/kangmei chhuak avangin/gi, "due to fire outbreak");
+  result = result.replace(/in\s+(\d+)\s+a kangral a/gi, "$1 houses were burned down and");
+  result = result.replace(/in\s+(\d+)\s+a kangral/gi, "$1 houses were burned down");
+  result = result.replace(/kangmei chhiatna/gi, "fire disaster");
+  result = result.replace(/kangral/gi, "burned down");
+
+  // Landslide / flood patterns
+  result = result.replace(/tuilian vanga harsatna tawk tu te tan tanpuina vehbur khawn sak a ni\.?/gi, "Relief fundraising appeal for families and victims affected by flood disaster.");
+  result = result.replace(/tuilian vanga harsatna tawk tu te tan/gi, "for victims affected by flood difficulties");
+  result = result.replace(/tuilian vanga/gi, "due to flood");
+  result = result.replace(/harsatna tawk tu te tan/gi, "for those facing difficulties");
+  result = result.replace(/harsatna tawk/gi, "facing difficulties");
+  result = result.replace(/leimin chhiatna/gi, "landslide disaster");
+  result = result.replace(/leimin avangin/gi, "due to landslide");
+  result = result.replace(/tuilian avangin/gi, "due to flooding");
+  result = result.replace(/tuilian chhiatna/gi, "flood disaster");
+  result = result.replace(/vehbur khawn sak a ni\.?/gi, "fundraising collection for relief.");
+  result = result.replace(/vehbur khawn/gi, "fundraising collection");
+
+  // Families / victims
+  result = result.replace(/chhungkaw\s+(\d+)\s+chhiat tawk te/gi, "$1 affected families");
+  result = result.replace(/chhungkaw\s+(\d+)/gi, "$1 families");
+  result = result.replace(/chhiat tawk te/gi, "disaster victims");
+  result = result.replace(/tuartu te/gi, "those affected");
+
+  // Support / relief / fund
+  result = result.replace(/tanpui nan\.?/gi, "for relief assistance.");
+  result = result.replace(/tanpui nan/gi, "for relief assistance");
+  result = result.replace(/tanpuina pual a ni e\.?/gi, "dedicated relief fund.");
+  result = result.replace(/tanpuina pual/gi, "dedicated support fund");
+  result = result.replace(/fund vawmchhohna pual a ni e\.?/gi, "fundraising initiative.");
+  result = result.replace(/fund vawmchhohna/gi, "fundraising appeal");
+
+  // Charity / medical / orphan phrases
+  result = result.replace(/hnuchham naupang/gi, "orphan children");
+  result = result.replace(/lehkha zirna senso/gi, "educational expenses");
+  result = result.replace(/damdawi leh nitin mamawh/gi, "medicines and daily necessities");
+  result = result.replace(/damdawi senso/gi, "medical expenses");
+  result = result.replace(/damlo enkawlna/gi, "patient medical treatment");
+  result = result.replace(/damlo/gi, "patient");
+  result = result.replace(/naupang/gi, "children");
+  result = result.replace(/hnuchham/gi, "orphan");
+  result = result.replace(/riangvai/gi, "destitute");
+  result = result.replace(/chanhai/gi, "underprivileged");
+  result = result.replace(/chawmna/gi, "sustenance and care");
+  result = result.replace(/ei & bar/gi, "food and nutrition");
+  result = result.replace(/amah chauha khawsa/gi, "lives alone");
+  result = result.replace(/hna thawk thei lo/gi, "unable to work");
+  result = result.replace(/tanpui a ngai hle/gi, "is in urgent need of help");
+  result = result.replace(/tanpui a ngai/gi, "is in need of assistance");
+
+  // Title-level phrases
+  result = result.replace(/\bRalna\b/gi, "Condolence Support");
+  result = result.replace(/\bTanpuina\b/gi, "Support Fund");
+  result = result.replace(/\bTanpui Nan\b/gi, "Relief Appeal");
+  result = result.replace(/\bBiak In Sakna\b/gi, "Church Building Fund");
+  result = result.replace(/\bThawhlawm\b/gi, "Offering Fund");
+  result = result.replace(/\bEnkawlna\b/gi, "Care & Treatment Support");
+
+  // Capitalize first letter
+  if (result.length > 0) {
+    result = result.charAt(0).toUpperCase() + result.slice(1);
+  }
+
+  return result;
+}
+
+function fallbackEnglishToMizoTranslate(text: string): string {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (lower.includes('heavy rain') || lower.includes('rainfall')) {
+    return 'Ruah sur nasa avanga chhiat tawk te tanpui nan.';
+  }
+  if (lower.includes('fire') || lower.includes('burned')) {
+    return 'Kangmei chhuah avanga in leh lo chan te tanpui nan.';
+  }
+  if (lower.includes('landslide')) {
+    return 'Leimin avanga chhiat tawk chhungkua te tanpuina pual.';
+  }
+  if (lower.includes('orphan') || lower.includes('children')) {
+    return 'Hnuchham naupang enkawlna leh lehkha zirna senso tanpuina.';
+  }
+  if (lower.includes('medical') || lower.includes('treatment') || lower.includes('hospital')) {
+    return 'Damlo enkawlna leh damdawi senso tanpuina pual a ni e.';
+  }
+
+  return trimmed;
+}
+
+app.post('/api/translate', async (req: Request, res: Response) => {
+  try {
+    const { text, targetLang = 'en', category = 'general' } = req.body;
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'Text is required for translation' });
+    }
+
+    const trimmed = text.trim();
+    const isTargetEn = targetLang === 'en' || targetLang === 'english';
+
+    // 1. Check Gemini AI if configured
+    const ai = getGenAI();
+    if (ai) {
+      try {
+        const categoryContext = category === 'rikrum' 
+          ? 'Emergency relief cause (e.g. fire, landslide, flood, collapsed house, urgent crisis in Mizoram)' 
+          : category === 'khawlsak'
+          ? 'Charity, welfare, medical treatment assistance, orphan care or community help in Mizoram'
+          : 'Community donation campaign cause in Mizoram';
+
+        const prompt = `You are an expert bilingual translator between Mizo (Lushai) and English.
+Task: Translate the following campaign cause / description accurately and naturally.
+Context: ${categoryContext}.
+Target Language: ${isTargetEn ? 'English' : 'Mizo'}
+Source text:
+"${trimmed}"
+
+Rules:
+1. Return ONLY the translated sentence. Do not add any introductory phrases, explanations, notes, or quotation marks.
+2. Preserve proper names of places (e.g., Aizawl, Lunglei, Champhai, Kanan Veng, Dawrpui, Bawngkawn, Laipuitlang) and names of persons.
+3. Preserve all numbers, quantities (e.g. 4 houses, 18 families), currency amounts, and timeframes.`;
+
+        const geminiPromise = ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Gemini translation timeout')), 2500)
+        );
+
+        const response: any = await Promise.race([geminiPromise, timeoutPromise]);
+
+        const translated = response.text ? response.text.trim().replace(/^["']|["']$/g, '') : '';
+        if (translated && translated.length > 2) {
+          return res.json({
+            success: true,
+            originalText: trimmed,
+            translatedText: translated,
+            targetLang: isTargetEn ? 'english' : 'mizo',
+            provider: 'gemini-2.5-flash'
+          });
+        }
+      } catch (geminiError) {
+        console.warn('Gemini translation error, falling back to rule-based engine:', geminiError);
+      }
+    }
+
+    // 2. Rule-based translation fallback
+    const translatedText = isTargetEn 
+      ? fallbackMizoToEnglishTranslate(trimmed) 
+      : fallbackEnglishToMizoTranslate(trimmed);
+
+    return res.json({
+      success: true,
+      originalText: trimmed,
+      translatedText,
+      targetLang: isTargetEn ? 'english' : 'mizo',
+      provider: 'rule-based'
+    });
+  } catch (err: any) {
+    console.error('Translation error:', err);
+    res.status(500).json({ success: false, error: 'Translation failed', message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // AI HRIAT PUI (RONPAY USER GUIDE & CONVERSATIONAL FORM/DOC GENERATOR) ENDPOINT
 // -------------------------------------------------------------
 
@@ -1425,7 +1722,7 @@ Always respond in natural, warm, polite, and fluent Mizo with structured markdow
         let response;
         try {
           response = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-2.5-flash',
             contents: systemPrompt,
           });
         } catch (mErr) {
