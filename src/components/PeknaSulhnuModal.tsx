@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
   History, 
@@ -69,7 +69,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onOpenScanner,
   onRefreshData,
 }) => {
-  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('received');
+  // Default to 'all' so users see their records immediately without hidden filter exclusion
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -126,11 +127,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   // Helper to determine if transaction is received in creator's bawm or sent as donor
   const getTxDirection = (tx?: Transaction | null): 'received' | 'sent' => {
     if (!tx) return 'sent';
-    
-    // Super admin can view all transactions as received donations across platform
-    if (creatorProfile?.isAdmin) {
-      return 'received';
-    }
 
     const campId = tx.campaignId ? String(tx.campaignId) : '';
     const campTitle = tx.campaignTitle ? String(tx.campaignTitle).toLowerCase().trim() : '';
@@ -138,15 +134,20 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     const isOwned = (campId && ownedCampaignIds.has(campId)) || 
       (campTitle ? ownedCampaignTitles.has(campTitle) : false);
 
-    if (isOwned) {
-      // If creator was also the donor, check if phone matches and not just received
-      const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
-      const txPhone = tx.donorPhone ? String(tx.donorPhone).replace(/\D/g, '').slice(-10) : '';
-      if (profilePhone && txPhone && profilePhone === txPhone && safeUserPaidIds.includes(tx.id)) {
-        return 'sent';
-      }
+    const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
+    const txPhone = tx.donorPhone ? String(tx.donorPhone).replace(/\D/g, '').slice(-10) : '';
+    const isDonorPhone = Boolean(profilePhone && txPhone && profilePhone === txPhone);
+    const isPaidOnDevice = safeUserPaidIds.includes(tx.id);
+
+    // If active user contributed this payment directly, it belongs to personal 'sent' giving
+    if (isDonorPhone || isPaidOnDevice) {
+      return 'sent';
+    }
+
+    if (isOwned || creatorProfile?.isAdmin) {
       return 'received';
     }
+
     return 'sent';
   };
 
@@ -157,6 +158,15 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const sentCount = useMemo(() => {
     return safeTransactions.filter(t => getTxDirection(t) === 'sent').length;
   }, [safeTransactions, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
+
+  // Ensure directionFilter stays on a valid tab when data updates
+  useEffect(() => {
+    if (isOpen) {
+      if (directionFilter === 'received' && receivedCount === 0) {
+        setDirectionFilter('all');
+      }
+    }
+  }, [isOpen, receivedCount]);
 
   // Direction-filtered transactions for accurate tab counts
   const directionFiltered = useMemo(() => {
@@ -430,29 +440,29 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
           </span>
         </div>
 
-        {/* Creator Scope Switcher (Dawnte vs Thawhte) */}
-        {isCreatorAccount && (receivedCount > 0 || sentCount > 0) && (
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
+        {/* Scope Switcher (A Vaiin / Ka Thawhte / Bawm Dawnte) */}
+        {(receivedCount > 0 || isCreatorAccount) ? (
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
             <button
-              id="sulhnu-dir-received-btn"
+              id="sulhnu-dir-all-btn"
               type="button"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setDirectionFilter('received');
+                setDirectionFilter('all');
               }}
               className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
-                directionFilter === 'received'
-                  ? 'bg-emerald-600 text-white font-black shadow-xs'
+                directionFilter === 'all'
+                  ? 'bg-slate-900 text-white font-black shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Inbox className="w-3 h-3" />
-              <span>Bawm Dawnte</span>
+              <History className="w-3 h-3" />
+              <span>A Vaiin</span>
               <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
-                directionFilter === 'received' ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
+                directionFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
               }`}>
-                {receivedCount}
+                {safeTransactions.length}
               </span>
             </button>
 
@@ -478,8 +488,79 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 {sentCount}
               </span>
             </button>
+
+            <button
+              id="sulhnu-dir-received-btn"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('received');
+              }}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'received'
+                  ? 'bg-emerald-600 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Inbox className="w-3 h-3" />
+              <span>Bawm Dawnte</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                directionFilter === 'received' ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {receivedCount}
+              </span>
+            </button>
           </div>
-        )}
+        ) : sentCount > 0 ? (
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0 text-xs font-bold">
+            <button
+              id="sulhnu-dir-all-btn"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('all');
+              }}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'all'
+                  ? 'bg-slate-900 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <History className="w-3 h-3" />
+              <span>A Vaiin</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                directionFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {safeTransactions.length}
+              </span>
+            </button>
+
+            <button
+              id="sulhnu-dir-sent-btn"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDirectionFilter('sent');
+              }}
+              className={`py-1.5 rounded-lg transition text-[11px] flex items-center justify-center gap-1 cursor-pointer ${
+                directionFilter === 'sent'
+                  ? 'bg-indigo-600 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Send className="w-3 h-3" />
+              <span>Ka Thawhte (Sent)</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                directionFilter === 'sent' ? 'bg-indigo-800 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {sentCount}
+              </span>
+            </button>
+          </div>
+        ) : null}
 
         {/* Summary Card */}
         <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-3.5 text-white mb-2.5 shrink-0 shadow-md border border-indigo-800 flex justify-between items-center">

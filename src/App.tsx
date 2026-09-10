@@ -318,6 +318,15 @@ export default function App() {
       }
     };
 
+    const handleUserPaidSync = (e: Event) => {
+      const customEvent = e as CustomEvent<string[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setUserPaidIds(customEvent.detail);
+      } else {
+        setUserPaidIds(getStoredUserPaidTxIds());
+      }
+    };
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'ronpay_campaigns' || e.key === 'ronpay_campaigns_v2') {
         setCampaigns(getStoredCampaigns());
@@ -329,6 +338,8 @@ export default function App() {
         setCreators(getStoredCreatorsList());
       } else if (e.key === 'ronpay_kumtluang_members_v1') {
         setMembersState(getMembers());
+      } else if (e.key && e.key.includes('ronpay_user_paid_tx_ids')) {
+        setUserPaidIds(getStoredUserPaidTxIds());
       }
     };
 
@@ -336,6 +347,7 @@ export default function App() {
     window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
     window.addEventListener('ronpay-transactions-updated', handleTransactionsSync);
+    window.addEventListener('ronpay_user_paid_updated', handleUserPaidSync);
     window.addEventListener('ronpay-creator-updated', handleCreatorSync);
     window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
     window.addEventListener('ronpay_creators_updated', handleCreatorsListSync);
@@ -344,11 +356,58 @@ export default function App() {
     window.addEventListener('ronpay_data_synced', reloadLocalData);
     window.addEventListener('storage', handleStorageChange);
 
+    // Sync database state from server on startup
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/state')
+        .then(res => res.json())
+        .then(result => {
+          if (result && result.success && result.data) {
+            const serverDb = result.data;
+            if (Array.isArray(serverDb.transactions) && serverDb.transactions.length > 0) {
+              const localTxs = getStoredTransactions();
+              const existingTxIds = new Set(localTxs.map(t => t.id));
+              let addedTx = false;
+              const mergedTxs = [...localTxs];
+              for (const stx of serverDb.transactions) {
+                if (stx && stx.id && !existingTxIds.has(stx.id)) {
+                  mergedTxs.push(stx);
+                  existingTxIds.add(stx.id);
+                  addedTx = true;
+                }
+              }
+              if (addedTx) {
+                saveStoredTransactions(mergedTxs);
+                setTransactions(mergedTxs);
+              }
+            }
+            if (Array.isArray(serverDb.campaigns) && serverDb.campaigns.length > 0) {
+              const localCamps = getStoredCampaigns();
+              const existingCampIds = new Set(localCamps.map(c => c.id));
+              let addedCamp = false;
+              const mergedCamps = [...localCamps];
+              for (const sc of serverDb.campaigns) {
+                if (sc && sc.id && !existingCampIds.has(sc.id)) {
+                  mergedCamps.push(sc);
+                  existingCampIds.add(sc.id);
+                  addedCamp = true;
+                }
+              }
+              if (addedCamp) {
+                saveStoredCampaigns(mergedCamps);
+                setCampaigns(mergedCamps);
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => {
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
       window.removeEventListener('ronpay-transactions-updated', handleTransactionsSync);
+      window.removeEventListener('ronpay_user_paid_updated', handleUserPaidSync);
       window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
       window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);
       window.removeEventListener('ronpay_creators_updated', handleCreatorsListSync);
@@ -415,16 +474,20 @@ export default function App() {
           feeOption: 'ADD_ON',
         };
         setCompletedTransaction(fallbackTx);
+        saveTransaction(fallbackTx);
+        recordUserPaidTxId(fallbackTx.id);
         // Query server status to confirm if recorded
         fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
           .then(r => r.json())
           .then(data => {
             if (data.data) {
-              setCompletedTransaction(prev => prev ? {
-                ...prev,
-                referenceNo: data.data.transactionId || prev.referenceNo,
-                status: data.data.status === 'PAYMENT_SUCCESS' ? 'completed' : prev.status
-              } : null);
+              const updatedTx: Transaction = {
+                ...fallbackTx,
+                referenceNo: data.data.transactionId || fallbackTx.referenceNo,
+                status: data.data.status === 'PAYMENT_SUCCESS' ? 'completed' : fallbackTx.status
+              };
+              setCompletedTransaction(updatedTx);
+              saveTransaction(updatedTx);
             }
           })
           .catch(() => {});

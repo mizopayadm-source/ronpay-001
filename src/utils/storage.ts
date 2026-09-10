@@ -746,35 +746,46 @@ const USER_PAID_TX_IDS_KEY = 'ronpay_user_paid_tx_ids_v3';
 export const getStoredUserPaidTxIds = (): string[] => {
   try {
     const raw = localStorage.getItem(USER_PAID_TX_IDS_KEY);
+    const ids: string[] = [];
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Strip out any legacy foreign dummy transaction IDs
-        return parsed.filter(id => id && id !== 'TXN-9011' && id !== 'TXN-9015');
+        for (const id of parsed) {
+          if (id && id !== 'TXN-9011' && id !== 'TXN-9015' && !ids.includes(id)) {
+            ids.push(id);
+          }
+        }
       }
     }
-    // Also clean up legacy key if present
-    const legacyRaw = localStorage.getItem('ronpay_user_paid_tx_ids_v2');
-    if (legacyRaw) {
-      try {
-        const legacyParsed = JSON.parse(legacyRaw);
-        if (Array.isArray(legacyParsed)) {
-          const cleaned = legacyParsed.filter(id => id && id !== 'TXN-9011' && id !== 'TXN-9015');
-          saveStoredUserPaidTxIds(cleaned);
-          return cleaned;
-        }
-      } catch {}
+    // Also check and merge legacy keys
+    for (const legacyKey of ['ronpay_user_paid_tx_ids_v2', 'ronpay_user_paid_tx_ids_v1', 'ronpay_user_paid_tx_ids']) {
+      const legacyRaw = localStorage.getItem(legacyKey);
+      if (legacyRaw) {
+        try {
+          const legacyParsed = JSON.parse(legacyRaw);
+          if (Array.isArray(legacyParsed)) {
+            for (const id of legacyParsed) {
+              if (id && id !== 'TXN-9011' && id !== 'TXN-9015' && !ids.includes(id)) {
+                ids.push(id);
+              }
+            }
+          }
+        } catch {}
+      }
     }
+    return ids;
   } catch (e) {
     console.error('Failed to parse user paid tx ids', e);
   }
-  // Brand new clean session starts with empty history (only genuine user contributions)
   return [];
 };
 
 export const saveStoredUserPaidTxIds = (ids: string[]) => {
   try {
     localStorage.setItem(USER_PAID_TX_IDS_KEY, JSON.stringify(ids));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: ids }));
+    }
   } catch (e) {
     console.error('Failed to save user paid tx ids', e);
   }
@@ -1607,12 +1618,12 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 };
 
 export const saveTransaction = (tx: Transaction): void => {
+  if (!tx || !tx.id) return;
   const current = getStoredTransactions();
-  const updated = [tx, ...current];
+  const updated = [tx, ...current.filter(t => t.id !== tx.id)];
   saveStoredTransactions(updated);
-  if (tx && tx.id) {
-    syncTransactionToFirestore(tx).catch(() => {});
-  }
+  recordUserPaidTxId(tx.id);
+  syncTransactionToFirestore(tx).catch(() => {});
   if (typeof fetch !== 'undefined') {
     fetch('/api/transactions', {
       method: 'POST',

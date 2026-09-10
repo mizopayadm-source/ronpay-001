@@ -26,6 +26,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
+import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
 
 interface PhonePeModalProps {
   isOpen: boolean;
@@ -1157,6 +1158,8 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           donorName="UAT Test User"
           donorPhone="9876543210"
           onPaymentSuccess={(tx) => {
+            saveTransaction(tx);
+            recordUserPaidTxId(tx.id);
             setIsCheckoutModalOpen(false);
             fetchWebhookLogs();
             showNotification(`🎉 Test payment completed successfully! Ref: ${tx.id}`, 'success');
