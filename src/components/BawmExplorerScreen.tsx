@@ -34,7 +34,7 @@ import {
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName } from '../utils/translations';
 import { isCampaignCreator } from '../utils/storage';
 
 interface BawmExplorerScreenProps {
@@ -74,6 +74,16 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [, setTranslationVersion] = useState(0);
+
+  // Re-render when async background translation completes
+  useEffect(() => {
+    const handleTranslationEvent = () => setTranslationVersion(v => v + 1);
+    window.addEventListener('ronpay-translation-updated', handleTranslationEvent);
+    return () => {
+      window.removeEventListener('ronpay-translation-updated', handleTranslationEvent);
+    };
+  }, []);
 
   const t = TRANSLATIONS[language];
 
@@ -266,11 +276,11 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
 
   const categoriesList: { key: BawmCategory | 'all'; label: string; count: number }[] = [
     { key: 'all', label: language === 'english' ? 'All Bawm' : 'Bawm Zawng2', count: categoryCounts.all },
-    { key: 'ralna', label: 'Ralna (Chhiatni)', count: categoryCounts.ralna },
-    { key: 'khawlsak', label: 'Khawlsak (Tanpuina)', count: categoryCounts.khawlsak },
-    { key: 'rikrum', label: 'Rikrum (Emergency)', count: categoryCounts.rikrum },
-    { key: 'kumtluang', label: 'Kumtluang (Kohhran/NGO)', count: categoryCounts.kumtluang },
-    { key: 'others', label: 'Others (Bills)', count: categoryCounts.others },
+    { key: 'ralna', label: language === 'english' ? 'Condolence (Ralna)' : 'Ralna (Chhiatni)', count: categoryCounts.ralna },
+    { key: 'khawlsak', label: language === 'english' ? 'Charity & Welfare' : 'Khawlsak (Tanpuina)', count: categoryCounts.khawlsak },
+    { key: 'rikrum', label: language === 'english' ? 'Emergency Relief' : 'Rikrum (Emergency)', count: categoryCounts.rikrum },
+    { key: 'kumtluang', label: language === 'english' ? 'Permanent NGO / Church' : 'Kumtluang (Kohhran/NGO)', count: categoryCounts.kumtluang },
+    { key: 'others', label: language === 'english' ? 'Bills & Utilities' : 'Others (Bills)', count: categoryCounts.others },
   ];
 
   return (
@@ -286,7 +296,9 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-[9.5px] uppercase font-black px-2.5 py-1 rounded-md border bg-white text-slate-900 border-slate-300 shadow-2xs">
-            {selectedCategory === 'all' ? (language === 'english' ? 'Community Directory' : 'Bawm Khawmpui Directory') : `${activeCategoryConfig?.name} Hub`}
+            {selectedCategory === 'all' 
+              ? (language === 'english' ? 'Community Directory' : 'Bawm Khawmpui Directory') 
+              : `${language === 'english' ? getCategoryDisplayName(selectedCategory, 'english') : activeCategoryConfig?.name} Hub`}
           </span>
         </div>
       </div>
@@ -704,7 +716,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                           camp.category === 'kumtluang' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
                           'bg-purple-100 text-purple-800 border border-purple-200'
                         }`}>
-                          {campConfig.name}
+                          {getCategoryDisplayName(camp.category, language)}
                         </span>
                         <h3 className="font-extrabold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
                           {translatedTitle}
@@ -740,7 +752,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
 
                     {camp.emergencyTitle && (
                       <p className="text-[10px] text-rose-700 font-bold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" /> {camp.emergencyTitle}
+                        <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" /> {translateDynamicText(camp.emergencyTitle, language, camp)}
                       </p>
                     )}
 

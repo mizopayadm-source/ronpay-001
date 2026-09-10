@@ -1508,9 +1508,37 @@ function fallbackMizoToEnglishTranslate(text: string): string {
   result = result.replace(/fund vawmchhohna pual a ni e\.?/gi, "fundraising initiative.");
   result = result.replace(/fund vawmchhohna/gi, "fundraising appeal");
 
-  // Charity / medical / orphan phrases
-  result = result.replace(/hnuchham naupang/gi, "orphan children");
+  // Savings, Pocket Money & Testing phrases
+  result = result.replace(/pawisa khawl sak chhunluh sak nan hman tur a ni a,?\s*kan enchhin(?:\.|\s)*$/gi, "Dedicated to depositing and building personal savings, created for testing purposes.");
+  result = result.replace(/pawisa khawl sak chhunluh sak nan hman tur a ni a/gi, "Intended for depositing and building personal savings,");
+  result = result.replace(/pawisa khawl sak chhunluh nan/gi, "for personal savings deposits");
+  result = result.replace(/pawisa khawl sak nan/gi, "for saving money");
+  result = result.replace(/pawisa khawl sak/gi, "personal savings accumulation");
+  result = result.replace(/pawisa khawl/gi, "money savings");
+  result = result.replace(/chhunluh sak nan/gi, "for depositing into");
+  result = result.replace(/chhunluh nan/gi, "for depositing");
+  result = result.replace(/hman tur a ni a/gi, "is intended to be used for,");
+  result = result.replace(/hman tur/gi, "to be used for");
+  result = result.replace(/kan enchhin(?:\.|\s)*$/gi, "we are conducting a trial test.");
+  result = result.replace(/kan enchhin/gi, "trial testing");
+  result = result.replace(/enchhin nan/gi, "for trial testing");
+  result = result.replace(/enchhin pual/gi, "testing purpose");
+  result = result.replace(/pocket money/gi, "Pocket Money");
+
+  // Education / Student Welfare
+  result = result.replace(/zirna senso tanpui nan/gi, "for educational assistance and student welfare");
+  result = result.replace(/zirna senso pual/gi, "dedicated educational expense fund");
   result = result.replace(/lehkha zirna senso/gi, "educational expenses");
+  result = result.replace(/school fee chawina/gi, "school fee assistance");
+  result = result.replace(/hostel fee/gi, "hostel fees");
+
+  // Charity / medical / orphan phrases
+  result = result.replace(/damlo enkawlna tur/gi, "for patient medical care");
+  result = result.replace(/damdawi senso pual/gi, "dedicated medical expense fund");
+  result = result.replace(/damdawi senso tur/gi, "for medical and treatment expenses");
+  result = result.replace(/in entirna senso/gi, "medical examination expenses");
+  result = result.replace(/in zaina senso/gi, "surgery and medical operation expenses");
+  result = result.replace(/hnuchham naupang/gi, "orphan children");
   result = result.replace(/damdawi leh nitin mamawh/gi, "medicines and daily necessities");
   result = result.replace(/damdawi senso/gi, "medical expenses");
   result = result.replace(/damlo enkawlna/gi, "patient medical treatment");
@@ -1519,6 +1547,10 @@ function fallbackMizoToEnglishTranslate(text: string): string {
   result = result.replace(/hnuchham/gi, "orphan");
   result = result.replace(/riangvai/gi, "destitute");
   result = result.replace(/chanhai/gi, "underprivileged");
+  result = result.replace(/chhungkaw chanhai/gi, "underprivileged families");
+  result = result.replace(/chhungkaw riangvai/gi, "destitute families");
+  result = result.replace(/hmeithai/gi, "widowed family");
+  result = result.replace(/tar leh chanhai/gi, "elderly and underprivileged");
   result = result.replace(/chawmna/gi, "sustenance and care");
   result = result.replace(/ei & bar/gi, "food and nutrition");
   result = result.replace(/amah chauha khawsa/gi, "lives alone");
@@ -1598,12 +1630,12 @@ Rules:
 3. Preserve all numbers, quantities (e.g. 4 houses, 18 families), currency amounts, and timeframes.`;
 
         const geminiPromise = ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: prompt,
         });
 
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Gemini translation timeout')), 2500)
+          setTimeout(() => reject(new Error('Gemini translation timeout')), 4000)
         );
 
         const response: any = await Promise.race([geminiPromise, timeoutPromise]);
@@ -1615,7 +1647,7 @@ Rules:
             originalText: trimmed,
             translatedText: translated,
             targetLang: isTargetEn ? 'english' : 'mizo',
-            provider: 'gemini-2.5-flash'
+            provider: 'gemini-3.8-flash'
           });
         }
       } catch (geminiError) {

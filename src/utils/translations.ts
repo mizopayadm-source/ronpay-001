@@ -2,6 +2,32 @@ import { useState, useEffect } from 'react';
 
 export type Language = 'mizo' | 'english';
 
+/**
+ * Universal Bilingual Category Display Name Helper
+ */
+export function getCategoryDisplayName(category: string, lang?: Language | string): string {
+  const isEnglish = lang === 'english' || lang === 'en';
+  if (isEnglish) {
+    switch (category) {
+      case 'ralna': return 'Condolence Bawm';
+      case 'khawlsak': return 'Charity & Welfare';
+      case 'rikrum': return 'Emergency Relief';
+      case 'kumtluang': return 'Permanent NGO / Church';
+      case 'others': return 'Bills & Utilities';
+      default: return category ? category.toUpperCase() : 'Bawm';
+    }
+  } else {
+    switch (category) {
+      case 'ralna': return 'Ralna Bawm';
+      case 'khawlsak': return 'Khawlsak Bawm';
+      case 'rikrum': return 'Rikrum Bawm';
+      case 'kumtluang': return 'Kumtluang Bawm';
+      case 'others': return 'Others (Bills)';
+      default: return category ? category : 'Bawm';
+    }
+  }
+}
+
 export const TRANSLATIONS = {
   mizo: {
     appTitle: 'RonPay',
@@ -187,6 +213,15 @@ const MIZO_TO_EN_DICTIONARY: Record<string, string> = {
   "Kunga Tanpuina": "Kunga Welfare & Support Fund",
   "Naupang apute tanpui leh ei & bar chawmna fund vawmchhohna pual a ni e.": "Fundraising for orphan assistance, daily nutrition and basic livelihood support.",
   "Kidney transplant nei tur senso tanpuina pual.": "Financial assistance fund for kidney transplant surgery and medical treatment.",
+  "Pawisa khawl sak chhunluh sak nan hman tur a ni a, kan enchhin...": "Dedicated to depositing and building personal savings, created for testing purposes.",
+  "Pawisa khawl sak chhunluh sak nan hman tur a ni a, kan enchhin": "Dedicated to depositing and building personal savings, created for testing purposes.",
+  "Pawisa khawl sak chhunluh sak nan hman tur a ni a": "Intended for depositing and accumulating personal savings.",
+  "Pocket Money": "Pocket Money",
+  "Pocket money": "Pocket Money",
+  "Pawisa khawl": "Personal Savings",
+  "Pawisa khawl sak": "Personal Savings Accumulation",
+  "Enchhinna": "Trial Testing",
+  "Kan enchhin": "Testing / Trial Run",
   "Kanan Veng In Kang Tanpuina": "Emergency relief support for house fire victims in Kanan Veng.",
   "Kangmei Relief Support": "Emergency Fire Disaster Relief Support",
   "Hnuchham Pual Donation": "Orphan Welfare & Child Support Donation",
@@ -376,7 +411,36 @@ function formatMizoKeywords(str: string): string {
   res = res.replace(/fund vawmchhohna pual a ni e\.?/gi, "fundraising initiative.");
   res = res.replace(/fund vawmchhohna/gi, "fundraising appeal");
 
+  // Savings, Pocket Money & Testing phrases
+  res = res.replace(/pawisa khawl sak chhunluh sak nan hman tur a ni a,?\s*kan enchhin(?:\.|\s)*$/gi, "Dedicated to depositing and building personal savings, created for testing purposes.");
+  res = res.replace(/pawisa khawl sak chhunluh sak nan hman tur a ni a/gi, "Intended for depositing and building personal savings,");
+  res = res.replace(/pawisa khawl sak chhunluh nan/gi, "for personal savings deposits");
+  res = res.replace(/pawisa khawl sak nan/gi, "for saving money");
+  res = res.replace(/pawisa khawl sak/gi, "personal savings accumulation");
+  res = res.replace(/pawisa khawl/gi, "money savings");
+  res = res.replace(/chhunluh sak nan/gi, "for depositing into");
+  res = res.replace(/chhunluh nan/gi, "for depositing");
+  res = res.replace(/hman tur a ni a/gi, "is intended to be used for,");
+  res = res.replace(/hman tur/gi, "to be used for");
+  res = res.replace(/kan enchhin(?:\.|\s)*$/gi, "we are conducting a trial test.");
+  res = res.replace(/kan enchhin/gi, "trial testing");
+  res = res.replace(/enchhin nan/gi, "for trial testing");
+  res = res.replace(/enchhin pual/gi, "testing purpose");
+  res = res.replace(/pocket money/gi, "Pocket Money");
+
+  // Education / Student Welfare
+  res = res.replace(/zirna senso tanpui nan/gi, "for educational assistance and student welfare");
+  res = res.replace(/zirna senso pual/gi, "dedicated educational expense fund");
+  res = res.replace(/lehkha zirna senso/gi, "educational expenses");
+  res = res.replace(/school fee chawina/gi, "school fee assistance");
+  res = res.replace(/hostel fee/gi, "hostel fees");
+
   // Medical & Welfare
+  res = res.replace(/damlo enkawlna tur/gi, "for patient medical care");
+  res = res.replace(/damdawi senso pual/gi, "dedicated medical expense fund");
+  res = res.replace(/damdawi senso tur/gi, "for medical and treatment expenses");
+  res = res.replace(/in entirna senso/gi, "medical examination expenses");
+  res = res.replace(/in zaina senso/gi, "surgery and medical operation expenses");
   res = res.replace(/damlo enkawlna/gi, "patient medical treatment");
   res = res.replace(/damlo tanpuina/gi, "medical patient support");
   res = res.replace(/damlo/gi, "patient");
@@ -387,6 +451,10 @@ function formatMizoKeywords(str: string): string {
   res = res.replace(/naupang/gi, "children");
   res = res.replace(/riangvai/gi, "destitute");
   res = res.replace(/chanhai/gi, "underprivileged");
+  res = res.replace(/chhungkaw chanhai/gi, "underprivileged families");
+  res = res.replace(/chhungkaw riangvai/gi, "destitute families");
+  res = res.replace(/hmeithai/gi, "widowed family");
+  res = res.replace(/tar leh chanhai/gi, "elderly and underprivileged");
   res = res.replace(/amah chauha khawsa/gi, "lives alone");
   res = res.replace(/hna thawk thei lo/gi, "unable to work");
   res = res.replace(/tanpui a ngai hle/gi, "is in urgent need of help");
@@ -395,10 +463,15 @@ function formatMizoKeywords(str: string): string {
   res = res.replace(/chawmna/gi, "care and sustenance");
 
   // Church / Community
+  res = res.replace(/biak in sak tanpui nan/gi, "for church sanctuary building support");
   res = res.replace(/biak in sakna/gi, "church sanctuary construction");
+  res = res.replace(/hall sakna tur/gi, "for community hall construction");
+  res = res.replace(/rawngbawlna pual/gi, "dedicated church ministry fund");
+  res = res.replace(/rawngbawlna/gi, "ministry service");
   res = res.replace(/presbyterian kohhran/gi, "Presbyterian Church");
   res = res.replace(/kohhran/gi, "church");
   res = res.replace(/tualchhung/gi, "local church operations");
+  res = res.replace(/ramthianghlim/gi, "Holy Land");
 
   // Capitalize first character
   if (res.length > 0) {

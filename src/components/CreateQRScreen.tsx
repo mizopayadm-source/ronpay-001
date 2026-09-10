@@ -2438,9 +2438,11 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
     const updated: Campaign = {
       ...campaign,
       title: title.trim(),
+      titleEn: formatMizoTextToEnglish(title.trim()),
+      titleMizo: title.trim(),
       location: location.trim(),
       cause: trimmedCause || undefined,
-      causeEn: trimmedCause === campaign.cause ? campaign.causeEn : undefined,
+      causeEn: (trimmedCause === campaign.cause && campaign.causeEn) ? campaign.causeEn : (trimmedCause ? formatMizoTextToEnglish(trimmedCause) : undefined),
       causeMizo: trimmedCause || undefined,
       upiId: upiId.trim(),
       validityDate: validityDate,
