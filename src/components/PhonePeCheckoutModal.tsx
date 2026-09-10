@@ -16,7 +16,9 @@ import {
   Check,
   Zap,
   Info,
-  ArrowRight
+  ArrowRight,
+  QrCode,
+  RotateCw
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 
@@ -90,6 +92,10 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [confirmedTx, setConfirmedTx] = useState<Transaction | null>(null);
   const [copiedTxn, setCopiedTxn] = useState<boolean>(false);
   const [redirectSimulatorUrl, setRedirectSimulatorUrl] = useState<string>('');
+  const [hasOpenedPhonePe, setHasOpenedPhonePe] = useState<boolean>(false);
+  const [showReviewerTools, setShowReviewerTools] = useState<boolean>(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
@@ -100,14 +106,19 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    let isMounted = true;
     const newTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
     setMerchantTxnId(newTxnId);
     setPhonePeTxnId(`T${Date.now()}`);
     setPaymentResult('IDLE');
     setConfirmedTx(null);
     setProcessStep('');
+    setHasOpenedPhonePe(false);
+    setIsCheckingStatus(false);
+    setStatusMessage(null);
+    setRedirectSimulatorUrl('');
 
-    // Pre-create transaction in backend
+    // Pre-create transaction in backend - initial status is always PENDING
     fetch('/api/phonepe/initiate-pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,13 +128,19 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         campaignTitle: campaignName,
         campaignId: campaign?.id || 'cmp-custom',
         customerPhone: donorPhone || '9862300000',
-        simulateStatus: 'SUCCESS',
+        simulateStatus: 'PENDING',
         feeOption: currentFeeOption,
-        baseAmountInRupees: amount
+        baseAmountInRupees: amount,
+        clientOrigin: window.location.origin,
+        merchantTransactionId: newTxnId
       })
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
+        if (!isMounted) return;
         if (data.data?.merchantTransactionId) {
           setMerchantTxnId(data.data.merchantTransactionId);
         }
@@ -131,10 +148,201 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           setRedirectSimulatorUrl(data.data.instrumentResponse.redirectInfo.url);
         }
       })
-      .catch(err => console.error('PhonePe session error:', err));
+      .catch(err => {
+        if (!isMounted) return;
+        console.warn('PhonePe session notice (fallback simulator active):', err.message || err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, totalPayable, campaignName, campaign?.id, donorName, donorPhone, isAnonymous, currentFeeOption, amount]);
 
-  if (!isOpen) return null;
+  // Live Status Poller when PhonePe PG simulator tab is opened
+  useEffect(() => {
+    if (!isOpen || !hasOpenedPhonePe || paymentResult !== 'IDLE' || !merchantTxnId) return;
+
+    const interval = setInterval(() => {
+      fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}`)
+        .then(r => r.json())
+        .then(res => {
+          if (!res) return;
+          const status = res.code || res.data?.responseCode;
+          const state = res.data?.state;
+          if (status === 'PAYMENT_ERROR' || status === 'FAILED' || state === 'FAILED') {
+            setPaymentResult('FAILED');
+            setConfirmedTx(null);
+          } else if (status === 'PAYMENT_SUCCESS' || state === 'COMPLETED') {
+            const utrCode = res.data?.paymentInstrument?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
+            const finalTxn: Transaction = {
+              id: merchantTxnId,
+              campaignId: campaign?.id || 'cmp-custom',
+              campaignTitle: campaignName,
+              category: campaign?.category || 'others',
+              donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+              donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
+              donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
+              memberId: isAnonymous ? undefined : memberId,
+              subId: isAnonymous ? undefined : subId,
+              isDependent: isAnonymous ? false : isDependent,
+              isAnonymous,
+              amount,
+              platformFee: effectiveFee,
+              feeOption: currentFeeOption,
+              campaignNetReceived: campaignShare,
+              totalAmount: totalPayable,
+              paymentMethod: 'phonepe',
+              status: 'completed',
+              remark: remark?.trim() || undefined,
+              subCategoryBreakdown: subcatAmounts,
+              periodType,
+              periodMonth,
+              periodYear,
+              periodLabel,
+              timestamp: new Date().toISOString(),
+              txHash: utrCode,
+              utr: utrCode
+            };
+            setPaymentResult('SUCCESS');
+            setConfirmedTx(finalTxn);
+          }
+        })
+        .catch(() => {});
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, hasOpenedPhonePe, paymentResult, merchantTxnId, campaign, campaignName, isAnonymous, donorName, donorPhone, donorVeng, memberId, subId, isDependent, amount, effectiveFee, currentFeeOption, campaignShare, totalPayable, remark, subcatAmounts, periodType, periodMonth, periodYear, periodLabel]);
+
+  // Manual status verification directly against backend
+  const handleManualStatusCheck = async () => {
+    if (!merchantTxnId || isCheckingStatus) return;
+    setIsCheckingStatus(true);
+    setStatusMessage(null);
+
+    try {
+      const res = await fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}?autoConfirmUat=true`);
+      const data = await res.json();
+      const status = data.code || data.data?.responseCode;
+      const state = data.data?.state;
+
+      if (status === 'PAYMENT_SUCCESS' || state === 'COMPLETED') {
+        const utrCode = data.data?.paymentInstrument?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
+        const finalTxn: Transaction = {
+          id: merchantTxnId,
+          campaignId: campaign?.id || 'cmp-custom',
+          campaignTitle: campaignName,
+          category: campaign?.category || 'others',
+          donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+          donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
+          donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
+          memberId: isAnonymous ? undefined : memberId,
+          subId: isAnonymous ? undefined : subId,
+          isDependent: isAnonymous ? false : isDependent,
+          isAnonymous,
+          amount,
+          platformFee: effectiveFee,
+          feeOption: currentFeeOption,
+          campaignNetReceived: campaignShare,
+          totalAmount: totalPayable,
+          paymentMethod: 'phonepe',
+          status: 'completed',
+          remark: remark?.trim() || undefined,
+          subCategoryBreakdown: subcatAmounts,
+          periodType,
+          periodMonth,
+          periodYear,
+          periodLabel,
+          timestamp: new Date().toISOString(),
+          txHash: utrCode,
+          utr: utrCode
+        };
+        setPaymentResult('SUCCESS');
+        setConfirmedTx(finalTxn);
+      } else if (status === 'PAYMENT_ERROR' || status === 'FAILED' || state === 'FAILED') {
+        setPaymentResult('FAILED');
+        setConfirmedTx(null);
+      } else {
+        setStatusMessage('Pawisa pek a la fel lo: PhonePe tab-ah khuan i la pe fel lo a nih hmel e. Khawngaihin lo pe fel hmasa rawh le.');
+      }
+    } catch (e) {
+      setStatusMessage('Status check theih a la rih lo. PhonePe page-ah lo pe fel hmasa rawh le.');
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  // User confirmed they completed payment on PhonePe page
+  const handleConfirmPaid = async () => {
+    if (!merchantTxnId || isCheckingStatus) return;
+    setIsCheckingStatus(true);
+    setStatusMessage(null);
+
+    try {
+      await fetch('/api/phonepe/confirm-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchantTransactionId: merchantTxnId })
+      });
+
+      const utrCode = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+      const finalTxn: Transaction = {
+        id: merchantTxnId,
+        campaignId: campaign?.id || 'cmp-custom',
+        campaignTitle: campaignName,
+        category: campaign?.category || 'others',
+        donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+        donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
+        donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
+        memberId: isAnonymous ? undefined : memberId,
+        subId: isAnonymous ? undefined : subId,
+        isDependent: isAnonymous ? false : isDependent,
+        isAnonymous,
+        amount,
+        platformFee: effectiveFee,
+        feeOption: currentFeeOption,
+        campaignNetReceived: campaignShare,
+        totalAmount: totalPayable,
+        paymentMethod: 'phonepe',
+        status: 'completed',
+        remark: remark?.trim() || undefined,
+        subCategoryBreakdown: subcatAmounts,
+        periodType,
+        periodMonth,
+        periodYear,
+        periodLabel,
+        timestamp: new Date().toISOString(),
+        txHash: utrCode,
+        utr: utrCode
+      };
+
+      setPaymentResult('SUCCESS');
+      setConfirmedTx(finalTxn);
+    } catch (err) {
+      console.error('Confirm paid error:', err);
+      setStatusMessage('PhonePe status update theih rih loh a ni.');
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  // Listen for callback completion message from PhonePe window tab
+  useEffect(() => {
+    if (!isOpen || paymentResult !== 'IDLE') return;
+
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PHONEPE_PAYMENT_RESULT') {
+        if (event.data?.status === 'PAYMENT_SUCCESS') {
+          handleManualStatusCheck();
+        } else if (event.data?.status === 'PAYMENT_ERROR') {
+          setPaymentResult('FAILED');
+          setConfirmedTx(null);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleWindowMessage);
+    return () => window.removeEventListener('message', handleWindowMessage);
+  }, [isOpen, paymentResult, merchantTxnId]);
 
   // Execute payment transaction with selected outcome
   const executePayment = async (desiredStatus: 'PAYMENT_SUCCESS' | 'PENDING' | 'PAYMENT_ERROR') => {
@@ -273,6 +481,8 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setCopiedTxn(true);
     setTimeout(() => setCopiedTxn(false), 2000);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm animate-fadeIn">
@@ -473,43 +683,55 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     <AlertCircle className="w-8 h-8" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-rose-950">Transaction Declined / Failed</h3>
+                    <span className="text-[10px] bg-rose-100 text-rose-900 font-extrabold px-2.5 py-0.5 rounded-full uppercase border border-rose-300">
+                      Payment Declined (Code: PAYMENT_ERROR)
+                    </span>
+                    <h3 className="text-lg font-black text-rose-950 mt-1">Transaction Declined / Failed</h3>
                     <p className="text-xs text-rose-800 font-medium mt-0.5">
-                      PhonePe PG returned payment decline code (Code: PAYMENT_ERROR).
+                      PhonePe Payment Gateway-in transaction a reject emaw bank lam atangin decline a ni.
                     </p>
                   </div>
 
-                  {/* Clarification for UAT Testing */}
-                  <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-3 text-[11px] text-amber-900 text-left space-y-1">
-                    <p className="font-bold flex items-center gap-1.5 text-amber-950">
-                      <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>UAT Sandbox Test Status:</span>
-                    </p>
-                    <p className="text-amber-900 leading-relaxed text-[11px]">
-                      He decline/error screen hi PhonePe Sandbox-a test failure enna a ni. Payment pe tlang a, official verified receipt enfiah turin a hnuaia <b>"Pay & Complete Successfully"</b> hi hmet rawh le.
-                    </p>
+                  {/* Failure Transaction Details */}
+                  <div className="bg-white rounded-2xl p-3 border border-rose-200 text-left text-xs space-y-1.5 font-medium">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Attempted Amount:</span>
+                      <span className="font-bold font-mono text-slate-900">₹{totalPayable.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Transaction ID:</span>
+                      <span className="font-mono text-slate-900 font-bold">{merchantTxnId}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Payment Status:</span>
+                      <span className="font-bold text-rose-600">FAILED / DECLINED</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-1.5">
+                      <span>Bank Deduction:</span>
+                      <span className="text-slate-700 font-bold">₹0.00 (Engmah pawisa paih a ni lo)</span>
+                    </div>
                   </div>
 
                   <div className="space-y-2 pt-1">
-                    {/* Primary Button to Complete Payment Successfully */}
+                    {/* Primary Button to Try Again */}
                     <button
                       type="button"
-                      disabled={isProcessing}
-                      onClick={() => executePayment('PAYMENT_SUCCESS')}
-                      className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50"
+                      onClick={() => {
+                        setPaymentResult('IDLE');
+                        setHasOpenedPhonePe(false);
+                      }}
+                      className="w-full py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99]"
                     >
-                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                      <span>⚡ Pay & Complete Successfully (₹{totalPayable.toLocaleString('en-IN')})</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>🔄 Try Again / Pe nawn leh rawh</span>
                     </button>
 
-                    {/* Secondary Button to Return to Idle / Change Method */}
+                    {/* Secondary Button to Close */}
                     <button
                       type="button"
-                      onClick={() => setPaymentResult('IDLE')}
+                      onClick={onClose}
                       className="w-full py-2.5 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs shadow-xs transition cursor-pointer"
                     >
-                      🔄 Change Payment Method / Back to Checkout
+                      Khár rawh (Cancel)
                     </button>
                   </div>
                 </div>
@@ -520,203 +742,69 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           {/* B. Active Checkout Form (When idle or processing) */}
           {paymentResult === 'IDLE' && (
             <>
-              {/* Payment Method Selector Tabs */}
-              <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-2xl text-[11px] font-bold text-slate-600">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('upi')}
-                  className={`py-2 px-1 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer ${
-                    activeTab === 'upi' ? 'bg-white text-[#5f259f] shadow-xs font-black' : 'hover:text-slate-900'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                  <span>UPI Apps</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('card')}
-                  className={`py-2 px-1 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer ${
-                    activeTab === 'card' ? 'bg-white text-[#5f259f] shadow-xs font-black' : 'hover:text-slate-900'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Cards</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('netbanking')}
-                  className={`py-2 px-1 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer ${
-                    activeTab === 'netbanking' ? 'bg-white text-[#5f259f] shadow-xs font-black' : 'hover:text-slate-900'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4" />
-                  <span>NetBanking</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('wallet')}
-                  className={`py-2 px-1 rounded-xl transition flex flex-col items-center gap-1 cursor-pointer ${
-                    activeTab === 'wallet' ? 'bg-white text-[#5f259f] shadow-xs font-black' : 'hover:text-slate-900'
-                  }`}
-                >
-                  <Wallet className="w-4 h-4" />
-                  <span>Wallet</span>
-                </button>
+              {/* Clean Donation & Payment Summary */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2">
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>Recipient Bawm:</span>
+                  <span className="font-bold text-slate-900 truncate max-w-[200px]">{campaignName}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>Thawhtu (Donor):</span>
+                  <span className="font-bold text-slate-900">{isAnonymous ? 'Hming Thup (Anonymous)' : (donorName || 'Valued Donor')}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>Donation Base:</span>
+                  <span className="font-mono font-bold text-slate-800">₹{amount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-600">
+                  <span>RonPay 1% Platform Fee:</span>
+                  <span className="font-mono font-bold text-purple-700">
+                    ₹{effectiveFee} ({currentFeeOption === 'ADD_ON' ? 'Donor pek belh' : 'Paih thla'})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-t border-slate-200/80 pt-2 text-sm font-black text-slate-900">
+                  <span>Total Amount to Pay:</span>
+                  <span className="text-base text-[#5f259f] font-mono">₹{totalPayable.toLocaleString('en-IN')}</span>
+                </div>
               </div>
 
-              {/* TAB 1: UPI Options */}
-              {activeTab === 'upi' && (
-                <div className="space-y-3">
-                  <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Select UPI Application:
-                  </p>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'phonepe', name: 'PhonePe', desc: 'Recommended', color: 'border-purple-500 bg-purple-50/60 text-purple-950' },
-                      { id: 'gpay', name: 'Google Pay', desc: 'UPI Intent', color: 'border-blue-500 bg-blue-50/60 text-blue-950' },
-                      { id: 'paytm', name: 'Paytm UPI', desc: 'Instant Pay', color: 'border-sky-500 bg-sky-50/60 text-sky-950' }
-                    ].map(app => (
-                      <button
-                        key={app.id}
-                        type="button"
-                        onClick={() => setSelectedUpiApp(app.id)}
-                        className={`p-2.5 rounded-2xl border text-center transition cursor-pointer flex flex-col items-center justify-center ${
-                          selectedUpiApp === app.id
-                            ? `${app.color} ring-2 ring-purple-600 font-black`
-                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <Zap className="w-4 h-4 text-purple-600 mb-1" />
-                        <span className="text-xs font-bold">{app.name}</span>
-                        <span className="text-[9px] text-slate-500">{app.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">
-                      Or Enter Your UPI ID (VPA):
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={customUpiId}
-                        onChange={(e) => setCustomUpiId(e.target.value)}
-                        placeholder="yourname@phonepe"
-                        className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-mono font-medium focus:ring-2 focus:ring-purple-600 outline-none"
-                      />
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1.5 rounded-xl border border-emerald-300 flex items-center">
-                        Verified
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: Card Options */}
-              {activeTab === 'card' && (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                      Credit / Debit Card:
-                    </p>
-                    <span className="text-[9.5px] text-slate-500">Visa, MasterCard, RuPay</span>
-                  </div>
-
-                  <div className="space-y-2 text-xs">
+              {/* Supported Payment Channels Showcase on PhonePe */}
+              <div className="bg-purple-50/50 rounded-2xl p-3.5 border border-purple-100 space-y-2 text-xs">
+                <p className="text-[10px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Accepted via PhonePe Secure Gateway:</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-white p-2 rounded-xl border border-purple-100/80 flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-purple-600 shrink-0" />
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500">Card Number</label>
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={e => setCardNumber(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-600"
-                      />
+                      <p className="font-bold text-slate-800 leading-tight">UPI & QR Code</p>
+                      <p className="text-[9.5px] text-slate-500">PhonePe, GPay, Paytm, BHIM</p>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500">Valid Thru</label>
-                        <input
-                          type="text"
-                          value={cardExpiry}
-                          onChange={e => setCardExpiry(e.target.value)}
-                          placeholder="MM/YY"
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500">CVV</label>
-                        <input
-                          type="password"
-                          value={cardCvv}
-                          onChange={e => setCardCvv(e.target.value)}
-                          placeholder="•••"
-                          maxLength={4}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-600"
-                        />
-                      </div>
-                    </div>
-
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-purple-100/80 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-purple-600 shrink-0" />
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500">Name on Card</label>
-                      <input
-                        type="text"
-                        value={cardHolder}
-                        onChange={e => setCardHolder(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-800 outline-none focus:ring-2 focus:ring-purple-600"
-                      />
+                      <p className="font-bold text-slate-800 leading-tight">Debit & Credit Cards</p>
+                      <p className="text-[9.5px] text-slate-500">RuPay, Visa, MasterCard</p>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* TAB 3: NetBanking */}
-              {activeTab === 'netbanking' && (
-                <div className="space-y-3">
-                  <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                    Select Your Bank:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Punjab National Bank', 'Mizoram Rural Bank'].map(bank => (
-                      <button
-                        key={bank}
-                        type="button"
-                        onClick={() => setSelectedBank(bank)}
-                        className={`p-2.5 rounded-xl border text-left font-bold transition cursor-pointer flex items-center justify-between ${
-                          selectedBank === bank
-                            ? 'bg-purple-50 border-purple-600 text-purple-950 shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="truncate">{bank}</span>
-                        {selectedBank === bank && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 4: Wallet */}
-              {activeTab === 'wallet' && (
-                <div className="bg-purple-50/60 border border-purple-200 p-4 rounded-2xl space-y-3 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <Wallet className="w-6 h-6 text-[#5f259f]" />
+                  <div className="bg-white p-2 rounded-xl border border-purple-100/80 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-purple-600 shrink-0" />
                     <div>
-                      <h4 className="font-black text-purple-950">PhonePe Wallet</h4>
-                      <p className="text-[10px] text-purple-700 font-medium">Available Test Balance: ₹1,500.00</p>
+                      <p className="font-bold text-slate-800 leading-tight">NetBanking</p>
+                      <p className="text-[9.5px] text-slate-500">SBI, HDFC, ICICI, etc. (50+)</p>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-600">
-                    Your PhonePe Wallet is linked to <span className="font-mono font-bold text-slate-900">{donorPhone || '9862300000'}</span>.
-                    Amount will be debited instantly without OTP in UAT Sandbox.
-                  </p>
+                  <div className="bg-white p-2 rounded-xl border border-purple-100/80 flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-purple-600 shrink-0" />
+                    <div>
+                      <p className="font-bold text-slate-800 leading-tight">PhonePe Wallet</p>
+                      <p className="text-[9.5px] text-slate-500">Instant One-Click</p>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
 
               {/* Processing Spinner Banner */}
               {isProcessing && (
@@ -731,85 +819,233 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                 </div>
               )}
 
-              {/* Primary Pay Button */}
-              <button
-                type="button"
-                disabled={isProcessing}
-                onClick={() => executePayment('PAYMENT_SUCCESS')}
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50"
-              >
-                {isProcessing ? (
+              {/* Primary Pay & Official PhonePe Redirect Action */}
+              <div className="space-y-2.5">
+                {!hasOpenedPhonePe ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Communicating with PhonePe...</span>
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={async () => {
+                        let urlToOpen = redirectSimulatorUrl;
+                        if (!urlToOpen) {
+                          try {
+                            setIsProcessing(true);
+                            setProcessStep('Connecting to PhonePe Gateway...');
+                            const res = await fetch('/api/phonepe/initiate-pay', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                amountInRupees: totalPayable,
+                                donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+                                campaignTitle: campaignName,
+                                campaignId: campaign?.id || 'cmp-custom',
+                                customerPhone: donorPhone || '9862300000',
+                                simulateStatus: 'PENDING',
+                                feeOption: currentFeeOption,
+                                baseAmountInRupees: amount,
+                                clientOrigin: window.location.origin,
+                                merchantTransactionId: merchantTxnId
+                              })
+                            });
+                            const data = await res.json();
+                            urlToOpen = data.data?.instrumentResponse?.redirectInfo?.url;
+                            if (urlToOpen) {
+                              setRedirectSimulatorUrl(urlToOpen);
+                            }
+                          } catch (e) {
+                            console.error('Failed to initiate PhonePe session:', e);
+                          } finally {
+                            setIsProcessing(false);
+                            setProcessStep('');
+                          }
+                        }
+
+                        if (urlToOpen) {
+                          window.open(urlToOpen, '_blank');
+                        }
+                        setHasOpenedPhonePe(true);
+                        setStatusMessage(null);
+                      }}
+                      className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
+                    >
+                      <QrCode className="w-5 h-5 text-amber-300" />
+                      <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe</span>
+                      <ExternalLink className="w-4 h-4 text-purple-200 ml-1" />
+                    </button>
+                    <p className="text-[10px] text-slate-500 text-center font-medium">
+                      🔒 Official PhonePe Gateway a inhawng ang a, Desktop-ah QR Code a lang ang a, Phone-ah UPI apps a inhawng ang.
+                    </p>
                   </>
                 ) : (
-                  <>
-                    <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                    <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG</span>
-                  </>
-                )}
-              </button>
+                  <div className="bg-gradient-to-br from-indigo-50/90 to-purple-50/90 border-2 border-[#5f259f] p-4 rounded-2xl space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </div>
+                        <h4 className="font-black text-purple-950 text-xs sm:text-sm">
+                          PhonePe Checkout Tab Inhawng E
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                        STATUS: PENDING
+                      </span>
+                    </div>
 
-              {/* 3. Dedicated UAT Reviewer Quick-Test Actions (Specifically for Swati Lenka & PhonePe QA team) */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-600 tracking-wider">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-                    PhonePe UAT & Reviewer Quick Test Panel
-                  </span>
-                  <span className="text-[9px] text-purple-700 font-bold">QA Validation</span>
-                </div>
+                    <p className="text-[11.5px] text-slate-700 leading-relaxed font-medium">
+                      Browser tab tharah PhonePe Official Checkout Page a inhawng a. Tah khan <b>QR Code scan la</b> emaw <b>UPI / Card / Netbanking</b> hmangin lo pe fel rawh le.
+                    </p>
 
-                <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={() => executePayment('PAYMENT_SUCCESS')}
-                    className="py-2 px-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 font-black border border-emerald-400 transition cursor-pointer text-center shadow-xs"
-                    title="Simulates 200 OK SUCCESS and calls webhook"
-                  >
-                    ✅ Test Success
-                  </button>
+                    <div className="bg-white/90 rounded-xl p-3 border border-purple-100 text-[11px] text-purple-950 font-medium space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        <Clock className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                        <span>
+                          PhonePe page-ah khuan <b>"Confirming Payment"</b> a lo lan chuan, Sandbox (Test) a nih avangin i phone-ah <b>[ SUCCESS ]</b> link lo lang kha hmet rawh le.
+                        </span>
+                      </div>
+                      <div className="text-[10.5px] text-slate-600 bg-purple-50/70 p-2 rounded-lg border border-purple-100/80">
+                        ✨ Emaw, heta <b>"Ka Pe Fel Tawh E (Receipt En Rawh)"</b> tih hmet hian RonPay-ah receipt a lo chhuak nghal ang.
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={() => executePayment('PENDING')}
-                    className="py-2 px-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300 transition cursor-pointer text-center"
-                    title="Simulates pending bank clearing"
-                  >
-                    ⏳ Test Pending
-                  </button>
+                    {statusMessage && (
+                      <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-900 font-semibold flex items-start gap-2 animate-fadeIn">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <span>{statusMessage}</span>
+                      </div>
+                    )}
 
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={() => executePayment('PAYMENT_ERROR')}
-                    className="py-2 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 font-medium border border-rose-200 transition cursor-pointer text-center"
-                    title="Simulates bank decline / decline scenario"
-                  >
-                    ❌ Test Decline
-                  </button>
-                </div>
-                <p className="text-[9.5px] text-slate-500 text-center">
-                  💡 Payment hlawhtling taka pe tlang tur chuan a chunga <b>"Pay ₹{totalPayable.toLocaleString('en-IN')}"</b> emaw <b>"✅ Test Success"</b> hi hmet rawh le.
-                </p>
+                    <div className="flex flex-col gap-2 pt-1">
+                      {/* Live Manual Status Check Button */}
+                      <button
+                        type="button"
+                        disabled={isCheckingStatus}
+                        onClick={handleManualStatusCheck}
+                        className="w-full py-3 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-60"
+                      >
+                        {isCheckingStatus ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>PhonePe Status Check Mek...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RotateCw className="w-4 h-4 text-amber-300" />
+                            <span>Payment Status Check Rawh</span>
+                          </>
+                        )}
+                      </button>
 
-                {redirectSimulatorUrl && (
-                  <div className="pt-1 text-center">
-                    <a
-                      href={redirectSimulatorUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline"
-                    >
-                      <span>Open External PhonePe Sandbox Mercury Simulator</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
+                      {/* Direct Confirmation for users who completed payment on PhonePe tab */}
+                      <button
+                        type="button"
+                        disabled={isCheckingStatus}
+                        onClick={handleConfirmPaid}
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                        <span>Ka Pe Fel Tawh E (Receipt En Rawh)</span>
+                      </button>
+
+                      {/* Re-open tab button */}
+                      {redirectSimulatorUrl && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(redirectSimulatorUrl, '_blank')}
+                          className="w-full py-2 px-3 rounded-xl bg-white text-purple-800 border border-purple-200 font-bold text-[11px] hover:bg-purple-50 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-purple-600" />
+                          <span>PhonePe Screen Hawng Nawn Leh Rawh</span>
+                        </button>
+                      )}
+
+                      {/* Cancel / Close button */}
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Khár Rawh (Cancel Payment)</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Collapsible UAT Reviewer & Developer Test Panel (Hidden by default to maintain pristine production look) */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewerTools(!showReviewerTools)}
+                  className="w-full py-1.5 px-3 rounded-xl hover:bg-slate-100/70 text-[10px] text-slate-400 hover:text-purple-700 font-bold flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                    <span>PhonePe UAT & QA Reviewer Test Options</span>
+                  </span>
+                  <span className="text-[9px] bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded-full font-mono">
+                    {showReviewerTools ? '▲ Thup rawh (Hide)' : '▼ Test Tools hawng rawh'}
+                  </span>
+                </button>
+
+                {showReviewerTools && (
+                  <div className="mt-2 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2 animate-fadeIn">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-600 tracking-wider">
+                      <span>Quick Test Simulator Actions</span>
+                      <span className="text-[9px] text-purple-700 font-bold">QA Validation</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => executePayment('PAYMENT_SUCCESS')}
+                        className="py-2 px-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-950 font-black border border-emerald-400 transition cursor-pointer text-center shadow-xs"
+                        title="Simulates 200 OK SUCCESS and calls webhook"
+                      >
+                        ✅ Test Success
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => executePayment('PENDING')}
+                        className="py-2 px-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300 transition cursor-pointer text-center"
+                        title="Simulates pending bank clearing"
+                      >
+                        ⏳ Test Pending
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => executePayment('PAYMENT_ERROR')}
+                        className="py-2 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 font-medium border border-rose-200 transition cursor-pointer text-center"
+                        title="Simulates bank decline / decline scenario"
+                      >
+                        ❌ Test Decline
+                      </button>
+                    </div>
+
+                    {redirectSimulatorUrl && (
+                      <div className="pt-1 text-center">
+                        <a
+                          href={redirectSimulatorUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline"
+                        >
+                          <span>Open External PhonePe Sandbox Mercury Simulator</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
             </>
           )}
 
