@@ -88,6 +88,8 @@ export interface Campaign {
   voidReason?: string;
   voidedAt?: string;
   voidedBy?: string;
+  isDynamicGateway?: boolean;
+  gatewaySessionExpiresAt?: string;
   updatedAt?: string;
   lastEditedBy?: string;
   lastEditReason?: string;

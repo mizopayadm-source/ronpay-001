@@ -20,7 +20,8 @@ import {
   Building, 
   CreditCard,
   Plus,
-  Coins
+  Coins,
+  Zap
 } from 'lucide-react';
 import { Campaign, MemberRecord, MemberDependent } from '../types';
 import { createUPIPaymentString } from '../utils/qr';
@@ -150,11 +151,15 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
 
   if (!isOpen || !campaign) return null;
 
-  const isExpired = isCampaignExpired(campaign.validityDate, campaign.status);
+  const isSessionExpired = campaign.gatewaySessionExpiresAt 
+    ? new Date(campaign.gatewaySessionExpiresAt).getTime() < Date.now()
+    : false;
+  const isExpired = isCampaignExpired(campaign.validityDate, campaign.status) || isSessionExpired;
   const isOthers = campaign.category === 'others';
   const isRalna = campaign.category === 'ralna';
   const isRikrum = campaign.category === 'rikrum';
   const isKhawlsak = campaign.category === 'khawlsak';
+  const isDynamicGateway = Boolean(campaign.isDynamicGateway);
 
   // Get active payer name and ID
   const getActivePayerInfo = () => {
@@ -664,25 +669,52 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
               </p>
             )}
 
-            {isOthers && (
+            {isDynamicGateway ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-1.5 text-xs text-amber-900">
+                <div className="flex items-center gap-1.5 font-black text-amber-950">
+                  <Zap className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Dynamic Payment Gateway Session (One-Time QR)</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  He QR code hi Website / PhonePe gateway-in order bik atan a siam a ni a. Minute 3–5 chhung chauh nung tur leh <strong>vawi khat chiah pek theih (Single-use)</strong> a ni.
+                </p>
+                {campaign.customAmount && (
+                  <div className="bg-white/80 p-2 rounded-xl border border-amber-200/80 flex items-center justify-between text-xs font-bold mt-1">
+                    <span className="text-slate-600">Fixed Invoice Bill Amount:</span>
+                    <span className="font-black text-amber-950 text-sm">₹{campaign.customAmount}</span>
+                  </div>
+                )}
+              </div>
+            ) : isOthers ? (
               <div className="text-xs text-purple-900 bg-purple-50 p-2.5 rounded-xl border border-purple-200 font-medium flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-purple-600 shrink-0" />
                 <span>Standard UPI QR Code a ni a, RonPay Bawm dangte nen inzawmna a nei lo.</span>
               </div>
-            )}
+            ) : null}
 
             {/* Generic Amount Input */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-              <label className="text-xs font-black text-slate-800 block">
-                Pek Tur Zat (Amount in ₹):
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-slate-800 block">
+                  Pek Tur Zat (Amount in ₹):
+                </label>
+                {campaign.customAmount ? (
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded-md">
+                    Invoice Amount Fixed
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-slate-500">
+                    QR-ah amount a in-fix lo
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-2 font-black text-slate-400 text-sm">₹</span>
                 <input
                   type="number"
-                  min="10"
-                  step="50"
-                  value={genericAmount}
+                  min="1"
+                  step="1"
+                  value={genericAmount || ''}
                   onChange={(e) => setGenericAmount(Number(e.target.value) || 0)}
                   className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 />
@@ -712,9 +744,13 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
         {isExpired ? (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-center space-y-1">
             <AlertCircle className="w-5 h-5 text-rose-600 mx-auto" />
-            <p className="text-xs font-black text-rose-900">Pek Hun a Tawp Tawh (Expired)</p>
+            <p className="text-xs font-black text-rose-900">
+              {isSessionExpired ? 'Payment Gateway Session Expired' : 'Pek Hun a Tawp Tawh (Expired)'}
+            </p>
             <p className="text-[10.5px] text-rose-700">
-              He campaign/QR hi a tawp tawh avangin sum pek theih a ni tawh rih lo.
+              {isSessionExpired
+                ? 'He dynamic payment gateway session hi a hun tiam (minute 3–5) a ral tawh avangin bank/PhonePe server lamin a pawm tawh lo vang. Website-ah QR thar i siam nawn a ngai ang.'
+                : 'He campaign/QR hi a tawp tawh avangin sum pek theih a ni tawh rih lo.'}
             </p>
           </div>
         ) : (

@@ -76,7 +76,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     // Ignore JSON parse error and proceed
   }
 
-  // 2. Web Portal URL parsing (e.g. https://...?campaign=cmp-123 or ?cat=ralna&title=...)
+  // 2. Web Portal URL parsing (e.g. PhonePe PG, merchant-simulator, or https://...?campaign=cmp-123)
   if (cleanText.startsWith('http://') || cleanText.startsWith('https://') || cleanText.includes('/?') || cleanText.includes('campaign=')) {
     try {
       const urlString = (cleanText.startsWith('http://') || cleanText.startsWith('https://')) 
@@ -89,17 +89,68 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
                      url.searchParams.get('id') || 
                      url.searchParams.get('bawm');
       const cat = url.searchParams.get('cat') as BawmCategory;
-      const title = url.searchParams.get('title');
-      const upi = url.searchParams.get('upi');
+      const title = url.searchParams.get('title') || url.searchParams.get('pn') || url.searchParams.get('merchantName');
+      const upi = url.searchParams.get('upi') || url.searchParams.get('pa') || url.searchParams.get('vpa');
       const loc = url.searchParams.get('loc');
       const org = url.searchParams.get('org');
       const target = url.searchParams.get('target') || 
                      url.searchParams.get('amt') || 
                      url.searchParams.get('amount') || 
-                     url.searchParams.get('am');
-      const numTargetAmt = (target !== null && !isNaN(parseFloat(target)) && parseFloat(target) > 0)
+                     url.searchParams.get('am') ||
+                     url.searchParams.get('total') ||
+                     url.searchParams.get('price');
+
+      let numTargetAmt = (target !== null && !isNaN(parseFloat(target)) && parseFloat(target) > 0)
         ? parseFloat(target)
         : undefined;
+
+      let merchantTitle = title ? decodeURIComponent(title) : '';
+      let sessionExpiresAt: string | undefined = undefined;
+      const merchantIdParam = url.searchParams.get('merchantId') || url.searchParams.get('mid') || url.searchParams.get('chantId');
+      if (merchantIdParam && !merchantTitle) {
+        merchantTitle = decodeURIComponent(merchantIdParam);
+      }
+
+      // Check for JWT token in query params (e.g. PhonePe UAT mercury-uat.phonepe.com token=eyJ...)
+      const token = url.searchParams.get('token');
+      if (token && token.includes('.')) {
+        try {
+          const parts = token.split('.');
+          if (parts.length >= 2) {
+            let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) {
+              base64 += '=';
+            }
+            const decodedJsonStr = atob(base64);
+            const decoded = JSON.parse(decodedJsonStr);
+            if (decoded) {
+              if (decoded.amount !== undefined && !numTargetAmt) {
+                const numVal = parseFloat(String(decoded.amount));
+                numTargetAmt = numVal > 500 && numVal % 100 === 0 ? numVal / 100 : numVal;
+              }
+              if (decoded.merchantId && !merchantTitle) {
+                merchantTitle = String(decoded.merchantId);
+              }
+              if (decoded.chantId && !merchantTitle) {
+                merchantTitle = String(decoded.chantId);
+              }
+              if (decoded.expiresOn) {
+                const expDate = new Date(Number(decoded.expiresOn));
+                if (!isNaN(expDate.getTime())) {
+                  sessionExpiresAt = expDate.toISOString();
+                }
+              }
+            }
+          }
+        } catch {
+          // Token decode fallback
+        }
+      }
+
+      // If amount looks like paise without decimals (e.g. 23700 for ₹237), convert to rupees
+      if (numTargetAmt && numTargetAmt >= 1000 && Number.isInteger(numTargetAmt) && (urlString.includes('phonepe') || urlString.includes('razorpay'))) {
+        numTargetAmt = numTargetAmt / 100;
+      }
 
       if (campId) {
         const matched = campaigns.find(c => c.id.toLowerCase() === campId.toLowerCase());
@@ -115,14 +166,15 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         const reconstructedCamp: Campaign = {
           id: campId,
           category: (cat || (campId.startsWith('cmp-k') ? 'kumtluang' : campId.startsWith('cmp-r') ? 'ralna' : 'others')) as BawmCategory,
-          title: title ? decodeURIComponent(title) : 'Scanned Bawm Portal',
+          title: merchantTitle || 'Scanned Bawm Portal',
           location: loc ? decodeURIComponent(loc) : 'Mizoram',
           gpsCoords: '23.7271, 92.7176',
           upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
           orgCode: org ? decodeURIComponent(org) : undefined,
           targetAmount: numTargetAmt,
           customAmount: numTargetAmt,
-          validityDate: '2027-12-31',
+          validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
+          gatewaySessionExpiresAt: sessionExpiresAt,
           status: 'active',
           createdAt: new Date().toISOString()
         };
@@ -130,6 +182,43 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         return {
           type: reconstructedCamp.category,
           campaign: reconstructedCamp,
+          rawText: cleanText
+        };
+      }
+
+      // External Payment Gateway URL (PhonePe, Merchant Simulator, Razorpay, etc.)
+      const isPaymentGateway = 
+        url.hostname.includes('phonepe') || 
+        url.hostname.includes('merchant-simulator') || 
+        url.hostname.includes('mercury') ||
+        url.hostname.includes('razorpay') ||
+        url.hostname.includes('paytm') ||
+        Boolean(token) ||
+        Boolean(merchantIdParam) ||
+        Boolean(numTargetAmt);
+
+      if (isPaymentGateway) {
+        const displayMerchant = merchantTitle || (url.hostname.includes('phonepe') ? 'PhonePe PG Merchant' : 'Payment Gateway Merchant');
+        const dynamicPGCamp: Campaign = {
+          id: `pg-${Date.now()}`,
+          category: 'others',
+          title: `${displayMerchant}`,
+          location: url.hostname.includes('uat') || url.hostname.includes('simulator') ? 'PhonePe UAT Sandbox (Single-use)' : 'Payment Gateway (Single-use)',
+          gpsCoords: '23.7271, 92.7176',
+          upiId: upi ? decodeURIComponent(upi) : (url.hostname.includes('phonepe') ? 'pg-gateway@phonepe' : 'gateway@upi'),
+          targetAmount: numTargetAmt,
+          customAmount: numTargetAmt,
+          validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
+          gatewaySessionExpiresAt: sessionExpiresAt,
+          isDynamicGateway: true,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          feeOptionRule: 'DEDUCT',
+        };
+
+        return {
+          type: 'general-upi',
+          campaign: dynamicPGCamp,
           rawText: cleanText
         };
       }
