@@ -53,10 +53,16 @@ export function getCampaignFinancialStats(
     return false;
   });
 
-  // Count valid non-rejected/non-failed transactions
-  const validTxns = matching.filter(t => t.status !== 'failed' && t.status !== 'rejected');
+  // Count valid non-rejected/non-failed and completed transactions
+  const validTxns = matching.filter(t => 
+    t.status !== 'failed' && 
+    t.status !== 'rejected' && 
+    t.status !== 'pending' && 
+    t.status !== 'pending_verification' && 
+    t.status !== 'cancelled'
+  );
   const totalCollected = validTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-  const txnCount = matching.length;
+  const txnCount = validTxns.length;
   const hasTransactions = txnCount > 0 || totalCollected > 0;
   const isZeroBalance = totalCollected === 0 && txnCount === 0;
 

@@ -47,7 +47,7 @@ import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BILL_SERVICES } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
-import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
+import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction } from '../utils/storage';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -175,10 +175,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Compute dynamic live stats
   const totalRaised = transactions
-    .filter(t => t.status === 'completed')
+    .filter(isConfirmedTransaction)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const todayCount = transactions.length;
+  const todayCount = transactions.filter(isConfirmedTransaction).length;
   const activeQRsCount = campaigns.filter(c => c.status === 'active').length;
 
   const renderBillIcon = (iconName: string) => {
@@ -863,7 +863,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           ) : (
             displayedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
-            const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
+            const campTransactions = transactions.filter(t => (t.campaignId === camp.id || t.campaignTitle === camp.title) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const target = camp.targetAmount || (
               camp.category === 'ralna' ? 25000 :

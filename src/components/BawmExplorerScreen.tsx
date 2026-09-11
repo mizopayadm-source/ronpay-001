@@ -35,7 +35,7 @@ import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName } from '../utils/translations';
-import { isCampaignCreator } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
 
 interface BawmExplorerScreenProps {
   category: BawmCategory;
@@ -651,7 +651,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
             const isOwner = isCampaignCreator(camp, creatorProfile);
 
             // Campaign Transactions & Progress calculation (Private to creator)
-            const campTransactions = transactions.filter(t => t.campaignId === camp.id || t.campaignTitle === camp.title);
+            const campTransactions = transactions.filter(t => (t.campaignId === camp.id || t.campaignTitle === camp.title) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             
             const hasTarget = Boolean(camp.targetAmount && camp.targetAmount > 0);

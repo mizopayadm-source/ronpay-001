@@ -413,6 +413,21 @@ export const deleteStoredCampaign = (campaignId: string, reason?: string, delete
   }
 };
 
+export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
+  if (!tx) return false;
+  const status = (tx.status || '').toLowerCase().trim();
+  if (
+    status === 'pending' || 
+    status === 'pending_verification' || 
+    status === 'failed' || 
+    status === 'rejected' || 
+    status === 'cancelled'
+  ) {
+    return false;
+  }
+  return true;
+};
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
