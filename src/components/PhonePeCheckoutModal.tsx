@@ -277,14 +277,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     }
   };
 
-  // Listen for callback completion message from PhonePe window tab
+  // Listen for callback completion message from PhonePe window tab and across browser tabs
   useEffect(() => {
     if (!isOpen || paymentResult !== 'IDLE') return;
+
+    const triggerSuccess = () => {
+      handleManualStatusCheck();
+    };
 
     const handleWindowMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PHONEPE_PAYMENT_RESULT') {
         if (event.data?.status === 'PAYMENT_SUCCESS') {
-          handleManualStatusCheck();
+          triggerSuccess();
         } else if (event.data?.status === 'PAYMENT_ERROR') {
           setPaymentResult('FAILED');
           setConfirmedTx(null);
@@ -292,8 +296,36 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       }
     };
 
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'PHONEPE_PAYMENT_SUCCESS') {
+            triggerSuccess();
+          }
+        };
+      } catch (e) {}
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed.status === 'PAYMENT_SUCCESS') {
+            triggerSuccess();
+          }
+        } catch (err) {}
+      }
+    };
+
     window.addEventListener('message', handleWindowMessage);
-    return () => window.removeEventListener('message', handleWindowMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('message', handleWindowMessage);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [isOpen, paymentResult, merchantTxnId]);
 
   // Execute payment transaction with selected outcome

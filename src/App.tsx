@@ -450,6 +450,21 @@ export default function App() {
       setSelectedCategory(route.category);
     }
     if (route.receiptId) {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('ronpay_payment_channel');
+          bc.postMessage({ type: 'PHONEPE_PAYMENT_SUCCESS', receiptId: route.receiptId });
+        }
+        localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+          id: route.receiptId,
+          status: 'PAYMENT_SUCCESS',
+          timestamp: Date.now()
+        }));
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'PHONEPE_PAYMENT_RESULT', status: 'PAYMENT_SUCCESS', receiptId: route.receiptId }, '*');
+        }
+      } catch (e) {}
+
       const txs = getStoredTransactions();
       const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
       if (found) {
