@@ -263,15 +263,23 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
     let platformFeePaise = 0;
     let totalPayablePaise = 0;
 
-    if (feeOption === 'ADD_ON') {
-      const baseRupees = Number(baseAmountInRupees) || rawAmount;
-      merchantSharePaise = Math.round(baseRupees * 100);
-      platformFeePaise = Math.round(merchantSharePaise * 0.01); // 1% fee on top
-      totalPayablePaise = merchantSharePaise + platformFeePaise;
+    if (baseAmountInRupees && Number(baseAmountInRupees) > 0) {
+      // Precise split when base donation amount is provided
+      const baseNum = Number(baseAmountInRupees);
+      if (feeOption === 'ADD_ON') {
+        merchantSharePaise = Math.round(baseNum * 100);
+        platformFeePaise = Math.round(Math.max(1, Math.round(baseNum * 0.01)) * 100);
+        totalPayablePaise = merchantSharePaise + platformFeePaise; // 100 + 1 = 101 => 10100 paise
+      } else {
+        totalPayablePaise = Math.round(baseNum * 100);
+        platformFeePaise = Math.round(Math.max(1, Math.round(baseNum * 0.01)) * 100);
+        merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
+      }
     } else {
+      // If only amountInRupees is passed, treat it strictly as the exact total payable
       totalPayablePaise = Math.round(rawAmount * 100);
-      platformFeePaise = Math.round(totalPayablePaise * 0.01); // 1% deducted
-      merchantSharePaise = totalPayablePaise - platformFeePaise;
+      platformFeePaise = Math.max(100, Math.round(totalPayablePaise * 0.01));
+      merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
     }
 
     const amountInPaise = totalPayablePaise;

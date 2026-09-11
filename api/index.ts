@@ -231,9 +231,47 @@ export default async function handler(req: any, res: any) {
         body = {};
       }
 
-      const totalPayable = Number(body?.amountInRupees) || 101;
+      const baseNum = Number(body?.baseAmountInRupees) || 0;
+      const feeOption = body?.feeOption || 'ADD_ON';
+      let amountInPaise = 10100;
+
+      if (baseNum > 0) {
+        if (feeOption === 'ADD_ON') {
+          const fee = Math.max(1, Math.round(baseNum * 0.01));
+          amountInPaise = Math.round((baseNum + fee) * 100);
+        } else {
+          amountInPaise = Math.round(baseNum * 100);
+        }
+      } else if (body?.amountInRupees) {
+        amountInPaise = Math.round(Number(body.amountInRupees) * 100);
+      }
+
       const merchantTxnId = body?.merchantTransactionId || txnId || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-      const phonePeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
+      
+      // Dynamic PhonePe OAuth Token generation from official endpoint
+      let phonePeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
+      try {
+        const tokenParams = new URLSearchParams();
+        tokenParams.append('client_id', 'TSPMIZOPAYUAT_2608171706');
+        tokenParams.append('client_version', '1');
+        tokenParams.append('client_secret', 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4');
+        tokenParams.append('grant_type', 'client_credentials');
+
+        const oauthResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: tokenParams.toString()
+        });
+        if (oauthResp.ok) {
+          const oauthJson: any = await oauthResp.json();
+          if (oauthJson?.access_token) {
+            phonePeToken = oauthJson.access_token;
+          }
+        }
+      } catch (oErr) {
+        console.warn('OAuth token fetch warning:', oErr);
+      }
+
       let checkoutUrl = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(phonePeToken)}`;
       let orderId = `OMO${Date.now()}`;
 
@@ -247,7 +285,7 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             merchantOrderId: merchantTxnId,
-            amount: Math.round(totalPayable * 100),
+            amount: amountInPaise,
             paymentFlow: {
               type: 'PG_CHECKOUT',
               merchantUrls: {
@@ -284,7 +322,7 @@ export default async function handler(req: any, res: any) {
       // Register transaction in store as PENDING
       globalTxStore[merchantTxnId] = {
         status: 'PENDING',
-        amount: totalPayable,
+        amount: amountInPaise / 100,
         orderId
       };
 

@@ -99,6 +99,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [showReviewerTools, setShowReviewerTools] = useState<boolean>(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isPreparingSession, setIsPreparingSession] = useState<boolean>(false);
 
   const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
@@ -119,7 +120,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setHasOpenedPhonePe(false);
     setIsCheckingStatus(false);
     setStatusMessage(null);
-    setRedirectSimulatorUrl(DEFAULT_PHONEPE_CHECKOUT_URL);
+    setIsPreparingSession(true);
 
     // Pre-create transaction in backend - initial status is always PENDING
     fetch('/api/phonepe/initiate-pay', {
@@ -150,10 +151,12 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         if (data.data?.instrumentResponse?.redirectInfo?.url) {
           setRedirectSimulatorUrl(data.data.instrumentResponse.redirectInfo.url);
         }
+        setIsPreparingSession(false);
       })
       .catch(err => {
         if (!isMounted) return;
         console.warn('PhonePe session notice (fallback simulator active):', err.message || err);
+        setIsPreparingSession(false);
       });
 
     return () => {
@@ -774,7 +777,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                   <>
                     <button
                       type="button"
-                      disabled={isProcessing}
+                      disabled={isProcessing || isPreparingSession}
                       onClick={() => {
                         const targetUrl = redirectSimulatorUrl || DEFAULT_PHONEPE_CHECKOUT_URL;
                         
@@ -816,9 +819,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                       }}
                       className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
                     >
-                      <QrCode className="w-5 h-5 text-amber-300" />
-                      <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe</span>
-                      <ExternalLink className="w-4 h-4 text-purple-200 ml-1" />
+                      {isPreparingSession ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>PhonePe Gateway buatsaih mek a ni...</span>
+                        </>
+                      ) : (
+                        <>
+                          <QrCode className="w-5 h-5 text-amber-300" />
+                          <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe</span>
+                          <ExternalLink className="w-4 h-4 text-purple-200 ml-1" />
+                        </>
+                      )}
                     </button>
                     <p className="text-[10px] text-slate-500 text-center font-medium">
                       🔒 Official PhonePe Gateway a inhawng ang a, Desktop-ah QR Code a lang ang a, Phone-ah UPI apps a inhawng ang.
