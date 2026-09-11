@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 import { saveTransaction } from '../utils/storage';
+import { getCampaignCauseTitle } from '../utils/translations';
 
 // PhonePe Dynamic Gateway Modal Component
 interface PhonePeCheckoutModalProps {
@@ -103,7 +104,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
   const campaignShare = currentFeeOption === 'ADD_ON' ? amount : Math.max(0, amount - effectiveFee);
-  const campaignName = campaign?.orgName || campaign?.title || 'RonPay Community Bawm';
+  const campaignName = getCampaignCauseTitle(campaign);
 
   // Initialize session when modal opens or fee option changes
   useEffect(() => {

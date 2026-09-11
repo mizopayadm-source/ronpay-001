@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   CheckCircle2, 
@@ -26,6 +26,8 @@ import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
 import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
+import { getStoredCampaigns } from '../utils/storage';
+import { getCampaignCauseTitle } from '../utils/translations';
 
 interface SuccessScreenProps {
   transaction: Transaction | null;
@@ -60,6 +62,25 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   }, [transaction]);
 
   const webReceiptLink = transaction ? generateReceiptWebLink(transaction.id) : '';
+
+  const displayCampaignTitle = useMemo(() => {
+    if (!transaction) return 'RonPay Community Cause';
+    const allCamps = getStoredCampaigns();
+    const matched = allCamps.find(c => c.id === transaction.campaignId);
+    if (matched) {
+      const causeTitle = getCampaignCauseTitle(matched);
+      if (causeTitle && causeTitle !== 'RonPay Community Bawm') {
+        return causeTitle;
+      }
+    }
+    if (transaction.category === 'ralna' && (transaction.campaignTitle === 'BCM Ebenezer' || !transaction.campaignTitle)) {
+      return 'Lalrinpuii Ralna';
+    }
+    if (transaction.category === 'khawlsak' && transaction.campaignTitle === 'BCM Ebenezer') {
+      return 'Pocket Money';
+    }
+    return transaction.campaignTitle || 'RonPay Community Cause';
+  }, [transaction]);
 
   // Synthesize a joyful celebratory chime using Web Audio API
   const playCelebrationChime = () => {
@@ -158,7 +179,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   const handleShareReceipt = async () => {
     const receiptLink = webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`;
     const text = `🎉 *RonPay Official Digital Receipt*\n\n` +
-      `🏛️ *Bawm:* ${transaction?.campaignTitle || 'RonPay Community Bawm'}\n` +
+      `🏛️ *Bawm:* ${displayCampaignTitle}\n` +
       `👤 *Donor:* ${transaction?.isAnonymous ? 'Anonymous' : (transaction?.donorName || 'Consumer User')}\n` +
       `💰 *Amount:* ₹${transaction?.amount.toFixed(2) || '0.00'}\n` +
       `💳 *Platform Fee:* ₹${transaction?.platformFee.toFixed(2) || '0.00'}\n` +
@@ -269,8 +290,8 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
             </div>
             <div class="row">
-              <span class="label">Campaign / Service:</span>
-              <span class="val">${transaction.campaignTitle}</span>
+              <span class="label">Bawm / Pawisa thawh chhan:</span>
+              <span class="val" style="font-weight: bold; color: #1e1b4b;">${displayCampaignTitle}</span>
             </div>
             <div class="row">
               <span class="label">Petu Hming:</span>
@@ -376,7 +397,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               {transaction?.category ? `${transaction.category.toUpperCase()} BAWM` : 'RONPAY DONATION'}
             </span>
             <h3 className="font-black text-sm text-slate-900 truncate">
-              {transaction?.campaignTitle || 'RonPay Community Cause'}
+              {displayCampaignTitle}
             </h3>
           </div>
           <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 shadow-2xs">

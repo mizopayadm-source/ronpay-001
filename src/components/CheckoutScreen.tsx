@@ -37,7 +37,7 @@ import {
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
 import { getMembers, addOrUpdateMember } from '../utils/storage';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
@@ -553,7 +553,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
         campaignId: campaign?.id || `cmp-${category}-custom`,
-        campaignTitle: campaign?.title || (category === 'ralna' ? 'Ralna Bawm' : config.name),
+        campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
         category: category,
         donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),

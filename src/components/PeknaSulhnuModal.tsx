@@ -22,7 +22,8 @@ import {
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
-import { isCampaignCreator } from '../utils/storage';
+import { isCampaignCreator, getStoredCampaigns } from '../utils/storage';
+import { getCampaignCauseTitle } from '../utils/translations';
 
 interface PeknaSulhnuModalProps {
   isOpen: boolean;
@@ -124,6 +125,34 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     ownedCampaignIds.size > 0
   );
 
+  const resolveTxCampaignTitle = (tx?: Transaction | null): string => {
+    if (!tx) return 'RonPay Bawm';
+    if (safeCampaigns && tx.campaignId) {
+      const matched = safeCampaigns.find(c => c.id === tx.campaignId);
+      if (matched) {
+        const causeTitle = getCampaignCauseTitle(matched);
+        if (causeTitle && causeTitle !== 'RonPay Community Bawm') {
+          return causeTitle;
+        }
+      }
+    }
+    const storedCamps = getStoredCampaigns();
+    const matchedStored = storedCamps.find(c => c.id === tx.campaignId);
+    if (matchedStored) {
+      const causeTitle = getCampaignCauseTitle(matchedStored);
+      if (causeTitle && causeTitle !== 'RonPay Community Bawm') {
+        return causeTitle;
+      }
+    }
+    if (tx.category === 'ralna' && (tx.campaignTitle === 'BCM Ebenezer' || !tx.campaignTitle)) {
+      return 'Lalrinpuii Ralna';
+    }
+    if (tx.category === 'khawlsak' && tx.campaignTitle === 'BCM Ebenezer') {
+      return 'Pocket Money';
+    }
+    return tx.campaignTitle || 'RonPay Bawm';
+  };
+
   // Helper to determine if transaction is received in creator's bawm or sent as donor
   const getTxDirection = (tx?: Transaction | null): 'received' | 'sent' => {
     if (!tx) return 'sent';
@@ -194,7 +223,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = t.campaignTitle ? String(t.campaignTitle).toLowerCase().includes(q) : false;
+        const rTitle = resolveTxCampaignTitle(t);
+        const matchTitle = (t.campaignTitle ? String(t.campaignTitle).toLowerCase().includes(q) : false) || (rTitle ? rTitle.toLowerCase().includes(q) : false);
         const matchId = t.id ? String(t.id).toLowerCase().includes(q) : false;
         const matchDonor = t.donorName ? String(t.donorName).toLowerCase().includes(q) : false;
         const matchPhone = t.donorPhone ? String(t.donorPhone).includes(q) : false;
@@ -318,8 +348,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
               </div>
               <div class="row">
-                <span class="label">Campaign / Service:</span>
-                <span class="val">${tx.campaignTitle || '—'}</span>
+                <span class="label">Bawm / Pawisa thawh chhan:</span>
+                <span class="val" style="font-weight: bold; color: #1e1b4b;">${resolveTxCampaignTitle(tx)}</span>
               </div>
               <div class="row">
                 <span class="label">Petu Hming:</span>
@@ -805,7 +835,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
                   <div>
                     <h4 className="font-extrabold text-slate-900 text-xs">
-                      {tx.campaignTitle || 'Campaign'}
+                      {resolveTxCampaignTitle(tx)}
                     </h4>
                     <div className="flex items-center justify-between text-[10.5px] text-slate-500 mt-0.5">
                       <span>{formatDateDDMMYYYY(tx.timestamp)}</span>

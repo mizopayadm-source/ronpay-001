@@ -11,7 +11,7 @@ import {
   MemberRecord,
   BillService,
 } from './types';
-import { Language } from './utils/translations';
+import { Language, getCampaignCauseTitle } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
 import {
   getStoredCampaigns,
@@ -141,10 +141,18 @@ export default function App() {
         if (total > 0) {
           const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
           const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
+          const allCamps = getStoredCampaigns();
+          const mCamp = allCamps.find(c => c.id === meta.campaignId);
+          const resolvedTitle = (mCamp ? getCampaignCauseTitle(mCamp) : '') ||
+            (meta.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
+            (meta.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
+            meta.campaignTitle ||
+            'RonPay Community Bawm';
+
           return {
             id: initialRoute.receiptId,
             campaignId: meta.campaignId || 'cmp-custom',
-            campaignTitle: meta.campaignTitle || 'RonPay Community Bawm',
+            campaignTitle: resolvedTitle,
             category: meta.category || 'others',
             donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued Donor'),
             donorPhone: meta.donorPhone,
@@ -546,10 +554,18 @@ export default function App() {
             const base = sData?.baseAmountRupees || meta?.baseAmount || (total > 1 ? total - 1 : total);
             const fee = sData?.platformFeeRupees !== undefined ? sData.platformFeeRupees : (meta?.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base));
 
+            const resolvedCampTitle = (matchedCamp ? getCampaignCauseTitle(matchedCamp) : '') ||
+              (sData?.campaignTitle && sData.campaignTitle !== 'BCM Ebenezer' ? sData.campaignTitle : '') ||
+              (meta?.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
+              (sData?.category === 'ralna' || meta?.category === 'ralna' || matchedCamp?.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
+              sData?.campaignTitle ||
+              meta?.campaignTitle ||
+              'RonPay Community Bawm';
+
             const verifiedTx: Transaction = {
               id: route.receiptId!,
               campaignId: targetCampId || matchedCamp?.id || 'cmp-custom',
-              campaignTitle: sData?.campaignTitle || meta?.campaignTitle || matchedCamp?.title || 'RonPay Community Bawm',
+              campaignTitle: resolvedCampTitle,
               donorName: sData?.isAnonymous || meta?.isAnonymous ? 'Anonymous' : (sData?.donorName || meta?.donorName || 'Valued Donor'),
               donorPhone: sData?.donorPhone || meta?.donorPhone,
               isAnonymous: Boolean(sData?.isAnonymous || meta?.isAnonymous),
@@ -577,10 +593,18 @@ export default function App() {
               const total = meta.amount || (meta.baseAmount ? (meta.feeOption === 'ADD_ON' ? meta.baseAmount + (meta.platformFee || 1) : meta.baseAmount) : 0);
               const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
               const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
+              const allCampsFallback = [...campaigns, ...getStoredCampaigns()];
+              const matchedFallback = allCampsFallback.find(c => c.id === meta.campaignId);
+              const resolvedMetaCampTitle = (matchedFallback ? getCampaignCauseTitle(matchedFallback) : '') ||
+                (meta.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
+                (meta.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
+                meta.campaignTitle ||
+                'RonPay Community Bawm';
+
               const verifiedTx: Transaction = {
                 id: route.receiptId!,
                 campaignId: meta.campaignId || 'cmp-custom',
-                campaignTitle: meta.campaignTitle || 'RonPay Community Bawm',
+                campaignTitle: resolvedMetaCampTitle,
                 donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued Donor'),
                 donorPhone: meta.donorPhone,
                 isAnonymous: Boolean(meta.isAnonymous),

@@ -583,6 +583,64 @@ export function translateCampaignTitle(
 }
 
 /**
+ * Resolves the primary cause / purpose of a campaign for donations, receipts, and history.
+ * Strictly prioritizes the actual donation cause/title (e.g. "Lalrinpuii Ralna", "Kangmei Relief Support")
+ * rather than creator organization names (e.g. "BCM Ebenezer").
+ */
+export function getCampaignCauseTitle(
+  campaign?: {
+    title?: string;
+    titleMizo?: string;
+    mitthiHming?: string;
+    category?: string;
+    emergencyTitle?: string;
+    orgName?: string;
+    cause?: string;
+  } | null,
+  fallback = 'RonPay Community Bawm'
+): string {
+  if (!campaign) return fallback;
+
+  // 1. Ralna: dead person's condolence cause
+  if (campaign.category === 'ralna') {
+    if (campaign.title && campaign.title.trim()) return campaign.title.trim();
+    if (campaign.mitthiHming && campaign.mitthiHming.trim()) {
+      const hming = campaign.mitthiHming.trim();
+      return hming.toLowerCase().includes('ralna') ? hming : `${hming} Ralna`;
+    }
+    return 'Ralna Bawm';
+  }
+
+  // 2. Rikrum: Emergency relief cause
+  if (campaign.category === 'rikrum') {
+    if (campaign.emergencyTitle && campaign.emergencyTitle.trim()) return campaign.emergencyTitle.trim();
+    if (campaign.title && campaign.title.trim()) return campaign.title.trim();
+  }
+
+  // 3. General campaign title
+  if (campaign.title && campaign.title.trim()) {
+    return campaign.title.trim();
+  }
+
+  // 4. Emergency title
+  if (campaign.emergencyTitle && campaign.emergencyTitle.trim()) {
+    return campaign.emergencyTitle.trim();
+  }
+
+  // 5. Cause description if short
+  if (campaign.cause && campaign.cause.trim() && campaign.cause.length < 60) {
+    return campaign.cause.trim();
+  }
+
+  // 6. Organization name as last resort
+  if (campaign.orgName && campaign.orgName.trim()) {
+    return campaign.orgName.trim();
+  }
+
+  return fallback;
+}
+
+/**
  * Helper to get the correct cause text for a campaign based on user language preference
  */
 export function translateCampaignCause(

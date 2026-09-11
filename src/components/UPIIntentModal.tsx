@@ -16,6 +16,7 @@ import {
   Download
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
+import { getCampaignCauseTitle } from '../utils/translations';
 import {
   validateUpiId,
   buildUpiIntentUrl,
@@ -90,7 +91,7 @@ export function UPIIntentModal({
   const targetUpi = valCheck.isValid ? rawTargetUpi : 'ronpay.bawm@okhdfcbank';
   const totalPayable = feeOption === 'DEDUCT' ? amount : amount + platformFee;
   const netReceived = campaignNetReceived ?? (feeOption === 'DEDUCT' ? Math.max(0, amount - platformFee) : amount);
-  const payeeDisplayName = campaign?.orgName || campaign?.creatorName || campaign?.title || 'RonPay Bawm';
+  const payeeDisplayName = getCampaignCauseTitle(campaign, 'RonPay Bawm');
 
   // Validate recipient UPI ID on modal open
   useEffect(() => {
@@ -212,7 +213,7 @@ export function UPIIntentModal({
       const transaction: Transaction = {
         id: txRef,
         campaignId: campaign?.id || 'cmp-custom',
-        campaignTitle: campaign?.title || 'RonPay Bawm',
+        campaignTitle: getCampaignCauseTitle(campaign, 'RonPay Bawm'),
         category: campaign?.category || 'others',
         donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (donorPhone?.trim() || undefined),

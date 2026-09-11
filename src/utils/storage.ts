@@ -442,6 +442,25 @@ export const getStoredTransactions = (): Transaction[] => {
         if (hasNew || cleaned.length !== parsed.length) {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
         }
+
+        // Auto-correct any legacy campaign titles cached in localStorage
+        let hasFixedTitles = false;
+        for (const t of merged) {
+          if (t.campaignId === 'cmp-1788526889943' || (t.category === 'ralna' && t.campaignTitle === 'BCM Ebenezer')) {
+            if (t.campaignTitle !== 'Lalrinpuii Ralna') {
+              t.campaignTitle = 'Lalrinpuii Ralna';
+              hasFixedTitles = true;
+            }
+          }
+          if (t.campaignId === 'cmp-1788527889945' && t.campaignTitle === 'BCM Ebenezer') {
+            t.campaignTitle = 'Pocket Money';
+            hasFixedTitles = true;
+          }
+        }
+        if (hasFixedTitles) {
+          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
+        }
+
         return merged;
       }
     }
