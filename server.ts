@@ -364,7 +364,7 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       merchantUserId,
       amount: amountInPaise,
       campaignTitle: campaignTitle || 'RonPay Community Bawm',
-      status: simulateStatus === 'FAILURE' ? 'PAYMENT_ERROR' : (simulateStatus === 'PENDING' ? 'PENDING' : 'PAYMENT_SUCCESS'),
+      status: simulateStatus === 'FAILURE' ? 'PAYMENT_ERROR' : (simulateStatus === 'SUCCESS' ? 'PAYMENT_SUCCESS' : 'PENDING'),
       createdAt: new Date().toISOString(),
       phonePeTransactionId: phonePeOrderId,
       splitDetails: {
@@ -430,7 +430,7 @@ app.get(['/api/phonepe/status', '/api/phonepe/status/', '/api/phonepe/status/:me
       merchantUserId: `USER_${Date.now()}`,
       amount: amountInPaise,
       campaignTitle: 'RonPay Community Bawm',
-      status: 'PAYMENT_SUCCESS',
+      status: 'PENDING',
       createdAt: new Date().toISOString(),
       phonePeTransactionId: `T${Date.now()}`,
       splitDetails: {
