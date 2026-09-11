@@ -22,9 +22,7 @@ import {
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 
-const DEFAULT_PHONEPE_UAT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
-export const DEFAULT_PHONEPE_CHECKOUT_URL = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${DEFAULT_PHONEPE_UAT_TOKEN}`;
-
+// PhonePe Dynamic Gateway Modal Component
 interface PhonePeCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -809,45 +807,72 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                   <>
                     <button
                       type="button"
-                      disabled={isProcessing || isPreparingSession}
-                      onClick={() => {
-                        const targetUrl = redirectSimulatorUrl || DEFAULT_PHONEPE_CHECKOUT_URL;
-                        
-                        // Open PhonePe window immediately in synchronous user gesture (prevents Chrome popup blocker)
-                        const openedWin = window.open(targetUrl, '_blank');
+                      disabled={isProcessing}
+                      onClick={async () => {
+                        // If session URL is already ready, open it directly
+                        if (redirectSimulatorUrl) {
+                          window.open(redirectSimulatorUrl, '_blank');
+                          setHasOpenedPhonePe(true);
+                          setStatusMessage(null);
+                          return;
+                        }
+
+                        // Otherwise open blank window immediately (to preserve user-gesture permissions in browser)
+                        const openedWin = window.open('about:blank', '_blank');
+                        if (openedWin) {
+                          try {
+                            openedWin.document.title = 'PhonePe Payment Gateway';
+                            openedWin.document.body.innerHTML = `
+                              <div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8f9fa;color:#1e293b;">
+                                <div style="width:48px;height:48px;border:4px solid #5f259f;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:20px;"></div>
+                                <h3 style="margin:0 0 8px 0;font-size:20px;font-weight:700;color:#5f259f;">Connecting to PhonePe...</h3>
+                                <p style="margin:0;font-size:14px;color:#64748b;">Khawngaihin lo nghak lawk rawh, secure gateway buatsaih mek a ni.</p>
+                                <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                              </div>
+                            `;
+                          } catch (e) {}
+                        }
                         setHasOpenedPhonePe(true);
                         setStatusMessage(null);
 
-                        // Background session registration / sync
-                        fetch('/api/phonepe/initiate-pay', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            amountInRupees: totalPayable,
-                            donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
-                            campaignTitle: campaignName,
-                            campaignId: campaign?.id || 'cmp-custom',
-                            customerPhone: donorPhone || '9862300000',
-                            simulateStatus: 'PENDING',
-                            feeOption: currentFeeOption,
-                            baseAmountInRupees: amount,
-                            clientOrigin: window.location.origin,
-                            merchantTransactionId: merchantTxnId
-                          })
-                        })
-                          .then(res => res.json())
-                          .then(data => {
-                            const newUrl = data.data?.instrumentResponse?.redirectInfo?.url;
-                            if (newUrl && newUrl !== targetUrl) {
-                              setRedirectSimulatorUrl(newUrl);
-                              if (openedWin && !openedWin.closed) {
-                                openedWin.location.href = newUrl;
-                              }
-                            }
-                          })
-                          .catch(err => {
-                            console.warn('Initiate-pay background sync note:', err);
+                        try {
+                          const res = await fetch('/api/phonepe/initiate-pay', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              amountInRupees: totalPayable,
+                              donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+                              campaignTitle: campaignName,
+                              campaignId: campaign?.id || 'cmp-custom',
+                              customerPhone: donorPhone || '9862300000',
+                              simulateStatus: 'PENDING',
+                              feeOption: currentFeeOption,
+                              baseAmountInRupees: amount,
+                              clientOrigin: window.location.origin,
+                              merchantTransactionId: merchantTxnId
+                            })
                           });
+                          const data = await res.json();
+                          const newUrl = data.data?.instrumentResponse?.redirectInfo?.url;
+                          if (newUrl) {
+                            setRedirectSimulatorUrl(newUrl);
+                            if (openedWin && !openedWin.closed) {
+                              openedWin.location.replace(newUrl);
+                            }
+                          } else {
+                            if (openedWin && !openedWin.closed) {
+                              openedWin.close();
+                            }
+                            setStatusMessage('PhonePe session a inhawng thei lo rih. Khawngaihin hmet nawn leh rawh le.');
+                            setHasOpenedPhonePe(false);
+                          }
+                        } catch (err) {
+                          if (openedWin && !openedWin.closed) {
+                            openedWin.close();
+                          }
+                          setStatusMessage('PhonePe connection problem a awm deuh. Hmet nawn leh rawh.');
+                          setHasOpenedPhonePe(false);
+                        }
                       }}
                       className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
                     >

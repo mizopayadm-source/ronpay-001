@@ -35,7 +35,7 @@ async function getOrFetchPhonePeOAuthToken(): Promise<string> {
   } catch (err) {
     console.warn('OAuth token fetch error in api/index.ts:', err);
   }
-  return cachedPhonePeOAuthToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
+  return cachedPhonePeOAuthToken || '';
 }
 
 export default async function handler(req: any, res: any) {

@@ -109,7 +109,7 @@ async function getOrFetchPhonePeOAuthToken(forceRefresh = false): Promise<string
     console.warn('Failed to fetch official PhonePe OAuth token:', err.message || err);
   }
 
-  return cachedPhonePeToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
+  return cachedPhonePeToken || '';
 }
 
 // Helper: Calculate PhonePe Checksum / X-VERIFY
