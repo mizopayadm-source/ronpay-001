@@ -320,6 +320,21 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
             merchantUrls: {
               redirectUrl: directReturnUrl
             }
+          },
+          paymentModeConfig: {
+            version: 'V2',
+            enabledPaymentModes: [
+              {
+                type: 'UPI',
+                flows: ['INTENT', 'COLLECT', 'QR']
+              },
+              {
+                type: 'CARD'
+              },
+              {
+                type: 'NET_BANKING'
+              }
+            ]
           }
         })
       });
