@@ -78,7 +78,11 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
   const [categoryAmounts, setCategoryAmounts] = useState<{ [categoryName: string]: number }>({});
 
   // Non-kumtluang generic donation amount
-  const [genericAmount, setGenericAmount] = useState<number>(200);
+  const [genericAmount, setGenericAmount] = useState<number>(() => {
+    if (campaign?.customAmount && campaign.customAmount > 0) return campaign.customAmount;
+    if (campaign?.targetAmount && campaign.targetAmount > 0) return campaign.targetAmount;
+    return 200;
+  });
   const [genericDonorName, setGenericDonorName] = useState<string>('');
 
   // Load members list
@@ -86,6 +90,15 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
 
   useEffect(() => {
     if (campaign && isOpen) {
+      const explicitAmt = (campaign.customAmount && campaign.customAmount > 0)
+        ? campaign.customAmount
+        : (campaign.targetAmount && campaign.targetAmount > 0)
+        ? campaign.targetAmount
+        : null;
+      if (explicitAmt && explicitAmt > 0) {
+        setGenericAmount(explicitAmt);
+      }
+
       const members = getMembers(campaign.id);
       setAllMembers(members);
       
@@ -717,7 +730,9 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
               type="button"
               onClick={() => onProceedRonPay({ 
                 ...campaign, 
-                customAmount: totalAmount > 0 ? totalAmount : genericAmount 
+                targetAmount: totalAmount > 0 ? totalAmount : genericAmount,
+                customAmount: totalAmount > 0 ? totalAmount : genericAmount,
+                feeOptionRule: campaign.category === 'others' ? 'DEDUCT' : campaign.feeOptionRule
               })}
               className="w-full text-left bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 hover:from-slate-800 hover:to-indigo-900 text-white p-3.5 rounded-2xl shadow-md border border-indigo-500/40 transition cursor-pointer active:scale-98 group space-y-1.5"
             >

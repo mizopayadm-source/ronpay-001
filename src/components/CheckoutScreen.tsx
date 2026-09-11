@@ -111,7 +111,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setFeeBearerOption('DEDUCT');
     }
   }, [effectiveFeeMode]);
-  const [standardAmount, setStandardAmount] = useState<number>(() => initialAmount || 500);
+  const [standardAmount, setStandardAmount] = useState<number>(() => {
+    if (initialAmount && initialAmount > 0) return initialAmount;
+    if (campaign?.customAmount && campaign.customAmount > 0) return campaign.customAmount;
+    if (campaign?.targetAmount && campaign.targetAmount > 0) return campaign.targetAmount;
+    return 500;
+  });
   const [donorName, setDonorName] = useState<string>('');
   const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
@@ -196,8 +201,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Initialize subcategories from campaign
   useEffect(() => {
-    if (campaign?.customAmount && campaign.customAmount > 0) {
-      setStandardAmount(campaign.customAmount);
+    const explicitAmt = (initialAmount && initialAmount > 0)
+      ? initialAmount
+      : (campaign?.customAmount && campaign.customAmount > 0)
+      ? campaign.customAmount
+      : (campaign?.targetAmount && campaign.targetAmount > 0)
+      ? campaign.targetAmount
+      : null;
+    if (explicitAmt && explicitAmt > 0) {
+      setStandardAmount(explicitAmt);
     }
 
     if (category === 'kumtluang') {
@@ -209,7 +221,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         setSubcatAmounts(initialMap);
       }
     }
-  }, [category, campaign]);
+  }, [category, campaign, initialAmount]);
 
   const handlePhoneSearch = (query: string) => {
     setPhoneSearchQuery(query);
@@ -422,6 +434,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       feeRatePercent = 0;
       fixedFee = 0;
     } else if (category === 'kumtluang' && campaign?.trxnFeeBearer === 'org_paid') {
+      feeRatePercent = 0;
+      fixedFee = 0;
+    } else if (category === 'others' && campaign?.feeOptionRule === 'DEDUCT') {
+      // Scanned external merchant or dynamic QR has exact payable amount
       feeRatePercent = 0;
       fixedFee = 0;
     } else if (campaign?.customPlatformFeePercent !== undefined) {
@@ -1656,20 +1672,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {/* 1. PhonePe PG V2 */}
             <button
               type="button"
               onClick={() => {
                 setPaymentMethod('phonepe');
               }}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'phonepe'
                   ? 'bg-purple-50/90 border-purple-600 shadow-xs text-purple-950 ring-2 ring-purple-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
+              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
                 paymentMethod === 'phonepe' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}>
                 <Smartphone className="w-4 h-4" />
@@ -1682,40 +1698,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               </span>
             </button>
 
-            {/* 2. Direct Online UPI Apps */}
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('online')}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
-                paymentMethod === 'online'
-                  ? 'bg-indigo-50/90 border-indigo-600 shadow-xs text-indigo-950 ring-2 ring-indigo-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-              }`}
-            >
-              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
-                paymentMethod === 'online' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
-              }`}>
-                <CreditCard className="w-4 h-4" />
-              </div>
-              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
-                UPI Apps
-              </p>
-              <span className="text-[9px] text-slate-500 font-medium mt-0.5">
-                GPay / Paytm
-              </span>
-            </button>
-
-            {/* 3. Cash Pekna */}
+            {/* 2. Cash Pekna */}
             <button
               type="button"
               onClick={() => setPaymentMethod('cash')}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'cash'
                   ? 'bg-amber-50/90 border-amber-600 shadow-xs text-amber-950 ring-2 ring-amber-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className={`p-1.5 rounded-lg mb-1.5 transition-colors ${
+              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
                 paymentMethod === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}>
                 <Banknote className="w-4 h-4" />
@@ -1779,15 +1772,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ? 'bg-slate-700 hover:bg-slate-700'
               : paymentMethod === 'phonepe'
               ? 'bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-600 hover:to-indigo-600'
-              : paymentMethod === 'online'
-              ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600'
               : 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600'
           }`}
         >
           {isProcessing ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              {paymentMethod === 'phonepe' ? 'Opening PhonePe PG V2...' : paymentMethod === 'online' ? 'Connecting UPI Gateway...' : 'Recording Cash Entry...'}
+              {paymentMethod === 'phonepe' ? 'Opening PhonePe PG V2...' : 'Recording Cash Entry...'}
             </>
           ) : isExpired ? (
             <>
@@ -1800,11 +1791,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 <>
                   <Zap className="w-4 h-4 text-amber-300" />
                   <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG (UAT)</span>
-                </>
-              ) : paymentMethod === 'online' ? (
-                <>
-                  <Zap className="w-4 h-4 text-amber-300" />
-                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via UPI</span>
                 </>
               ) : (
                 <>

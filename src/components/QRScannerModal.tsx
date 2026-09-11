@@ -37,12 +37,17 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
       const parsed = JSON.parse(cleanText);
       const campId = parsed.campaignId || parsed.id || parsed.campaign;
+      const jsonAmt = parsed.amount || parsed.amt || parsed.customAmount || parsed.targetAmount || parsed.target;
+      const numJsonAmt = (jsonAmt !== undefined && !isNaN(parseFloat(String(jsonAmt))) && parseFloat(String(jsonAmt)) > 0)
+        ? parseFloat(String(jsonAmt))
+        : undefined;
+
       if (campId) {
         const found = campaigns.find(c => c.id.toLowerCase() === String(campId).toLowerCase());
         if (found) {
           return {
             type: found.status === 'pending_approval' ? 'pending' : found.category,
-            campaign: found,
+            campaign: numJsonAmt ? { ...found, customAmount: numJsonAmt, targetAmount: numJsonAmt } : found,
             rawText: cleanText
           };
         }
@@ -57,6 +62,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           validityDate: parsed.validity || '2027-12-31',
           status: parsed.status || 'active',
           createdAt: new Date().toISOString(),
+          targetAmount: numJsonAmt,
+          customAmount: numJsonAmt,
         };
         return {
           type: dynamicCamp.status === 'pending_approval' ? 'pending' : dynamicCamp.category,
@@ -86,14 +93,20 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const upi = url.searchParams.get('upi');
       const loc = url.searchParams.get('loc');
       const org = url.searchParams.get('org');
-      const target = url.searchParams.get('target');
+      const target = url.searchParams.get('target') || 
+                     url.searchParams.get('amt') || 
+                     url.searchParams.get('amount') || 
+                     url.searchParams.get('am');
+      const numTargetAmt = (target !== null && !isNaN(parseFloat(target)) && parseFloat(target) > 0)
+        ? parseFloat(target)
+        : undefined;
 
       if (campId) {
         const matched = campaigns.find(c => c.id.toLowerCase() === campId.toLowerCase());
         if (matched) {
           return {
             type: matched.status === 'pending_approval' ? 'pending' : matched.category,
-            campaign: matched,
+            campaign: numTargetAmt ? { ...matched, customAmount: numTargetAmt, targetAmount: numTargetAmt } : matched,
             rawText: cleanText
           };
         }
@@ -107,7 +120,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           gpsCoords: '23.7271, 92.7176',
           upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
           orgCode: org ? decodeURIComponent(org) : undefined,
-          targetAmount: target ? Number(target) : undefined,
+          targetAmount: numTargetAmt,
+          customAmount: numTargetAmt,
           validityDate: '2027-12-31',
           status: 'active',
           createdAt: new Date().toISOString()
@@ -132,7 +146,10 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const pa = (params.get('pa') || '').trim();
       const pn = (params.get('pn') || '').trim();
       const tn = (params.get('tn') || '').trim();
-      const am = params.get('am');
+      const am = params.get('am') || params.get('amount');
+      const numUpiAmt = (am !== null && !isNaN(parseFloat(am)) && parseFloat(am) > 0)
+        ? parseFloat(am)
+        : undefined;
 
       // Check if tn or note contains explicit RonPay campaign ID (e.g. "RonPay:cmp-xxx", "cmp-xxx", etc.)
       let targetId = '';
@@ -152,7 +169,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         if (found) {
           return {
             type: found.status === 'pending_approval' ? 'pending' : found.category,
-            campaign: found,
+            campaign: numUpiAmt ? { ...found, customAmount: numUpiAmt, targetAmount: numUpiAmt } : found,
             rawText: cleanText
           };
         }
@@ -164,7 +181,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         if (foundByUpi) {
           return {
             type: foundByUpi.status === 'pending_approval' ? 'pending' : foundByUpi.category,
-            campaign: foundByUpi,
+            campaign: numUpiAmt ? { ...foundByUpi, customAmount: numUpiAmt, targetAmount: numUpiAmt } : foundByUpi,
             rawText: cleanText
           };
         }
@@ -181,7 +198,9 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         validityDate: '2027-12-31',
         status: 'active',
         createdAt: new Date().toISOString(),
-        targetAmount: am ? Number(am) : undefined,
+        targetAmount: numUpiAmt,
+        customAmount: numUpiAmt,
+        feeOptionRule: 'DEDUCT',
       };
 
       return {

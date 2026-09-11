@@ -734,6 +734,7 @@ export default function App() {
   const handleSelectCampaign = (campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
+    setAutoOpenPhonePeCheckout(false);
     updateBrowserUrl('checkout', campaign, campaign.category);
     setCurrentScreen('checkout');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1138,7 +1139,7 @@ export default function App() {
               onPreviewImage={handlePreviewImage}
               language={language}
               initialOpenPhonePeCheckout={autoOpenPhonePeCheckout}
-              initialAmount={phonePeCheckoutAmount}
+              initialAmount={autoOpenPhonePeCheckout ? phonePeCheckoutAmount : (selectedCampaign?.customAmount || selectedCampaign?.targetAmount)}
             />
           )}
 
