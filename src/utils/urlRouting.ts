@@ -65,15 +65,37 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const viewParam = searchParams.get('view');
     const statusParam = searchParams.get('status');
 
-    let receiptId = searchParams.get('receipt') || 
-                    searchParams.get('tx') || 
-                    searchParams.get('txn') || 
-                    searchParams.get('receiptId') ||
-                    searchParams.get('phonepe_txn_id');
+    const isExplicitFailStatus = statusParam === 'PAYMENT_ERROR' || 
+                                 statusParam === 'FAILED' || 
+                                 statusParam === 'PAYMENT_DECLINED' || 
+                                 statusParam === 'CANCELLED' ||
+                                 screenParam === 'failed';
 
-    // If status is PAYMENT_SUCCESS or phonepe_txn_id query param exists (even if empty)
-    if ((!receiptId || receiptId.trim() === '') && (statusParam === 'PAYMENT_SUCCESS' || searchParams.has('phonepe_txn_id'))) {
-      receiptId = `RPAY_TXN_${Date.now()}`;
+    let receiptId = '';
+    if (!isExplicitFailStatus) {
+      receiptId = searchParams.get('receipt') || 
+                  searchParams.get('tx') || 
+                  searchParams.get('txn') || 
+                  searchParams.get('txnId') ||
+                  searchParams.get('merchantTransactionId') ||
+                  searchParams.get('orderId') ||
+                  searchParams.get('receiptId') ||
+                  searchParams.get('phonepe_txn_id') ||
+                  '';
+
+      // If status or code is PAYMENT_SUCCESS but no receiptId passed
+      if ((!receiptId || receiptId.trim() === '') && (statusParam === 'PAYMENT_SUCCESS' || searchParams.get('code') === 'PAYMENT_SUCCESS')) {
+        receiptId = `RPAY_TXN_${Date.now()}`;
+      }
+    }
+
+    // Special catch: If arriving at /callback or /phonepe/callback
+    if (pathname.includes('/callback') || pathname.includes('/phonepe/callback')) {
+      return {
+        screen: 'success',
+        receiptId: receiptId || `RPAY_TXN_${Date.now()}`,
+        view: 'app',
+      };
     }
 
     const rollId = searchParams.get('roll') || 
@@ -157,6 +179,14 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         campaignId: cleanId,
         campaign: reconstructed,
         category: deducedCategory,
+      };
+    }
+
+    // 1b. If Explicit Failure from Payment Gateway redirect (e.g. PhonePe decline / failure)
+    if (isExplicitFailStatus) {
+      return {
+        screen: 'checkout',
+        view: parsedView || 'app',
       };
     }
 

@@ -19,9 +19,9 @@ export const firebaseConfig = {
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Suppress benign connection retry logs
+// Suppress benign connection retry logs and offline warnings
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {
   // Ignore in environments where setLogLevel is not permitted
 }
@@ -32,11 +32,17 @@ try {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager()
     }),
-    experimentalAutoDetectLongPolling: true
+    experimentalForceLongPolling: true
   });
 } catch {
   // If Firestore is already initialized or persistence fails in iframe/sandbox
-  firestoreInstance = getFirestore(app);
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true
+    });
+  } catch {
+    firestoreInstance = getFirestore(app);
+  }
 }
 
 export const db = firestoreInstance;

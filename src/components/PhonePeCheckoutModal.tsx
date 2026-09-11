@@ -271,60 +271,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     }
   };
 
-  // User confirmed they completed payment on PhonePe page
-  const handleConfirmPaid = async () => {
-    if (!merchantTxnId || isCheckingStatus) return;
-    setIsCheckingStatus(true);
-    setStatusMessage(null);
-
-    try {
-      await fetch('/api/phonepe/confirm-paid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchantTransactionId: merchantTxnId })
-      });
-
-      const utrCode = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
-      const finalTxn: Transaction = {
-        id: merchantTxnId,
-        campaignId: campaign?.id || 'cmp-custom',
-        campaignTitle: campaignName,
-        category: campaign?.category || 'others',
-        donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
-        donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
-        donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
-        memberId: isAnonymous ? undefined : memberId,
-        subId: isAnonymous ? undefined : subId,
-        isDependent: isAnonymous ? false : isDependent,
-        isAnonymous,
-        amount,
-        platformFee: effectiveFee,
-        feeOption: currentFeeOption,
-        campaignNetReceived: campaignShare,
-        totalAmount: totalPayable,
-        paymentMethod: 'phonepe',
-        status: 'completed',
-        remark: remark?.trim() || undefined,
-        subCategoryBreakdown: subcatAmounts,
-        periodType,
-        periodMonth,
-        periodYear,
-        periodLabel,
-        timestamp: new Date().toISOString(),
-        txHash: utrCode,
-        utr: utrCode
-      };
-
-      setPaymentResult('SUCCESS');
-      setConfirmedTx(finalTxn);
-    } catch (err) {
-      console.error('Confirm paid error:', err);
-      setStatusMessage('PhonePe status update theih rih loh a ni.');
-    } finally {
-      setIsCheckingStatus(false);
-    }
-  };
-
   // Listen for callback completion message from PhonePe window tab
   useEffect(() => {
     if (!isOpen || paymentResult !== 'IDLE') return;
@@ -878,35 +824,36 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     </p>
                   </>
                 ) : (
-                  <div className="bg-gradient-to-br from-indigo-50/90 to-purple-50/90 border-2 border-[#5f259f] p-4 rounded-2xl space-y-3 shadow-xs">
+                  <div className="bg-gradient-to-br from-indigo-50/90 to-purple-50/90 border-2 border-[#5f259f] p-4 sm:p-5 rounded-2xl space-y-3.5 shadow-xs">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative flex h-3.5 w-3.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#5f259f]"></span>
                         </div>
-                        <h4 className="font-black text-purple-950 text-xs sm:text-sm">
-                          PhonePe Checkout Tab Inhawng E
-                        </h4>
+                        <div>
+                          <h4 className="font-black text-purple-950 text-xs sm:text-sm">
+                            Payment Nghah Mek A Ni...
+                          </h4>
+                          <p className="text-[10px] text-purple-700 font-medium">Listening for bank & UPI confirmation</p>
+                        </div>
                       </div>
-                      <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
-                        STATUS: PENDING
+                      <span className="text-[10px] font-mono font-bold bg-purple-100 text-purple-900 px-2.5 py-1 rounded-full border border-purple-200 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        LIVE SYNC
                       </span>
                     </div>
 
-                    <p className="text-[11.5px] text-slate-700 leading-relaxed font-medium">
-                      Browser tab tharah PhonePe Official Checkout Page a inhawng a. Tah khan <b>QR Code scan la</b> emaw <b>UPI / Card / Netbanking</b> hmangin lo pe fel rawh le.
-                    </p>
-
-                    <div className="bg-white/90 rounded-xl p-3 border border-purple-100 text-[11px] text-purple-950 font-medium space-y-1.5">
-                      <div className="flex items-start gap-2">
+                    <div className="bg-white/95 rounded-xl p-3.5 border border-purple-100 space-y-2 text-[11.5px] text-slate-700 leading-relaxed shadow-2xs">
+                      <div className="flex items-start gap-2 text-slate-800 font-medium">
                         <Clock className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
                         <span>
-                          PhonePe page-ah khuan <b>"Confirming Payment"</b> a lo lan chuan, Sandbox (Test) a nih avangin i phone-ah <b>[ SUCCESS ]</b> link lo lang kha hmet rawh le.
+                          PhonePe checkout page inhawngah khuan <b>QR Code scan</b> emaw <b>UPI / Card / Netbanking</b> hmangin payment lo ti zo rawh le.
                         </span>
                       </div>
-                      <div className="text-[10.5px] text-slate-600 bg-purple-50/70 p-2 rounded-lg border border-purple-100/80">
-                        ✨ Emaw, heta <b>"Ka Pe Fel Tawh E (Receipt En Rawh)"</b> tih hmet hian RonPay-ah receipt a lo chhuak nghal ang.
+                      <div className="text-[11px] text-purple-900 bg-purple-50/70 p-2.5 rounded-lg border border-purple-100/80 flex items-center gap-2">
+                        <div className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                        <span>Pawisa i pek zawh rualin RonPay hian automatic-in a hre nghal ang a, Receipt a lo inpho chhuak nghal ang.</span>
                       </div>
                     </div>
 
@@ -918,54 +865,43 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     )}
 
                     <div className="flex flex-col gap-2 pt-1">
-                      {/* Live Manual Status Check Button */}
-                      <button
-                        type="button"
-                        disabled={isCheckingStatus}
-                        onClick={handleManualStatusCheck}
-                        className="w-full py-3 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-60"
-                      >
-                        {isCheckingStatus ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>PhonePe Status Check Mek...</span>
-                          </>
-                        ) : (
-                          <>
-                            <RotateCw className="w-4 h-4 text-amber-300" />
-                            <span>Payment Status Check Rawh</span>
-                          </>
-                        )}
-                      </button>
-
-                      {/* Direct Confirmation for users who completed payment on PhonePe tab */}
-                      <button
-                        type="button"
-                        disabled={isCheckingStatus}
-                        onClick={handleConfirmPaid}
-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-60"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                        <span>Ka Pe Fel Tawh E (Receipt En Rawh)</span>
-                      </button>
-
-                      {/* Re-open tab button */}
+                      {/* Re-open tab button in case user minimized or closed it */}
                       {redirectSimulatorUrl && (
                         <button
                           type="button"
                           onClick={() => window.open(redirectSimulatorUrl, '_blank')}
-                          className="w-full py-2 px-3 rounded-xl bg-white text-purple-800 border border-purple-200 font-bold text-[11px] hover:bg-purple-50 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                          className="w-full py-2.5 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                         >
-                          <ExternalLink className="w-3.5 h-3.5 text-purple-600" />
-                          <span>PhonePe Screen Hawng Nawn Leh Rawh</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-purple-200" />
+                          <span>PhonePe Checkout Screen Hawng Nawn Rawh</span>
                         </button>
                       )}
+
+                      {/* Manual Status Check Button */}
+                      <button
+                        type="button"
+                        disabled={isCheckingStatus}
+                        onClick={handleManualStatusCheck}
+                        className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-60"
+                      >
+                        {isCheckingStatus ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Status Check Mek...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RotateCw className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Status Check Nawn Rawh (Re-check)</span>
+                          </>
+                        )}
+                      </button>
 
                       {/* Cancel / Close button */}
                       <button
                         type="button"
                         onClick={onClose}
-                        className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <span>Khár Rawh (Cancel Payment)</span>
                       </button>
