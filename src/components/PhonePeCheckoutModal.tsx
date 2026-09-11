@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
 
+const DEFAULT_PHONEPE_UAT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzT24iOjE3ODkwNzM2MjU4NzUsIm1lcmNoYW50SWQiOiJUU1BNSVpPUEFZVUFUIn0.duv3MvckDBY-M4voOQrsjym8qZfIJacW_Kh9WC16wAY';
+export const DEFAULT_PHONEPE_CHECKOUT_URL = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${DEFAULT_PHONEPE_UAT_TOKEN}`;
+
 interface PhonePeCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -116,7 +119,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setHasOpenedPhonePe(false);
     setIsCheckingStatus(false);
     setStatusMessage(null);
-    setRedirectSimulatorUrl('');
+    setRedirectSimulatorUrl(DEFAULT_PHONEPE_CHECKOUT_URL);
 
     // Pre-create transaction in backend - initial status is always PENDING
     fetch('/api/phonepe/initiate-pay', {
@@ -772,46 +775,44 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     <button
                       type="button"
                       disabled={isProcessing}
-                      onClick={async () => {
-                        let urlToOpen = redirectSimulatorUrl;
-                        if (!urlToOpen) {
-                          try {
-                            setIsProcessing(true);
-                            setProcessStep('Connecting to PhonePe Gateway...');
-                            const res = await fetch('/api/phonepe/initiate-pay', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                amountInRupees: totalPayable,
-                                donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
-                                campaignTitle: campaignName,
-                                campaignId: campaign?.id || 'cmp-custom',
-                                customerPhone: donorPhone || '9862300000',
-                                simulateStatus: 'PENDING',
-                                feeOption: currentFeeOption,
-                                baseAmountInRupees: amount,
-                                clientOrigin: window.location.origin,
-                                merchantTransactionId: merchantTxnId
-                              })
-                            });
-                            const data = await res.json();
-                            urlToOpen = data.data?.instrumentResponse?.redirectInfo?.url;
-                            if (urlToOpen) {
-                              setRedirectSimulatorUrl(urlToOpen);
-                            }
-                          } catch (e) {
-                            console.error('Failed to initiate PhonePe session:', e);
-                          } finally {
-                            setIsProcessing(false);
-                            setProcessStep('');
-                          }
-                        }
-
-                        if (urlToOpen) {
-                          window.open(urlToOpen, '_blank');
-                        }
+                      onClick={() => {
+                        const targetUrl = redirectSimulatorUrl || DEFAULT_PHONEPE_CHECKOUT_URL;
+                        
+                        // Open PhonePe window immediately in synchronous user gesture (prevents Chrome popup blocker)
+                        const openedWin = window.open(targetUrl, '_blank');
                         setHasOpenedPhonePe(true);
                         setStatusMessage(null);
+
+                        // Background session registration / sync
+                        fetch('/api/phonepe/initiate-pay', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            amountInRupees: totalPayable,
+                            donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+                            campaignTitle: campaignName,
+                            campaignId: campaign?.id || 'cmp-custom',
+                            customerPhone: donorPhone || '9862300000',
+                            simulateStatus: 'PENDING',
+                            feeOption: currentFeeOption,
+                            baseAmountInRupees: amount,
+                            clientOrigin: window.location.origin,
+                            merchantTransactionId: merchantTxnId
+                          })
+                        })
+                          .then(res => res.json())
+                          .then(data => {
+                            const newUrl = data.data?.instrumentResponse?.redirectInfo?.url;
+                            if (newUrl && newUrl !== targetUrl) {
+                              setRedirectSimulatorUrl(newUrl);
+                              if (openedWin && !openedWin.closed) {
+                                openedWin.location.href = newUrl;
+                              }
+                            }
+                          })
+                          .catch(err => {
+                            console.warn('Initiate-pay background sync note:', err);
+                          });
                       }}
                       className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
                     >
