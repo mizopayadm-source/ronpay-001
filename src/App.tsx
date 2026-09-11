@@ -120,23 +120,49 @@ export default function App() {
       const txs = getStoredTransactions();
       const found = txs.find(t => t.id.toLowerCase() === initialRoute.receiptId?.toLowerCase());
       if (found) return found;
-      return {
-        id: initialRoute.receiptId,
-        campaignId: 'cmp-church-1',
-        campaignTitle: 'RonPay Community Bawm',
-        category: 'others',
-        donorName: 'PhonePe Verified Donor',
-        donorPhone: '9862300000',
-        amount: 100,
-        platformFee: 1,
-        totalAmount: 101,
-        paymentMethod: 'phonepe',
-        status: 'completed',
-        timestamp: new Date().toISOString(),
-        referenceNo: `T${Date.now()}`,
-        verifiedAt: new Date().toISOString(),
-        feeOption: 'ADD_ON',
-      };
+
+      const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`);
+      if (pendingRaw) {
+        try {
+          const parsed = JSON.parse(pendingRaw);
+          if (parsed && parsed.id) {
+            return {
+              ...parsed,
+              status: 'completed',
+              verifiedAt: new Date().toISOString()
+            };
+          }
+        } catch (e) {}
+      }
+
+      if (initialRoute.receiptMeta) {
+        const meta = initialRoute.receiptMeta;
+        const total = meta.amount || (meta.baseAmount ? (meta.feeOption === 'ADD_ON' ? meta.baseAmount + (meta.platformFee || 1) : meta.baseAmount) : 0);
+        if (total > 0) {
+          const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
+          const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
+          return {
+            id: initialRoute.receiptId,
+            campaignId: meta.campaignId || 'cmp-custom',
+            campaignTitle: meta.campaignTitle || 'RonPay Community Bawm',
+            category: meta.category || 'others',
+            donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued Donor'),
+            donorPhone: meta.donorPhone,
+            isAnonymous: Boolean(meta.isAnonymous),
+            amount: base,
+            platformFee: fee,
+            totalAmount: total,
+            feeOption: meta.feeOption || 'ADD_ON',
+            campaignNetReceived: base,
+            paymentMethod: 'phonepe',
+            status: 'completed',
+            timestamp: new Date().toISOString(),
+            referenceNo: `T${Date.now()}`,
+            verifiedAt: new Date().toISOString(),
+            utr: meta.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
+          };
+        }
+      }
     }
     return null;
   });
@@ -466,46 +492,116 @@ export default function App() {
       } catch (e) {}
 
       const txs = getStoredTransactions();
-      const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+      let found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+
+      if (!found) {
+        const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`);
+        if (pendingRaw) {
+          try {
+            const parsed = JSON.parse(pendingRaw);
+            if (parsed && parsed.id) {
+              found = {
+                ...parsed,
+                status: 'completed',
+                verifiedAt: new Date().toISOString()
+              };
+              saveTransaction(found);
+            }
+          } catch (e) {}
+        }
+      }
+
       if (found) {
         setCompletedTransaction(found);
-      } else {
-        // Fallback for PhonePe redirect callback (?phonepe_txn_id=... or ?receipt=...)
-        const fallbackTx: Transaction = {
-          id: route.receiptId,
-          campaignId: campaigns[0]?.id || 'cmp-church-1',
-          campaignTitle: campaigns[0]?.title || 'RonPay Community Bawm',
-          donorName: 'PhonePe Verified Donor',
-          donorPhone: '9862300000',
-          amount: 100,
-          platformFee: 1,
-          totalAmount: 101,
-          category: 'others',
-          paymentMethod: 'phonepe',
-          status: 'completed',
-          timestamp: new Date().toISOString(),
-          referenceNo: `T${Date.now()}`,
-          verifiedAt: new Date().toISOString(),
-          feeOption: 'ADD_ON',
-        };
-        setCompletedTransaction(fallbackTx);
-        saveTransaction(fallbackTx);
-        recordUserPaidTxId(fallbackTx.id);
-        // Query server status to confirm if recorded
+        recordUserPaidTxId(found.id);
+        // Query server status to confirm if recorded and fetch real UTR
         fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
           .then(r => r.json())
           .then(data => {
-            if (data.data) {
+            if (data?.data) {
               const updatedTx: Transaction = {
-                ...fallbackTx,
-                referenceNo: data.data.transactionId || fallbackTx.referenceNo,
-                status: data.data.status === 'PAYMENT_SUCCESS' ? 'completed' : fallbackTx.status
+                ...found!,
+                referenceNo: data.data.transactionId || data.data.paymentInstrument?.utr || found!.referenceNo,
+                utr: data.data.paymentInstrument?.utr || found!.utr,
+                status: (data.data.state === 'COMPLETED' || data.data.responseCode === 'SUCCESS' || data.code === 'PAYMENT_SUCCESS') ? 'completed' : found!.status
               };
               setCompletedTransaction(updatedTx);
               saveTransaction(updatedTx);
             }
           })
           .catch(() => {});
+      } else {
+        // Query server status endpoint to retrieve the recorded transaction metadata
+        fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
+          .then(r => r.json())
+          .then(res => {
+            const sData = res?.data;
+            const meta = route.receiptMeta;
+
+            const allCamps = [...campaigns, ...getStoredCampaigns()];
+            const targetCampId = sData?.campaignId || meta?.campaignId || '';
+            const matchedCamp = allCamps.find(c => c.id === targetCampId);
+
+            const total = sData?.amountRupees || (sData?.amount ? sData.amount / 100 : null) || meta?.amount || 0;
+            const base = sData?.baseAmountRupees || meta?.baseAmount || (total > 1 ? total - 1 : total);
+            const fee = sData?.platformFeeRupees !== undefined ? sData.platformFeeRupees : (meta?.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base));
+
+            const verifiedTx: Transaction = {
+              id: route.receiptId!,
+              campaignId: targetCampId || matchedCamp?.id || 'cmp-custom',
+              campaignTitle: sData?.campaignTitle || meta?.campaignTitle || matchedCamp?.title || 'RonPay Community Bawm',
+              donorName: sData?.isAnonymous || meta?.isAnonymous ? 'Anonymous' : (sData?.donorName || meta?.donorName || 'Valued Donor'),
+              donorPhone: sData?.donorPhone || meta?.donorPhone,
+              isAnonymous: Boolean(sData?.isAnonymous || meta?.isAnonymous),
+              amount: base,
+              platformFee: fee,
+              totalAmount: total,
+              category: (sData?.category || meta?.category || matchedCamp?.category || 'others') as any,
+              paymentMethod: 'phonepe',
+              status: 'completed',
+              timestamp: new Date().toISOString(),
+              referenceNo: sData?.transactionId || `T${Date.now()}`,
+              verifiedAt: new Date().toISOString(),
+              feeOption: (sData?.feeOption || meta?.feeOption || 'ADD_ON') as any,
+              campaignNetReceived: base,
+              utr: sData?.paymentInstrument?.utr || meta?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
+            };
+
+            setCompletedTransaction(verifiedTx);
+            saveTransaction(verifiedTx);
+            recordUserPaidTxId(verifiedTx.id);
+          })
+          .catch(() => {
+            if (route.receiptMeta && (route.receiptMeta.amount || route.receiptMeta.baseAmount)) {
+              const meta = route.receiptMeta;
+              const total = meta.amount || (meta.baseAmount ? (meta.feeOption === 'ADD_ON' ? meta.baseAmount + (meta.platformFee || 1) : meta.baseAmount) : 0);
+              const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
+              const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
+              const verifiedTx: Transaction = {
+                id: route.receiptId!,
+                campaignId: meta.campaignId || 'cmp-custom',
+                campaignTitle: meta.campaignTitle || 'RonPay Community Bawm',
+                donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued Donor'),
+                donorPhone: meta.donorPhone,
+                isAnonymous: Boolean(meta.isAnonymous),
+                amount: base,
+                platformFee: fee,
+                totalAmount: total,
+                category: (meta.category || 'others') as any,
+                paymentMethod: 'phonepe',
+                status: 'completed',
+                timestamp: new Date().toISOString(),
+                referenceNo: `T${Date.now()}`,
+                verifiedAt: new Date().toISOString(),
+                feeOption: meta.feeOption || 'ADD_ON',
+                campaignNetReceived: base,
+                utr: meta.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
+              };
+              setCompletedTransaction(verifiedTx);
+              saveTransaction(verifiedTx);
+              recordUserPaidTxId(verifiedTx.id);
+            }
+          });
       }
       setCurrentScreen('success');
       setAppView('app');

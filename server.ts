@@ -59,6 +59,15 @@ interface PaymentRecord {
     platformShare: number;
   };
   utr?: string;
+  amountRupees?: number;
+  baseAmountRupees?: number;
+  platformFeeRupees?: number;
+  feeOption?: string;
+  campaignId?: string;
+  category?: string;
+  donorName?: string;
+  donorPhone?: string;
+  isAnonymous?: boolean;
 }
 
 const transactionStore: Record<string, PaymentRecord> = {};
@@ -255,7 +264,9 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       customerPhone,
       simulateStatus,
       feeOption = 'ADD_ON', // 'ADD_ON' (Rs 100 + Rs 1 = Rs 101) or 'DEDUCT_FROM_DONATION' (Rs 99 + Rs 1 = Rs 100)
-      baseAmountInRupees
+      baseAmountInRupees,
+      merchantTransactionId: clientTxnId,
+      isAnonymous
     } = req.body;
 
     const rawAmount = Number(amountInRupees) || 100;
@@ -283,7 +294,7 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
     }
 
     const amountInPaise = totalPayablePaise;
-    const merchantTransactionId = `RPAY_TXN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const merchantTransactionId = clientTxnId || `RPAY_TXN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const merchantUserId = `USER_${(customerPhone || '9862000000').replace(/\D/g, '')}`;
 
     const rawOrigin = req.headers.origin;
@@ -310,8 +321,8 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
     let phonePeCheckoutUrl = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(livePhonePeToken)}`;
     let phonePeOrderId = `OMO${Date.now()}`;
 
-    // Direct return URL straight to RonPay Success & Official Receipt Screen with Home button
-    const directReturnUrl = `${effectiveOrigin}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTransactionId)}&phonepe_txn_id=${encodeURIComponent(merchantTransactionId)}&status=PAYMENT_SUCCESS`;
+    // Direct return URL straight to RonPay Success & Official Receipt Screen with exact transaction parameters
+    const directReturnUrl = `${effectiveOrigin}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTransactionId)}&phonepe_txn_id=${encodeURIComponent(merchantTransactionId)}&status=PAYMENT_SUCCESS&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId || '')}&ctitle=${encodeURIComponent(campaignTitle || '')}&cat=${encodeURIComponent(req.body?.category || '')}&donor=${encodeURIComponent(donorName || '')}&donorPhone=${encodeURIComponent(customerPhone || '')}&anon=${req.body?.isAnonymous ? '1' : '0'}`;
 
     try {
       const v2PayResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
@@ -386,7 +397,16 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       merchantTransactionId,
       merchantUserId,
       amount: amountInPaise,
+      amountRupees: totalPayablePaise / 100,
+      baseAmountRupees: merchantSharePaise / 100,
+      platformFeeRupees: platformFeePaise / 100,
+      feeOption: feeOption,
+      campaignId: campaignId || '',
       campaignTitle: campaignTitle || 'RonPay Community Bawm',
+      category: req.body?.category || 'others',
+      donorName: donorName || 'Valued Donor',
+      donorPhone: customerPhone || '9862300000',
+      isAnonymous: Boolean(req.body?.isAnonymous),
       status: simulateStatus === 'FAILURE' ? 'PAYMENT_ERROR' : (simulateStatus === 'SUCCESS' ? 'PAYMENT_SUCCESS' : 'PENDING'),
       createdAt: new Date().toISOString(),
       phonePeTransactionId: phonePeOrderId,
@@ -509,6 +529,16 @@ app.get(['/api/phonepe/status', '/api/phonepe/status/', '/api/phonepe/status/:me
       merchantTransactionId: record.merchantTransactionId,
       transactionId: record.phonePeTransactionId,
       amount: record.amount,
+      amountRupees: record.amountRupees || (record.amount ? record.amount / 100 : 100),
+      baseAmountRupees: record.baseAmountRupees || (record.splitDetails?.merchantShare ? record.splitDetails.merchantShare / 100 : (record.amountRupees || 100)),
+      platformFeeRupees: record.platformFeeRupees !== undefined ? record.platformFeeRupees : (record.splitDetails?.platformShare ? record.splitDetails.platformShare / 100 : 1),
+      feeOption: record.feeOption || 'ADD_ON',
+      campaignId: record.campaignId || '',
+      campaignTitle: record.campaignTitle || 'RonPay Community Bawm',
+      category: record.category || 'others',
+      donorName: record.donorName || 'Valued Donor',
+      donorPhone: record.donorPhone,
+      isAnonymous: Boolean(record.isAnonymous),
       state: isSuccess ? 'COMPLETED' : 'PENDING',
       responseCode: isSuccess ? 'SUCCESS' : 'PENDING',
       paymentInstrument: {
@@ -526,29 +556,57 @@ app.get(['/api/phonepe/status', '/api/phonepe/status/', '/api/phonepe/status/:me
 // API 4b: Mark transaction as paid / confirmed (User confirmation & UAT sync)
 // -------------------------------------------------------------
 app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
-  const { merchantTransactionId, status = 'PAYMENT_SUCCESS' } = req.body;
+  const {
+    merchantTransactionId,
+    status = 'PAYMENT_SUCCESS',
+    amountInRupees,
+    baseAmountInRupees,
+    platformFeeRupees,
+    campaignTitle,
+    campaignId,
+    category,
+    donorName,
+    donorPhone,
+    isAnonymous,
+    feeOption
+  } = req.body;
   if (!merchantTransactionId) {
     return res.status(400).json({ success: false, message: 'Missing merchantTransactionId' });
   }
 
   let record = transactionStore[merchantTransactionId];
   if (!record) {
-    const amountInPaise = 10100;
-    const platformFeePaise = Math.round(amountInPaise * 0.01);
+    const rawAmt = Number(amountInRupees) || 100;
+    const amountInPaise = Math.round(rawAmt * 100);
+    const feePaise = platformFeeRupees !== undefined ? Math.round(Number(platformFeeRupees) * 100) : Math.round(amountInPaise * 0.01);
     record = {
       merchantTransactionId,
       merchantUserId: `USER_${Date.now()}`,
       amount: amountInPaise,
-      campaignTitle: 'RonPay Community Bawm',
+      amountRupees: rawAmt,
+      baseAmountRupees: baseAmountInRupees !== undefined ? Number(baseAmountInRupees) : (rawAmt - (feePaise / 100)),
+      platformFeeRupees: feePaise / 100,
+      feeOption: feeOption || 'ADD_ON',
+      campaignId: campaignId || '',
+      campaignTitle: campaignTitle || 'RonPay Community Bawm',
+      category: category || 'others',
+      donorName: donorName || 'Valued Donor',
+      donorPhone: donorPhone || '',
+      isAnonymous: Boolean(isAnonymous),
       status: 'PAYMENT_SUCCESS',
       createdAt: new Date().toISOString(),
       phonePeTransactionId: `T${Date.now()}`,
       splitDetails: {
-        merchantShare: amountInPaise - platformFeePaise,
-        platformShare: platformFeePaise
+        merchantShare: amountInPaise - feePaise,
+        platformShare: feePaise
       }
     };
     transactionStore[merchantTransactionId] = record;
+  } else {
+    if (amountInRupees) record.amountRupees = Number(amountInRupees);
+    if (campaignTitle) record.campaignTitle = campaignTitle;
+    if (campaignId) record.campaignId = campaignId;
+    if (donorName) record.donorName = donorName;
   }
 
   record.status = status;

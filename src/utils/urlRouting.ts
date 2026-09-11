@@ -8,6 +8,19 @@ export interface ParsedRoute {
   campaign?: Campaign;
   category?: BawmCategory;
   receiptId?: string;
+  receiptMeta?: {
+    amount?: number;
+    baseAmount?: number;
+    platformFee?: number;
+    feeOption?: 'ADD_ON' | 'DEDUCT';
+    campaignId?: string;
+    campaignTitle?: string;
+    category?: BawmCategory;
+    donorName?: string;
+    donorPhone?: string;
+    isAnonymous?: boolean;
+    utr?: string;
+  };
   isSulhnuOpen?: boolean;
   isMemberRollOpen?: boolean;
   memberRollCampaignId?: string;
@@ -192,9 +205,36 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     // 2. If Receipt ID is present
     if (receiptId && receiptId.trim() !== '') {
+      const amtParam = searchParams.get('amt');
+      const baseAmtParam = searchParams.get('baseAmt');
+      const feeParam = searchParams.get('fee');
+      const feeOptParam = searchParams.get('feeOpt');
+      const cidParam = searchParams.get('cid');
+      const ctitleParam = searchParams.get('ctitle');
+      const catParam = searchParams.get('cat') || searchParams.get('category');
+      const donorParam = searchParams.get('donor');
+      const donorPhoneParam = searchParams.get('donorPhone');
+      const anonParam = searchParams.get('anon');
+      const utrParam = searchParams.get('utr');
+
+      const receiptMeta = (amtParam || baseAmtParam || cidParam || ctitleParam || donorParam) ? {
+        amount: amtParam ? parseFloat(amtParam) : undefined,
+        baseAmount: baseAmtParam ? parseFloat(baseAmtParam) : undefined,
+        platformFee: feeParam ? parseFloat(feeParam) : undefined,
+        feeOption: (feeOptParam === 'DEDUCT' ? 'DEDUCT' : 'ADD_ON') as 'ADD_ON' | 'DEDUCT',
+        campaignId: cidParam ? decodeURIComponent(cidParam) : undefined,
+        campaignTitle: ctitleParam ? decodeURIComponent(ctitleParam) : undefined,
+        category: (catParam as BawmCategory) || undefined,
+        donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+        donorPhone: donorPhoneParam ? decodeURIComponent(donorPhoneParam) : undefined,
+        isAnonymous: anonParam === '1' || anonParam === 'true',
+        utr: utrParam ? decodeURIComponent(utrParam) : undefined,
+      } : undefined;
+
       return {
         screen: 'success',
         receiptId: decodeURIComponent(receiptId).trim(),
+        receiptMeta,
         view: 'app',
       };
     }

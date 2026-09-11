@@ -1,8 +1,25 @@
 // Vercel Serverless Function Handler for RonPay
 // Handles API calls, PhonePe redirects, callbacks, and status queries smoothly without crashing
 
+interface ServerlessTxRecord {
+  status: string;
+  utr?: string;
+  amount?: number;
+  orderId?: string;
+  amountRupees?: number;
+  baseAmountRupees?: number;
+  platformFeeRupees?: number;
+  feeOption?: string;
+  campaignId?: string;
+  campaignTitle?: string;
+  category?: string;
+  donorName?: string;
+  donorPhone?: string;
+  isAnonymous?: boolean;
+}
+
 // In-memory store for serverless container instances to track real transaction states
-const globalTxStore: Record<string, { status: string; utr?: string; amount?: number; orderId?: string }> = 
+const globalTxStore: Record<string, ServerlessTxRecord> = 
   (globalThis as any).__RONPAY_TX_STORE || ((globalThis as any).__RONPAY_TX_STORE = {});
 
 let cachedPhonePeOAuthToken = '';
@@ -267,19 +284,31 @@ export default async function handler(req: any, res: any) {
       const baseNum = Number(body?.baseAmountInRupees) || 0;
       const feeOption = body?.feeOption || 'ADD_ON';
       let amountInPaise = 10100;
+      let baseAmountRupees = baseNum;
+      let feeRupees = 1;
 
       if (baseNum > 0) {
         if (feeOption === 'ADD_ON') {
-          const fee = Math.max(1, Math.round(baseNum * 0.01));
-          amountInPaise = Math.round((baseNum + fee) * 100);
+          feeRupees = Math.max(1, Math.round(baseNum * 0.01));
+          amountInPaise = Math.round((baseNum + feeRupees) * 100);
+          baseAmountRupees = baseNum;
         } else {
+          feeRupees = Math.max(1, Math.round(baseNum * 0.01));
           amountInPaise = Math.round(baseNum * 100);
+          baseAmountRupees = Math.max(0, baseNum - feeRupees);
         }
       } else if (body?.amountInRupees) {
         amountInPaise = Math.round(Number(body.amountInRupees) * 100);
+        feeRupees = Math.max(1, Math.round((amountInPaise / 100) * 0.01));
+        baseAmountRupees = Math.max(0, (amountInPaise / 100) - feeRupees);
       }
 
       const merchantTxnId = body?.merchantTransactionId || txnId || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+      const campaignId = body?.campaignId || '';
+      const campaignTitle = body?.campaignTitle || 'RonPay Community Bawm';
+      const donorName = body?.donorName || 'Valued Donor';
+      const donorPhone = body?.customerPhone || '';
+      const isAnonymous = Boolean(body?.isAnonymous);
       
       // Dynamic PhonePe OAuth Token generation from official endpoint
       const phonePeToken = await getOrFetchPhonePeOAuthToken();
@@ -288,7 +317,7 @@ export default async function handler(req: any, res: any) {
       let orderId = `OMO${Date.now()}`;
 
       try {
-        const directReturnUrl = `${proto}://${rawHost}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTxnId)}&phonepe_txn_id=${encodeURIComponent(merchantTxnId)}&status=PAYMENT_SUCCESS`;
+        const directReturnUrl = `${proto}://${rawHost}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTxnId)}&phonepe_txn_id=${encodeURIComponent(merchantTxnId)}&status=PAYMENT_SUCCESS&amt=${(amountInPaise / 100).toFixed(2)}&baseAmt=${baseAmountRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&anon=${isAnonymous ? '1' : '0'}`;
         const v2Resp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
           method: 'POST',
           headers: {
@@ -331,10 +360,20 @@ export default async function handler(req: any, res: any) {
         // Fallback to official mercury-uat checkout url
       }
 
-      // Register transaction in store as PENDING
+      // Register transaction in store as PENDING with all metadata
       globalTxStore[merchantTxnId] = {
         status: 'PENDING',
         amount: amountInPaise / 100,
+        amountRupees: amountInPaise / 100,
+        baseAmountRupees: baseAmountRupees,
+        platformFeeRupees: feeRupees,
+        feeOption: feeOption,
+        campaignId: campaignId,
+        campaignTitle: campaignTitle,
+        category: body?.category || 'others',
+        donorName: donorName,
+        donorPhone: donorPhone,
+        isAnonymous: isAnonymous,
         orderId
       };
 
@@ -378,7 +417,17 @@ export default async function handler(req: any, res: any) {
             merchantTransactionId: targetId,
             state: 'COMPLETED',
             responseCode: 'SUCCESS',
-            amount: Math.round((record.amount || 101) * 100),
+            amount: Math.round((record.amountRupees || record.amount || 100) * 100),
+            amountRupees: record.amountRupees || record.amount || 100,
+            baseAmountRupees: record.baseAmountRupees || record.amountRupees || record.amount || 100,
+            platformFeeRupees: record.platformFeeRupees !== undefined ? record.platformFeeRupees : 1,
+            feeOption: record.feeOption || 'ADD_ON',
+            campaignId: record.campaignId || '',
+            campaignTitle: record.campaignTitle || 'RonPay Community Bawm',
+            category: record.category || 'others',
+            donorName: record.donorName || 'Valued Donor',
+            donorPhone: record.donorPhone,
+            isAnonymous: Boolean(record.isAnonymous),
             paymentInstrument: {
               type: 'UPI',
               utr: record.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000)),
@@ -398,10 +447,13 @@ export default async function handler(req: any, res: any) {
           const sData: any = await sResp.json();
           if (sData?.state === 'COMPLETED') {
             const utrNum = sData.paymentDetails?.[0]?.transactionId || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
+            const finalTotal = sData?.amount ? sData.amount / 100 : (record?.amountRupees || record?.amount || 100);
             globalTxStore[targetId] = {
+              ...(record || {}),
               status: 'PAYMENT_SUCCESS',
               utr: utrNum,
-              amount: sData?.amount ? sData.amount / 100 : (record?.amount || 101)
+              amount: finalTotal,
+              amountRupees: finalTotal
             };
             res.setHeader('Content-Type', 'application/json');
             return res.end(JSON.stringify({
@@ -413,6 +465,17 @@ export default async function handler(req: any, res: any) {
                 merchantTransactionId: targetId,
                 state: 'COMPLETED',
                 responseCode: 'SUCCESS',
+                amount: Math.round(finalTotal * 100),
+                amountRupees: finalTotal,
+                baseAmountRupees: record?.baseAmountRupees || finalTotal,
+                platformFeeRupees: record?.platformFeeRupees !== undefined ? record.platformFeeRupees : 1,
+                feeOption: record?.feeOption || 'ADD_ON',
+                campaignId: record?.campaignId || '',
+                campaignTitle: record?.campaignTitle || 'RonPay Community Bawm',
+                category: record?.category || 'others',
+                donorName: record?.donorName || 'Valued Donor',
+                donorPhone: record?.donorPhone,
+                isAnonymous: Boolean(record?.isAnonymous),
                 paymentInstrument: {
                   type: 'UPI',
                   utr: utrNum
@@ -420,7 +483,7 @@ export default async function handler(req: any, res: any) {
               }
             }));
           } else if (sData?.state === 'FAILED') {
-            globalTxStore[targetId] = { status: 'PAYMENT_ERROR', amount: record?.amount || 101 };
+            globalTxStore[targetId] = { ...(record || {}), status: 'PAYMENT_ERROR', amount: record?.amount || 100 };
             res.setHeader('Content-Type', 'application/json');
             return res.end(JSON.stringify({
               success: false,
@@ -437,10 +500,13 @@ export default async function handler(req: any, res: any) {
       // If user clicked Re-check status or requested autoConfirm in UAT
       if (autoConfirm) {
         const utrNum = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+        const finalTotal = record?.amountRupees || record?.amount || 100;
         globalTxStore[targetId] = {
+          ...(record || {}),
           status: 'PAYMENT_SUCCESS',
           utr: utrNum,
-          amount: record?.amount || 101
+          amount: finalTotal,
+          amountRupees: finalTotal
         };
         res.setHeader('Content-Type', 'application/json');
         return res.end(JSON.stringify({
@@ -452,6 +518,17 @@ export default async function handler(req: any, res: any) {
             merchantTransactionId: targetId,
             state: 'COMPLETED',
             responseCode: 'SUCCESS',
+            amount: Math.round(finalTotal * 100),
+            amountRupees: finalTotal,
+            baseAmountRupees: record?.baseAmountRupees || finalTotal,
+            platformFeeRupees: record?.platformFeeRupees !== undefined ? record.platformFeeRupees : 1,
+            feeOption: record?.feeOption || 'ADD_ON',
+            campaignId: record?.campaignId || '',
+            campaignTitle: record?.campaignTitle || 'RonPay Community Bawm',
+            category: record?.category || 'others',
+            donorName: record?.donorName || 'Valued Donor',
+            donorPhone: record?.donorPhone,
+            isAnonymous: Boolean(record?.isAnonymous),
             paymentInstrument: {
               type: 'UPI',
               utr: utrNum

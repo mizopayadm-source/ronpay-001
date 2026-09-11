@@ -21,6 +21,7 @@ import {
   RotateCw
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
+import { saveTransaction } from '../utils/storage';
 
 // PhonePe Dynamic Gateway Modal Component
 interface PhonePeCheckoutModalProps {
@@ -120,6 +121,40 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setStatusMessage(null);
     setIsPreparingSession(true);
 
+    // Pre-save pending transaction locally so any redirect or reload preserves exact amount and campaign details
+    const initialTx: Transaction = {
+      id: newTxnId,
+      campaignId: campaign?.id || 'cmp-custom',
+      campaignTitle: campaignName,
+      category: campaign?.category || 'others',
+      donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
+      donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
+      donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
+      memberId: isAnonymous ? undefined : memberId,
+      subId: isAnonymous ? undefined : subId,
+      isDependent: isAnonymous ? false : isDependent,
+      isAnonymous,
+      amount,
+      platformFee: effectiveFee,
+      feeOption: currentFeeOption,
+      campaignNetReceived: campaignShare,
+      totalAmount: totalPayable,
+      paymentMethod: 'phonepe',
+      status: 'pending',
+      remark: remark?.trim() || undefined,
+      subCategoryBreakdown: subcatAmounts,
+      periodType,
+      periodMonth,
+      periodYear,
+      periodLabel,
+      timestamp: new Date().toISOString()
+    };
+    try {
+      saveTransaction(initialTx);
+      localStorage.setItem(`RONPAY_PENDING_TX_${newTxnId}`, JSON.stringify(initialTx));
+      sessionStorage.setItem(`RONPAY_PENDING_TX_${newTxnId}`, JSON.stringify(initialTx));
+    } catch (e) {}
+
     // Pre-create transaction in backend - initial status is always PENDING
     fetch('/api/phonepe/initiate-pay', {
       method: 'POST',
@@ -129,6 +164,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
         campaignTitle: campaignName,
         campaignId: campaign?.id || 'cmp-custom',
+        category: campaign?.category || 'others',
         customerPhone: donorPhone || '9862300000',
         simulateStatus: 'PENDING',
         feeOption: currentFeeOption,
@@ -144,7 +180,14 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       .then(data => {
         if (!isMounted) return;
         if (data.data?.merchantTransactionId) {
-          setMerchantTxnId(data.data.merchantTransactionId);
+          const actualTxnId = data.data.merchantTransactionId;
+          setMerchantTxnId(actualTxnId);
+          if (actualTxnId !== newTxnId) {
+            const syncedTx: Transaction = { ...initialTx, id: actualTxnId };
+            saveTransaction(syncedTx);
+            localStorage.setItem(`RONPAY_PENDING_TX_${actualTxnId}`, JSON.stringify(syncedTx));
+            sessionStorage.setItem(`RONPAY_PENDING_TX_${actualTxnId}`, JSON.stringify(syncedTx));
+          }
         }
         if (data.data?.instrumentResponse?.redirectInfo?.url) {
           setRedirectSimulatorUrl(data.data.instrumentResponse.redirectInfo.url);
@@ -161,6 +204,21 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       isMounted = false;
     };
   }, [isOpen, totalPayable, campaignName, campaign?.id, donorName, donorPhone, isAnonymous, currentFeeOption, amount]);
+
+  const markTxAsSuccessAndSave = (finalTxn: Transaction) => {
+    try {
+      saveTransaction(finalTxn);
+      localStorage.setItem(`RONPAY_PENDING_TX_${finalTxn.id}`, JSON.stringify(finalTxn));
+      sessionStorage.setItem(`RONPAY_PENDING_TX_${finalTxn.id}`, JSON.stringify(finalTxn));
+      localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+        status: 'PAYMENT_SUCCESS',
+        transaction: finalTxn,
+        timestamp: Date.now()
+      }));
+    } catch (e) {}
+    setPaymentResult('SUCCESS');
+    setConfirmedTx(finalTxn);
+  };
 
   // Live Status Poller when PhonePe PG simulator tab is opened
   useEffect(() => {
@@ -207,8 +265,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
               txHash: utrCode,
               utr: utrCode
             };
-            setPaymentResult('SUCCESS');
-            setConfirmedTx(finalTxn);
+            markTxAsSuccessAndSave(finalTxn);
           }
         })
         .catch(() => {});
@@ -260,8 +317,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           txHash: utrCode,
           utr: utrCode
         };
-        setPaymentResult('SUCCESS');
-        setConfirmedTx(finalTxn);
+        markTxAsSuccessAndSave(finalTxn);
       } else if (status === 'PAYMENT_ERROR' || status === 'FAILED' || state === 'FAILED') {
         setPaymentResult('FAILED');
         setConfirmedTx(null);
@@ -401,8 +457,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           utr: utrCode
         };
 
-        setPaymentResult('SUCCESS');
-        setConfirmedTx(finalTxn);
+        markTxAsSuccessAndSave(finalTxn);
       } else if (desiredStatus === 'PENDING') {
         setPaymentResult('PENDING');
       } else {
@@ -443,8 +498,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
           txHash: utrCode,
           utr: utrCode
         };
-        setPaymentResult('SUCCESS');
-        setConfirmedTx(finalTxn);
+        markTxAsSuccessAndSave(finalTxn);
       } else {
         setPaymentResult('FAILED');
       }
