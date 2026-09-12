@@ -866,14 +866,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                       onClick={async () => {
                         // If session URL is already ready, open it directly
                         if (redirectSimulatorUrl) {
-                          window.open(redirectSimulatorUrl, '_blank');
+                          if ((window as any).RonPayBridge?.openInExternalBrowser) {
+                            (window as any).RonPayBridge.openInExternalBrowser(redirectSimulatorUrl);
+                          } else {
+                            window.open(redirectSimulatorUrl, '_blank');
+                          }
                           setHasOpenedPhonePe(true);
                           setStatusMessage(null);
                           return;
                         }
 
                         // Otherwise open blank window immediately (to preserve user-gesture permissions in browser)
-                        const openedWin = window.open('about:blank', '_blank');
+                        const openedWin = (window as any).RonPayBridge?.openInExternalBrowser ? null : window.open('about:blank', '_blank');
                         if (openedWin) {
                           try {
                             openedWin.document.title = 'PhonePe Payment Gateway';
@@ -911,7 +915,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                           const newUrl = data.data?.instrumentResponse?.redirectInfo?.url;
                           if (newUrl) {
                             setRedirectSimulatorUrl(newUrl);
-                            if (openedWin && !openedWin.closed) {
+                            if ((window as any).RonPayBridge?.openInExternalBrowser) {
+                              (window as any).RonPayBridge.openInExternalBrowser(newUrl);
+                            } else if (openedWin && !openedWin.closed) {
                               openedWin.location.replace(newUrl);
                             }
                           } else {
@@ -994,7 +1000,13 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                       {redirectSimulatorUrl && (
                         <button
                           type="button"
-                          onClick={() => window.open(redirectSimulatorUrl, '_blank')}
+                          onClick={() => {
+                            if ((window as any).RonPayBridge?.openInExternalBrowser) {
+                              (window as any).RonPayBridge.openInExternalBrowser(redirectSimulatorUrl);
+                            } else {
+                              window.open(redirectSimulatorUrl, '_blank');
+                            }
+                          }}
                           className="w-full py-2.5 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                         >
                           <ExternalLink className="w-3.5 h-3.5 text-purple-200" />

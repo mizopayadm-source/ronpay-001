@@ -28,6 +28,7 @@ import { createUPIPaymentString } from '../utils/qr';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { getMembers } from '../utils/storage';
 import { Language, translateCampaignCause } from '../utils/translations';
+import { getCurrentMonthYearString, getRollingMonthYearList } from '../utils/monthHelper';
 
 interface ExternalUPILandingModalProps {
   isOpen: boolean;
@@ -45,12 +46,7 @@ const DEFAULT_KUMTLUANG_SUBCATS = [
   'Tualchhung / General'
 ];
 
-const MONTHS_LIST = [
-  'January 2026', 'February 2026', 'March 2026', 'April 2026', 
-  'May 2026', 'June 2026', 'July 2026', 'August 2026', 
-  'September 2026', 'October 2026', 'November 2026', 'December 2026',
-  'January 2027', 'February 2027', 'March 2027'
-];
+const MONTHS_LIST = getRollingMonthYearList(6, 6);
 
 export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = ({
   isOpen,
@@ -73,7 +69,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
   const [guestSection, setGuestSection] = useState<string>('Tualchhung');
 
   // Month / Period selector
-  const [selectedMonth, setSelectedMonth] = useState<string>('August 2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthYearString);
 
   // Dynamic category amounts
   const [categoryAmounts, setCategoryAmounts] = useState<{ [categoryName: string]: number }>({});

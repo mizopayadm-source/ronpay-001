@@ -11,6 +11,66 @@ export const ALL_MONTH_NAMES_SHORT = [
 ] as const;
 
 /**
+ * Returns current month full name (e.g. "September")
+ */
+export const getCurrentMonthName = (): string => {
+  const monthIdx = new Date().getMonth();
+  return ALL_MONTH_NAMES_FULL[monthIdx] || 'September';
+};
+
+/**
+ * Returns current year as string (e.g. "2026")
+ */
+export const getCurrentYearString = (): string => {
+  return String(new Date().getFullYear());
+};
+
+/**
+ * Returns current quarter string (e.g. "Q3 (Jul - Sep)")
+ */
+export const getCurrentQuarterString = (): string => {
+  const monthIdx = new Date().getMonth();
+  if (monthIdx < 3) return 'Q1 (Jan - Mar)';
+  if (monthIdx < 6) return 'Q2 (Apr - Jun)';
+  if (monthIdx < 9) return 'Q3 (Jul - Sep)';
+  return 'Q4 (Oct - Dec)';
+};
+
+/**
+ * Returns current month and year string (e.g. "September 2026")
+ */
+export const getCurrentMonthYearString = (): string => {
+  return `${getCurrentMonthName()} ${getCurrentYearString()}`;
+};
+
+/**
+ * Generates rolling month list (e.g. for last 6 months + next 6 months)
+ */
+export const getRollingMonthYearList = (pastMonths = 6, futureMonths = 6): string[] => {
+  const list: string[] = [];
+  const now = new Date();
+  for (let i = -pastMonths; i <= futureMonths; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const monthName = ALL_MONTH_NAMES_FULL[d.getMonth()];
+    const year = d.getFullYear();
+    list.push(`${monthName} ${year}`);
+  }
+  return list;
+};
+
+/**
+ * Generates array of years centered around current year (e.g. ['2025', '2026', '2027', '2028'])
+ */
+export const getYearOptions = (pastYears = 1, futureYears = 3): string[] => {
+  const currentYear = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = currentYear - pastYears; y <= currentYear + futureYears; y++) {
+    years.push(String(y));
+  }
+  return years;
+};
+
+/**
  * Normalizes any month string (e.g. "March", "mar", "MAR", "03", "3") to index (0-11)
  */
 export const getMonthIndex = (monthStr?: string | null): number => {

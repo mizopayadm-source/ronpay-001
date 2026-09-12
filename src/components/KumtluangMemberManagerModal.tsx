@@ -40,6 +40,7 @@ import {
   exportKumtluangMatrixToCSV
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
+import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
 
 interface KumtluangMemberManagerModalProps {
   isOpen: boolean;
@@ -120,8 +121,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
-  const [selectedMonth, setSelectedMonth] = useState<string>('August');
-  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthName);
+  const [selectedYear, setSelectedYear] = useState<string>(getCurrentYearString);
   const [entryAmount, setEntryAmount] = useState<string>('500');
   const [entryRemark, setEntryRemark] = useState<string>('');
   const [entrySuccess, setEntrySuccess] = useState<string | null>(null);
@@ -1083,8 +1084,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       </select>
                     </div>
 
-                    {/* Category & Month */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Category, Month & Year */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
                         <select
@@ -1105,8 +1106,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           onChange={(e) => setSelectedMonth(e.target.value)}
                           className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         >
-                          {monthsList.map(m => (
+                          {ALL_MONTH_NAMES_FULL.map(m => (
                             <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1">Kum (Year)</label>
+                        <select
+                          value={selectedYear}
+                          onChange={(e) => setSelectedYear(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                          {getYearOptions(1, 3).map(y => (
+                            <option key={y} value={y}>{y}</option>
                           ))}
                         </select>
                       </div>
