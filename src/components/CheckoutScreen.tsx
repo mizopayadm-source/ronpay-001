@@ -1737,68 +1737,43 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {/* 1. Direct UPI Apps (GPay, PhonePe, Paytm) */}
-            <button
-              type="button"
-              onClick={() => {
-                setPaymentMethod('online');
-              }}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
-                paymentMethod === 'online'
-                  ? 'bg-blue-50/95 border-blue-600 shadow-xs text-blue-950 ring-2 ring-blue-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-              }`}
-            >
-              <div className={`p-2 rounded-lg mb-1 transition-colors ${
-                paymentMethod === 'online' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
-              }`}>
-                <Smartphone className="w-4 h-4" />
-              </div>
-              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
-                UPI Apps
-              </p>
-              <span className="text-[8.5px] text-blue-700 font-bold mt-0.5">
-                GPay / PhonePe
-              </span>
-            </button>
-
-            {/* 2. PhonePe PG V2 */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* 1. PhonePe PG V2 */}
             <button
               type="button"
               onClick={() => {
                 setPaymentMethod('phonepe');
               }}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'phonepe'
                   ? 'bg-purple-50/90 border-purple-600 shadow-xs text-purple-950 ring-2 ring-purple-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className={`p-2 rounded-lg mb-1 transition-colors ${
+              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
                 paymentMethod === 'phonepe' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}>
-                <CreditCard className="w-4 h-4" />
+                <Smartphone className="w-4 h-4" />
               </div>
               <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
                 PhonePe PG
               </p>
-              <span className="text-[8.5px] text-purple-700 font-bold mt-0.5">
-                Card / NetBank
+              <span className="text-[9px] text-purple-700 font-bold mt-0.5">
+                UAT Active
               </span>
             </button>
 
-            {/* 3. Cash Pekna */}
+            {/* 2. Cash Pekna */}
             <button
               type="button"
               onClick={() => setPaymentMethod('cash')}
-              className={`p-2.5 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
                 paymentMethod === 'cash'
                   ? 'bg-amber-50/90 border-amber-600 shadow-xs text-amber-950 ring-2 ring-amber-500/20'
                   : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <div className={`p-2 rounded-lg mb-1 transition-colors ${
+              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
                 paymentMethod === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
               }`}>
                 <Banknote className="w-4 h-4" />
@@ -1806,7 +1781,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
                 Cash Pekna
               </p>
-              <span className="text-[8.5px] text-slate-500 font-medium mt-0.5">
+              <span className="text-[9px] text-slate-500 font-medium mt-0.5">
                 Treasurer Slip
               </span>
             </button>
@@ -1847,7 +1822,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </p>
           ) : (
             <p className="text-[10px] text-slate-400 pt-1.5 border-t border-slate-800/80 leading-relaxed flex items-center justify-between">
-              <span>* 256-bit encrypted NPCI & PhonePe rails</span>
+              <span>* PhonePe TSP & 256-bit encrypted NPCI rails</span>
               <span className="text-emerald-400 font-bold">100% Secure</span>
             </p>
           )}
@@ -1860,8 +1835,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           className={`w-full py-3.5 px-4 rounded-2xl font-black text-sm text-white shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
             isExpired
               ? 'bg-slate-700 hover:bg-slate-700'
-              : paymentMethod === 'online'
-              ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-600/20'
               : paymentMethod === 'phonepe'
               ? 'bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 hover:from-purple-600 hover:to-indigo-600'
               : 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600'
@@ -1870,11 +1843,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {isProcessing ? (
             <>
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              {paymentMethod === 'online'
-                ? 'Opening UPI Apps Chooser...'
-                : paymentMethod === 'phonepe'
-                ? 'Opening PhonePe PG V2...'
-                : 'Recording Cash Entry...'}
+              {paymentMethod === 'phonepe' ? 'Opening PhonePe PG V2...' : 'Recording Cash Entry...'}
             </>
           ) : isExpired ? (
             <>
@@ -1883,12 +1852,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </>
           ) : (
             <>
-              {paymentMethod === 'online' ? (
-                <>
-                  <Smartphone className="w-4 h-4 text-white" />
-                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via UPI Apps (GPay, PhonePe, Paytm)</span>
-                </>
-              ) : paymentMethod === 'phonepe' ? (
+              {paymentMethod === 'phonepe' ? (
                 <>
                   <Zap className="w-4 h-4 text-amber-300" />
                   <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG (UAT)</span>
@@ -1908,10 +1872,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       <PhonePeCheckoutModal
         isOpen={isPhonePeCheckoutOpen}
         onClose={() => setIsPhonePeCheckoutOpen(false)}
-        onSwitchToDirectUPI={() => {
-          setIsPhonePeCheckoutOpen(false);
-          setIsUPICheckoutOpen(true);
-        }}
         campaign={campaign}
         amount={subtotal}
         platformFee={platformFee}

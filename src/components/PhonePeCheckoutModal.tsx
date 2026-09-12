@@ -45,7 +45,6 @@ interface PhonePeCheckoutModalProps {
   periodMonth?: string;
   periodYear?: string;
   periodLabel?: string;
-  onSwitchToDirectUPI?: () => void;
   onPaymentSuccess: (transaction: Transaction) => void;
 }
 
@@ -71,7 +70,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   periodMonth,
   periodYear,
   periodLabel,
-  onSwitchToDirectUPI,
   onPaymentSuccess
 }) => {
   const [activeTab, setActiveTab] = useState<PaymentTab>('upi');
@@ -807,32 +805,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                 </div>
               </div>
 
-              {/* Direct UPI Apps (GPay, PhonePe, Paytm) Quick Switch */}
-              {onSwitchToDirectUPI && (
-                <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/90 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Smartphone className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h5 className="text-xs font-black text-blue-950">GPay / PhonePe / Paytm App Hawng Rawh</h5>
-                      <p className="text-[10.5px] text-blue-900 mt-0.5 leading-relaxed">
-                        PhonePe UAT Sandbox-ah hian test account a nih avangin live GPay/PhonePe app kha PhonePe web-ah a lang lova, <b>QR chauh</b> a lang a ni. Phone atanga Direct GPay / PhonePe / Paytm app hawng nghal tura pe duh tan a hnuaia button hi hmet rawh le:
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={onSwitchToDirectUPI}
-                    className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-xs transition active:scale-98 cursor-pointer"
-                  >
-                    <Smartphone className="w-4 h-4" />
-                    <span>Direct UPI Apps (GPay / PhonePe / Paytm) ah Thlak Rawh</span>
-                  </button>
-                </div>
-              )}
-
               {/* Supported Payment Channels Showcase on PhonePe */}
               <div className="bg-purple-50/50 rounded-2xl p-3.5 border border-purple-100 space-y-2 text-xs">
                 <p className="text-[10px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
@@ -844,7 +816,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     <Smartphone className="w-4 h-4 text-purple-600 shrink-0" />
                     <div>
                       <p className="font-bold text-slate-800 leading-tight">UPI & QR Code</p>
-                      <p className="text-[9.5px] text-slate-500">Live-ah GPay/PhonePe; UAT-ah QR</p>
+                      <p className="text-[9.5px] text-slate-500">PhonePe, GPay, Paytm, BHIM</p>
                     </div>
                   </div>
                   <div className="bg-white p-2 rounded-xl border border-purple-100/80 flex items-center gap-2">

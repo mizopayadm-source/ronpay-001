@@ -188,9 +188,6 @@ export function UPIIntentModal({
 
     // 3. Launch UPI intent deep link
     try {
-      if ((window as any).RonPayBridge?.openInExternalBrowser) {
-        (window as any).RonPayBridge.openInExternalBrowser(intentUrl);
-      }
       window.location.href = intentUrl;
     } catch (err) {
       console.warn('Failed to launch custom scheme directly, falling back to universal intent:', err);
@@ -204,9 +201,6 @@ export function UPIIntentModal({
         },
         'upi://pay'
       );
-      if ((window as any).RonPayBridge?.openInExternalBrowser) {
-        (window as any).RonPayBridge.openInExternalBrowser(fallbackUrl);
-      }
       window.location.href = fallbackUrl;
     }
   };
