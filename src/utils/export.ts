@@ -79,11 +79,69 @@ export const downloadFileUniversal = async (
   title: string = 'RonPay Report'
 ): Promise<boolean> => {
   try {
+    // Step 1: Try server download relay first so Android WebView DownloadManager receives genuine HTTPS URL
+    // This completely resolves Android DownloadManager's "IllegalArgumentException: Can only download HTTP/HTTPS URIs"
+    let serverDownloadUrl: string | undefined;
+    try {
+      if (typeof fetch !== 'undefined') {
+        let base64 = '';
+        let textContent = '';
+        if (content instanceof Blob) {
+          const arrayBuf = await content.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuf);
+          let binary = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < uint8.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, Array.from(uint8.subarray(i, i + chunkSize)));
+          }
+          base64 = btoa(binary);
+        } else {
+          textContent = content;
+        }
+
+        const resp = await fetch('/api/download/prepare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64: base64 || undefined,
+            content: textContent || undefined,
+            fileName,
+            mimeType
+          })
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data?.downloadUrl) {
+            serverDownloadUrl = new URL(data.downloadUrl, window.location.origin).href;
+          }
+        }
+      }
+    } catch (relayErr) {
+      console.warn('Server download relay error, falling back to client:', relayErr);
+    }
+
+    if (serverDownloadUrl) {
+      const a = document.createElement('a');
+      a.href = serverDownloadUrl;
+      a.download = fileName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+        } catch {}
+      }, 1500);
+      return true;
+    }
+
     const blob = content instanceof Blob 
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
 
-    // Step 1: Check Web Share API with files (Android / iOS / Mobile WebViews)
+    // Step 2: Check Web Share API with files (Android / iOS / Mobile WebViews)
     if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
         const file = new File([blob], fileName, { type: mimeType.split(';')[0] });
@@ -103,7 +161,7 @@ export const downloadFileUniversal = async (
       }
     }
 
-    // Step 2: Standard Blob Object URL
+    // Step 3: Standard Blob Object URL fallback
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -121,26 +179,6 @@ export const downloadFileUniversal = async (
         // ignore cleanup error
       }
     }, 1500);
-
-    // Step 3: Additional fallback for Android WebView which ignores blob URLs
-    if (typeof content === 'string') {
-      try {
-        const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
-        const fallbackA = document.createElement('a');
-        fallbackA.href = dataUri;
-        fallbackA.download = fileName;
-        fallbackA.target = '_blank';
-        document.body.appendChild(fallbackA);
-        fallbackA.click();
-        setTimeout(() => {
-          try {
-            document.body.removeChild(fallbackA);
-          } catch (e) {}
-        }, 1000);
-      } catch (e) {
-        // ignore
-      }
-    }
 
     return true;
   } catch (err) {

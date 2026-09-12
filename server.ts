@@ -37,6 +37,91 @@ app.get('/healthz', (req: Request, res: Response) => {
   res.status(200).send('OK');
 });
 
+// -------------------------------------------------------------
+// Universal File & PDF Download Relay (Solves Android WebView Blob/DownloadManager issues)
+// Android WebView's DownloadManager rejects blob: and data: URIs, requiring genuine HTTPS endpoints.
+// -------------------------------------------------------------
+interface TempDownloadItem {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  createdAt: number;
+}
+
+const tempDownloadStore = new Map<string, TempDownloadItem>();
+
+// Clean up expired download buffers older than 15 minutes every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 15 * 60 * 1000;
+  for (const [token, item] of tempDownloadStore.entries()) {
+    if (now - item.createdAt > maxAge) {
+      tempDownloadStore.delete(token);
+    }
+  }
+}, 5 * 60 * 1000);
+
+app.post('/api/download/prepare', (req: Request, res: Response) => {
+  try {
+    const { content, base64, fileName = 'RonPay_Document.pdf', mimeType = 'application/pdf' } = req.body || {};
+    
+    let buffer: Buffer;
+    if (base64) {
+      buffer = Buffer.from(base64, 'base64');
+    } else if (content) {
+      buffer = Buffer.from(content, 'utf-8');
+    } else {
+      return res.status(400).json({ success: false, error: 'No content provided' });
+    }
+
+    const token = crypto.randomBytes(16).toString('hex');
+    const safeFileName = (fileName || 'RonPay_Download.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    tempDownloadStore.set(token, {
+      buffer,
+      fileName: safeFileName,
+      mimeType,
+      createdAt: Date.now()
+    });
+
+    const downloadUrl = `/api/download/file/${token}/${encodeURIComponent(safeFileName)}`;
+
+    res.json({
+      success: true,
+      token,
+      fileName: safeFileName,
+      downloadUrl
+    });
+  } catch (err: any) {
+    console.error('Error preparing download:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Download preparation failed' });
+  }
+});
+
+app.get('/api/download/file/:token/:fileName', (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const item = tempDownloadStore.get(token);
+
+    if (!item) {
+      return res.status(404).send('Download link expired or not found. Khawngaihin generate nawn rawh.');
+    }
+
+    const encodedFileName = encodeURIComponent(item.fileName);
+
+    res.setHeader('Content-Type', item.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodedFileName}"; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Length', item.buffer.length);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+
+    return res.end(item.buffer);
+  } catch (err: any) {
+    console.error('Error serving download file:', err);
+    res.status(500).send('Error serving file');
+  }
+});
+
 // PhonePe Credentials from Env or UAT Defaults
 const PHONEPE_ENV = process.env.PHONEPE_ENV || 'UAT';
 const PHONEPE_MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || 'TSPMIZOPAYUAT';

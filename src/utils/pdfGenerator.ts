@@ -8,6 +8,7 @@ export interface PDFExportResult {
   blobUrl?: string;
   blob?: Blob;
   dataUri?: string;
+  downloadUrl?: string;
   error?: string;
 }
 
@@ -114,11 +115,40 @@ export async function exportElementToPDF(
     const blobUrl = URL.createObjectURL(pdfBlob);
     const dataUri = pdf.output('datauristring');
 
+    // Extract raw base64 string
+    const base64Data = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
+
+    // Prepare real HTTPS download endpoint so Android WebView DownloadManager does not fail on blob:
+    let serverDownloadUrl: string | undefined;
+    try {
+      if (typeof fetch !== 'undefined') {
+        const prepareResp = await fetch('/api/download/prepare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64: base64Data,
+            fileName: cleanFileName,
+            mimeType: 'application/pdf',
+          }),
+        });
+        if (prepareResp.ok) {
+          const prepareData = await prepareResp.json();
+          if (prepareData?.downloadUrl) {
+            serverDownloadUrl = new URL(prepareData.downloadUrl, window.location.origin).href;
+          }
+        }
+      }
+    } catch (relayErr) {
+      console.warn('Server download relay error, falling back to client URL:', relayErr);
+    }
+
+    // Determine target URL for download: prefer genuine HTTPS URL, fallback to blobUrl
+    const effectiveDownloadUrl = serverDownloadUrl || blobUrl;
+
     // Multi-tier download execution for Android WebViews and mobile browsers
     try {
-      // 1. Trigger direct anchor download using Blob Object URL
       const a = document.createElement('a');
-      a.href = blobUrl;
+      a.href = effectiveDownloadUrl;
       a.download = cleanFileName;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -128,9 +158,9 @@ export async function exportElementToPDF(
         try {
           document.body.removeChild(a);
         } catch {}
-      }, 800);
+      }, 1000);
     } catch (e) {
-      console.warn('Anchor blob download failed, trying dataUri and pdf.save', e);
+      console.warn('Anchor download failed, trying dataUri and pdf.save', e);
       try {
         pdf.save(cleanFileName);
       } catch (saveErr) {
@@ -141,6 +171,7 @@ export async function exportElementToPDF(
     return {
       success: true,
       fileName: cleanFileName,
+      downloadUrl: serverDownloadUrl,
       blobUrl,
       blob: pdfBlob,
       dataUri,

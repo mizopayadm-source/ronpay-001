@@ -20,7 +20,8 @@ import {
   MessageCircle,
   Sparkles,
   Maximize2,
-  RotateCcw
+  RotateCcw,
+  ExternalLink
 } from 'lucide-react';
 import { downloadFileUniversal } from '../utils/export';
 import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
@@ -228,11 +229,12 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     }
   };
 
-  // Open generated PDF or re-download on mobile
+  // Open generated PDF or re-download on mobile using HTTPS link
   const handleOpenPdfBlob = () => {
-    if (pdfSuccessResult?.blobUrl) {
+    const targetUrl = pdfSuccessResult?.downloadUrl || pdfSuccessResult?.blobUrl;
+    if (targetUrl) {
       const a = document.createElement('a');
-      a.href = pdfSuccessResult.blobUrl;
+      a.href = targetUrl;
       a.download = pdfSuccessResult.fileName;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -244,6 +246,19 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         } catch {}
       }, 1000);
     }
+  };
+
+  // Open in external browser or system viewer (works especially well with RonPayBridge)
+  const handleOpenInBrowser = () => {
+    const targetUrl = pdfSuccessResult?.downloadUrl || pdfSuccessResult?.blobUrl;
+    if (!targetUrl) return;
+
+    if ((window as any).RonPayBridge?.openInExternalBrowser && pdfSuccessResult?.downloadUrl) {
+      (window as any).RonPayBridge.openInExternalBrowser(pdfSuccessResult.downloadUrl);
+      return;
+    }
+
+    window.open(targetUrl, '_blank');
   };
 
   // Universal WhatsApp Share Trigger (Always available)
@@ -730,16 +745,27 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            {pdfSuccessResult.blobUrl && (
-              <button
-                onClick={handleOpenPdfBlob}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
-                title="Download another copy"
-              >
-                <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Download Nawn</span>
-              </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            {(pdfSuccessResult.downloadUrl || pdfSuccessResult.blobUrl) && (
+              <>
+                <button
+                  onClick={handleOpenPdfBlob}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+                  title="Download another copy"
+                >
+                  <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Download Nawn</span>
+                </button>
+
+                <button
+                  onClick={handleOpenInBrowser}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-indigo-700 hover:bg-indigo-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+                  title="Open in external browser / PDF viewer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Browser-ah Hawng</span>
+                </button>
+              </>
             )}
 
             <button
@@ -748,7 +774,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               title="Share report summary and status to WhatsApp"
             >
               <MessageCircle className="w-3.5 h-3.5 text-white" />
-              <span>WhatsApp Share</span>
+              <span>WhatsApp</span>
             </button>
 
             <button
