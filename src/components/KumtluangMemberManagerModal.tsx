@@ -181,6 +181,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab || 'members_list');
+      setSelectedMonth(getCurrentMonthName());
+      setSelectedYear(getCurrentYearString());
       
       let activeId = '';
       if (allowedCampaigns.length > 0) {

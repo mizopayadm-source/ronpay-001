@@ -152,11 +152,44 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const t = TRANSLATIONS[language];
 
-  // Kumtluang period & frequency selection (defaults automatically to current Month & Year)
+  // Kumtluang period & frequency selection (defaults strictly to current Month & Year)
   const [periodType, setPeriodType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthName);
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(getCurrentQuarterString);
-  const [selectedYear, setSelectedYear] = useState<string>(getCurrentYearString);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentMonthName());
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => getCurrentQuarterString());
+  const [selectedYear, setSelectedYear] = useState<string>(() => getCurrentYearString());
+  const [useCustomDate, setUseCustomDate] = useState<boolean>(false);
+  const [selectedCustomDate, setSelectedCustomDate] = useState<string>(() => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  });
+
+  // Always reset to current month & year dynamically whenever campaign or screen changes
+  useEffect(() => {
+    setSelectedMonth(getCurrentMonthName());
+    setSelectedYear(getCurrentYearString());
+    setSelectedQuarter(getCurrentQuarterString());
+  }, [campaign?.id, category]);
+
+  // Synchronize Month & Year when user picks a specific date
+  const handleCustomDateChange = (val: string) => {
+    setSelectedCustomDate(val);
+    if (val) {
+      const parts = val.split('-');
+      if (parts.length === 3) {
+        const yr = parts[0];
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        if (ALL_MONTH_NAMES_FULL[monthIndex]) {
+          setSelectedMonth(ALL_MONTH_NAMES_FULL[monthIndex]);
+        }
+        if (yr) {
+          setSelectedYear(yr);
+        }
+      }
+    }
+  };
 
   // Kumtluang subcategory breakdown
   const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
@@ -172,7 +205,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Derive human-readable period label
   const periodLabel = periodType === 'monthly'
-    ? `${selectedMonth} ${selectedYear}`
+    ? `${selectedMonth} ${selectedYear}${useCustomDate && selectedCustomDate ? ` (${selectedCustomDate})` : ''}`
     : periodType === 'quarterly'
     ? `${selectedQuarter} ${selectedYear}`
     : `${selectedYear} (Kumtluan)`;
@@ -1604,6 +1637,37 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Date duh tan (Specific Date Picker Option) */}
+              <div className="pt-2 border-t border-blue-100/90 mt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10.5px] text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={useCustomDate}
+                      onChange={(e) => setUseCustomDate(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                    />
+                    <span>Pek ni bik (Date) thlan duh tan</span>
+                  </label>
+                  {useCustomDate && (
+                    <span className="text-[9.5px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded">
+                      Thla leh Kum a in-sync ang
+                    </span>
+                  )}
+                </div>
+
+                {useCustomDate && (
+                  <div className="mt-2 animate-in fade-in duration-200">
+                    <input
+                      type="date"
+                      value={selectedCustomDate}
+                      onChange={(e) => handleCustomDateChange(e.target.value)}
+                      className="w-full bg-white border border-indigo-200 rounded-xl p-2 text-xs font-bold text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

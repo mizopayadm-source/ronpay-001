@@ -33,6 +33,7 @@ import {
   getStoredCampaigns, 
   saveTransaction, 
   deleteStoredTransaction, 
+  deleteMultipleTransactions,
   isConfirmedTransaction 
 } from '../utils/storage';
 import { getCampaignCauseTitle } from '../utils/translations';
@@ -92,6 +93,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [statusDialogTx, setStatusDialogTx] = useState<Transaction | null>(null);
   const [statusDialogResult, setStatusDialogResult] = useState<{ status: string; message: string } | null>(null);
   const [actionToast, setActionToast] = useState<string | null>(null);
+  const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(new Set());
+  const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
@@ -108,8 +111,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   // Defensive array checks
   const safeTransactions = useMemo(() => {
-    return Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-  }, [transactions]);
+    const list = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+    return list.filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
+  }, [transactions, deletedTxIds]);
 
   const safeCampaigns = useMemo(() => {
     return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
@@ -368,28 +372,42 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   };
 
   const handleDeletePendingTx = (txId: string) => {
-    if (window.confirm('He pending transaction hi paih fai i duh takzet em?')) {
-      deleteStoredTransaction(txId);
-      if (onRefreshData) onRefreshData();
-      setStatusDialogTx(null);
-      setStatusDialogResult(null);
-      setActionToast('Pending transaction paih a ni ta.');
-      setTimeout(() => setActionToast(null), 3500);
-    }
+    if (!txId) return;
+    const cleanId = String(txId).trim();
+    // 1. Instant local removal so it vanishes right away
+    setDeletedTxIds(prev => new Set(prev).add(cleanId.toLowerCase()));
+
+    // 2. Persistent removal from Storage, Firestore & Server
+    deleteStoredTransaction(cleanId);
+
+    // 3. Clear dialog
+    setStatusDialogTx(null);
+    setStatusDialogResult(null);
+
+    // 4. Refresh external data & show toast
+    if (onRefreshData) onRefreshData();
+    setActionToast('🗑️ Pending transaction paih fel a ni ta.');
+    setTimeout(() => setActionToast(null), 3500);
   };
 
   const handleClearAllPending = () => {
     if (pendingFiltered.length === 0) return;
-    if (window.confirm(`Pending transaction awm zawng zawng (${pendingFiltered.length}) hi paih fai i duh takzet em? Record hlawhtling te erawh an bo lovang.`)) {
-      pendingFiltered.forEach(t => {
-        if (t && t.id) {
-          deleteStoredTransaction(t.id);
-        }
-      });
-      if (onRefreshData) onRefreshData();
-      setActionToast(`Pending transaction ${pendingFiltered.length} paih fai a ni ta.`);
-      setTimeout(() => setActionToast(null), 3500);
-    }
+    const ids = pendingFiltered.map(t => t.id).filter(Boolean);
+    
+    // 1. Instant local state update
+    setDeletedTxIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.add(String(id).toLowerCase().trim()));
+      return next;
+    });
+
+    // 2. Batch delete across channels
+    deleteMultipleTransactions(ids);
+    setShowConfirmClearAll(false);
+
+    if (onRefreshData) onRefreshData();
+    setActionToast(`🗑️ Pending transaction ${ids.length} paih fai a ni ta.`);
+    setTimeout(() => setActionToast(null), 3500);
   };
 
   if (!isOpen) return null;
@@ -821,13 +839,40 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleClearAllPending();
+                    setShowConfirmClearAll(true);
                   }}
                   className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
                   title="Paih fai rawh"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
                   <span>Paih Fai Rawh</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Confirm Clear All Pending Banner */}
+          {showConfirmClearAll && pendingFiltered.length > 0 && (
+            <div className="mt-2 p-2.5 bg-rose-950/90 border border-rose-500/40 rounded-xl text-white flex flex-col sm:flex-row items-center justify-between gap-2 text-xs animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="font-semibold">Pending {pendingFiltered.length} awm zawng zawng hi paih fai i duh takzet em?</span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmClearAll(false)}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+                >
+                  Sut leh rawh
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAllPending}
+                  className="px-3 py-1 text-[11px] font-black bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Paih Fai Vek Rawh</span>
                 </button>
               </div>
             </div>
@@ -1345,24 +1390,46 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               </div>
 
               <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleManualConfirmPaid(statusDialogTx)}
-                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Pawisa a lut tawh e (Confirm as Verified)</span>
-                </button>
-
-                <div className="flex items-center gap-2">
+                {statusDialogResult?.status === 'FAILED' ? (
                   <button
                     type="button"
                     onClick={() => handleDeletePendingTx(statusDialogTx.id)}
-                    className="flex-1 py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition active:scale-98"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Paih Rawh</span>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Failed Record Paih Fai Rawh</span>
                   </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleManualConfirmPaid(statusDialogTx)}
+                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Pawisa a lut tawh e (Confirm as Verified)</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2">
+                  {statusDialogResult?.status === 'FAILED' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleManualConfirmPaid(statusDialogTx)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Pawisa a lut zawk e</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePendingTx(statusDialogTx.id)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Paih Rawh</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

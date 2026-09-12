@@ -1248,6 +1248,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       campaigns,
       members,
       transactions,
+      deletedTransactionIds,
       creators,
       pricingConfig,
       announcement,
@@ -1255,6 +1256,12 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     } = req.body || {};
 
     const db = getDatabase();
+
+    // 0. Process any deletions first so they are never re-merged
+    if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
+      const delSet = new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
+      db.transactions = (db.transactions || []).filter((t: any) => !delSet.has(String(t.id).toLowerCase().trim()));
+    }
 
     // Merge collections intelligently
     if (Array.isArray(campaigns)) {
@@ -1264,7 +1271,12 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.members = mergeCollections(db.members, members, 'id');
     }
     if (Array.isArray(transactions)) {
-      db.transactions = mergeCollections(db.transactions, transactions, 'id');
+      // Filter out any known deleted IDs
+      const delSet = Array.isArray(deletedTransactionIds) 
+        ? new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())) 
+        : new Set();
+      const cleanTx = transactions.filter((t: any) => t && t.id && !delSet.has(String(t.id).toLowerCase().trim()));
+      db.transactions = mergeCollections(db.transactions, cleanTx, 'id');
     }
     if (Array.isArray(creators)) {
       db.creators = mergeCollections(db.creators, creators, 'phone');
@@ -1484,6 +1496,22 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     db.transactions = (db.transactions || []).filter((t: any) => String(t.id).toLowerCase().trim() !== cleanId);
     saveDatabase(db);
     res.json({ success: true, message: `Transaction ${id} deleted successfully` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body || {};
+    if (Array.isArray(ids) && ids.length > 0) {
+      const db = getDatabase();
+      const idSet = new Set(ids.map((i: any) => String(i).toLowerCase().trim()));
+      db.transactions = (db.transactions || []).filter((t: any) => !idSet.has(String(t.id).toLowerCase().trim()));
+      saveDatabase(db);
+      return res.json({ success: true, deletedCount: ids.length });
+    }
+    res.json({ success: true, deletedCount: 0 });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -428,27 +428,55 @@ export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
   return true;
 };
 
+const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
+
+export const getDeletedTransactionIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_TX_IDS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+    }
+  } catch (e) {}
+  return new Set<string>();
+};
+
+export const markTransactionAsDeleted = (txId: string): void => {
+  if (!txId) return;
+  try {
+    const set = getDeletedTransactionIds();
+    set.add(String(txId).toLowerCase().trim());
+    const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
+    localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
+  } catch (e) {}
+};
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
+    const deletedIds = getDeletedTransactionIds();
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions
+        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions or deleted transactions
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
         const cleaned = parsed.filter(t => 
+          t && t.id &&
+          !deletedIds.has(String(t.id).toLowerCase().trim()) &&
           t.donorName !== 'Liana' && 
           t.donorName !== 'Kunga' && 
           !legacyMismatchedIds.has(t.id)
         );
 
         // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
-        // (like Zonunmawia or demo accounts) are never missing due to old browser cache
-        const existingIds = new Set(cleaned.map(t => t.id));
+        // (like Zonunmawia or demo accounts) are never missing due to old browser cache,
+        // BUT NEVER restore any ID that was intentionally deleted by user
+        const existingIds = new Set(cleaned.map(t => String(t.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
-          if (!existingIds.has(initTx.id)) {
+          const initKey = String(initTx.id).toLowerCase().trim();
+          if (!existingIds.has(initKey) && !deletedIds.has(initKey)) {
             merged.push(initTx);
             hasNew = true;
           }
@@ -1855,23 +1883,69 @@ export const deleteStaffAccount = (staffId: string): void => {
 
 export const deleteStoredTransaction = (transactionId: string): void => {
   if (!transactionId) return;
+  const cleanId = String(transactionId).trim();
+  markTransactionAsDeleted(cleanId);
+  
   const current = getStoredTransactions();
-  const updated = current.filter(t => t.id !== transactionId);
-  saveStoredTransactions(updated);
-  deleteTransactionFromFirestore(transactionId).catch(() => {});
+  const updated = current.filter(t => String(t.id).toLowerCase().trim() !== cleanId.toLowerCase());
+  
+  // Update local storage and broadcast
+  try {
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
+    }
+  } catch (e) {}
+
+  // Delete from Firestore
+  deleteTransactionFromFirestore(cleanId).catch(() => {});
+
+  // Delete from Server immediately
   if (typeof fetch !== 'undefined') {
-    fetch(`/api/transactions/${encodeURIComponent(transactionId)}`, { method: 'DELETE' }).catch(() => {});
+    fetch(`/api/transactions/${encodeURIComponent(cleanId)}`, { method: 'DELETE' }).catch(() => {});
+    fetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedTransactionIds: [cleanId] })
+    }).catch(() => {});
   }
 };
 
 export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   if (!transactionIds || transactionIds.length === 0) return;
-  const idSet = new Set(transactionIds);
+  const cleanIds = transactionIds.map(id => String(id).trim()).filter(Boolean);
+  const idSet = new Set(cleanIds.map(id => id.toLowerCase()));
+
+  for (const id of cleanIds) {
+    markTransactionAsDeleted(id);
+  }
+
   const current = getStoredTransactions();
-  const updated = current.filter(t => !idSet.has(t.id));
-  saveStoredTransactions(updated);
-  for (const id of transactionIds) {
+  const updated = current.filter(t => !idSet.has(String(t.id).toLowerCase().trim()));
+
+  try {
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
+    }
+  } catch (e) {}
+
+  for (const id of cleanIds) {
     deleteTransactionFromFirestore(id).catch(() => {});
+  }
+
+  if (typeof fetch !== 'undefined') {
+    fetch('/api/transactions/delete-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: cleanIds })
+    }).catch(() => {});
+
+    fetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedTransactionIds: cleanIds })
+    }).catch(() => {});
   }
 };
 
