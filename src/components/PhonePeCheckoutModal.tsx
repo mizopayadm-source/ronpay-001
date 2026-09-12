@@ -74,7 +74,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<PaymentTab>('upi');
   const [currentFeeOption, setCurrentFeeOption] = useState<'ADD_ON' | 'DEDUCT'>(feeOption);
-  const [selectedUpiApp, setSelectedUpiApp] = useState<string>('phonepe');
   const [customUpiId, setCustomUpiId] = useState<string>('testdonor@phonepe');
   
   // Card inputs
@@ -100,6 +99,11 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isPreparingSession, setIsPreparingSession] = useState<boolean>(false);
+
+  const isAndroid = typeof window !== 'undefined' && (
+    /Android/i.test(navigator.userAgent || '') || 
+    Boolean((window as any).RonPayBridge)
+  );
 
   const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
@@ -171,7 +175,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         feeOption: currentFeeOption,
         baseAmountInRupees: amount,
         clientOrigin: window.location.origin,
-        merchantTransactionId: newTxnId
+        merchantTransactionId: newTxnId,
+        clientType: (window as any).RonPayBridge ? 'mobile_app' : 'web_browser',
+        isMobileApp: Boolean((window as any).RonPayBridge)
       })
     })
       .then(res => {
@@ -908,7 +914,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               feeOption: currentFeeOption,
                               baseAmountInRupees: amount,
                               clientOrigin: window.location.origin,
-                              merchantTransactionId: merchantTxnId
+                              merchantTransactionId: merchantTxnId,
+                              clientType: (window as any).RonPayBridge ? 'mobile_app' : 'web_browser',
+                              isMobileApp: Boolean((window as any).RonPayBridge)
                             })
                           });
                           const data = await res.json();

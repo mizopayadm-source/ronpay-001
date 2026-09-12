@@ -360,11 +360,11 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
 
       if (v2PayResp.ok) {
         const v2Data: any = await v2PayResp.json();
-        if (v2Data?.redirectUrl) {
-          phonePeCheckoutUrl = v2Data.redirectUrl;
-        }
         if (v2Data?.orderId) {
           phonePeOrderId = v2Data.orderId;
+        }
+        if (v2Data?.redirectUrl) {
+          phonePeCheckoutUrl = v2Data.redirectUrl;
         }
       } else {
         const errText = await v2PayResp.text();
@@ -372,6 +372,21 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       }
     } catch (v2Err: any) {
       console.warn('PhonePe checkout/v2/pay call warning:', v2Err?.message || v2Err);
+    }
+
+    // Determine platform:
+    // 1. Mobile App (Android APK / RonPayBridge / mobile client): Route to dedicated Mobile App checkout with UPI Apps (Pull Down)
+    // 2. Web Site / Browser (Desktop, Laptop, Web browser): Route to official PhonePe Gateway (mercury-uat.phonepe.com)
+    const isMobileApp = Boolean(
+      req.body?.isMobileApp === true ||
+      req.body?.clientType === 'mobile_app' ||
+      req.headers['x-client-platform'] === 'android'
+    );
+
+    const ronpayMobileCheckoutUrl = `${effectiveOrigin}/?view=app&screen=phonepe-checkout&txnId=${encodeURIComponent(merchantTransactionId)}&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId || '')}&ctitle=${encodeURIComponent(campaignTitle || '')}&cat=${encodeURIComponent(req.body?.category || '')}&donor=${encodeURIComponent(donorName || '')}&donorPhone=${encodeURIComponent(customerPhone || '')}&anon=${req.body?.isAnonymous ? '1' : '0'}`;
+
+    if (isMobileApp) {
+      phonePeCheckoutUrl = ronpayMobileCheckoutUrl;
     }
 
     // Standard PhonePe PG V2 Payload Schema

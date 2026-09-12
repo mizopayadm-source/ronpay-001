@@ -66,6 +66,7 @@ import { CreatorRegScreen } from './components/CreatorRegScreen';
 import { ReportsScreen } from './components/ReportsScreen';
 import { SuccessScreen } from './components/SuccessScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
+import { PhonePeStandardCheckout } from './components/PhonePeStandardCheckout';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BottomNav } from './components/BottomNav';
 
@@ -1049,26 +1050,28 @@ export default function App() {
         <OfflineStatusBanner onRefreshCache={reloadLocalData} />
 
         {/* Global Header */}
-        <Header
-          currentScreen={currentScreen}
-          onNavigate={handleNavigate}
-          onOpenScanner={() => handleStartScanner('any')}
-          onOpenReports={handleOpenReports}
-          isDesktopView={isDesktopView}
-          onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
-          notificationCount={notificationCount}
-          onOpenNotifications={handleOpenNotifications}
-          language={language}
-          onToggleLanguage={setLanguage}
-          onOpenHistory={handleOpenHistory}
-          onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
-          onOpenLogin={() => setIsLoginModalOpen(true)}
-          creatorProfile={creatorProfile}
-          onSwitchToWebsite={handleSwitchToWebsite}
-        />
+        {currentScreen !== 'phonepe_checkout' && (
+          <Header
+            currentScreen={currentScreen}
+            onNavigate={handleNavigate}
+            onOpenScanner={() => handleStartScanner('any')}
+            onOpenReports={handleOpenReports}
+            isDesktopView={isDesktopView}
+            onToggleDesktopView={() => setIsDesktopView(!isDesktopView)}
+            notificationCount={notificationCount}
+            onOpenNotifications={handleOpenNotifications}
+            language={language}
+            onToggleLanguage={setLanguage}
+            onOpenHistory={handleOpenHistory}
+            onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
+            onOpenLogin={() => setIsLoginModalOpen(true)}
+            creatorProfile={creatorProfile}
+            onSwitchToWebsite={handleSwitchToWebsite}
+          />
+        )}
 
         {/* Main Body Screen Router */}
-        <main className="flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden">
+        <main className={currentScreen === 'phonepe_checkout' ? "flex-1 w-full max-w-full p-0 overflow-y-auto overflow-x-hidden" : "flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden"}>
           {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}
@@ -1279,10 +1282,21 @@ export default function App() {
               }}
             />
           )}
+          {currentScreen === 'phonepe_checkout' && (
+            <PhonePeStandardCheckout
+              campaign={selectedCampaign || campaigns[0]}
+              onBack={() => handleNavigate('checkout')}
+              onSuccess={(tx) => {
+                setTransactions(prev => [tx, ...prev.filter(t => t.id !== tx.id)]);
+                setCompletedTransaction(tx);
+                setCurrentScreen('success');
+              }}
+            />
+          )}
         </main>
 
         {/* Global Footer Navigation (Home, Roll, Studio, Report, Profile) */}
-        {currentScreen !== 'checkout' && (
+        {currentScreen !== 'checkout' && currentScreen !== 'phonepe_checkout' && (
           <BottomNav
             currentScreen={currentScreen}
             onNavigate={(screen) => {

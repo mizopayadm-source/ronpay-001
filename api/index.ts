@@ -353,11 +353,26 @@ export default async function handler(req: any, res: any) {
 
         if (v2Resp.ok) {
           const v2Data: any = await v2Resp.json();
-          if (v2Data?.redirectUrl) checkoutUrl = v2Data.redirectUrl;
           if (v2Data?.orderId) orderId = v2Data.orderId;
+          if (v2Data?.redirectUrl) checkoutUrl = v2Data.redirectUrl;
         }
       } catch (err) {
-        // Fallback to official mercury-uat checkout url
+        // Fallback
+      }
+
+      // Determine platform:
+      // 1. Mobile App (Android APK / RonPayBridge / mobile client): Route to dedicated Mobile App checkout with UPI Apps (Pull Down)
+      // 2. Web Site / Browser (Desktop, Laptop, Web browser): Route to official PhonePe Gateway (mercury-uat.phonepe.com)
+      const isMobileApp = Boolean(
+        body?.isMobileApp === true ||
+        body?.clientType === 'mobile_app' ||
+        req.headers['x-client-platform'] === 'android'
+      );
+
+      const ronpayMobileCheckoutUrl = `${proto}://${rawHost}/?view=app&screen=phonepe-checkout&txnId=${encodeURIComponent(merchantTxnId)}&amt=${(amountInPaise / 100).toFixed(2)}&baseAmt=${baseAmountRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(donorPhone)}&anon=${isAnonymous ? '1' : '0'}`;
+
+      if (isMobileApp) {
+        checkoutUrl = ronpayMobileCheckoutUrl;
       }
 
       // Register transaction in store as PENDING with all metadata

@@ -203,6 +203,14 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
     }
 
+    // 1c. If PhonePe Standard Checkout page is requested
+    if (screenParam === 'phonepe-checkout' || screenParam === 'phonepe_checkout' || pathname.includes('phonepe-checkout')) {
+      return {
+        screen: 'phonepe_checkout',
+        view: 'app',
+      };
+    }
+
     // 2. If Receipt ID is present
     if (receiptId && receiptId.trim() !== '') {
       const amtParam = searchParams.get('amt');
