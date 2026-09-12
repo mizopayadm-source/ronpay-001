@@ -102,11 +102,38 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     return /Android/i.test(ua) || hasBridge || queryParams.get('mobile') === 'android';
   }, [queryParams]);
 
-  // Payment states
-  const [selectedMethod, setSelectedMethod] = useState<'upi_app' | 'qr' | 'card' | 'netbanking'>('upi_app');
-  const [selectedUpiApp, setSelectedUpiApp] = useState<'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'other'>('phonepe');
+  // Workflow Stages for Android / Mobile App PhonePe PG:
+  // 1. 'initial_loading': White screen with PhonePe logo "Please wait, processing your request" (Image 1)
+  // 2. 'checkout': Clean payment selection page with NO preselected UPI apps (Image 2)
+  // 3. 'pre_simulate_loading': White screen transition to simulation
+  // 4. 'simulate_response': Official PhonePe "Simulate Payment Response" (Image 3)
+  // 5. 'final_processing': White screen while generating receipt
+  // 6. 'failure_view': Clean failure state if Failure was simulated
+  type CheckoutStage = 
+    | 'initial_loading'
+    | 'checkout'
+    | 'pre_simulate_loading'
+    | 'simulate_response'
+    | 'final_processing'
+    | 'failure_view';
+
+  const [stage, setStage] = useState<CheckoutStage>('initial_loading');
+  const [simulatedStatus, setSimulatedStatus] = useState<'SUCCESS' | 'FAILURE' | 'SUBMITTED'>('SUCCESS');
+  const [pendingPaymentMethodName, setPendingPaymentMethodName] = useState<string>('PhonePe Gateway');
+
+  // Requirement 1: Show the white PhonePe processing screen briefly before revealing the checkout options
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStage('checkout');
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Payment states - Requirement 2: Nothing pre-selected, pull-down collapsed by default for a clean page
+  const [selectedMethod, setSelectedMethod] = useState<'upi_app' | 'qr' | 'card' | 'netbanking' | null>(null);
+  const [selectedUpiApp, setSelectedUpiApp] = useState<'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'other' | null>(null);
   const [isQrExpanded, setIsQrExpanded] = useState<boolean>(false);
-  const [isUpiAppsExpanded, setIsUpiAppsExpanded] = useState<boolean>(true);
+  const [isUpiAppsExpanded, setIsUpiAppsExpanded] = useState<boolean>(false);
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
   const [isNetBankingModalOpen, setIsNetBankingModalOpen] = useState<boolean>(false);
   const [selectedBank, setSelectedBank] = useState<string>('SBI');
@@ -149,7 +176,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
   }, [merchantVpa, merchantName, totalAmount, txnId]);
 
   // Specific App Intent URIs
-  const getAppUri = (app: 'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'other') => {
+  const getAppUri = (app: 'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'other' | null) => {
     const encName = encodeURIComponent(merchantName);
     const note = encodeURIComponent(`RonPay ${txnId}`);
     const params = `pa=${merchantVpa}&pn=${encName}&am=${totalAmount.toFixed(2)}&tr=${txnId}&tn=${note}&cu=INR`;
@@ -241,7 +268,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
       }
     } catch (e) {}
 
-    // 4. Brief delay to show realistic banking authorization
+    // 4. Brief delay to show realistic banking authorization then navigate
     setTimeout(() => {
       setProcessingMessage('Payment Authorized! Opening Receipt...');
       setTimeout(() => {
@@ -256,25 +283,10 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     }, 1200);
   };
 
-  // Trigger UPI intent on Android or proceed with payment
+  // Requirement 3: Trigger payment -> PhonePe white loading screen -> Simulate Payment Response page
   const handlePayClick = () => {
-    if (selectedMethod === 'upi_app') {
-      const appUri = getAppUri(selectedUpiApp);
-      // If Android, try to launch app intent
-      if (isAndroid) {
-        try {
-          if ((window as any).RonPayBridge?.openInExternalBrowser) {
-            (window as any).RonPayBridge.openInExternalBrowser(appUri);
-          } else {
-            window.location.href = appUri;
-          }
-        } catch (e) {
-          console.warn('Intent launch failed, continuing with direct confirmation:', e);
-        }
-      }
-
-      // As user requested:
-      // "upi apps thlan a nih pawh in debit / net banking ang bawkin payment hi tlang ve rih bawk se la"
+    let methodName = 'PhonePe Gateway';
+    if (selectedMethod === 'upi_app' && selectedUpiApp) {
       const appNames: Record<string, string> = {
         phonepe: 'PhonePe UPI',
         gpay: 'Google Pay UPI',
@@ -282,13 +294,50 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
         bhim: 'BHIM UPI',
         other: 'UPI App'
       };
-      handleCompletePayment(appNames[selectedUpiApp] || 'UPI App');
+      methodName = appNames[selectedUpiApp] || 'UPI App';
+
+      // If Android, attempt intent launch smoothly
+      if (isAndroid) {
+        try {
+          const appUri = getAppUri(selectedUpiApp);
+          if ((window as any).RonPayBridge?.openInExternalBrowser) {
+            (window as any).RonPayBridge.openInExternalBrowser(appUri);
+          }
+        } catch (e) {
+          console.warn('Intent notice:', e);
+        }
+      }
     } else if (selectedMethod === 'qr') {
-      handleCompletePayment('UPI QR Scan');
+      methodName = 'UPI QR Scan';
     } else if (selectedMethod === 'card') {
       setIsCardModalOpen(true);
+      return;
     } else if (selectedMethod === 'netbanking') {
       setIsNetBankingModalOpen(true);
+      return;
+    }
+
+    setPendingPaymentMethodName(methodName);
+    // Move to white loading screen (Image 1) then to Simulate Payment Response (Image 3)
+    setStage('pre_simulate_loading');
+    setTimeout(() => {
+      setStage('simulate_response');
+    }, 1100);
+  };
+
+  // Handle Submit button on Simulate Payment Response page
+  const handleSubmitSimulatedResponse = () => {
+    if (simulatedStatus === 'SUCCESS' || simulatedStatus === 'SUBMITTED') {
+      setStage('final_processing');
+      setTimeout(() => {
+        handleCompletePayment(pendingPaymentMethodName);
+      }, 1200);
+    } else {
+      // Simulate Failure
+      setStage('final_processing');
+      setTimeout(() => {
+        setStage('failure_view');
+      }, 1000);
     }
   };
 
@@ -300,6 +349,138 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     }
   };
 
+  // -------------------------------------------------------------
+  // Requirement 1: White Loading Screen with PhonePe Logo (Image 1)
+  // -------------------------------------------------------------
+  if (stage === 'initial_loading' || stage === 'pre_simulate_loading' || stage === 'final_processing') {
+    return (
+      <div className="min-h-screen bg-white text-slate-900 flex flex-col justify-between items-center px-6 py-12 max-w-lg mx-auto select-none">
+        {/* Top spacer */}
+        <div className="w-full h-8" />
+
+        {/* Center Content */}
+        <div className="flex flex-col items-center text-center">
+          {/* PhonePe Purple Circle Logo with Devanagari Pe */}
+          <div className="w-16 h-16 rounded-full bg-[#5f259f] text-white flex items-center justify-center shadow-xs mb-8">
+            <span className="text-3xl font-black font-sans leading-none select-none tracking-tight">पे</span>
+          </div>
+
+          <h2 className="text-xl sm:text-2xl font-normal text-slate-800 tracking-tight leading-snug">
+            Please wait,<br />processing your request
+          </h2>
+
+          {/* Purple curved arc spinner */}
+          <div className="mt-8">
+            <div className="w-6 h-6 border-2 border-[#5f259f] border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+
+        {/* Bottom Notice */}
+        <div className="text-center px-4 pb-4">
+          <p className="text-xs text-slate-400 font-normal leading-relaxed">
+            Please don't hit the back button until the action is complete.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Requirement 3: PhonePe Simulate Payment Response Screen (Image 3)
+  // -------------------------------------------------------------
+  if (stage === 'simulate_response') {
+    return (
+      <div className="min-h-screen bg-white text-slate-900 flex flex-col justify-center px-6 py-12 max-w-sm mx-auto select-none">
+        {/* PhonePe Purple Logo */}
+        <div className="w-14 h-14 rounded-full bg-[#5f259f] text-white flex items-center justify-center shadow-xs mx-auto mb-4">
+          <span className="text-2xl font-black font-sans leading-none select-none tracking-tight">पे</span>
+        </div>
+
+        {/* Header */}
+        <h1 className="text-2xl font-bold text-slate-900 text-center tracking-tight">
+          Simulate Payment Response
+        </h1>
+        <p className="text-xs text-slate-400 text-center mt-1 mb-8">
+          Select a status to continue...
+        </p>
+
+        {/* Status Choices */}
+        <div className="space-y-3 w-full">
+          {/* Success Choice */}
+          <button
+            type="button"
+            onClick={() => setSimulatedStatus('SUCCESS')}
+            className={`w-full py-3.5 px-4 rounded-md text-sm font-bold text-white transition-all cursor-pointer text-center bg-[#22c55e] hover:bg-[#16a34a] shadow-xs ${
+              simulatedStatus === 'SUCCESS' ? 'border-2 border-slate-950 ring-1 ring-slate-950 scale-[1.01]' : 'border-2 border-transparent'
+            }`}
+          >
+            Success
+          </button>
+
+          {/* Failure Choice */}
+          <button
+            type="button"
+            onClick={() => setSimulatedStatus('FAILURE')}
+            className={`w-full py-3.5 px-4 rounded-md text-sm font-bold text-white transition-all cursor-pointer text-center bg-[#ef4444] hover:bg-[#dc2626] shadow-xs flex items-center justify-center gap-1 ${
+              simulatedStatus === 'FAILURE' ? 'border-2 border-slate-950 ring-1 ring-slate-950 scale-[1.01]' : 'border-2 border-transparent'
+            }`}
+          >
+            <span>Failure</span>
+            <span className="text-xs">▸</span>
+          </button>
+
+          {/* Submitted Choice */}
+          <button
+            type="button"
+            onClick={() => setSimulatedStatus('SUBMITTED')}
+            className={`w-full py-2.5 px-4 rounded-md text-sm font-bold text-white transition-all cursor-pointer text-center bg-[#9ca3af] hover:bg-[#6b7280] shadow-xs ${
+              simulatedStatus === 'SUBMITTED' ? 'border-2 border-slate-950 ring-1 ring-slate-950 scale-[1.01]' : 'border-2 border-transparent'
+            }`}
+          >
+            <div>Submitted</div>
+            <div className="text-[10px] text-slate-100 font-normal">Only for Corp NetBanking</div>
+          </button>
+        </div>
+
+        {/* Submit Button */}
+        <button
+          type="button"
+          onClick={handleSubmitSimulatedResponse}
+          className="w-full mt-7 py-3.5 px-4 rounded-md bg-[#5f259f] hover:bg-[#521d8b] text-white font-bold text-base transition shadow-md cursor-pointer active:scale-[0.99] text-center"
+        >
+          Submit
+        </button>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Simulated Failure Screen
+  // -------------------------------------------------------------
+  if (stage === 'failure_view') {
+    return (
+      <div className="min-h-screen bg-white text-slate-900 flex flex-col justify-center items-center px-6 py-12 max-w-sm mx-auto text-center select-none">
+        <div className="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">Payment Failed</h2>
+        <p className="text-xs text-slate-500 mb-6">
+          PhonePe PG received simulated failure response. No amount was deducted.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStage('checkout')}
+          className="w-full py-3.5 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-bold text-sm cursor-pointer shadow-md active:scale-98 transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Requirement 2: Clean Payment Options Screen
+  // -------------------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F5F6F8] text-slate-900 font-sans flex flex-col justify-between max-w-lg mx-auto shadow-xl relative select-none">
       
@@ -449,9 +630,9 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500">
-                      {selectedMethod === 'upi_app'
+                      {selectedUpiApp
                         ? `Selected: ${selectedUpiApp === 'phonepe' ? 'PhonePe' : selectedUpiApp === 'gpay' ? 'Google Pay' : selectedUpiApp === 'paytm' ? 'Paytm' : selectedUpiApp === 'bhim' ? 'BHIM UPI' : 'Other UPI'}`
-                        : 'PhonePe, Google Pay, Paytm, BHIM'}
+                        : 'Tap to select an app (PhonePe, GPay, Paytm, etc.)'}
                     </p>
                   </div>
                 </div>
@@ -479,14 +660,19 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                         </label>
                         <select
                           id="upi-app-pulldown-select"
-                          value={selectedUpiApp}
+                          value={selectedUpiApp || ''}
                           onChange={(e) => {
-                            setSelectedMethod('upi_app');
-                            setSelectedUpiApp(e.target.value as any);
+                            if (e.target.value) {
+                              setSelectedMethod('upi_app');
+                              setSelectedUpiApp(e.target.value as any);
+                            } else {
+                              setSelectedUpiApp(null);
+                            }
                           }}
                           className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#5f259f] cursor-pointer"
                         >
-                          <option value="phonepe">PhonePe (Recommended)</option>
+                          <option value="">-- UPI App Thlang Rawh --</option>
+                          <option value="phonepe">PhonePe</option>
                           <option value="gpay">Google Pay (GPay)</option>
                           <option value="paytm">Paytm UPI</option>
                           <option value="bhim">BHIM UPI</option>
@@ -930,7 +1116,11 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                   type="button"
                   onClick={() => {
                     setIsCardModalOpen(false);
-                    handleCompletePayment('Debit/Credit Card');
+                    setPendingPaymentMethodName('Debit/Credit Card');
+                    setStage('pre_simulate_loading');
+                    setTimeout(() => {
+                      setStage('simulate_response');
+                    }, 1000);
                   }}
                   className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs cursor-pointer shadow-md transition"
                 >
@@ -997,7 +1187,11 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                   type="button"
                   onClick={() => {
                     setIsNetBankingModalOpen(false);
-                    handleCompletePayment(`Net Banking (${selectedBank})`);
+                    setPendingPaymentMethodName(`Net Banking (${selectedBank})`);
+                    setStage('pre_simulate_loading');
+                    setTimeout(() => {
+                      setStage('simulate_response');
+                    }, 1000);
                   }}
                   className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-md transition"
                 >
