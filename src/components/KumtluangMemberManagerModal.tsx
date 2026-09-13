@@ -612,18 +612,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const campaignCounts = useMemo(() => {
     const counts: { [campId: string]: number } = {};
     allowedCampaigns.forEach(c => {
-      const cOrg = (c.orgCode || '').toUpperCase();
-      counts[c.id] = allMembersList.filter(m => {
-        if (!m) return false;
-        if (m.campaignId === c.id) return true;
-        if (cOrg && m.orgCode && m.orgCode.toUpperCase() === cOrg) return true;
-        if (cOrg && m.id && m.id.split('-')[0].toUpperCase() === cOrg) return true;
-        if (cOrg === 'BMPSHL' && (c.id === 'cmp-1788107291420' || c.id.toLowerCase().includes('bmp'))) return true;
-        return false;
-      }).length;
+      counts[c.id] = getScopedMembersForView(c.id).length;
     });
     return counts;
-  }, [allowedCampaigns, allMembersList]);
+  }, [allowedCampaigns, getScopedMembersForView, members, isOpen]);
 
   // Filtered members for Member Roll Table
   const filteredTableMembers = useMemo(() => {
