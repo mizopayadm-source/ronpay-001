@@ -189,23 +189,57 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
 
   const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiIntentUri) : upiIntentUri;
 
-  // Real-time polling for remote phone scans/authorization
+  // Real-time polling & multi-channel sync for remote phone scans/authorization
   useEffect(() => {
     if (stage !== 'checkout' || !txnId) return;
     const pollInterval = setInterval(async () => {
       try {
-        const resp = await fetch(`/api/phonepe/status/${txnId}`);
+        const resp = await fetch(`/api/phonepe/status/${encodeURIComponent(txnId)}`);
         const data = await resp.json();
-        if (data.success && (data.data?.status === 'SUCCESS' || data.data?.status === 'PAYMENT_SUCCESS')) {
+        if (data.success && (data.data?.status === 'SUCCESS' || data.data?.status === 'PAYMENT_SUCCESS' || data.data?.state === 'COMPLETED')) {
           clearInterval(pollInterval);
           handleCompletePayment('PhonePe QR Scan (Remote Mobile Verified)');
         }
       } catch (e) {
         // network retry
       }
-    }, 1500);
+    }, 1000);
 
-    return () => clearInterval(pollInterval);
+    // BroadcastChannel sync
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'PHONEPE_PAYMENT_SUCCESS') {
+            if (!event.data.txnId || event.data.txnId === txnId) {
+              clearInterval(pollInterval);
+              handleCompletePayment('PhonePe QR Scan (Mobile App Sync)');
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
+    // Storage sync
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.status === 'PAYMENT_SUCCESS' && (parsed?.transaction?.id === txnId || !txnId)) {
+            clearInterval(pollInterval);
+            handleCompletePayment('PhonePe QR Scan (Mobile Event Sync)');
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearInterval(pollInterval);
+      try { bc?.close(); } catch (e) {}
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [stage, txnId]);
 
   // Specific App Intent URIs

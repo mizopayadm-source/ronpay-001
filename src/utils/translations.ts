@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BawmCategory, Campaign, Transaction } from '../types';
 
 export type Language = 'mizo' | 'english';
 
@@ -26,6 +27,189 @@ export function getCategoryDisplayName(category: string, lang?: Language | strin
       default: return category ? category : 'Bawm';
     }
   }
+}
+
+/**
+ * Clean, standard category label for receipts and printed documents.
+ * Ensures donations are never branded as 'OTHERS (BILLS & RECHARGE)'.
+ */
+export function formatCategoryBawmLabel(cat?: BawmCategory | string, lang?: Language | string): string {
+  const isEnglish = lang === 'english' || lang === 'en';
+  const c = String(cat || '').toLowerCase().trim();
+  if (c === 'ralna') return isEnglish ? 'RALNA BAWM (CONDOLENCE)' : 'RALNA BAWM';
+  if (c === 'khawlsak') return isEnglish ? 'KHAWLSAK BAWM (WELFARE)' : 'KHAWLSAK BAWM';
+  if (c === 'rikrum') return isEnglish ? 'RIKRUM BAWM (EMERGENCY)' : 'RIKRUM BAWM';
+  if (c === 'kumtluang') return isEnglish ? 'KUMTLUANG BAWM (PERMANENT)' : 'KUMTLUANG BAWM';
+  if (c === 'others') return isEnglish ? 'BILLS & RECHARGE' : 'BILLS & RECHARGE';
+  return isEnglish ? 'COMMUNITY BAWM' : 'COMMUNITY BAWM';
+}
+
+/**
+ * Safely deduce the true Bawm category from transaction details,
+ * ensuring donations and community Bawms are NEVER mistakenly labeled as 'others' (Bills/Recharge).
+ */
+export function getEffectiveCategory(
+  t?: Partial<Transaction> | null,
+  campaignsList?: Campaign[]
+): BawmCategory {
+  if (!t) return 'khawlsak';
+
+  // 1. Explicit utility / bill transaction check - ONLY genuine bills & recharges are 'others'
+  const isExplicitBill = 
+    Boolean(t.billServiceType || t.billConsumerNumber || t.billOperator) ||
+    String(t.id || '').startsWith('BILL-') || 
+    String(t.id || '').startsWith('TXN-BILL-') || 
+    String(t.campaignId || '').startsWith('bill-');
+
+  if (isExplicitBill) {
+    return 'others';
+  }
+
+  // 2. If already set to a valid specific Bawm category, return it
+  const cat = t.category;
+  if (cat === 'ralna' || cat === 'khawlsak' || cat === 'rikrum' || cat === 'kumtluang') {
+    return cat;
+  }
+
+  // 3. Search campaigns by ID or Title
+  let allCamps: Campaign[] = campaignsList || [];
+  if (allCamps.length === 0 && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('RONPAY_CAMPAIGNS_v2') || localStorage.getItem('ronpay_campaigns');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) allCamps = parsed;
+      }
+    } catch (e) {}
+  }
+
+  if (t.campaignId && allCamps.length > 0) {
+    const matched = allCamps.find(c => c.id === t.campaignId);
+    if (matched?.category && matched.category !== 'others') {
+      return matched.category;
+    }
+  }
+
+  const titleLower = String(t.campaignTitle || '').toLowerCase().trim();
+  if (titleLower && allCamps.length > 0) {
+    const matched = allCamps.find(c => 
+      c.title?.toLowerCase().trim() === titleLower ||
+      c.titleMizo?.toLowerCase().trim() === titleLower ||
+      c.cause?.toLowerCase().trim() === titleLower
+    );
+    if (matched?.category && matched.category !== 'others') {
+      return matched.category;
+    }
+  }
+
+  // 4. Keyword heuristics for Mizo community causes
+  if (titleLower.includes('ralna') || titleLower.includes('mitthi') || titleLower.includes('sunna')) {
+    return 'ralna';
+  }
+  if (
+    titleLower.includes('pocket') || 
+    titleLower.includes('khawl') || 
+    titleLower.includes('saving') || 
+    titleLower.includes('hnuchham') || 
+    titleLower.includes('damlo') || 
+    titleLower.includes('tanpui') || 
+    titleLower.includes('welfare') ||
+    titleLower.includes('charity') ||
+    titleLower.includes('ebenezer')
+  ) {
+    return 'khawlsak';
+  }
+  if (
+    titleLower.includes('rikrum') || 
+    titleLower.includes('emergency') || 
+    titleLower.includes('chhiatrupna') || 
+    titleLower.includes('kangmei') || 
+    titleLower.includes('accident') || 
+    titleLower.includes('rescue')
+  ) {
+    return 'rikrum';
+  }
+  if (
+    titleLower.includes('kumtluang') || 
+    titleLower.includes('member') || 
+    titleLower.includes('thlatin') || 
+    titleLower.includes('lawmman') || 
+    titleLower.includes('inkhawmpui') || 
+    titleLower.includes('khualthang')
+  ) {
+    return 'kumtluang';
+  }
+
+  // 5. If category was marked 'others' or missing but it's not a bill, correct it to 'khawlsak'
+  return 'khawlsak';
+}
+
+/**
+ * Resolves the Bawm's geographic location, organization, or Veng
+ * for receipts and transaction slips.
+ */
+export function resolveTxCampaignLocation(
+  tx?: Partial<Transaction> | null,
+  campaignsList?: Campaign[]
+): string {
+  if (!tx) return '';
+
+  let allCamps: Campaign[] = campaignsList || [];
+  if (allCamps.length === 0 && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('RONPAY_CAMPAIGNS_v2') || localStorage.getItem('ronpay_campaigns');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) allCamps = parsed;
+      }
+    } catch (e) {}
+  }
+
+  // 1. Try matching by campaignId
+  if (tx.campaignId && allCamps.length > 0) {
+    const matched = allCamps.find(c => c.id === tx.campaignId);
+    if (matched) {
+      if (matched.location && matched.orgName) {
+        return `${matched.location} (${matched.orgName})`;
+      }
+      if (matched.location) return matched.location;
+      if (matched.orgName) return matched.orgName;
+    }
+  }
+
+  // 2. Try matching by campaignTitle
+  const titleLower = String(tx.campaignTitle || '').toLowerCase().trim();
+  if (titleLower && allCamps.length > 0) {
+    const matched = allCamps.find(c => 
+      c.title?.toLowerCase().trim() === titleLower ||
+      c.titleMizo?.toLowerCase().trim() === titleLower
+    );
+    if (matched) {
+      if (matched.location && matched.orgName) {
+        return `${matched.location} (${matched.orgName})`;
+      }
+      if (matched.location) return matched.location;
+      if (matched.orgName) return matched.orgName;
+    }
+  }
+
+  // 3. Known campaign locations & titles
+  if (titleLower.includes('pocket') || titleLower.includes('ebenezer')) {
+    return 'BCM Ebenezer, Aizawl, Mizoram';
+  }
+  if (titleLower.includes('lalrinpuii') || titleLower.includes('bungkawn')) {
+    return 'Bungkawn Vengthar, Aizawl';
+  }
+  if (titleLower.includes('hnuchham') || titleLower.includes('dawrpui')) {
+    return 'Dawrpui, Aizawl, Mizoram';
+  }
+
+  // 4. Donor veng if provided
+  if (tx.donorVeng) {
+    return `${tx.donorVeng}, Mizoram`;
+  }
+
+  return '';
 }
 
 export const TRANSLATIONS = {

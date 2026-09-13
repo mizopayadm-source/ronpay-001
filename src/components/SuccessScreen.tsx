@@ -27,7 +27,12 @@ import { formatDateTimeDDMMYYYY } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
 import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
 import { getStoredCampaigns } from '../utils/storage';
-import { getCampaignCauseTitle } from '../utils/translations';
+import { 
+  getCampaignCauseTitle, 
+  getEffectiveCategory, 
+  resolveTxCampaignLocation, 
+  formatCategoryBawmLabel 
+} from '../utils/translations';
 
 interface SuccessScreenProps {
   transaction: Transaction | null;
@@ -63,8 +68,29 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
   const webReceiptLink = transaction ? generateReceiptWebLink(transaction.id) : '';
 
+  const effectiveCategory = useMemo(() => {
+    return getEffectiveCategory(transaction);
+  }, [transaction]);
+
+  const categoryLabel = useMemo(() => {
+    return formatCategoryBawmLabel(effectiveCategory);
+  }, [effectiveCategory]);
+
+  const bawmLocation = useMemo(() => {
+    return resolveTxCampaignLocation(transaction);
+  }, [transaction]);
+
   const displayCampaignTitle = useMemo(() => {
     if (!transaction) return 'RonPay Community Cause';
+    if (transaction.campaignId === 'cmp-1788527889945' || transaction.campaignTitle === 'Pocket Money') {
+      return 'Pocket Money';
+    }
+    if (transaction.campaignId === 'cmp-1788526889943' || transaction.campaignTitle === 'Lalrinpuii Ralna') {
+      return 'Lalrinpuii Ralna';
+    }
+    if (transaction.campaignTitle === 'BCM Ebenezer') {
+      return effectiveCategory === 'ralna' ? 'Lalrinpuii Ralna' : 'Pocket Money';
+    }
     const allCamps = getStoredCampaigns();
     const matched = allCamps.find(c => c.id === transaction.campaignId);
     if (matched) {
@@ -80,7 +106,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
       return 'Pocket Money';
     }
     return transaction.campaignTitle || 'RonPay Community Cause';
-  }, [transaction]);
+  }, [transaction, effectiveCategory]);
 
   // Synthesize a joyful celebratory chime using Web Audio API
   const playCelebrationChime = () => {
@@ -226,7 +252,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
   const handleDownloadReceipt = () => {
     if (!transaction) return;
-    const categoryLabel = transaction.category ? transaction.category.toUpperCase() + ' BAWM' : 'COMMUNITY PAYMENT';
     const subcatsHtml = transaction.subCategoryBreakdown && Object.keys(transaction.subCategoryBreakdown).length > 0
       ? `<div style="margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
           <div style="font-weight: 700; font-size: 11px; margin-bottom: 6px; color: #475569;">ITEMIZED BREAKDOWN:</div>
@@ -287,12 +312,18 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
             ` : ''}
             <div class="row">
               <span class="label">Category / Bawm:</span>
-              <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
+              <span class="val" style="text-transform: uppercase; color: #4338ca; font-weight: 800;">${categoryLabel}</span>
             </div>
             <div class="row">
               <span class="label">Bawm / Pawisa thawh chhan:</span>
               <span class="val" style="font-weight: bold; color: #1e1b4b;">${displayCampaignTitle}</span>
             </div>
+            ${bawmLocation ? `
+            <div class="row">
+              <span class="label">Bawm Awmna Hmun:</span>
+              <span class="val" style="color: #475569; font-weight: 600;">${bawmLocation}</span>
+            </div>
+            ` : ''}
             <div class="row">
               <span class="label">Petu Hming:</span>
               <span class="val">${transaction.isAnonymous ? 'Anonymous' : (transaction.donorName || 'User')}</span>
@@ -394,11 +425,16 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
         <div className="flex items-start justify-between gap-2 border-b border-emerald-100 pb-3">
           <div className="min-w-0">
             <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
-              {transaction?.category ? `${transaction.category.toUpperCase()} BAWM` : 'RONPAY DONATION'}
+              {categoryLabel}
             </span>
             <h3 className="font-black text-sm text-slate-900 truncate">
               {displayCampaignTitle}
             </h3>
+            {bawmLocation && (
+              <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                📍 {bawmLocation}
+              </p>
+            )}
           </div>
           <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0 shadow-2xs">
             COMPLETED
@@ -413,6 +449,15 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               {transaction?.isAnonymous ? 'Anonymous (Hming thup)' : (transaction?.donorName || 'Community Member')}
             </span>
           </div>
+
+          {bawmLocation && (
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="font-medium">Bawm Awmna Hmun:</span>
+              <span className="font-bold text-slate-800 text-[11px] text-right max-w-[65%]">
+                {bawmLocation}
+              </span>
+            </div>
+          )}
 
           {(transaction?.memberId || transaction?.subId) && (
             <div className="flex justify-between items-center text-slate-600">

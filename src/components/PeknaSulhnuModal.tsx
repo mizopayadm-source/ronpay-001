@@ -36,7 +36,14 @@ import {
   deleteMultipleTransactions,
   isConfirmedTransaction 
 } from '../utils/storage';
-import { getCampaignCauseTitle } from '../utils/translations';
+import { 
+  getCampaignCauseTitle, 
+  getEffectiveCategory, 
+  resolveTxCampaignLocation, 
+  formatCategoryBawmLabel 
+} from '../utils/translations';
+
+export { getEffectiveCategory };
 
 interface PeknaSulhnuModalProps {
   isOpen: boolean;
@@ -50,26 +57,6 @@ interface PeknaSulhnuModalProps {
   onOpenScanner?: () => void;
   onRefreshData?: () => void;
 }
-
-// Helper to categorize non-Bawm transactions (bills, recharges, tickets, taxes) under 'others'
-export const getEffectiveCategory = (t?: Transaction | null): BawmCategory => {
-  if (!t) return 'others';
-  const cat = t.category;
-  if (cat === 'ralna' || cat === 'khawlsak' || cat === 'rikrum' || cat === 'kumtluang') {
-    return cat;
-  }
-  if (cat === 'others') return 'others';
-  const idStr = String(t.id || '');
-  const campIdStr = String(t.campaignId || '');
-  if (
-    idStr.startsWith('BILL-') || 
-    idStr.startsWith('TXN-BILL-') || 
-    campIdStr.startsWith('bill-')
-  ) {
-    return 'others';
-  }
-  return (cat as BawmCategory) || 'others';
-};
 
 export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   isOpen,
@@ -148,6 +135,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   const resolveTxCampaignTitle = (tx?: Transaction | null): string => {
     if (!tx) return 'RonPay Bawm';
+    if (tx.campaignId === 'cmp-1788527889945' || tx.campaignTitle === 'Pocket Money') {
+      return 'Pocket Money';
+    }
+    if (tx.campaignId === 'cmp-1788526889943' || tx.campaignTitle === 'Lalrinpuii Ralna') {
+      return 'Lalrinpuii Ralna';
+    }
+    if (tx.campaignTitle === 'BCM Ebenezer') {
+      const eff = getEffectiveCategory(tx, safeCampaigns);
+      return eff === 'ralna' ? 'Lalrinpuii Ralna' : 'Pocket Money';
+    }
     if (safeCampaigns && tx.campaignId) {
       const matched = safeCampaigns.find(c => c.id === tx.campaignId);
       if (matched) {
@@ -414,10 +411,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   const printSingleReceipt = (tx: Transaction) => {
     try {
-      const effectiveCat = getEffectiveCategory(tx);
-      const categoryLabel = effectiveCat === 'others' 
-        ? 'OTHERS (BILLS & RECHARGE)' 
-        : String(effectiveCat).toUpperCase() + ' BAWM';
+      const effectiveCat = getEffectiveCategory(tx, safeCampaigns);
+      const categoryLabel = formatCategoryBawmLabel(effectiveCat);
+      const bawmLocation = resolveTxCampaignLocation(tx, safeCampaigns);
 
       const isPhonePe = tx.paymentMethod === 'phonepe' || (typeof tx.id === 'string' && tx.id.startsWith('RPAY_TXN_'));
       const isOnline = tx.paymentMethod === 'online' || isPhonePe;
@@ -538,12 +534,18 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               ` : ''}
               <div class="row">
                 <span class="label">Category / Bawm:</span>
-                <span class="val" style="text-transform: uppercase; color: #4338ca;">${categoryLabel}</span>
+                <span class="val" style="text-transform: uppercase; color: #4338ca; font-weight: 800;">${categoryLabel}</span>
               </div>
               <div class="row">
                 <span class="label">Bawm / Pawisa thawh chhan:</span>
                 <span class="val" style="font-weight: bold; color: #1e1b4b;">${resolveTxCampaignTitle(tx)}</span>
               </div>
+              ${bawmLocation ? `
+              <div class="row">
+                <span class="label">Bawm Awmna Hmun:</span>
+                <span class="val" style="color: #475569; font-weight: 600;">${bawmLocation}</span>
+              </div>
+              ` : ''}
               <div class="row">
                 <span class="label">Petu Hming:</span>
                 <span class="val">${tx.isAnonymous ? 'Anonymous' : (tx.donorName || 'Valued Donor')}</span>
@@ -1069,7 +1071,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             </div>
           ) : (
             displayedList.map((tx) => {
-              const effectiveCat = getEffectiveCategory(tx);
+              const effectiveCat = getEffectiveCategory(tx, safeCampaigns);
               const isRalna = effectiveCat === 'ralna';
               const isRikrum = effectiveCat === 'rikrum';
               const isKhawlsak = effectiveCat === 'khawlsak';

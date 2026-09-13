@@ -410,7 +410,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     
     // Check master superadmin credentials
     if (
-      (uid === 'admin' || uid === 'superadmin' || uid === 'admin@ronpay.mizoram.gov.in') &&
+      (uid === 'admin' || uid === 'superadmin' || uid === 'admin@ronpay.com' || uid === 'superadmin@ronpay.com' || uid === 'admin@ronpay.mizoram.gov.in') &&
       (adminPassword === 'admin' || adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
     ) {
       setCurrentRole('SUPER_ADMIN');
@@ -1076,7 +1076,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminUserId}
                     onChange={(e) => setAdminUserId(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="Enter Admin Username"
+                    placeholder="admin / admin@ronpay.com"
                   />
                 </div>
                 <div>
@@ -1086,8 +1086,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="••••••••"
+                    placeholder="admin / ronpay2026 / ronpay@admin2026"
                   />
+                </div>
+
+                <div className="bg-amber-50/80 border border-amber-200/70 p-2 rounded-xl text-[10px] text-amber-900 leading-tight flex items-start gap-1.5">
+                  <span className="font-bold">🔑 Info:</span>
+                  <span>Username: <b>admin</b> (or <b>admin@ronpay.com</b>) • Password: <b>admin</b>, <b>ronpay2026</b>, or <b>ronpay@admin2026</b></span>
                 </div>
 
                 {loginError && (

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import type { Request, Response } from 'express';
 import path from 'path';
@@ -128,6 +129,9 @@ const PHONEPE_MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || 'TSPMIZOPAYUAT';
 const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID || 'TSPMIZOPAYUAT_2608171706';
 const PHONEPE_CLIENT_VERSION = process.env.PHONEPE_CLIENT_VERSION || '1';
 const PHONEPE_CLIENT_SECRET = process.env.PHONEPE_CLIENT_SECRET || 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4';
+const PHONEPE_WEBHOOK_URL = process.env.PHONEPE_WEBHOOK_URL || 'https://ronpay.app/api/phonepe/webhook';
+const PHONEPE_MERCHANT_NAME = process.env.PHONEPE_MERCHANT_NAME || 'TSPMIZOPAYUAT';
+const PHONEPE_MERCHANT_VPA = process.env.PHONEPE_MERCHANT_VPA || 'mab060000049448@aubank';
 const PHONEPE_UAT_BASE_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox';
 
 // In-memory mock database for transactions and webhook events
@@ -225,6 +229,9 @@ app.get('/api/phonepe/config', (req: Request, res: Response) => {
     merchantId: PHONEPE_MERCHANT_ID,
     clientId: PHONEPE_CLIENT_ID,
     clientVersion: PHONEPE_CLIENT_VERSION,
+    merchantName: PHONEPE_MERCHANT_NAME,
+    merchantVpa: PHONEPE_MERCHANT_VPA,
+    webhookUrl: PHONEPE_WEBHOOK_URL,
     baseUrl: PHONEPE_UAT_BASE_URL,
     oauthTokenUrl: activeOAuthUrl,
     oauthEndpoints: {
@@ -486,7 +493,7 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       amount: amountInPaise,
       redirectUrl: `${effectiveOrigin}/api/phonepe/callback?txnId=${merchantTransactionId}`,
       redirectMode: 'POST',
-      callbackUrl: `${effectiveOrigin}/api/phonepe/webhook`,
+      callbackUrl: PHONEPE_WEBHOOK_URL || `${effectiveOrigin}/api/phonepe/webhook`,
       mobileNumber: customerPhone || '9862300000',
       paymentInstrument: {
         type: 'PAY_PAGE'
@@ -1072,6 +1079,7 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
 <body>
   <div class="card">
     <div class="header">
+      <a href="javascript:void(0)" onclick="if(window.opener || window.history.length > 1){window.close(); setTimeout(()=>{window.location.href='/?view=app';},300);}else{window.location.href='/?view=app';}" style="position: absolute; top: 16px; right: 18px; color: #ffffff; text-decoration: none; font-size: 20px; font-weight: 700; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;" title="Kharna (Close)">✕</a>
       <div class="logo-circle">पे</div>
       <div class="title">PhonePe PG Sandbox</div>
       <div class="subtitle">TSPMIZOPAYUAT • UAT Scan & Pay</div>
@@ -1102,17 +1110,30 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
 
       <div class="divider-text">Pay with Mobile UPI App</div>
 
-      <a href="phonepe://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-phonepe">
+      <!-- App Return Confirmation Banner -->
+      <div id="upiConfirmPrompt" style="display:none; background:#ecfdf5; border:1.5px solid #10b981; border-radius:16px; padding:14px; margin:12px 0; text-align:center;">
+        <p style="font-size:13px; font-weight:700; color:#065f46; margin-bottom:6px;">
+          📱 App-ah payment i ti zo tawh em?
+        </p>
+        <p style="font-size:11px; color:#047857; margin-bottom:10px;">
+          Payment i tih zawh tawh chuan a hnuaia button hi hmet la, desktop checkout leh receipt a in-update nghal ang.
+        </p>
+        <button type="button" class="btn btn-success" id="btnConfirmFromApp" style="margin-top:0;">
+          <span>✅ Aw, Ka Ti Zo E (Confirm & Auto-Close)</span>
+        </button>
+      </div>
+
+      <a href="phonepe://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-phonepe upi-app-link" onclick="handleUpiAppLaunch('PhonePe')">
         <span style="font-size: 16px; font-weight: 900;">पे</span>
         <span>Open in PhonePe App</span>
       </a>
 
-      <a href="gpay://upi/pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-gpay">
+      <a href="gpay://upi/pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-gpay upi-app-link" onclick="handleUpiAppLaunch('Google Pay')">
         <span style="font-size: 15px; font-weight: 800;">G</span>
         <span>Open in Google Pay</span>
       </a>
 
-      <a href="upi://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-upi">
+      <a href="upi://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-upi upi-app-link" onclick="handleUpiAppLaunch('UPI App')">
         <span>⚡ Open in Any UPI / Paytm</span>
       </a>
 
@@ -1124,6 +1145,10 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
 
       <button type="button" class="btn btn-fail" id="btnDecline">
         <span>❌ Decline / Cancel Payment</span>
+      </button>
+
+      <button type="button" class="btn" style="background:#f1f5f9; color:#475569; margin-top:8px;" onclick="if(window.opener || window.history.length > 1){window.close(); setTimeout(()=>{window.location.href='/?view=app';},300);}else{window.location.href='/?view=app';}">
+        <span>✕ Kharna (Cancel & Close)</span>
       </button>
 
       <p class="note">
@@ -1138,10 +1163,16 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
         Amount of ₹${rawAmt.toFixed(2)} has been authorized.<br>
         <strong>Your desktop checkout screen has automatically updated to the official receipt.</strong>
       </p>
-      <div style="font-size: 11px; font-family: monospace; color: #64748b; background: #f1f5f9; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;" id="resultUtr">
+      <div style="font-size: 11px; font-family: monospace; color: #64748b; background: #f1f5f9; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px;" id="resultUtr">
         UTR: UTR${Date.now()}
       </div>
-      <p style="font-size: 11px; color: #94a3b8;">You may now safely close this browser window.</p>
+
+      <button type="button" class="btn btn-phonepe" onclick="if(window.opener || window.history.length > 1){window.close(); setTimeout(()=>{window.location.href='/?view=app';},300);}else{window.location.href='/?view=app';}">
+        <span>✕ He Window Hi Khar Rawh (Close Window)</span>
+      </button>
+      <a href="/?view=app" class="btn" style="background:#f1f5f9; color:#334155; margin-top:8px;">
+        <span>🏠 RonPay Home-ah Lut Rawh</span>
+      </a>
     </div>
   </div>
 
@@ -1150,6 +1181,22 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
     const amt = ${rawAmt};
     const donorName = ${JSON.stringify(donorName)};
     const causeTitle = ${JSON.stringify(causeTitle)};
+
+    function handleUpiAppLaunch(appName) {
+      setTimeout(() => {
+        const box = document.getElementById('upiConfirmPrompt');
+        if (box) box.style.display = 'block';
+      }, 1000);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const box = document.getElementById('upiConfirmPrompt');
+        if (box && box.style.display !== 'none') {
+          box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    });
 
     async function sendSimulation(status) {
       document.getElementById('actionSection').style.opacity = '0.5';
@@ -1169,6 +1216,19 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
           })
         });
         const data = await resp.json();
+
+        // Broadcast to desktop or other tabs
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const bc = new BroadcastChannel('ronpay_payment_channel');
+            bc.postMessage({
+              type: status === 'SUCCESS' ? 'PHONEPE_PAYMENT_SUCCESS' : 'PHONEPE_PAYMENT_ERROR',
+              txnId: txnId,
+              utr: data?.data?.utr
+            });
+            bc.close();
+          }
+        } catch(bcErr) {}
 
         document.getElementById('actionSection').style.display = 'none';
         const resultSection = document.getElementById('resultSection');
@@ -1199,6 +1259,10 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
 
     document.getElementById('btnApprove').addEventListener('click', () => sendSimulation('SUCCESS'));
     document.getElementById('btnDecline').addEventListener('click', () => sendSimulation('FAILURE'));
+    const btnConfirm = document.getElementById('btnConfirmFromApp');
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', () => sendSimulation('SUCCESS'));
+    }
   </script>
 </body>
 </html>`);

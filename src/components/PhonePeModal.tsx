@@ -72,10 +72,14 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
 
   const credentials = {
     merchantId: 'TSPMIZOPAYUAT',
+    merchantName: 'TSPMIZOPAYUAT',
+    merchantVpa: 'mab060000049448@aubank',
     clientId: 'TSPMIZOPAYUAT_2608171706',
     clientVersion: '1',
     clientSecret: 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4',
     webhookUrl: 'https://ronpay.app/api/phonepe/webhook',
+    sandboxBaseUrl: 'https://api-preprod.phonepe.com/apis/pg-sandbox',
+    sandboxOAuthUrl: 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token',
     env: 'UAT Sandbox (PG V2 Standard Checkout)',
   };
 
@@ -668,6 +672,23 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                     title="Copy MID"
                   >
                     {copiedKey === 'mid' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Merchant UPI VPA (Receiver ID) */}
+                <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[9.5px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                      Merchant UPI VPA (Receiver ID)
+                    </span>
+                    <span className="font-mono font-black text-slate-900 text-xs">{credentials.merchantVpa}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(credentials.merchantVpa, 'vpa')}
+                    className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-600 transition cursor-pointer"
+                    title="Copy VPA"
+                  >
+                    {copiedKey === 'vpa' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
 

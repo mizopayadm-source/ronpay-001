@@ -295,7 +295,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       // 1. Check Master Super Admin credentials
       if (
         (cleanUser === 'superadmin' || cleanUser === 'admin' || cleanPhone === '9862000001' || cleanPhone === '9436001234' || cleanUser === 'admin@ronpay.com') &&
-        (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234')
+        (pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
       ) {
         const profile: CreatorProfile = {
           name: 'Super Admin (Master)',

@@ -488,21 +488,45 @@ export const getStoredTransactions = (): Transaction[] => {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
         }
 
-        // Auto-correct any legacy campaign titles cached in localStorage
-        let hasFixedTitles = false;
+        // Auto-correct any legacy campaign titles & categories cached in localStorage
+        let hasFixed = false;
         for (const t of merged) {
           if (t.campaignId === 'cmp-1788526889943' || (t.category === 'ralna' && t.campaignTitle === 'BCM Ebenezer')) {
             if (t.campaignTitle !== 'Lalrinpuii Ralna') {
               t.campaignTitle = 'Lalrinpuii Ralna';
-              hasFixedTitles = true;
+              hasFixed = true;
             }
           }
           if (t.campaignId === 'cmp-1788527889945' && t.campaignTitle === 'BCM Ebenezer') {
             t.campaignTitle = 'Pocket Money';
-            hasFixedTitles = true;
+            hasFixed = true;
+          }
+
+          // Ensure non-bill transactions are never mistakenly stored with category 'others' or empty
+          const isBill = Boolean(t.billServiceType || t.billConsumerNumber || t.billOperator) ||
+            String(t.id || '').startsWith('BILL-') || 
+            String(t.id || '').startsWith('TXN-BILL-') || 
+            String(t.campaignId || '').startsWith('bill-');
+          if (!isBill) {
+            if (!t.category || t.category === 'others') {
+              const titleL = String(t.campaignTitle || '').toLowerCase();
+              if (titleL.includes('ralna') || t.campaignId === 'cmp-1788526889943') {
+                t.category = 'ralna';
+                hasFixed = true;
+              } else if (titleL.includes('rikrum') || t.campaignId === 'cmp-1788528889947') {
+                t.category = 'rikrum';
+                hasFixed = true;
+              } else if (titleL.includes('kumtluang') || t.campaignId === 'cmp-1788529889949') {
+                t.category = 'kumtluang';
+                hasFixed = true;
+              } else {
+                t.category = 'khawlsak';
+                hasFixed = true;
+              }
+            }
           }
         }
-        if (hasFixedTitles) {
+        if (hasFixed) {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
         }
 
@@ -2074,6 +2098,22 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 
 export const saveTransaction = (tx: Transaction): void => {
   if (!tx || !tx.id) return;
+  const isBill = Boolean(tx.billServiceType || tx.billConsumerNumber || tx.billOperator) ||
+    String(tx.id || '').startsWith('BILL-') || 
+    String(tx.id || '').startsWith('TXN-BILL-') || 
+    String(tx.campaignId || '').startsWith('bill-');
+  if (!isBill && (!tx.category || tx.category === 'others')) {
+    const titleL = String(tx.campaignTitle || '').toLowerCase();
+    if (titleL.includes('ralna') || tx.campaignId === 'cmp-1788526889943') {
+      tx.category = 'ralna';
+    } else if (titleL.includes('rikrum') || tx.campaignId === 'cmp-1788528889947') {
+      tx.category = 'rikrum';
+    } else if (titleL.includes('kumtluang') || tx.campaignId === 'cmp-1788529889949') {
+      tx.category = 'kumtluang';
+    } else {
+      tx.category = 'khawlsak';
+    }
+  }
   const current = getStoredTransactions();
   const updated = [tx, ...current.filter(t => t.id !== tx.id)];
   saveStoredTransactions(updated);

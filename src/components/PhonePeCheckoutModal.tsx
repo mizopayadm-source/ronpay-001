@@ -103,6 +103,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [merchantTxnId, setMerchantTxnId] = useState<string>('');
   const [pendingMethodName, setPendingMethodName] = useState<string>('UPI QR Scan');
   const [qrFormat, setQrFormat] = useState<'weblink' | 'upiapp'>('weblink');
+  const [hasLaunchedUpiApp, setHasLaunchedUpiApp] = useState<boolean>(false);
 
   const merchantName = 'TSPMIZOPAYUAT';
   const merchantVpa = 'mab060000049448@aubank';
@@ -112,11 +113,24 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const campaignShare = currentFeeOption === 'ADD_ON' ? amount : Math.max(0, amount - effectiveFee);
   const campaignTitle = getCampaignCauseTitle(campaign);
 
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Initialize session whenever modal opens
   useEffect(() => {
     if (!isOpen) return;
 
-    const newTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlTxn = urlParams?.get('txn') || urlParams?.get('txnId') || urlParams?.get('merchantTransactionId');
+    const newTxnId = urlTxn || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
     setMerchantTxnId(newTxnId);
     setStage('initial_loading');
     setActiveTab('upi');
@@ -131,6 +145,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setSelectedBank('SBI');
     setCustomVpa('');
     setVpaError('');
+    setHasLaunchedUpiApp(false);
 
     // Pre-register transaction as PENDING in backend store
     fetch('/api/phonepe/initiate-pay', {
@@ -166,18 +181,25 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return () => clearInterval(interval);
   }, [isOpen, stage]);
 
-  // Real-time status polling: If scanned via mobile phone scanner, auto-proceed!
+  // Real-time status polling & multi-window event synchronization
   useEffect(() => {
     if (!isOpen || stage !== 'checkout' || !merchantTxnId) return;
 
+    // 1. Polling server status
     const pollInterval = setInterval(async () => {
       try {
         const resp = await fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}`);
         if (resp.ok) {
           const data = await resp.json();
-          if (data?.code === 'PAYMENT_SUCCESS' || data?.data?.state === 'COMPLETED') {
+          if (
+            data?.code === 'PAYMENT_SUCCESS' ||
+            data?.code === 'SUCCESS' ||
+            data?.data?.state === 'COMPLETED' ||
+            data?.data?.status === 'SUCCESS' ||
+            data?.data?.status === 'PAYMENT_SUCCESS'
+          ) {
             clearInterval(pollInterval);
-            finalizeSuccess(data?.data?.paymentInstrument?.utr || data?.data?.utr);
+            finalizeSuccess(data?.data?.paymentInstrument?.utr || data?.data?.utr || ('UTR' + Date.now()));
           } else if (data?.code === 'PAYMENT_ERROR' || data?.data?.state === 'FAILED') {
             clearInterval(pollInterval);
             setStage('failure_view');
@@ -186,9 +208,43 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       } catch (e) {
         // network polling silent catch
       }
-    }, 1500);
+    }, 1000);
 
-    return () => clearInterval(pollInterval);
+    // 2. BroadcastChannel for cross-tab and mobile scan-pay window synchronization
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'PHONEPE_PAYMENT_SUCCESS') {
+            if (!event.data.txnId || event.data.txnId === merchantTxnId) {
+              clearInterval(pollInterval);
+              finalizeSuccess(event.data.utr || ('UTR' + Date.now()));
+            }
+          }
+        };
+      }
+    } catch (e) {}
+
+    // 3. Storage event listener for cross-window notifications
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.status === 'PAYMENT_SUCCESS' && (parsed?.transaction?.id === merchantTxnId || !merchantTxnId)) {
+            clearInterval(pollInterval);
+            finalizeSuccess(parsed?.transaction?.utr);
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      clearInterval(pollInterval);
+      try { bc?.close(); } catch (e) {}
+      window.removeEventListener('storage', handleStorage);
+    };
   }, [isOpen, stage, merchantTxnId]);
 
   // 1. Authentic standard NPCI UPI Intent URI for Scan & Pay in UPI apps
@@ -198,32 +254,19 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
   }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
-  // 2. Direct RonPay Deep Link to the EXACT Specific Bawm & User/Donor chosen
-  // When scanned by ANY phone camera, Google Lens, or Web QR Scanner, it opens RonPay App DIRECTLY at this specific chosen Bawm!
+  // 2. Dedicated PhonePe PG Sandbox Scan & Pay mobile web portal link
+  // When scanned by phone camera, Google Lens, or mobile QR scanner, it opens the PhonePe PG Sandbox Scan & Pay portal
   const scanPayWebLink = useMemo(() => {
-    if (typeof window === 'undefined') return '';
+    if (typeof window === 'undefined' || !merchantTxnId) return '';
     const origin = window.location.origin;
     const campId = campaign?.id || 'cmp-custom';
-    const cat = campaign?.category || 'ralna';
     const encTitle = encodeURIComponent(campaignTitle || campaign?.title || 'RonPay Bawm');
-    const encUpi = encodeURIComponent(campaign?.upiId || merchantVpa);
-    const encLoc = encodeURIComponent(campaign?.location || donorVeng || 'Mizoram');
     const encDonor = encodeURIComponent(isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'));
-    const encVeng = encodeURIComponent(donorVeng || '');
+    const encLoc = encodeURIComponent(campaign?.location || donorVeng || 'Mizoram');
     const amt = totalPayable.toFixed(2);
     
-    let url = `${origin}/?view=app&campaign=${campId}&cat=${cat}&title=${encTitle}&upi=${encUpi}&loc=${encLoc}&amt=${amt}&donor=${encDonor}&veng=${encVeng}&pay=1&txn=${merchantTxnId}`;
-    
-    if (campaign?.mitthiHming) url += `&mitthi=${encodeURIComponent(campaign.mitthiHming)}`;
-    if (campaign?.vuiHun) url += `&vuiHun=${encodeURIComponent(campaign.vuiHun)}`;
-    if (campaign?.vuitu) url += `&vuitu=${encodeURIComponent(campaign.vuitu)}`;
-    if (campaign?.thihni) url += `&thihni=${encodeURIComponent(campaign.thihni)}`;
-    if (campaign?.orgName) url += `&org=${encodeURIComponent(campaign.orgName)}`;
-    if (campaign?.creatorName) url += `&creator=${encodeURIComponent(campaign.creatorName)}`;
-    if (isAnonymous) url += `&anon=1`;
-
-    return url;
-  }, [campaign, campaignTitle, merchantVpa, donorName, donorVeng, isAnonymous, totalPayable, merchantTxnId]);
+    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}`;
+  }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous]);
 
   // Active QR value: 'weblink' provides a real clickable Web Link for Web Scanners, while 'upiapp' provides direct UPI protocol
   const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiPaymentUri) : upiPaymentUri;
@@ -397,8 +440,26 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <div className="relative w-full max-w-4xl lg:max-w-5xl bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden min-h-0 max-h-[96vh] flex flex-col select-none">
+
+        {/* Prominent Global Close Button (Always visible on all screens & stages) */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-3.5 right-3.5 z-50 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200/90 shadow-xs transition-all cursor-pointer flex items-center justify-center group active:scale-95"
+          title="Kharna (Close Payment) • Esc"
+          aria-label="Close"
+        >
+          <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-150" />
+        </button>
 
         {/* ------------------------------------------------------------- */}
         {/* STAGE: White Loading Screen with PhonePe Logo                  */}
@@ -678,6 +739,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     <p><span className="font-medium text-slate-700">Payer:</span> {donorName || 'Valued Donor'}</p>
                     {donorVeng && <p><span className="font-medium text-slate-700">Veng:</span> {donorVeng}</p>}
                     <p className="truncate"><span className="font-medium text-slate-700">Cause:</span> {campaignTitle}</p>
+                  </div>
+
+                  {/* Desktop Cancel / Close Button in Left Column */}
+                  <div className="mt-4 pt-2 hidden md:block">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="w-full py-2.5 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-98"
+                    >
+                      <X className="w-4 h-4 text-slate-500" />
+                      <span>Kharna (Cancel & Close)</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1027,6 +1100,25 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                 <Smartphone className="w-4 h-4 text-amber-300" />
                                 <span>Pay ₹{totalPayable.toFixed(2)} via {selectedUpiApp}</span>
                               </button>
+
+                              {hasLaunchedUpiApp && (
+                                <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-300 text-center space-y-2 mt-3 animate-in fade-in">
+                                  <p className="text-xs font-bold text-emerald-900">
+                                    📱 {selectedUpiApp}-ah payment i zo tawh em?
+                                  </p>
+                                  <p className="text-[11px] text-emerald-700">
+                                    Payment i tih zawh tawh chuan a hnuaia button hi hmet la, receipt a in-generate nghal ang:
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => finalizeSuccess('UTR' + Date.now())}
+                                    className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    <span>Aw, Ka Pe Zo E (Complete & Close)</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1273,8 +1365,15 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
 
                 </div>
 
-                {/* Page Timeout Banner at bottom right (Matching image) */}
-                <div className="mt-4 flex justify-end items-center">
+                {/* Page Timeout Banner & Cancel Button at bottom */}
+                <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 underline transition cursor-pointer"
+                  >
+                    Payment ti lovin kir leh rawh (Cancel & Close)
+                  </button>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200/80 text-[11px] font-semibold">
                     <Clock className="w-3.5 h-3.5 text-amber-700" />
                     <span>This page will timeout in {formatTimer(timeLeft)} mins</span>
