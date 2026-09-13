@@ -55,6 +55,9 @@ interface CheckoutScreenProps {
   language?: Language;
   initialAmount?: number;
   initialOpenPhonePeCheckout?: boolean;
+  initialDonorName?: string;
+  initialDonorSection?: string;
+  initialIsAnonymous?: boolean;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -69,6 +72,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   language = 'mizo',
   initialAmount,
   initialOpenPhonePeCheckout,
+  initialDonorName,
+  initialDonorSection,
+  initialIsAnonymous,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
@@ -118,15 +124,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (campaign?.targetAmount && campaign.targetAmount > 0) return campaign.targetAmount;
     return 500;
   });
-  const [donorName, setDonorName] = useState<string>('');
+  const [donorName, setDonorName] = useState<string>(() => initialDonorName || '');
   const [remark, setRemark] = useState<string>('');
-  const [isAnonymous, setIsAnonymous] = useState<boolean>(false);
+  const [isAnonymous, setIsAnonymous] = useState<boolean>(() => Boolean(initialIsAnonymous));
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
-  const [donorSection, setDonorSection] = useState<string>('Bial 1 (Vengchhak)');
+  const [donorSection, setDonorSection] = useState<string>(() => initialDonorSection || 'Bial 1 (Vengchhak)');
   const [phoneSearchQuery, setPhoneSearchQuery] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId (e.g. EBE-1460-01)

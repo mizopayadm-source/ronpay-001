@@ -207,7 +207,15 @@ export default function App() {
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
   const [autoOpenPhonePeCheckout, setAutoOpenPhonePeCheckout] = useState<boolean>(() => !!initialRoute?.isPhonePeOpen);
-  const [phonePeCheckoutAmount, setPhonePeCheckoutAmount] = useState<number>(100);
+  const [phonePeCheckoutAmount, setPhonePeCheckoutAmount] = useState<number>(() => {
+    if (initialRoute?.campaign?.customAmount && initialRoute.campaign.customAmount > 0) {
+      return initialRoute.campaign.customAmount;
+    }
+    if (initialRoute?.campaign?.targetAmount && initialRoute.campaign.targetAmount > 0) {
+      return initialRoute.campaign.targetAmount;
+    }
+    return 100;
+  });
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
@@ -499,6 +507,12 @@ export default function App() {
     }
     if (route.category && !route.campaign) {
       setSelectedCategory(route.category);
+    }
+    if (route.isPhonePeOpen) {
+      setAutoOpenPhonePeCheckout(true);
+      if (route.campaign?.customAmount || route.campaign?.targetAmount) {
+        setPhonePeCheckoutAmount(route.campaign.customAmount || route.campaign.targetAmount || 100);
+      }
     }
     if (route.receiptId) {
       try {
@@ -1165,6 +1179,9 @@ export default function App() {
               language={language}
               initialOpenPhonePeCheckout={autoOpenPhonePeCheckout}
               initialAmount={autoOpenPhonePeCheckout ? phonePeCheckoutAmount : (selectedCampaign?.customAmount || selectedCampaign?.targetAmount)}
+              initialDonorName={initialRoute?.donorName}
+              initialDonorSection={initialRoute?.donorVeng}
+              initialIsAnonymous={initialRoute?.isAnonymous}
             />
           )}
 

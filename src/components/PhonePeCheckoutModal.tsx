@@ -198,16 +198,32 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
   }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
-  // 2. Smart Universal Web Link: recognized by ALL Web QR Scanners, Google Lens, Phone Cameras, and browsers
-  // When scanned, it opens a direct mobile-friendly payment landing page with PhonePe/GPay buttons and sandbox simulation!
+  // 2. Direct RonPay Deep Link to the EXACT Specific Bawm & User/Donor chosen
+  // When scanned by ANY phone camera, Google Lens, or Web QR Scanner, it opens RonPay App DIRECTLY at this specific chosen Bawm!
   const scanPayWebLink = useMemo(() => {
     if (typeof window === 'undefined') return '';
     const origin = window.location.origin;
-    const encDonor = encodeURIComponent(donorName || 'Anonymous');
-    const encCause = encodeURIComponent(campaignTitle || 'RonPay Bawm');
     const campId = campaign?.id || 'cmp-custom';
-    return `${origin}/api/phonepe/scan-pay?campaign=${campId}&txnId=${merchantTxnId}&amt=${totalPayable.toFixed(2)}&donor=${encDonor}&cause=${encCause}&mid=${merchantName}`;
-  }, [merchantTxnId, totalPayable, donorName, campaignTitle, campaign?.id, merchantName]);
+    const cat = campaign?.category || 'ralna';
+    const encTitle = encodeURIComponent(campaignTitle || campaign?.title || 'RonPay Bawm');
+    const encUpi = encodeURIComponent(campaign?.upiId || merchantVpa);
+    const encLoc = encodeURIComponent(campaign?.location || donorVeng || 'Mizoram');
+    const encDonor = encodeURIComponent(isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'));
+    const encVeng = encodeURIComponent(donorVeng || '');
+    const amt = totalPayable.toFixed(2);
+    
+    let url = `${origin}/?view=app&campaign=${campId}&cat=${cat}&title=${encTitle}&upi=${encUpi}&loc=${encLoc}&amt=${amt}&donor=${encDonor}&veng=${encVeng}&pay=1&txn=${merchantTxnId}`;
+    
+    if (campaign?.mitthiHming) url += `&mitthi=${encodeURIComponent(campaign.mitthiHming)}`;
+    if (campaign?.vuiHun) url += `&vuiHun=${encodeURIComponent(campaign.vuiHun)}`;
+    if (campaign?.vuitu) url += `&vuitu=${encodeURIComponent(campaign.vuitu)}`;
+    if (campaign?.thihni) url += `&thihni=${encodeURIComponent(campaign.thihni)}`;
+    if (campaign?.orgName) url += `&org=${encodeURIComponent(campaign.orgName)}`;
+    if (campaign?.creatorName) url += `&creator=${encodeURIComponent(campaign.creatorName)}`;
+    if (isAnonymous) url += `&anon=1`;
+
+    return url;
+  }, [campaign, campaignTitle, merchantVpa, donorName, donorVeng, isAnonymous, totalPayable, merchantTxnId]);
 
   // Active QR value: 'weblink' provides a real clickable Web Link for Web Scanners, while 'upiapp' provides direct UPI protocol
   const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiPaymentUri) : upiPaymentUri;

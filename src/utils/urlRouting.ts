@@ -28,6 +28,9 @@ export interface ParsedRoute {
   isWalletOpen?: boolean;
   view?: 'website' | 'app';
   isPhonePeOpen?: boolean;
+  donorName?: string;
+  donorVeng?: string;
+  isAnonymous?: boolean;
 }
 
 /**
@@ -140,6 +143,10 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const urlAmtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('target') || searchParams.get('total') || searchParams.get('am');
       const numUrlAmt = (urlAmtStr && !isNaN(parseFloat(urlAmtStr)) && parseFloat(urlAmtStr) > 0) ? parseFloat(urlAmtStr) : undefined;
 
+      const donorParam = searchParams.get('donor') || searchParams.get('payer') || searchParams.get('name');
+      const vengParam = searchParams.get('veng') || searchParams.get('section') || searchParams.get('loc');
+      const isAnon = donorParam === 'Anonymous' || searchParams.get('anon') === '1' || searchParams.get('anon') === 'true';
+
       if (existing) {
         return {
           screen: 'checkout',
@@ -147,6 +154,10 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
           campaign: numUrlAmt ? { ...existing, customAmount: numUrlAmt, targetAmount: numUrlAmt } : existing,
           category: existing.category,
           isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
+          view: parsedView || 'app',
+          donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+          donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
+          isAnonymous: isAnon,
         };
       }
 
@@ -197,6 +208,10 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         campaign: numUrlAmt ? { ...reconstructed, customAmount: numUrlAmt, targetAmount: numUrlAmt } : reconstructed,
         category: deducedCategory,
         isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
+        view: parsedView || 'app',
+        donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+        donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
+        isAnonymous: isAnon,
       };
     }
 
