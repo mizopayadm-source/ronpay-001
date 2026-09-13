@@ -307,7 +307,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
           console.warn('Intent notice:', e);
         }
       }
-    } else if (selectedMethod === 'qr') {
+    } else if (selectedMethod === 'qr' || isQrExpanded) {
       methodName = 'UPI QR Scan';
     } else if (selectedMethod === 'card') {
       setIsCardModalOpen(true);
@@ -315,6 +315,9 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     } else if (selectedMethod === 'netbanking') {
       setIsNetBankingModalOpen(true);
       return;
+    } else {
+      // Default to UPI QR Scan or PhonePe Gateway
+      methodName = 'PhonePe Gateway';
     }
 
     setPendingPaymentMethodName(methodName);
@@ -544,27 +547,53 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
             {/* Click here to view QR Toggle */}
             <button
               type="button"
-              onClick={() => setIsQrExpanded(!isQrExpanded)}
-              className="w-full p-3 rounded-xl border border-slate-200 hover:border-purple-300 bg-slate-50/60 hover:bg-purple-50/30 transition flex items-center justify-between cursor-pointer group"
+              onClick={() => {
+                const nextState = !isQrExpanded;
+                setIsQrExpanded(nextState);
+                if (nextState) {
+                  setSelectedMethod('qr');
+                }
+              }}
+              className={`w-full p-3 rounded-xl border transition flex items-center justify-between cursor-pointer group ${
+                selectedMethod === 'qr' || isQrExpanded
+                  ? 'border-[#5f259f] bg-purple-50/70 ring-1 ring-purple-400/30'
+                  : 'border-slate-200 hover:border-purple-300 bg-slate-50/60 hover:bg-purple-50/30'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-purple-100 text-[#5f259f] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 text-[#5f259f] flex items-center justify-center shrink-0">
                   <QrCode className="w-4 h-4" />
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-bold text-slate-900 group-hover:text-[#5f259f] transition">
-                    Click here to view QR
+                  <p className="text-xs font-bold text-slate-900 group-hover:text-[#5f259f] transition flex items-center gap-1.5">
+                    <span>Click here to view QR</span>
+                    {(selectedMethod === 'qr' || isQrExpanded) && (
+                      <span className="text-[9px] font-bold text-[#5f259f] bg-purple-100 px-1.5 py-0.2 rounded-full">
+                        Selected
+                      </span>
+                    )}
                   </p>
                   <p className="text-[10px] text-slate-500">
                     Scan using any UPI App (GPay, PhonePe, Paytm)
                   </p>
                 </div>
               </div>
-              {isQrExpanded ? (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              )}
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                  selectedMethod === 'qr' || isQrExpanded
+                    ? 'border-[#5f259f] bg-[#5f259f]'
+                    : 'border-slate-300 bg-white'
+                }`}>
+                  {(selectedMethod === 'qr' || isQrExpanded) && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                  )}
+                </div>
+                {isQrExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-purple-700" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                )}
+              </div>
             </button>
 
             {/* Expanded QR Code Display */}
@@ -577,7 +606,18 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                   className="overflow-hidden"
                 >
                   <div className="p-4 bg-purple-50/40 rounded-xl border border-purple-100 flex flex-col items-center justify-center space-y-3">
-                    <div className="p-2.5 bg-white rounded-xl shadow-xs border border-slate-200">
+                    <div 
+                      onClick={() => {
+                        setSelectedMethod('qr');
+                        setPendingPaymentMethodName('UPI QR Scan');
+                        setStage('pre_simulate_loading');
+                        setTimeout(() => {
+                          setStage('simulate_response');
+                        }, 900);
+                      }}
+                      className="p-2.5 bg-white rounded-xl shadow-xs border border-slate-200 cursor-pointer hover:border-purple-400 transition transform hover:scale-[1.02]"
+                      title="Click or tap to Simulate QR Payment Response"
+                    >
                       <QRCodeSVG 
                         value={upiIntentUri} 
                         size={170} 
@@ -585,7 +625,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                         includeMargin={false} 
                       />
                     </div>
-                    <div className="text-center">
+                    <div className="text-center w-full">
                       <p className="text-[11px] font-bold text-slate-800">
                         Scan & Pay ₹{totalAmount.toFixed(2)}
                       </p>
@@ -599,6 +639,29 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                         >
                           {copiedUpi ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                         </button>
+                      </div>
+
+                      {/* Direct button to enter Simulate Payment Response for phone web & mobile users */}
+                      <div className="mt-3 pt-2.5 border-t border-purple-100/80">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMethod('qr');
+                            setPendingPaymentMethodName('UPI QR Scan');
+                            setStage('pre_simulate_loading');
+                            setTimeout(() => {
+                              setStage('simulate_response');
+                            }, 900);
+                          }}
+                          className="w-full py-2.5 px-4 bg-[#5f259f] hover:bg-[#511e89] active:scale-[0.99] text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center gap-2 cursor-pointer transition"
+                        >
+                          <QrCode className="w-4 h-4 text-amber-300" />
+                          <span>Simulate QR Payment Response</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-purple-200" />
+                        </button>
+                        <p className="text-[9.5px] text-slate-500 mt-1 text-center">
+                          (Phone web-ah QR scan theih loh pawhin Simulate page-ah tlang nghal rawh)
+                        </p>
                       </div>
                     </div>
                   </div>
