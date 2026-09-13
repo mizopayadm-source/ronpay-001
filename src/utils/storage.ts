@@ -145,14 +145,16 @@ export const getStoredCampaigns = (): Campaign[] => {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const mapped = parsed.map((camp: Campaign) => {
-          if (!camp.orgCode) {
-            const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
-            const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-            return { ...camp, orgCode: derived };
-          }
-          return camp;
-        });
+        const mapped = parsed
+          .filter((camp: Campaign) => camp.id !== 'cmp-kumtluang-ymavt')
+          .map((camp: Campaign) => {
+            if (!camp.orgCode) {
+              const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
+              const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
+              return { ...camp, orgCode: derived };
+            }
+            return camp;
+          });
 
         // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns
         const existingIds = new Set(mapped.map(c => c.id));
@@ -1426,7 +1428,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-7373',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'Lalhmangaiha',
     orgCode: 'YMAVT',
     phoneLast4: '7373',
@@ -1440,7 +1442,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-1212',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'Vanlalthlana',
     orgCode: 'YMAVT',
     phoneLast4: '1212',
@@ -1452,7 +1454,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-3434',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'C. Lalramnghaka',
     orgCode: 'YMAVT',
     phoneLast4: '3434',
@@ -1464,7 +1466,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-5465',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'Zonunmawia',
     orgCode: 'YMAVT',
     phoneLast4: '5465',
@@ -1476,7 +1478,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-5859',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'Lalrinawma',
     orgCode: 'YMAVT',
     phoneLast4: '5859',
@@ -1488,7 +1490,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   },
   {
     id: 'YMAVT-8466',
-    campaignId: 'cmp-kumtluang-ymavt',
+    campaignId: 'cmp-1787829303143',
     name: 'Lalhruaitluanga',
     orgCode: 'YMAVT',
     phoneLast4: '8466',
@@ -1873,7 +1875,8 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       if (m && m.id) {
         const k = m.id.toLowerCase();
         const existing = map.get(k);
-        map.set(k, { ...(existing || {}), ...m });
+        const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
+        map.set(k, { ...(existing || {}), ...m, campaignId: resolvedCampaignId });
       }
     }
 

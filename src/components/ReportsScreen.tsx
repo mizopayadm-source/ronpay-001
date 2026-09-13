@@ -58,6 +58,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getMembers, isCampaignCreator } from '../utils/storage';
+import { getUserRole } from '../utils/rbac';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
 
 interface ReportsScreenProps {
@@ -116,14 +117,28 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     endMonth: chartEndMonth,
   }), [chartStartMonth, chartEndMonth]);
 
-  // Check if current user is an authenticated QR creator
-  const isCreator = Boolean(creatorProfile.isApproved && creatorProfile.phone);
+  const userRole = getUserRole(creatorProfile);
+  const isPrivilegedUser = Boolean(
+    creatorProfile?.isAdmin === true || 
+    userRole === 'SUPER_ADMIN' || 
+    userRole === 'ADMIN' || 
+    userRole === 'MODERATOR'
+  );
 
-  // Filter campaigns strictly owned/created by this creator (no cross-creator leakage)
+  // Check if current user is an authenticated QR creator or privileged staff (Admin/Moderator)
+  const isCreator = Boolean(isPrivilegedUser || (creatorProfile.isApproved && creatorProfile.phone));
+
+  // Filter campaigns strictly owned/created by this creator (or all campaigns if Admin/Moderator)
   const creatorCampaigns = useMemo(() => {
     if (!isCreator) return [];
+    if (isPrivilegedUser) {
+      return campaigns.filter(c => {
+        if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
+        return true;
+      });
+    }
     return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-  }, [campaigns, isCreator, creatorProfile]);
+  }, [campaigns, isCreator, isPrivilegedUser, creatorProfile]);
 
   const creatorCampaignIds = useMemo(() => {
     return new Set(creatorCampaigns.map(c => c.id));
@@ -135,13 +150,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
   }, [isCreator, creatorCampaigns, selectedFilter]);
 
-  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation)
+  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation, bypassed for Admin/Moderator)
   const filteredTransactions = useMemo(() => {
-    if (!isCreator || creatorCampaignIds.size === 0) return [];
+    if (!isCreator || (creatorCampaignIds.size === 0 && !isPrivilegedUser)) return [];
 
     return transactions.filter(t => {
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's own verified campaigns
-      if (!creatorCampaignIds.has(t.campaignId)) {
+      if (!isPrivilegedUser && !creatorCampaignIds.has(t.campaignId)) {
         return false;
       }
 

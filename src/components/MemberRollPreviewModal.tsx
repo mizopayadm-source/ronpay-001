@@ -24,6 +24,7 @@ import { MemberRecord, Transaction, Campaign, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY } from '../utils/date';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { isCampaignCreator } from '../utils/storage';
+import { getUserRole } from '../utils/rbac';
 
 export type PreviewReportFormat = 'style1_master' | 'style4_audit' | 'style2_matrix' | 'style3_passbook';
 
@@ -61,11 +62,35 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
   // Month abbreviations
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+  const userRole = getUserRole(creatorProfile);
+  const isPrivilegedUser = Boolean(
+    creatorProfile?.isAdmin === true || 
+    userRole === 'SUPER_ADMIN' || 
+    userRole === 'ADMIN' || 
+    userRole === 'MODERATOR'
+  );
+
   // Allowed campaigns for this creator
   const allowedCampaigns = useMemo(() => {
-    if (creatorProfile.isAdmin) return campaigns;
-    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-  }, [campaigns, creatorProfile]);
+    const kumtluangCampaigns = campaigns.filter(c => {
+      if (c.category !== 'kumtluang') return false;
+      if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
+      return true;
+    });
+
+    if (isPrivilegedUser) {
+      return kumtluangCampaigns.filter(c => {
+        if (!c.id || !c.title) return false;
+        const count = members.filter(m => m.campaignId === c.id || (c.orgCode && m.orgCode === c.orgCode)).length;
+        if (count > 0) return true;
+        const hasTx = transactions.some(t => t.campaignId === c.id);
+        if (hasTx) return true;
+        return false;
+      });
+    }
+
+    return kumtluangCampaigns.filter(c => isCampaignCreator(c, creatorProfile));
+  }, [campaigns, creatorProfile, isPrivilegedUser, members, transactions]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
@@ -74,7 +99,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
   React.useEffect(() => {
     if (isOpen) {
       if (initialFormat) setSelectedFormat(initialFormat);
-      if (initialCampaignId && (initialCampaignId === 'all' ? (creatorProfile.isAdmin || allowedCampaigns.length > 1) : allowedCampaignIds.has(initialCampaignId))) {
+      if (initialCampaignId && (initialCampaignId === 'all' ? (isPrivilegedUser || allowedCampaigns.length > 1) : allowedCampaignIds.has(initialCampaignId))) {
         setSelectedCampaignId(initialCampaignId);
       } else if (allowedCampaigns.length > 0) {
         setSelectedCampaignId(allowedCampaigns[0].id);
@@ -83,7 +108,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
       }
       if (initialMemberId) setSelectedMemberId(initialMemberId);
     }
-  }, [isOpen, initialFormat, initialCampaignId, initialMemberId, allowedCampaigns, allowedCampaignIds, creatorProfile.isAdmin]);
+  }, [isOpen, initialFormat, initialCampaignId, initialMemberId, allowedCampaigns, allowedCampaignIds, isPrivilegedUser]);
 
   // Scoped campaign
   const activeCampaign = useMemo(() => {
@@ -93,10 +118,10 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
 
   // Scoped members
   const scopedMembers = useMemo(() => {
-    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) return [];
+    if (allowedCampaigns.length === 0 && !isPrivilegedUser) return [];
     
     // Base filter by allowed campaigns
-    const allowedList = creatorProfile.isAdmin ? members : members.filter(m => {
+    const allowedList = isPrivilegedUser ? members : members.filter(m => {
       if (m.campaignId && allowedCampaignIds.has(m.campaignId)) return true;
       if (m.orgCode && allowedOrgCodes.has(m.orgCode.toUpperCase())) return true;
       if (m.id) {
@@ -117,16 +142,16 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
       }
       return false;
     });
-  }, [members, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes, creatorProfile.isAdmin]);
+  }, [members, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes, isPrivilegedUser]);
 
   // Scoped transactions
   const scopedTransactions = useMemo(() => {
-    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) return [];
+    if (allowedCampaigns.length === 0 && !isPrivilegedUser) return [];
     
-    const allowedTx = creatorProfile.isAdmin ? transactions : transactions.filter(t => allowedCampaignIds.has(t.campaignId));
+    const allowedTx = isPrivilegedUser ? transactions : transactions.filter(t => allowedCampaignIds.has(t.campaignId));
     if (selectedCampaignId === 'all') return allowedTx;
     return allowedTx.filter(t => t.campaignId === selectedCampaignId || (activeCampaign?.title && t.campaignTitle === activeCampaign.title));
-  }, [transactions, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, creatorProfile.isAdmin]);
+  }, [transactions, selectedCampaignId, activeCampaign, allowedCampaigns.length, allowedCampaignIds, isPrivilegedUser]);
 
   // Unique sections for filtering
   const availableSections = useMemo(() => {
@@ -505,10 +530,10 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
                 disabled={allowedCampaigns.length === 0}
                 className="bg-white border border-indigo-200 text-slate-900 font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer max-w-[200px] truncate disabled:bg-slate-100 disabled:text-slate-400"
               >
-                {creatorProfile.isAdmin && (
+                {isPrivilegedUser && (
                   <option value="all">🌐 All Campaigns Combined ({scopedMembers.length} Members)</option>
                 )}
-                {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                {!isPrivilegedUser && allowedCampaigns.length > 1 && (
                   <option value="all">📂 Ka Bawm Zawng Zawng Combined ({scopedMembers.length} Members)</option>
                 )}
                 {allowedCampaigns.length === 0 && (

@@ -48,6 +48,7 @@ import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
+import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
 
 interface CreateQRScreenProps {
@@ -178,8 +179,18 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     }
   }, [kumtluangOrg, prefixUserEdited]);
 
-  // Filter creator's campaigns strictly to what THIS creator individually created
-  const myCampaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+  const userRole = getUserRole(creatorProfile);
+  const isPrivilegedUser = Boolean(
+    creatorProfile?.isAdmin === true || 
+    userRole === 'SUPER_ADMIN' || 
+    userRole === 'ADMIN' || 
+    userRole === 'MODERATOR'
+  );
+
+  // Filter creator's campaigns strictly to what THIS creator individually created (Privileged users see all)
+  const myCampaigns = isPrivilegedUser
+    ? campaigns.filter(c => c.id !== 'cmp-kumtluang-ymavt')
+    : campaigns.filter(c => isCampaignCreator(c, creatorProfile));
 
   const displayedCampaigns = myCampaigns.filter(c => {
     if (manageFilter === 'all') return true;

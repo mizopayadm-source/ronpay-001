@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
+import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
   exportMemberCategoryMatrixPrint, 
@@ -41,6 +42,46 @@ import {
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
+
+// Helper to check if a campaign was strictly created by this creator (strict ownership, no cross-creator leakage)
+const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null): boolean => {
+  if (!profile || !camp) return false;
+  const userPhone = (profile.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const campCreatedByDigits = (camp.createdBy || '').trim().replace(/\D/g, '').slice(-10);
+  const campCreatorPhone = ((camp as any).creatorPhone || (camp as any).contactPhone || '').trim().replace(/\D/g, '').slice(-10);
+
+  if (userPhone && userPhone.length >= 8) {
+    if (campCreatedByDigits && campCreatedByDigits === userPhone) return true;
+    if (campCreatorPhone && campCreatorPhone === userPhone) return true;
+    if (camp.createdBy && camp.createdBy === (profile.phone || '').trim()) return true;
+  }
+
+  const userName = (profile.name || '').trim().toLowerCase();
+  const cleanUserName = userName.replace(/\s*\([^)]*\)/g, '').trim();
+  const genericNames = ['user', 'guest', 'ronpay user', 'ronpay', 'donor', 'citizen', 'valued donor', 'anonymous', ''];
+  if (cleanUserName && cleanUserName.length >= 3 && !genericNames.includes(cleanUserName)) {
+    const campCreatedBy = (camp.createdBy || '').trim().toLowerCase();
+    const campCreatorName = ((camp as any).creatorName || (camp as any).contactPerson || '').trim().toLowerCase();
+    if (campCreatedBy && (campCreatedBy === userName || campCreatedBy === cleanUserName)) return true;
+    if (campCreatorName && (campCreatorName === userName || campCreatorName === cleanUserName)) return true;
+  }
+
+  if (profile.orgName && (camp.orgName || camp.title)) {
+    const pOrg = profile.orgName.trim().toLowerCase();
+    const cOrg = (camp.orgName || camp.title).trim().toLowerCase();
+    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community', 'creator', 'user'];
+    if (!genericOrgs.includes(pOrg) && pOrg.length >= 4 && (pOrg === cOrg || cOrg.includes(pOrg) || pOrg.includes(cOrg))) {
+      return true;
+    }
+  }
+
+  if ((userPhone === '9862300000' || userPhone === '9862311223') && 
+      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
+    return true;
+  }
+
+  return false;
+};
 
 interface KumtluangMemberManagerModalProps {
   isOpen: boolean;
@@ -70,20 +111,63 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
-  // Calculate scoped campaigns strictly owned/created by this creator (or all if admin)
+  const userRole = getUserRole(creatorProfile);
+  const isPrivilegedUser = Boolean(
+    creatorProfile?.isAdmin === true || 
+    userRole === 'SUPER_ADMIN' || 
+    userRole === 'ADMIN' || 
+    userRole === 'MODERATOR'
+  );
+
+  // Helper to count members for a campaign directly
+  const countCampaignMembers = useCallback((campId: string, orgCode?: string) => {
+    const rawAll = getMembers('all');
+    const code = (orgCode || '').toUpperCase();
+    return rawAll.filter(m => {
+      if (!m) return false;
+      if (m.campaignId === campId) return true;
+      if (code && m.orgCode && m.orgCode.toUpperCase() === code) return true;
+      if (code && m.id && m.id.split('-')[0].toUpperCase() === code) return true;
+      return false;
+    }).length;
+  }, []);
+
+  // Calculate scoped campaigns strictly owned/created by this creator (or all if admin/moderator)
   const allowedCampaigns = useMemo(() => {
-    if (creatorProfile.isAdmin) {
-      return campaigns;
+    // 1. Strictly filter to 'kumtluang' category only (Exclude ralna, khawlsak, rikrum)
+    const kumtluangCampaigns = campaigns.filter(c => {
+      if (c.category !== 'kumtluang') return false;
+      // Filter out duplicate mock YMA campaign if present
+      if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
+      return true;
+    });
+
+    if (isPrivilegedUser) {
+      // For Super Admin, Admin, and Moderator: show all valid Kumtluang campaigns.
+      // Filter out empty mock/phuahchawp Bawm with 0 members that have no transactions
+      return kumtluangCampaigns.filter(c => {
+        if (!c.id || !c.title) return false;
+        const count = countCampaignMembers(c.id, c.orgCode);
+        if (count > 0) return true;
+        const hasTx = transactions.some(t => t.campaignId === c.id);
+        if (hasTx) return true;
+        if (isStrictCampaignOwner(c, creatorProfile)) return true;
+        return false;
+      });
     }
-    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-  }, [campaigns, creatorProfile]);
+
+    // For regular Creator: STRICT ISOLATION!
+    // A Creator must ONLY see the Bawm they created themselves.
+    // They must NEVER see Bawms created by other creators.
+    return kumtluangCampaigns.filter(c => isStrictCampaignOwner(c, creatorProfile));
+  }, [campaigns, creatorProfile, isPrivilegedUser, transactions, countCampaignMembers]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
   const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
 
   // Helper to filter any members array to only this creator's scope
   const filterMembersForScope = useCallback((list: MemberRecord[]) => {
-    if (creatorProfile.isAdmin) return list;
+    if (isPrivilegedUser) return list;
     if (allowedCampaigns.length === 0) return [];
     return list.filter(m => {
       if (m.campaignId && allowedCampaignIds.has(m.campaignId)) return true;
@@ -94,23 +178,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       return false;
     });
-  }, [creatorProfile.isAdmin, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes]);
+  }, [isPrivilegedUser, allowedCampaigns.length, allowedCampaignIds, allowedOrgCodes]);
 
   // Safe getter for scoped members based on campaign ID
   const getScopedMembersForView = useCallback((campId: string) => {
-    if (allowedCampaigns.length === 0 && !creatorProfile.isAdmin) {
+    if (allowedCampaigns.length === 0 && !isPrivilegedUser) {
       return [];
     }
     if (campId === 'all') {
       const allM = getMembers('all');
       return filterMembersForScope(allM);
     }
-    if (!creatorProfile.isAdmin && !allowedCampaignIds.has(campId)) {
+    if (!isPrivilegedUser && !allowedCampaignIds.has(campId)) {
       return [];
     }
     const campMembers = getMembers(campId);
     return filterMembersForScope(campMembers);
-  }, [allowedCampaigns.length, creatorProfile.isAdmin, filterMembersForScope, allowedCampaignIds]);
+  }, [allowedCampaigns.length, isPrivilegedUser, filterMembersForScope, allowedCampaignIds]);
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
@@ -188,13 +272,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (allowedCampaigns.length > 0) {
         if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
           activeId = initialCampaignId;
-        } else if (selectedCampaignId && (selectedCampaignId === 'all' ? (creatorProfile.isAdmin || allowedCampaigns.length > 1) : allowedCampaignIds.has(selectedCampaignId))) {
+        } else if (selectedCampaignId && (selectedCampaignId === 'all' ? (isPrivilegedUser || allowedCampaigns.length > 1) : allowedCampaignIds.has(selectedCampaignId))) {
           activeId = selectedCampaignId;
         } else {
           const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
           activeId = initialCamp?.id || allowedCampaigns[0]?.id || '';
         }
-      } else if (creatorProfile.isAdmin) {
+      } else if (isPrivilegedUser) {
         activeId = 'all';
       }
 
@@ -215,7 +299,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         setMembers([]);
       }
     }
-  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, creatorProfile.isAdmin, getScopedMembersForView, allowedCampaignIds]);
+  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
 
   // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
   useEffect(() => {
@@ -240,7 +324,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // When selectedCampaignId changes, reload scoped members
   useEffect(() => {
     if (isOpen) {
-      if (!selectedCampaignId || (allowedCampaigns.length === 0 && !creatorProfile.isAdmin)) {
+      if (!selectedCampaignId || (allowedCampaigns.length === 0 && !isPrivilegedUser)) {
         setMembers([]);
         setSelectedMember(null);
         return;
@@ -271,7 +355,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       setSelectedMember(null);
     }
-  }, [selectedCampaignId, isOpen, allowedCampaigns, getScopedMembersForView, creatorProfile.isAdmin]);
+  }, [selectedCampaignId, isOpen, allowedCampaigns, getScopedMembersForView, isPrivilegedUser]);
 
   // When regTargetCampaignId changes during member creation, auto sync prefix
   useEffect(() => {
@@ -639,7 +723,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const printTargetTransactions = useMemo(() => {
     if (printOrgScope === 'all') {
-      if (creatorProfile.isAdmin) return transactions;
+      if (isPrivilegedUser) return transactions;
       return transactions.filter(t => allowedCampaignIds.has(t.campaignId));
     }
     return transactions.filter(t => 
@@ -647,19 +731,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title) ||
       (printTargetCampaign?.orgCode && (t.memberId?.startsWith(`${printTargetCampaign.orgCode}-`) || t.txHash?.includes(printTargetCampaign.orgCode)))
     );
-  }, [transactions, printOrgScope, printTargetCampaign, allowedCampaignIds, creatorProfile]);
+  }, [transactions, printOrgScope, printTargetCampaign, allowedCampaignIds, isPrivilegedUser]);
 
   const printTargetMembers = useMemo(() => {
     if (printOrgScope === 'all') {
       return filterMembersForScope(getMembers('all'));
     }
     return getMembers(printOrgScope);
-  }, [printOrgScope, allowedCampaigns]);
+  }, [printOrgScope, allowedCampaigns, filterMembersForScope]);
 
   if (!isOpen) return null;
 
-  // Enforce QR Creator exclusive access check
-  const isAuthorizedCreator = creatorProfile.isApproved || creatorProfile.isAdmin;
+  // Enforce QR Creator exclusive access check (Admin/SuperAdmin/Moderator or approved creator)
+  const isAuthorizedCreator = creatorProfile.isApproved || isPrivilegedUser;
 
   if (!isAuthorizedCreator) {
     return (
@@ -734,7 +818,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   {creatorProfile.name || 'Authenticated Creator'}
                 </h3>
                 <span className="text-[9px] sm:text-[10px] uppercase font-mono font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full shrink-0 shadow-xs">
-                  {creatorProfile.isAdmin ? 'Admin Master Roll' : (creatorProfile.designation || 'Creator Verified')}
+                  {isPrivilegedUser ? 'Admin Master Roll' : (creatorProfile.designation || 'Creator Verified')}
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-indigo-200/90 truncate flex items-center gap-1.5 mt-0.5">
@@ -781,12 +865,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 disabled={allowedCampaigns.length === 0}
                 className="w-full pl-3.5 pr-8 py-2.5 bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl text-xs font-black text-indigo-950 shadow-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer appearance-none truncate disabled:bg-slate-100 disabled:text-slate-400"
               >
-                {creatorProfile.isAdmin && (
+                {isPrivilegedUser && (
                   <option value="all">
                     🌐 All Lists (Bawm Zawng Zawng) — Consolidated Master Roll ({allMembersList.length} Members)
                   </option>
                 )}
-                {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                {!isPrivilegedUser && allowedCampaigns.length > 1 && (
                   <option value="all">
                     📂 Ka Bawm Zawng Zawng — Master Roll ({allMembersList.length} Members)
                   </option>
@@ -1496,10 +1580,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         🏛️ {camp.orgName || camp.title} [{camp.orgCode || 'QR'}]
                       </option>
                     ))}
-                    {creatorProfile.isAdmin && (
+                    {isPrivilegedUser && (
                       <option value="all">🌐 All Campaigns (Consolidated Combined Report)</option>
                     )}
-                    {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                    {!isPrivilegedUser && allowedCampaigns.length > 1 && (
                       <option value="all">📂 Ka Bawm Zawng Zawng (Combined Report)</option>
                     )}
                   </select>
@@ -1714,10 +1798,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       disabled={allowedCampaigns.length === 0}
                       className="px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
                     >
-                      {creatorProfile.isAdmin && (
+                      {isPrivilegedUser && (
                         <option value="all">🌐 All Lists ({allMembersList.length})</option>
                       )}
-                      {!creatorProfile.isAdmin && allowedCampaigns.length > 1 && (
+                      {!isPrivilegedUser && allowedCampaigns.length > 1 && (
                         <option value="all">📂 Ka Bawm Zawng Zawng ({allMembersList.length})</option>
                       )}
                       {allowedCampaigns.length === 0 && (

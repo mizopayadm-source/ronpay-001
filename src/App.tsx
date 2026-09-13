@@ -432,6 +432,22 @@ export default function App() {
                 setCampaigns(mergedCamps);
               }
             }
+            if (Array.isArray(serverDb.members) && serverDb.members.length > 0) {
+              const localMembers = getMembers();
+              const existingMemberIds = new Set(localMembers.map(m => m.id?.toLowerCase()));
+              let addedMember = false;
+              const mergedMembers = [...localMembers];
+              for (const sm of serverDb.members) {
+                if (sm && sm.id && !existingMemberIds.has(sm.id.toLowerCase())) {
+                  mergedMembers.push(sm);
+                  existingMemberIds.add(sm.id.toLowerCase());
+                  addedMember = true;
+                }
+              }
+              if (addedMember) {
+                saveMembers(mergedMembers);
+              }
+            }
           }
         })
         .catch(() => {});
