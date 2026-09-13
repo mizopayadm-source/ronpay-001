@@ -859,6 +859,299 @@ app.post('/api/phonepe/create-webhook-api', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API 5_scan: Mobile Phone QR Scanner Landing Page (PhonePe PG UAT)
+// Allows reviewers or users to scan the QR code with ANY phone camera/scanner,
+// simulate the payment response, and have the desktop window update in real time!
+// -------------------------------------------------------------
+app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res: Response) => {
+  const txnId = (req.query.txnId || req.query.id || req.query.merchantTransactionId || '') as string;
+  const amtStr = (req.query.amt as string) || '23.00';
+  const rawAmt = Number(amtStr) || 23;
+  const donorName = (req.query.donor as string) || 'Valued Donor';
+  const causeTitle = (req.query.cause as string) || 'RonPay Community Bawm';
+
+  let record = transactionStore[txnId];
+  if (!record && txnId) {
+    const amountInPaise = Math.round(rawAmt * 100);
+    const feePaise = Math.round(amountInPaise * 0.01);
+    record = {
+      merchantTransactionId: txnId,
+      merchantUserId: `USER_${Date.now()}`,
+      amount: amountInPaise,
+      amountRupees: rawAmt,
+      baseAmountRupees: rawAmt - (feePaise / 100),
+      platformFeeRupees: feePaise / 100,
+      feeOption: 'ADD_ON',
+      campaignTitle: causeTitle,
+      donorName: donorName,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      phonePeTransactionId: `T${Date.now()}`,
+      splitDetails: {
+        merchantShare: amountInPaise - feePaise,
+        platformShare: feePaise
+      }
+    };
+    transactionStore[txnId] = record;
+  }
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhonePe PG UAT - Scan & Pay Simulation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --phonepe-purple: #5f259f;
+      --phonepe-dark: #471879;
+      --phonepe-light: #7b2cbf;
+      --emerald: #16a34a;
+      --rose: #dc2626;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body {
+      background-color: #f8f9fa;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 16px;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: #ffffff;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(95, 37, 159, 0.08), 0 1px 3px rgba(0,0,0,0.05);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: linear-gradient(135deg, #5f259f 0%, #471879 100%);
+      padding: 24px 20px;
+      color: #ffffff;
+      text-align: center;
+      position: relative;
+    }
+    .logo-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #5f259f;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .title { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; }
+    .subtitle { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+    .content { padding: 24px 20px; }
+    .amt-box {
+      background: #faf5ff;
+      border: 1.5px dashed #c084fc;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .amt-label { font-size: 11px; font-weight: 700; color: #7e22ce; text-transform: uppercase; letter-spacing: 0.5px; }
+    .amt-value { font-size: 32px; font-weight: 900; color: #5f259f; margin-top: 4px; font-family: monospace; }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .meta-label { color: #64748b; font-weight: 500; }
+    .meta-value { color: #0f172a; font-weight: 700; text-align: right; max-width: 65%; word-break: break-word; }
+    .btn {
+      width: 100%;
+      padding: 15px 20px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      margin-top: 12px;
+    }
+    .btn-success {
+      background: #16a34a;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+    }
+    .btn-success:active { transform: scale(0.98); background: #15803d; }
+    .btn-fail {
+      background: #ffffff;
+      color: #dc2626;
+      border: 1.5px solid #fecaca;
+    }
+    .btn-fail:active { background: #fef2f2; }
+    .result-box {
+      display: none;
+      text-align: center;
+      padding: 30px 20px;
+    }
+    .badge-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 30px;
+    }
+    .badge-success { background: #dcfce7; color: #16a34a; }
+    .badge-fail { background: #fee2e2; color: #dc2626; }
+    .note {
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 16px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo-circle">पे</div>
+      <div class="title">PhonePe PG Sandbox</div>
+      <div class="subtitle">TSPMIZOPAYUAT • UAT Scan & Pay</div>
+    </div>
+
+    <div class="content" id="actionSection">
+      <div class="amt-box">
+        <div class="amt-label">Total Payable</div>
+        <div class="amt-value">₹${rawAmt.toFixed(2)}</div>
+      </div>
+
+      <div class="meta-row">
+        <span class="meta-label">Merchant</span>
+        <span class="meta-value">TSPMIZOPAYUAT</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Payer</span>
+        <span class="meta-value">${donorName}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Cause</span>
+        <span class="meta-value">${causeTitle}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Transaction ID</span>
+        <span class="meta-value" style="font-family: monospace; font-size: 11px;">${txnId}</span>
+      </div>
+
+      <p style="font-size: 12px; color: #64748b; text-align: center; margin: 18px 0 6px;">
+        QR code scanned successfully! Select a simulated response below to proceed:
+      </p>
+
+      <button type="button" class="btn btn-success" id="btnApprove">
+        <span>✅ Authorize Payment (₹${rawAmt.toFixed(2)})</span>
+      </button>
+
+      <button type="button" class="btn btn-fail" id="btnDecline">
+        <span>❌ Decline / Cancel Payment</span>
+      </button>
+
+      <p class="note">
+        PhonePe PG Sandbox Simulation. Clicking Authorize will immediately update the merchant checkout window on your screen.
+      </p>
+    </div>
+
+    <div class="result-box" id="resultSection">
+      <div class="badge-icon badge-success" id="resultBadge">✓</div>
+      <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 6px;" id="resultTitle">Payment Successful!</h2>
+      <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 16px;" id="resultMessage">
+        Amount of ₹${rawAmt.toFixed(2)} has been authorized.<br>
+        <strong>Your desktop checkout screen has automatically updated to the official receipt.</strong>
+      </p>
+      <div style="font-size: 11px; font-family: monospace; color: #64748b; background: #f1f5f9; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px;" id="resultUtr">
+        UTR: UTR${Date.now()}
+      </div>
+      <p style="font-size: 11px; color: #94a3b8;">You may now safely close this browser window.</p>
+    </div>
+  </div>
+
+  <script>
+    const txnId = ${JSON.stringify(txnId)};
+    const amt = ${rawAmt};
+    const donorName = ${JSON.stringify(donorName)};
+    const causeTitle = ${JSON.stringify(causeTitle)};
+
+    async function sendSimulation(status) {
+      document.getElementById('actionSection').style.opacity = '0.5';
+      document.getElementById('btnApprove').disabled = true;
+      document.getElementById('btnDecline').disabled = true;
+
+      try {
+        const resp = await fetch('/api/phonepe/confirm-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchantTransactionId: txnId,
+            status: status === 'SUCCESS' ? 'PAYMENT_SUCCESS' : 'PAYMENT_ERROR',
+            amountInRupees: amt,
+            donorName: donorName,
+            campaignTitle: causeTitle
+          })
+        });
+        const data = await resp.json();
+
+        document.getElementById('actionSection').style.display = 'none';
+        const resultSection = document.getElementById('resultSection');
+        resultSection.style.display = 'block';
+
+        if (status === 'SUCCESS') {
+          document.getElementById('resultBadge').className = 'badge-icon badge-success';
+          document.getElementById('resultBadge').innerText = '✓';
+          document.getElementById('resultTitle').innerText = 'Payment Successful!';
+          document.getElementById('resultMessage').innerHTML = 'Amount of ₹' + amt.toFixed(2) + ' received by TSPMIZOPAYUAT.<br><strong>Your desktop screen has automatically moved to the receipt!</strong>';
+          if (data?.data?.utr) {
+            document.getElementById('resultUtr').innerText = 'UTR: ' + data.data.utr;
+          }
+        } else {
+          document.getElementById('resultBadge').className = 'badge-icon badge-fail';
+          document.getElementById('resultBadge').innerText = '✕';
+          document.getElementById('resultTitle').innerText = 'Payment Declined';
+          document.getElementById('resultMessage').innerText = 'The payment simulation was marked as Failed.';
+          document.getElementById('resultUtr').style.display = 'none';
+        }
+      } catch (e) {
+        alert('Network error communicating with PG server. Please try again.');
+        document.getElementById('actionSection').style.opacity = '1';
+        document.getElementById('btnApprove').disabled = false;
+        document.getElementById('btnDecline').disabled = false;
+      }
+    }
+
+    document.getElementById('btnApprove').addEventListener('click', () => sendSimulation('SUCCESS'));
+    document.getElementById('btnDecline').addEventListener('click', () => sendSimulation('FAILURE'));
+  </script>
+</body>
+</html>`);
+});
+
+// -------------------------------------------------------------
 // API 5a: Dedicated PhonePe PG Sandbox Checkout Gateway Page
 // -------------------------------------------------------------
 app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'], (req: Request, res: Response) => {
