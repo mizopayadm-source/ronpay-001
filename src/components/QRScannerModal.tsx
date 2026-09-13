@@ -372,7 +372,7 @@ interface QRScannerModalProps {
   campaigns: Campaign[];
   onClose: () => void;
   onScanResult?: (scannedPayload: ScannedQRResult) => void;
-  onSelectCampaign?: (campaign: Campaign) => void;
+  onSelectCampaign?: (campaign: Campaign, forceAutoOpenPayment?: boolean) => void;
   onOpenExternalLanding?: (campaign: Campaign) => void;
   onMismatchDetected?: (category: BawmCategory) => void;
   onApproveCampaign?: (campaignId: string) => void;
@@ -457,21 +457,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // 2. If standard App.tsx modal props are provided
     if (result.type === 'pending' && result.campaign) {
       if (onSelectCampaign) {
-        onSelectCampaign(result.campaign);
+        onSelectCampaign(result.campaign, true);
       }
     } else if (result.type === 'general-upi' && result.campaign) {
-      // If the scanned payload has a specific amount or details, route directly to campaign checkout
-      // so the user does not have to re-select or configure everything again from scratch
-      if ((result.campaign.customAmount && result.campaign.customAmount > 0) || (result.campaign.targetAmount && result.campaign.targetAmount > 0)) {
-        if (onSelectCampaign) {
-          onSelectCampaign(result.campaign);
-        } else if (onOpenExternalLanding) {
-          onOpenExternalLanding(result.campaign);
-        }
+      // Direct route to campaign checkout & payment modal so user does not have to configure from scratch
+      if (onSelectCampaign) {
+        onSelectCampaign(result.campaign, true);
       } else if (onOpenExternalLanding) {
         onOpenExternalLanding(result.campaign);
-      } else if (onSelectCampaign) {
-        onSelectCampaign(result.campaign);
       }
     } else if (result.campaign) {
       const activeFilter = targetCategory || categoryFilter || 'any';
@@ -479,11 +472,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         if (onMismatchDetected) {
           onMismatchDetected(result.campaign.category);
         } else if (onSelectCampaign) {
-          onSelectCampaign(result.campaign);
+          onSelectCampaign(result.campaign, true);
         }
       } else {
         if (onSelectCampaign) {
-          onSelectCampaign(result.campaign);
+          onSelectCampaign(result.campaign, true);
         }
       }
     }
