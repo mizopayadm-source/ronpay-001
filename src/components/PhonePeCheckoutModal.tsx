@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   CreditCard,
@@ -188,18 +188,20 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return () => clearInterval(pollInterval);
   }, [isOpen, stage, merchantTxnId]);
 
-  if (!isOpen) return null;
+  // Authentic standard NPCI UPI Intent URI for Scan & Pay
+  // When scanned by ANY UPI app (PhonePe, Google Pay, Paytm, BHIM, etc.) or phone camera scanner,
+  // it opens the UPI payment screen directly to pay the exact amount, NOT opening any web browser or RonPay app!
+  const upiPaymentUri = useMemo(() => {
+    const encName = encodeURIComponent(merchantName);
+    const encNote = encodeURIComponent(`RonPay:${campaign?.id || 'bawm'}:${merchantTxnId}`);
+    return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
+  }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
-
-  // QR Code URL: Direct mobile scan landing page for PhonePe PG Demo!
-  const scanPayUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${totalPayable.toFixed(2)}&donor=${encodeURIComponent(donorName || 'Valued Donor')}&cause=${encodeURIComponent(campaignTitle)}`
-    : `https://ronpay.app/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${totalPayable.toFixed(2)}`;
 
   const handleCopyUpi = () => {
     try {
@@ -209,6 +211,30 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     } catch (e) {
       setCopiedUpi(true);
       setTimeout(() => setCopiedUpi(false), 2000);
+    }
+  };
+
+  // Mobile App Deep-linking for UPI apps
+  const handlePayViaSelectedApp = () => {
+    const encName = encodeURIComponent(merchantName);
+    const encNote = encodeURIComponent(`RonPay:${campaign?.id || 'bawm'}:${merchantTxnId}`);
+    const baseParams = `pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
+
+    let intentUri = `upi://pay?${baseParams}`;
+    if (selectedUpiApp === 'PhonePe') intentUri = `phonepe://pay?${baseParams}`;
+    else if (selectedUpiApp === 'Google Pay') intentUri = `gpay://upi/pay?${baseParams}`;
+    else if (selectedUpiApp === 'Paytm UPI') intentUri = `paytmmp://pay?${baseParams}`;
+    else if (selectedUpiApp === 'BHIM UPI') intentUri = `bhim://pay?${baseParams}`;
+    else if (selectedUpiApp === 'CRED UPI') intentUri = `credpay://upi/pay?${baseParams}`;
+
+    // On mobile devices, launch the installed UPI application
+    if (typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = intentUri;
+      setTimeout(() => {
+        proceedToSimulation(`UPI App (${selectedUpiApp})`);
+      }, 1500);
+    } else {
+      proceedToSimulation(`UPI App (${selectedUpiApp})`);
     }
   };
 
@@ -336,6 +362,8 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       onPaymentSuccess(completedTx);
     }, 800);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
@@ -819,10 +847,10 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               <div 
                                 onClick={() => proceedToSimulation('UPI QR Scan')}
                                 className="relative my-2 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-purple-400 hover:shadow-md transition-all transform hover:scale-[1.01] group"
-                                title="Click QR to Simulate Payment Response"
+                                title="Scan with PhonePe / GPay / Paytm or click to Simulate Payment Response"
                               >
                                 <QRCodeSVG 
-                                  value={scanPayUrl} 
+                                  value={upiPaymentUri} 
                                   size={168} 
                                   level="M" 
                                   includeMargin={false} 
@@ -905,7 +933,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
 
                               <button
                                 type="button"
-                                onClick={() => proceedToSimulation(`UPI App (${selectedUpiApp})`)}
+                                onClick={handlePayViaSelectedApp}
                                 className="w-full mt-4 py-3 px-4 bg-[#5f259f] hover:bg-[#511e89] text-white rounded-xl font-bold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2"
                               >
                                 <Smartphone className="w-4 h-4 text-amber-300" />

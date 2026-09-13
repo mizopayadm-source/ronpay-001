@@ -137,12 +137,16 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
       const existing = allCampaigns.find(c => c.id.toLowerCase() === cleanId.toLowerCase());
       
+      const urlAmtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('target') || searchParams.get('total') || searchParams.get('am');
+      const numUrlAmt = (urlAmtStr && !isNaN(parseFloat(urlAmtStr)) && parseFloat(urlAmtStr) > 0) ? parseFloat(urlAmtStr) : undefined;
+
       if (existing) {
         return {
           screen: 'checkout',
           campaignId: existing.id,
-          campaign: existing,
+          campaign: numUrlAmt ? { ...existing, customAmount: numUrlAmt, targetAmount: numUrlAmt } : existing,
           category: existing.category,
+          isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
         };
       }
 
@@ -190,8 +194,9 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       return {
         screen: 'checkout',
         campaignId: cleanId,
-        campaign: reconstructed,
+        campaign: numUrlAmt ? { ...reconstructed, customAmount: numUrlAmt, targetAmount: numUrlAmt } : reconstructed,
         category: deducedCategory,
+        isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
       };
     }
 

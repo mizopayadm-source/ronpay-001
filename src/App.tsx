@@ -748,10 +748,16 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSelectCampaign = (campaign: Campaign) => {
+  const handleSelectCampaign = (campaign: Campaign, forceAutoOpenPayment: boolean = false) => {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
-    setAutoOpenPhonePeCheckout(false);
+    const hasPresetAmount = Boolean(campaign.customAmount && campaign.customAmount > 0);
+    if (forceAutoOpenPayment || hasPresetAmount) {
+      setAutoOpenPhonePeCheckout(true);
+      setPhonePeCheckoutAmount(campaign.customAmount || campaign.targetAmount || 0);
+    } else {
+      setAutoOpenPhonePeCheckout(false);
+    }
     updateBrowserUrl('checkout', campaign, campaign.category);
     setCurrentScreen('checkout');
     window.scrollTo({ top: 0, behavior: 'smooth' });

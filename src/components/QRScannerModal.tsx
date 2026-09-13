@@ -460,7 +460,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         onSelectCampaign(result.campaign);
       }
     } else if (result.type === 'general-upi' && result.campaign) {
-      if (onOpenExternalLanding) {
+      // If the scanned payload has a specific amount or details, route directly to campaign checkout
+      // so the user does not have to re-select or configure everything again from scratch
+      if ((result.campaign.customAmount && result.campaign.customAmount > 0) || (result.campaign.targetAmount && result.campaign.targetAmount > 0)) {
+        if (onSelectCampaign) {
+          onSelectCampaign(result.campaign);
+        } else if (onOpenExternalLanding) {
+          onOpenExternalLanding(result.campaign);
+        }
+      } else if (onOpenExternalLanding) {
         onOpenExternalLanding(result.campaign);
       } else if (onSelectCampaign) {
         onSelectCampaign(result.campaign);
