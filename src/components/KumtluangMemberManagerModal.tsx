@@ -612,7 +612,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const campaignCounts = useMemo(() => {
     const counts: { [campId: string]: number } = {};
     allowedCampaigns.forEach(c => {
-      counts[c.id] = allMembersList.filter(m => m.campaignId === c.id || (c.orgCode && m.orgCode === c.orgCode)).length;
+      const cOrg = (c.orgCode || '').toUpperCase();
+      counts[c.id] = allMembersList.filter(m => {
+        if (!m) return false;
+        if (m.campaignId === c.id) return true;
+        if (cOrg && m.orgCode && m.orgCode.toUpperCase() === cOrg) return true;
+        if (cOrg && m.id && m.id.split('-')[0].toUpperCase() === cOrg) return true;
+        if (cOrg === 'BMPSHL' && (c.id === 'cmp-1788107291420' || c.id.toLowerCase().includes('bmp'))) return true;
+        return false;
+      }).length;
     });
     return counts;
   }, [allowedCampaigns, allMembersList]);

@@ -1270,15 +1270,88 @@ function getDefaultDatabase(): DatabaseSchema {
   };
 }
 
+function autoHealDatabase(db: DatabaseSchema): boolean {
+  let changed = false;
+
+  // 1. Recover members from transactions if any are missing
+  const memMap = new Map<string, any>();
+  for (const m of (db.members || [])) {
+    if (m && m.id) memMap.set(String(m.id).toLowerCase(), m);
+  }
+
+  for (const t of (db.transactions || [])) {
+    if (t && t.memberId && String(t.memberId).trim()) {
+      const mid = String(t.memberId).trim();
+      const k = mid.toLowerCase();
+      if (!memMap.has(k)) {
+        const orgCode = mid.split('-')[0] || '';
+        const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
+        memMap.set(k, {
+          id: mid,
+          campaignId: t.campaignId || '',
+          name: t.donorName || `Member ${mid}`,
+          orgCode: orgCode.toUpperCase(),
+          phoneLast4: phoneLast4,
+          fullPhone: (t.donorPhone && String(t.donorPhone).length >= 10) ? String(t.donorPhone) : '',
+          section: t.donorVeng || 'Section A',
+          isFamilyHead: true,
+          dependents: [],
+          createdAt: t.timestamp || new Date().toISOString(),
+          status: 'paid'
+        });
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    db.members = Array.from(memMap.values());
+  }
+
+  // 2. Ensure known campaigns exist if campaigns is empty or missing BMP Shillong
+  const campMap = new Map<string, any>();
+  for (const c of (db.campaigns || [])) {
+    if (c && c.id) campMap.set(c.id, c);
+  }
+  if (!campMap.has('cmp-1788107291420')) {
+    campMap.set('cmp-1788107291420', {
+      id: 'cmp-1788107291420',
+      category: 'kumtluang',
+      title: 'BMP Shillong',
+      titleMizo: 'BMP Shillong',
+      orgName: 'BMP Shillong',
+      orgCode: 'BMPSHL',
+      location: 'Shillong, Meghalaya',
+      gpsCoords: '25.5788, 91.8933',
+      upiId: 'bmpshillong@sbi',
+      imageUrl: 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80',
+      subCategories: ['BMP Fund', 'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'],
+      trxnFeeBearer: 'user_paid',
+      sectionLabel: 'Section / Bial',
+      definedSections: ['Section A', 'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'General'],
+      validityDate: '2027-12-31T23:59',
+      status: 'active',
+      createdAt: '2026-08-15T00:00:00Z',
+      createdBy: '9862000001'
+    });
+    db.campaigns = Array.from(campMap.values());
+    changed = true;
+  }
+
+  return changed;
+}
+
 function getDatabase(): DatabaseSchema {
   try {
     if (fs.existsSync(DB_FILE_PATH)) {
       const data = fs.readFileSync(DB_FILE_PATH, 'utf-8');
       if (!data || !data.trim()) {
-        return getDefaultDatabase();
+        const def = getDefaultDatabase();
+        autoHealDatabase(def);
+        return def;
       }
       const parsed = JSON.parse(data);
-      return {
+      const currentDb: DatabaseSchema = {
         campaigns: Array.isArray(parsed?.campaigns) ? parsed.campaigns : [],
         members: Array.isArray(parsed?.members) ? parsed.members : [],
         transactions: Array.isArray(parsed?.transactions) ? parsed.transactions : [],
@@ -1288,11 +1361,17 @@ function getDatabase(): DatabaseSchema {
         auditLogs: Array.isArray(parsed?.auditLogs) ? parsed.auditLogs : [],
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
+      if (autoHealDatabase(currentDb)) {
+        saveDatabase(currentDb);
+      }
+      return currentDb;
     }
   } catch (err) {
     console.warn('Failed reading DB file, falling back to empty schema:', err);
   }
-  return getDefaultDatabase();
+  const def = getDefaultDatabase();
+  autoHealDatabase(def);
+  return def;
 }
 
 function saveDatabase(db: DatabaseSchema) {

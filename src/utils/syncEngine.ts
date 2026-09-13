@@ -84,11 +84,33 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
       if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
         saveStoredCampaigns(serverData.campaigns);
       }
-      if (Array.isArray(serverData.members)) {
-        saveMembers(serverData.members);
+      if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+        const localMembers = getMembers('all');
+        const memMap = new Map<string, any>();
+        for (const m of localMembers) {
+          if (m && m.id) memMap.set(m.id.toLowerCase(), m);
+        }
+        for (const m of serverData.members) {
+          if (m && m.id) {
+            const k = m.id.toLowerCase();
+            memMap.set(k, { ...(memMap.get(k) || {}), ...m });
+          }
+        }
+        saveMembers(Array.from(memMap.values()));
       }
-      if (Array.isArray(serverData.transactions)) {
-        saveStoredTransactions(serverData.transactions);
+      if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
+        const currentTxs = getStoredTransactions();
+        const txMap = new Map<string, any>();
+        for (const t of currentTxs) {
+          if (t && t.id) txMap.set(t.id.toLowerCase(), t);
+        }
+        for (const t of serverData.transactions) {
+          if (t && t.id) {
+            const k = t.id.toLowerCase();
+            txMap.set(k, { ...(txMap.get(k) || {}), ...t });
+          }
+        }
+        saveStoredTransactions(Array.from(txMap.values()));
       }
       if (Array.isArray(serverData.creators)) {
         saveStoredCreatorsList(serverData.creators);

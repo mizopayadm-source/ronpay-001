@@ -1497,6 +1497,359 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-25T00:00:00.000Z'
+  },
+  // --- BMP Shillong (cmp-1788107291420) Member Roll ---
+  {
+    id: 'BMPSHL-1718',
+    campaignId: 'cmp-1788107291420',
+    name: 'J Lalsangliana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1718',
+    fullPhone: '',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-15T00:00:00.000Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-1739',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa Thawngphena Tuallawt',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1739',
+    fullPhone: '9366321739',
+    section: 'Bial 1 (Vengchhak)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-15T00:00:00.000Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-4259',
+    campaignId: 'cmp-1788107291420',
+    name: 'Eric C Lallawmpuia',
+    orgCode: 'BMPSHL',
+    phoneLast4: '4259',
+    fullPhone: '8800904259',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-03-15T00:00:00.000Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-0562',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalruatfela Zadeng',
+    orgCode: 'BMPSHL',
+    phoneLast4: '0562',
+    fullPhone: '7642930562',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:21:49.989Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-0520',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalrinawma Hmar',
+    orgCode: 'BMPSHL',
+    phoneLast4: '0520',
+    fullPhone: '8787560520',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:19:28.675Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-8871',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa Vanlalliana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '8871',
+    fullPhone: '9615328871',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:18:40.740Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-1111',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalhruaisanga',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1111',
+    fullPhone: '2222211111',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:18:07.314Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-8526',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalzawmliana Sailo',
+    orgCode: 'BMPSHL',
+    phoneLast4: '8526',
+    fullPhone: '7005338526',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:15:26.267Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-3106',
+    campaignId: 'cmp-1788107291420',
+    name: 'K Lalfakzuala',
+    orgCode: 'BMPSHL',
+    phoneLast4: '3106',
+    fullPhone: '9383193106',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:14:59.224Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-1548',
+    campaignId: 'cmp-1788107291420',
+    name: 'Zothanzuala Hrahsel',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1548',
+    fullPhone: '',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T18:11:34.756Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-5353',
+    campaignId: 'cmp-1788107291420',
+    name: 'Micky Marbanag',
+    orgCode: 'BMPSHL',
+    phoneLast4: '5353',
+    fullPhone: '3532535353',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T17:37:05.710Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-3333',
+    campaignId: 'cmp-1788107291420',
+    name: 'David Lallianzuala',
+    orgCode: 'BMPSHL',
+    phoneLast4: '3333',
+    fullPhone: '4534543333',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T17:36:40.078Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-2445',
+    campaignId: 'cmp-1788107291420',
+    name: 'JH Lalthlanbika',
+    orgCode: 'BMPSHL',
+    phoneLast4: '2445',
+    fullPhone: '2324552445',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T17:36:09.358Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-1133',
+    campaignId: 'cmp-1788107291420',
+    name: 'David Jahau',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1133',
+    fullPhone: '6323521133',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T12:06:48.589Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-2079',
+    campaignId: 'cmp-1788107291420',
+    name: 'Richard L Jongte',
+    orgCode: 'BMPSHL',
+    phoneLast4: '2079',
+    fullPhone: '9862712079',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T12:04:53.726Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-6368',
+    campaignId: 'cmp-1788107291420',
+    name: 'Zoliansanga',
+    orgCode: 'BMPSHL',
+    phoneLast4: '6368',
+    fullPhone: '9436156368',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T12:03:27.271Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-7128',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalnuntluanga Vanchhawng',
+    orgCode: 'BMPSHL',
+    phoneLast4: '7128',
+    fullPhone: '8415967128',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T12:02:10.171Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-4610',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa R Lalhmachhuana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '4610',
+    fullPhone: '9436354610',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T12:01:27.790Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-8223',
+    campaignId: 'cmp-1788107291420',
+    name: 'Jackie Lalrinsanga',
+    orgCode: 'BMPSHL',
+    phoneLast4: '8223',
+    fullPhone: '9620998223',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:37:53.546Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-0258',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa B Laltanpuia',
+    orgCode: 'BMPSHL',
+    phoneLast4: '0258',
+    fullPhone: '9436100258',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:37:28.837Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-8999',
+    campaignId: 'cmp-1788107291420',
+    name: 'JH Lallianbika',
+    orgCode: 'BMPSHL',
+    phoneLast4: '8999',
+    fullPhone: '2345678999',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:36:55.552Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-8465',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa Lalramzauva Sailo',
+    orgCode: 'BMPSHL',
+    phoneLast4: '8465',
+    fullPhone: '9436118465',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:36:07.910Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-7944',
+    campaignId: 'cmp-1788107291420',
+    name: 'Upa C Lalbiaktluanga',
+    orgCode: 'BMPSHL',
+    phoneLast4: '7944',
+    fullPhone: '9774487944',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:35:42.937Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-3902',
+    campaignId: 'cmp-1788107291420',
+    name: 'RC Lalliana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '3902',
+    fullPhone: '7005153902',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-31T11:33:22.166Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-1253',
+    campaignId: 'cmp-1788107291420',
+    name: 'J Lalsangliana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '1253',
+    fullPhone: '8635241253',
+    section: 'Bial 1 (Vengchhak)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-30T17:17:12.449Z',
+    status: 'paid'
+  },
+  {
+    id: 'BMPSHL-6709',
+    campaignId: 'cmp-1788107291420',
+    name: 'Lalkhawmuana',
+    orgCode: 'BMPSHL',
+    phoneLast4: '6709',
+    fullPhone: '',
+    section: 'Section A',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-03-22T00:00:00.000Z',
+    status: 'paid'
+  },
+  // --- PCI Sikulpuikawn (cmp-1787771373697) ---
+  {
+    id: 'PCIS-4444',
+    campaignId: 'cmp-1787771373697',
+    name: 'Biaka',
+    orgCode: 'PCIS',
+    phoneLast4: '4444',
+    fullPhone: '',
+    section: 'Bial 1 (Vengchhak)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-26T19:15:27.048Z',
+    status: 'paid'
   }
 ];
 
@@ -1524,6 +1877,41 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     }
 
+    // Self-healing from transactions: If any transactions exist for members not yet in map, automatically recover them!
+    try {
+      const txs = getStoredTransactions();
+      let hasRecovered = false;
+      for (const t of txs) {
+        if (t && t.memberId && String(t.memberId).trim()) {
+          const mid = String(t.memberId).trim();
+          const k = mid.toLowerCase();
+          if (!map.has(k)) {
+            const orgCode = mid.split('-')[0] || '';
+            const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
+            map.set(k, {
+              id: mid,
+              campaignId: t.campaignId || '',
+              name: t.donorName || `Member ${mid}`,
+              orgCode: orgCode.toUpperCase(),
+              phoneLast4: phoneLast4,
+              fullPhone: (t.donorPhone && String(t.donorPhone).length >= 10) ? String(t.donorPhone) : '',
+              section: t.donorVeng || 'Section A',
+              isFamilyHead: true,
+              dependents: [],
+              createdAt: t.timestamp || new Date().toISOString(),
+              status: 'paid'
+            });
+            hasRecovered = true;
+          }
+        }
+      }
+      if (hasRecovered && typeof localStorage !== 'undefined') {
+        localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
+      }
+    } catch (recoverErr) {
+      console.warn('Storage transaction self-healing check:', recoverErr);
+    }
+
     const allMembers = Array.from(map.values());
 
     if (!campaignId || campaignId === 'all') {
@@ -1540,12 +1928,12 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
         return true;
       }
       
-      // 2. Org code match with targetCampaign (e.g. YMAVT === YMAVT)
+      // 2. Org code match with targetCampaign (e.g. BMPSHL === BMPSHL)
       if (targetCampaign && m.orgCode && targetCampaign.orgCode && m.orgCode.toUpperCase() === targetCampaign.orgCode.toUpperCase()) {
         return true;
       }
       
-      // 3. ID prefix match (e.g. YMAVT-1212 starts with YMAVT)
+      // 3. ID prefix match (e.g. BMPSHL-1718 starts with BMPSHL)
       if (targetCampaign?.orgCode && m.id) {
         const prefix = m.id.split('-')[0].toUpperCase();
         if (prefix === targetCampaign.orgCode.toUpperCase()) {
@@ -1553,12 +1941,14 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
         }
       }
 
-      // 4. Backward compatibility
+      // 4. Backward compatibility & direct campaign mappings
       if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') return true;
       if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') return true;
-      if (m.orgCode === 'YMAVT' && (campaignId === 'cmp-kumtluang-ymavt' || campaignId.includes('ymavt') || campaignId.includes('yma-vengthar'))) return true;
+      if (m.orgCode === 'BMPSHL' && (campaignId === 'cmp-1788107291420' || campaignId.toLowerCase().includes('bmp'))) return true;
+      if (m.orgCode === 'YMAVT' && (campaignId === 'cmp-kumtluang-ymavt' || campaignId === 'cmp-1787829303143' || campaignId.includes('ymavt') || campaignId.includes('yma-vengthar'))) return true;
+      if (m.orgCode === 'PCIS' && (campaignId === 'cmp-1787771373697' || campaignId.toLowerCase().includes('pcis') || campaignId.toLowerCase().includes('sikulpuikawn'))) return true;
 
-      // 5. Title / Org Name match (e.g. 'YMA Vengthar' contains 'YMAVT' or 'YMA')
+      // 5. Title / Org Name match (e.g. 'BMP Shillong' contains 'BMPSHL' or 'BMP')
       if (targetCampaign) {
         const campClean = (targetCampaign.orgName || targetCampaign.title || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         const memOrgClean = (m.orgCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
