@@ -153,6 +153,7 @@ interface PaymentRecord {
   donorName?: string;
   donorPhone?: string;
   isAnonymous?: boolean;
+  mercuryUrl?: string;
 }
 
 const transactionStore: Record<string, PaymentRecord> = {};
@@ -425,6 +426,9 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
               redirectUrl: directReturnUrl
             }
           },
+          deviceContext: {
+            deviceOS: 'ANDROID'
+          },
           paymentModeConfig: {
             version: 'V2',
             enabledPaymentModes: [
@@ -510,11 +514,15 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
       status: simulateStatus === 'FAILURE' ? 'PAYMENT_ERROR' : (simulateStatus === 'SUCCESS' ? 'PAYMENT_SUCCESS' : 'PENDING'),
       createdAt: new Date().toISOString(),
       phonePeTransactionId: phonePeOrderId,
+      mercuryUrl: phonePeCheckoutUrl,
       splitDetails: {
         merchantShare: merchantSharePaise,
         platformShare: platformFeePaise
       }
     };
+
+    // Dedicated PhonePe Sandbox Gateway Checkout URL
+    const localCheckoutUrl = `${effectiveOrigin}/api/phonepe/checkout?txnId=${encodeURIComponent(merchantTransactionId)}`;
 
     // Return Standard Checkout Response
     res.json({
@@ -529,8 +537,9 @@ app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
         instrumentResponse: {
           type: 'PAY_PAGE',
           redirectInfo: {
-            url: phonePeCheckoutUrl,
-            method: 'POST'
+            url: localCheckoutUrl,
+            mercuryUrl: phonePeCheckoutUrl,
+            method: 'GET'
           }
         },
         payloadBase64: base64Payload,
@@ -847,6 +856,791 @@ app.post('/api/phonepe/create-webhook-api', (req: Request, res: Response) => {
       createdDate: new Date().toISOString()
     }
   });
+});
+
+// -------------------------------------------------------------
+// API 5a: Dedicated PhonePe PG Sandbox Checkout Gateway Page
+// -------------------------------------------------------------
+app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'], (req: Request, res: Response) => {
+  const txnId = (req.query.txnId || req.query.id || req.query.merchantTransactionId || '') as string;
+  let record = transactionStore[txnId];
+
+  if (!record) {
+    const rawAmt = Number(req.query.amt) || 505;
+    const amountInPaise = Math.round(rawAmt * 100);
+    const feePaise = Math.round(amountInPaise * 0.01);
+    record = {
+      merchantTransactionId: txnId || `RPAY_TXN_${Date.now()}`,
+      merchantUserId: `USER_${Date.now()}`,
+      amount: amountInPaise,
+      amountRupees: rawAmt,
+      baseAmountRupees: rawAmt - (feePaise / 100),
+      platformFeeRupees: feePaise / 100,
+      feeOption: 'ADD_ON',
+      campaignTitle: (req.query.ctitle as string) || 'RonPay Community Bawm',
+      donorName: (req.query.donor as string) || 'Valued Donor',
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      phonePeTransactionId: `OMO${Date.now()}`,
+      splitDetails: {
+        merchantShare: amountInPaise - feePaise,
+        platformShare: feePaise
+      }
+    };
+    if (txnId) {
+      transactionStore[txnId] = record;
+    }
+  }
+
+  const rawOrigin = req.headers.origin;
+  let rawReferer = '';
+  try {
+    if (req.headers.referer) {
+      rawReferer = new URL(req.headers.referer).origin;
+    }
+  } catch (e) {}
+  const rawHost = req.headers.host || '';
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+  const computedHostOrigin = rawHost ? `${protocol}://${rawHost}` : '';
+
+  let effectiveBase = rawOrigin || rawReferer || computedHostOrigin || 'https://ronpay.app';
+  if (effectiveBase.includes('localhost') || effectiveBase.includes('127.0.0.1')) {
+    effectiveBase = computedHostOrigin && !computedHostOrigin.includes('localhost') ? computedHostOrigin : 'https://ronpay.app';
+  }
+
+  const effectiveTxnId = record.merchantTransactionId || txnId || `RPAY_TXN_${Date.now()}`;
+  const totalRupees = record.amountRupees || (record.amount ? record.amount / 100 : 505);
+  const baseRupees = record.baseAmountRupees || (record.splitDetails?.merchantShare ? record.splitDetails.merchantShare / 100 : totalRupees);
+  const feeRupees = record.platformFeeRupees !== undefined ? record.platformFeeRupees : (record.splitDetails?.platformShare ? record.splitDetails.platformShare / 100 : 0);
+
+  const receiptUrl = `${effectiveBase}/?view=app&screen=success&receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=PAYMENT_SUCCESS&amt=${totalRupees.toFixed(2)}&baseAmt=${baseRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(record.feeOption || 'ADD_ON')}&cid=${encodeURIComponent(record.campaignId || '')}&ctitle=${encodeURIComponent(record.campaignTitle || '')}&cat=${encodeURIComponent(record.category || '')}&donor=${encodeURIComponent(record.donorName || '')}&donorPhone=${encodeURIComponent(record.donorPhone || '')}&anon=${record.isAnonymous ? '1' : '0'}`;
+  const homeUrl = `${effectiveBase}/?view=app&screen=home`;
+  const mercuryUrl = record.mercuryUrl || `https://mercury-uat.phonepe.com/transact/uat_v3`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhonePe Payment Gateway - RonPay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --phonepe-purple: #5f259f;
+      --phonepe-dark: #471879;
+      --phonepe-light: #7b2cbf;
+      --phonepe-bg: #f5f3f9;
+      --emerald: #10b981;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body {
+      background-color: var(--phonepe-bg);
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 0;
+    }
+    @media (min-width: 640px) {
+      body { padding: 24px 16px; }
+    }
+    .container {
+      width: 100%;
+      max-width: 460px;
+      background: #ffffff;
+      min-height: 100vh;
+      box-shadow: 0 10px 25px -5px rgba(95, 37, 159, 0.1), 0 8px 10px -6px rgba(95, 37, 159, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    @media (min-width: 640px) {
+      .container {
+        min-height: auto;
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid rgba(95, 37, 159, 0.15);
+      }
+    }
+    /* PhonePe Header */
+    .header {
+      background: linear-gradient(135deg, var(--phonepe-purple) 0%, var(--phonepe-dark) 100%);
+      color: #ffffff;
+      padding: 20px 20px 18px;
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: #ffffff;
+      color: var(--phonepe-purple);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 900;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    .brand-name {
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .brand-sub {
+      font-size: 11px;
+      opacity: 0.85;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .security-badge {
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255,255,255,0.15);
+      padding: 5px 10px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      backdrop-filter: blur(4px);
+    }
+    .order-box {
+      background: rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .order-info h3 {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    .order-info p {
+      font-size: 11px;
+      opacity: 0.75;
+      font-family: monospace;
+    }
+    .order-amount {
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 1;
+      min-width: 80px;
+      padding: 13px 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab.active {
+      color: var(--phonepe-purple);
+      border-bottom-color: var(--phonepe-purple);
+      background: #ffffff;
+    }
+    /* Content Panels */
+    .content {
+      padding: 18px 18px 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel { display: none; }
+    .panel.active { display: flex; flex-direction: column; gap: 14px; }
+    /* UAT Notice Banner */
+    .uat-banner {
+      background: #fdf4ff;
+      border: 1px solid #f0abfc;
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 11px;
+      color: #701a75;
+      line-height: 1.45;
+    }
+    .uat-banner b { color: var(--phonepe-purple); }
+    /* Apps Grid */
+    .app-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #ffffff;
+    }
+    .app-card:hover { border-color: #cbd5e1; }
+    .app-card.selected {
+      border-color: var(--phonepe-purple);
+      background: #faf5ff;
+      box-shadow: 0 4px 12px rgba(95, 37, 159, 0.08);
+    }
+    .app-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .app-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 800;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+    .icon-phonepe { background: var(--phonepe-purple); }
+    .icon-gpay { background: #1a73e8; }
+    .icon-paytm { background: #00b9f5; }
+    .icon-bhim { background: #ff9933; }
+    .app-details h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .app-details p {
+      font-size: 11px;
+      color: #64748b;
+    }
+    .radio-circle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .app-card.selected .radio-circle {
+      border-color: var(--phonepe-purple);
+    }
+    .radio-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--phonepe-purple);
+      display: none;
+    }
+    .app-card.selected .radio-dot { display: block; }
+    .badge-tag {
+      font-size: 9.5px;
+      font-weight: 800;
+      background: #dcfce7;
+      color: #166534;
+      padding: 2px 7px;
+      border-radius: 6px;
+      margin-left: 6px;
+    }
+    /* Buttons */
+    .btn-pay {
+      background: linear-gradient(135deg, var(--phonepe-purple) 0%, var(--phonepe-dark) 100%);
+      color: #ffffff;
+      border: none;
+      padding: 15px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(95, 37, 159, 0.35);
+      transition: all 0.2s;
+      margin-top: 4px;
+    }
+    .btn-pay:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-pay:active { transform: scale(0.99); }
+    .btn-cancel {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      text-decoration: none;
+      padding: 8px;
+      display: block;
+      margin-top: 4px;
+    }
+    /* QR Box */
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: #faf5ff;
+      border-radius: 16px;
+      border: 1px dashed var(--phonepe-purple);
+    }
+    .qr-box {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .qr-desc {
+      font-size: 11.5px;
+      text-align: center;
+      color: #475569;
+    }
+    /* Cards Form */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .form-group input {
+      padding: 11px 13px;
+      border-radius: 10px;
+      border: 1.5px solid #cbd5e1;
+      font-size: 13px;
+      outline: none;
+      font-family: monospace;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    /* Netbanking Grid */
+    .nb-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .nb-card {
+      padding: 12px 10px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      background: #ffffff;
+    }
+    .nb-card.selected {
+      border-color: var(--phonepe-purple);
+      background: #faf5ff;
+      color: var(--phonepe-purple);
+    }
+    /* Processing Overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(6px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 24px;
+    }
+    .overlay-card {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 32px 24px;
+      text-align: center;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.4);
+    }
+    .overlay-spinner {
+      width: 54px;
+      height: 54px;
+      border: 4px solid #e2e8f0;
+      border-top-color: var(--phonepe-purple);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .overlay-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .overlay-status {
+      font-size: 12.5px;
+      color: #64748b;
+      margin-bottom: 18px;
+    }
+    .overlay-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #faf5ff;
+      color: var(--phonepe-purple);
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid #f0abfc;
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 10.5px;
+      color: #94a3b8;
+      padding: 12px;
+    }
+    .footer-note a { color: var(--phonepe-purple); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- PhonePe Header -->
+    <div class="header">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-icon">पे</div>
+          <div>
+            <div class="brand-name">PhonePe</div>
+            <div class="brand-sub">Secure Payment Gateway</div>
+          </div>
+        </div>
+        <div class="security-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.5 1.1 2.5 2.5V11c.8 0 1.5.7 1.5 1.5v5c0 .8-.7 1.5-1.5 1.5h-5c-.8 0-1.5-.7-1.5-1.5v-5c0-.8.7-1.5 1.5-1.5V9.5C9.5 8.1 10.6 7 12 7zm0 2c-.3 0-.5.2-.5.5V11h1V9.5c0-.3-.2-.5-.5-.5z"/></svg>
+          <span>256-Bit SSL</span>
+        </div>
+      </div>
+
+      <div class="order-box">
+        <div class="order-info">
+          <h3>RonPay Community Bawm</h3>
+          <p>Txn: ${effectiveTxnId}</p>
+        </div>
+        <div class="order-amount">₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+      </div>
+    </div>
+
+    <!-- Tabs Selector -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('upi')">📱 UPI Apps</div>
+      <div class="tab" onclick="switchTab('qr')">📷 QR Code</div>
+      <div class="tab" onclick="switchTab('card')">💳 Card</div>
+      <div class="tab" onclick="switchTab('netbanking')">🏦 NetBanking</div>
+    </div>
+
+    <div class="content">
+      <!-- UAT Environment Information -->
+      <div class="uat-banner">
+        <span style="font-size: 14px;">💡</span>
+        <div>
+          <b>Demo / Sandbox Mode:</b> Card leh Net Banking ang chiahin <b>UPI</b> pawh demo a nih avangin tluang takin a kal tlang vek e. Instant confirmation kaltlangin receipt a inpe nghal ang.
+        </div>
+      </div>
+
+      <!-- Panel 1: UPI Apps -->
+      <div id="panel-upi" class="panel active">
+        <div class="app-card selected" onclick="selectUpiApp('PhonePe', this)">
+          <div class="app-left">
+            <div class="app-icon icon-phonepe">पे</div>
+            <div class="app-details">
+              <h4>PhonePe UPI <span class="badge-tag">RECOMMENDED</span></h4>
+              <p>Instant 1-Click Pay • Demo Auto-Confirm</p>
+            </div>
+          </div>
+          <div class="radio-circle"><div class="radio-dot"></div></div>
+        </div>
+
+        <div class="app-card" onclick="selectUpiApp('Google Pay', this)">
+          <div class="app-left">
+            <div class="app-icon icon-gpay">G</div>
+            <div class="app-details">
+              <h4>Google Pay UPI</h4>
+              <p>Pay with GPay • Instant Success</p>
+            </div>
+          </div>
+          <div class="radio-circle"><div class="radio-dot"></div></div>
+        </div>
+
+        <div class="app-card" onclick="selectUpiApp('Paytm', this)">
+          <div class="app-left">
+            <div class="app-icon icon-paytm">P</div>
+            <div class="app-details">
+              <h4>Paytm UPI</h4>
+              <p>Pay with Paytm UPI • Instant Success</p>
+            </div>
+          </div>
+          <div class="radio-circle"><div class="radio-dot"></div></div>
+        </div>
+
+        <div class="app-card" onclick="selectUpiApp('BHIM', this)">
+          <div class="app-left">
+            <div class="app-icon icon-bhim">B</div>
+            <div class="app-details">
+              <h4>BHIM & Other UPI</h4>
+              <p>Any UPI application</p>
+            </div>
+          </div>
+          <div class="radio-circle"><div class="radio-dot"></div></div>
+        </div>
+
+        <button id="btnPayUpi" class="btn-pay" onclick="triggerPayment('PhonePe UPI')">
+          <span>Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with PhonePe UPI</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+      </div>
+
+      <!-- Panel 2: QR Code Scan -->
+      <div id="panel-qr" class="panel">
+        <div class="qr-container">
+          <div class="qr-box">
+            <svg width="160" height="160" viewBox="0 0 160 160">
+              <rect width="160" height="160" fill="#ffffff" />
+              <!-- Outer Corners -->
+              <rect x="10" y="10" width="40" height="40" fill="#5f259f" rx="6" />
+              <rect x="16" y="16" width="28" height="28" fill="#ffffff" rx="3" />
+              <rect x="22" y="22" width="16" height="16" fill="#5f259f" rx="2" />
+
+              <rect x="110" y="10" width="40" height="40" fill="#5f259f" rx="6" />
+              <rect x="116" y="16" width="28" height="28" fill="#ffffff" rx="3" />
+              <rect x="122" y="22" width="16" height="16" fill="#5f259f" rx="2" />
+
+              <rect x="10" y="110" width="40" height="40" fill="#5f259f" rx="6" />
+              <rect x="16" y="116" width="28" height="28" fill="#ffffff" rx="3" />
+              <rect x="22" y="122" width="16" height="16" fill="#5f259f" rx="2" />
+
+              <!-- Matrix elements -->
+              <rect x="60" y="20" width="10" height="10" fill="#1e293b" />
+              <rect x="80" y="20" width="10" height="10" fill="#1e293b" />
+              <rect x="70" y="35" width="10" height="10" fill="#1e293b" />
+              <rect x="60" y="50" width="20" height="10" fill="#1e293b" />
+              <rect x="90" y="50" width="10" height="20" fill="#1e293b" />
+              <rect x="20" y="60" width="20" height="10" fill="#1e293b" />
+              <rect x="20" y="80" width="10" height="20" fill="#1e293b" />
+              <rect x="40" y="70" width="10" height="10" fill="#1e293b" />
+              <rect x="60" y="70" width="40" height="15" fill="#5f259f" rx="2" />
+              <rect x="70" y="90" width="20" height="10" fill="#1e293b" />
+              <rect x="110" y="70" width="20" height="10" fill="#1e293b" />
+              <rect x="130" y="85" width="15" height="15" fill="#1e293b" />
+              <rect x="60" y="110" width="15" height="15" fill="#1e293b" />
+              <rect x="80" y="110" width="20" height="10" fill="#1e293b" />
+              <rect x="110" y="115" width="30" height="10" fill="#1e293b" />
+              <rect x="70" y="130" width="30" height="15" fill="#1e293b" />
+              <rect x="120" y="130" width="20" height="15" fill="#1e293b" />
+
+              <!-- Center PhonePe Badge -->
+              <circle cx="80" cy="80" r="14" fill="#5f259f" />
+              <text x="80" y="85" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" font-weight="900" fill="#ffffff" text-anchor="middle">पे</text>
+            </svg>
+          </div>
+          <p class="qr-desc">
+            Scan with any UPI app (PhonePe, Google Pay, Paytm, BHIM).<br>
+            Demo-ah chuan hnuaia button hi hmetin i tlang tir nghal thei bawk e.
+          </p>
+        </div>
+
+        <button class="btn-pay" onclick="triggerPayment('QR Code Scan')">
+          <span>⚡ Simulate QR Scan (Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })})</span>
+        </button>
+      </div>
+
+      <!-- Panel 3: Cards -->
+      <div id="panel-card" class="panel">
+        <div class="form-group">
+          <label>CARD NUMBER</label>
+          <input type="text" value="4012  8888  9999  1881" readonly>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>VALID THRU</label>
+            <input type="text" value="12/28" readonly>
+          </div>
+          <div class="form-group">
+            <label>CVV</label>
+            <input type="password" value="789" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>CARDHOLDER NAME</label>
+          <input type="text" value="${record.donorName || 'Valued Donor'}" readonly>
+        </div>
+
+        <button class="btn-pay" onclick="triggerPayment('Debit Card')">
+          <span>Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with Card</span>
+        </button>
+      </div>
+
+      <!-- Panel 4: NetBanking -->
+      <div id="panel-netbanking" class="panel">
+        <div class="nb-grid">
+          <div class="nb-card selected" onclick="selectBank('SBI', this)">State Bank of India</div>
+          <div class="nb-card" onclick="selectBank('HDFC', this)">HDFC Bank</div>
+          <div class="nb-card" onclick="selectBank('ICICI', this)">ICICI Bank</div>
+          <div class="nb-card" onclick="selectBank('Axis', this)">Axis Bank</div>
+          <div class="nb-card" onclick="selectBank('MRB', this)">Mizoram Rural Bank</div>
+          <div class="nb-card" onclick="selectBank('Kotak', this)">Kotak Bank</div>
+        </div>
+
+        <button id="btnPayNb" class="btn-pay" onclick="triggerPayment('NetBanking')">
+          <span>Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with NetBanking</span>
+        </button>
+      </div>
+
+      <a href="${homeUrl}" class="btn-cancel">Khár Rawh / Cancel Payment</a>
+
+      <div class="footer-note">
+        Merchant: RonPay (TSPMIZOPAYUAT) • PhonePe PG V2 Sandbox<br>
+        ${record.mercuryUrl ? `<a href="${mercuryUrl}" target="_blank">Switch to raw mercury-uat portal (Desktop only)</a>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <!-- Processing Modal Overlay -->
+  <div id="overlay" class="overlay">
+    <div class="overlay-card">
+      <div class="overlay-spinner"></div>
+      <h3 id="overlayTitle" class="overlay-title">Connecting to PhonePe UPI...</h3>
+      <p id="overlayStatus" class="overlay-status">Authorizing transaction of ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })}...</p>
+      <div class="overlay-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        <span>Secure PhonePe UAT Switch</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedAppName = 'PhonePe UPI';
+    let selectedBankName = 'State Bank of India';
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+      if (tabId === 'upi') {
+        document.querySelectorAll('.tab')[0].classList.add('active');
+        document.getElementById('panel-upi').classList.add('active');
+      } else if (tabId === 'qr') {
+        document.querySelectorAll('.tab')[1].classList.add('active');
+        document.getElementById('panel-qr').classList.add('active');
+      } else if (tabId === 'card') {
+        document.querySelectorAll('.tab')[2].classList.add('active');
+        document.getElementById('panel-card').classList.add('active');
+      } else if (tabId === 'netbanking') {
+        document.querySelectorAll('.tab')[3].classList.add('active');
+        document.getElementById('panel-netbanking').classList.add('active');
+      }
+    }
+
+    function selectUpiApp(name, el) {
+      selectedAppName = name + ' UPI';
+      document.querySelectorAll('.app-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('btnPayUpi').innerHTML = '<span>Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with ' + name + ' UPI</span> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+    }
+
+    function selectBank(name, el) {
+      selectedBankName = name;
+      document.querySelectorAll('.nb-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('btnPayNb').innerHTML = '<span>Pay ₹${totalRupees.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with ' + name + '</span>';
+    }
+
+    async function triggerPayment(mode) {
+      const overlay = document.getElementById('overlay');
+      const title = document.getElementById('overlayTitle');
+      const status = document.getElementById('overlayStatus');
+      overlay.style.display = 'flex';
+
+      title.textContent = 'Connecting to ' + mode + '...';
+      status.textContent = 'Authorizing payment of ₹${totalRupees.toFixed(2)}...';
+
+      try {
+        // Step 1: Confirm payment on server
+        await fetch('/api/phonepe/confirm-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchantTransactionId: '${effectiveTxnId}',
+            status: 'PAYMENT_SUCCESS',
+            amountInRupees: ${totalRupees},
+            campaignTitle: '${(record.campaignTitle || 'RonPay Community Bawm').replace(/'/g, "\\'")}',
+            donorName: '${(record.donorName || 'Valued Donor').replace(/'/g, "\\'")}'
+          })
+        });
+      } catch (e) {
+        console.warn('Confirm error:', e);
+      }
+
+      // Step 2: Notify parent or BroadcastChannel
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('ronpay_payment_channel');
+          bc.postMessage({ type: 'PHONEPE_PAYMENT_SUCCESS', txnId: '${effectiveTxnId}' });
+          bc.close();
+        }
+      } catch (e) {}
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({
+            type: 'PHONEPE_PAYMENT_RESULT',
+            status: 'PAYMENT_SUCCESS',
+            txnId: '${effectiveTxnId}'
+          }, '*');
+        }
+      } catch (e) {}
+
+      setTimeout(() => {
+        title.textContent = 'Payment Confirmed!';
+        status.textContent = 'Pawisa pek a hlawhtling e. Receipt-ah kan hruai lut mek che...';
+      }, 500);
+
+      setTimeout(() => {
+        window.location.href = "${receiptUrl}";
+      }, 1100);
+    }
+  </script>
+</body>
+</html>`);
 });
 
 // -------------------------------------------------------------

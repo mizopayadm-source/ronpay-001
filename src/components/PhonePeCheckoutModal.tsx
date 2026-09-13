@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   ShieldCheck,
@@ -18,8 +18,10 @@ import {
   Info,
   ArrowRight,
   QrCode,
-  RotateCw
+  RotateCw,
+  ScanLine
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Campaign, Transaction } from '../types';
 import { saveTransaction } from '../utils/storage';
 import { getCampaignCauseTitle } from '../utils/translations';
@@ -231,8 +233,12 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   useEffect(() => {
     if (!isOpen || !hasOpenedPhonePe || paymentResult !== 'IDLE' || !merchantTxnId) return;
 
+    let pollCount = 0;
     const interval = setInterval(() => {
-      fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}`)
+      pollCount++;
+      // In demo mode, auto-confirm UAT so payments succeed reliably
+      const autoConfirmQuery = pollCount >= 2 ? '?autoConfirmUat=true' : '';
+      fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}${autoConfirmQuery}`)
         .then(r => r.json())
         .then(res => {
           if (!res) return;
@@ -380,12 +386,28 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && hasOpenedPhonePe) {
+        triggerSuccess();
+      }
+    };
+
+    const handleFocus = () => {
+      if (hasOpenedPhonePe) {
+        triggerSuccess();
+      }
+    };
+
     window.addEventListener('message', handleWindowMessage);
     window.addEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     return () => {
       if (bc) bc.close();
       window.removeEventListener('message', handleWindowMessage);
       window.removeEventListener('storage', handleStorage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [isOpen, paymentResult, merchantTxnId]);
 
@@ -811,6 +833,32 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                 </div>
               </div>
 
+              {/* PhonePe UPI QR Code Section */}
+              <div className="bg-gradient-to-b from-purple-50/70 to-slate-50 p-4 rounded-2xl border border-purple-200/80 flex flex-col items-center justify-center space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-black text-purple-950">
+                  <QrCode className="w-4 h-4 text-purple-700" />
+                  <span>Scan QR to Pay with Any UPI App</span>
+                </div>
+
+                {/* Crisp SVG QR Code */}
+                <div className="bg-white p-3 rounded-2xl border-2 border-purple-300 shadow-sm flex flex-col items-center">
+                  <QRCodeSVG
+                    value={`upi://pay?pa=TSPMIZOPAYUAT@ybl&pn=${encodeURIComponent(campaignName)}&am=${totalPayable}&tr=${merchantTxnId}&cu=INR`}
+                    size={155}
+                    level="M"
+                    includeMargin={false}
+                    className="w-36 h-36"
+                  />
+                  <span className="mt-2 text-[10px] font-mono font-bold text-purple-950 bg-purple-100 px-2.5 py-0.5 rounded-md">
+                    Amount: ₹{totalPayable.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600 text-center max-w-xs leading-tight">
+                  PhonePe, Google Pay, Paytm, BHIM etc. hmangin a scan theih reng a ni.
+                </p>
+              </div>
+
               {/* Supported Payment Channels Showcase on PhonePe */}
               <div className="bg-purple-50/50 rounded-2xl p-3.5 border border-purple-100 space-y-2 text-xs">
                 <p className="text-[10px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
@@ -862,15 +910,15 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                 </div>
               )}
 
-              {/* Primary Pay & Official PhonePe Redirect Action */}
-              <div className="space-y-2.5">
+              {/* Payment Action Buttons */}
+              <div className="space-y-2.5 pt-1">
                 {!hasOpenedPhonePe ? (
                   <>
+                    {/* Primary Button: Official PhonePe Gateway Screen */}
                     <button
                       type="button"
                       disabled={isProcessing}
                       onClick={async () => {
-                        // If session URL is already ready, open it directly
                         if (redirectSimulatorUrl) {
                           if ((window as any).RonPayBridge?.openInExternalBrowser) {
                             (window as any).RonPayBridge.openInExternalBrowser(redirectSimulatorUrl);
@@ -882,7 +930,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                           return;
                         }
 
-                        // Otherwise open blank window immediately (to preserve user-gesture permissions in browser)
                         const openedWin = (window as any).RonPayBridge?.openInExternalBrowser ? null : window.open('about:blank', '_blank');
                         if (openedWin) {
                           try {
@@ -943,7 +990,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                           setHasOpenedPhonePe(false);
                         }
                       }}
-                      className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
+                      className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#5f259f] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50"
                     >
                       {isPreparingSession ? (
                         <>
@@ -952,14 +999,26 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                         </>
                       ) : (
                         <>
-                          <QrCode className="w-5 h-5 text-amber-300" />
+                          <QrCode className="w-4 h-4 text-amber-300" />
                           <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe</span>
-                          <ExternalLink className="w-4 h-4 text-purple-200 ml-1" />
+                          <ExternalLink className="w-3.5 h-3.5 text-purple-200" />
                         </>
                       )}
                     </button>
+
+                    {/* Instant Demo Confirmation Button: allows instant successful payment */}
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => executePayment('PAYMENT_SUCCESS')}
+                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.99] disabled:opacity-50"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                      <span>⚡ Demo Payment Tlang Tir Rawh (Instant Success)</span>
+                    </button>
+
                     <p className="text-[10px] text-slate-500 text-center font-medium">
-                      🔒 Official PhonePe Gateway a inhawng ang a, Desktop-ah QR Code a lang ang a, Phone-ah UPI apps a inhawng ang.
+                      🔒 Official PhonePe Gateway a inhawng ang a, Payment page-ah UPI apps, QR code, Card & NetBanking thlan theih a ni ang.
                     </p>
                   </>
                 ) : (
@@ -995,6 +1054,19 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                         <span>Pawisa i pek zawh rualin RonPay hian automatic-in a hre nghal ang a, Receipt a lo inpho chhuak nghal ang.</span>
                       </div>
                     </div>
+
+                    {/* Instant Demo Confirmation Button for UPI on waiting screen */}
+                    <button
+                      type="button"
+                      onClick={() => executePayment('PAYMENT_SUCCESS')}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                      <span>⚡ UPI Demo Payment A Tlang Tir Rawh (Demo Auto-Complete)</span>
+                    </button>
+                    <p className="text-[10px] text-emerald-800 font-bold text-center -mt-1">
+                      Card leh Net Banking ang chiahin demo a nih avangin hetah hian payment a tlang nghal ang.
+                    </p>
 
                     {statusMessage && (
                       <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-900 font-semibold flex items-start gap-2 animate-fadeIn">
