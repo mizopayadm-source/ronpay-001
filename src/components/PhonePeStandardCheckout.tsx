@@ -15,7 +15,8 @@ import {
   Lock,
   X,
   Copy,
-  Check
+  Check,
+  Globe
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -141,6 +142,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingMessage, setProcessingMessage] = useState<string>('PhonePe Secure Gateway buatsaih mek a ni...');
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
+  const [qrFormat, setQrFormat] = useState<'weblink' | 'upiapp'>('weblink');
 
   // 5 Minutes countdown timer (matches PhonePe UAT: "This page will timeout in 04:17 mins")
   const [timeLeft, setTimeLeft] = useState<number>(298); // ~4 mins 58 secs
@@ -174,6 +176,37 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     const note = encodeURIComponent(`RonPay ${txnId}`);
     return `upi://pay?pa=${merchantVpa}&pn=${encName}&am=${totalAmount.toFixed(2)}&tr=${txnId}&tn=${note}&cu=INR`;
   }, [merchantVpa, merchantName, totalAmount, txnId]);
+
+  // Smart Universal Web Link: recognized by ALL Web QR Scanners, Google Lens, Phone Cameras, and browsers
+  const scanPayWebLink = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    const encDonor = encodeURIComponent(donorName || 'Valued Donor');
+    const encCause = encodeURIComponent(campaignTitle || 'RonPay Bawm');
+    const campId = campaignId || 'cmp-custom';
+    return `${origin}/api/phonepe/scan-pay?campaign=${campId}&txnId=${txnId}&amt=${totalAmount.toFixed(2)}&donor=${encDonor}&cause=${encCause}&mid=${merchantName}`;
+  }, [txnId, totalAmount, donorName, campaignTitle, campaignId, merchantName]);
+
+  const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiIntentUri) : upiIntentUri;
+
+  // Real-time polling for remote phone scans/authorization
+  useEffect(() => {
+    if (stage !== 'checkout' || !txnId) return;
+    const pollInterval = setInterval(async () => {
+      try {
+        const resp = await fetch(`/api/phonepe/status/${txnId}`);
+        const data = await resp.json();
+        if (data.success && (data.data?.status === 'SUCCESS' || data.data?.status === 'PAYMENT_SUCCESS')) {
+          clearInterval(pollInterval);
+          handleCompletePayment('PhonePe QR Scan (Remote Mobile Verified)');
+        }
+      } catch (e) {
+        // network retry
+      }
+    }, 1500);
+
+    return () => clearInterval(pollInterval);
+  }, [stage, txnId]);
 
   // Specific App Intent URIs
   const getAppUri = (app: 'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'other' | null) => {
@@ -605,7 +638,37 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="p-4 bg-purple-50/40 rounded-xl border border-purple-100 flex flex-col items-center justify-center space-y-3">
+                  <div className="p-4 bg-purple-50/40 rounded-xl border border-purple-100 flex flex-col items-center justify-center space-y-2.5">
+                    {/* QR Format Selector: Web Link QR vs Direct UPI App QR */}
+                    <div className="flex items-center justify-center p-1 bg-white rounded-xl border border-slate-200 w-full max-w-[280px] text-xs font-semibold shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setQrFormat('weblink')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
+                          qrFormat === 'weblink'
+                            ? 'bg-purple-50 text-[#5f259f] border border-purple-200 font-bold shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                        title="Produces a real clickable HTTPS Web Link for Web Scanners and Phone Cameras"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Web Link QR</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQrFormat('upiapp')}
+                        className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
+                          qrFormat === 'upiapp'
+                            ? 'bg-purple-50 text-[#5f259f] border border-purple-200 font-bold shadow-2xs'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                        title="Produces an authentic standard upi://pay URI for scanning directly inside UPI apps"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Direct UPI App QR</span>
+                      </button>
+                    </div>
+
                     <div 
                       onClick={() => {
                         setSelectedMethod('qr');
@@ -615,21 +678,53 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                           setStage('simulate_response');
                         }, 900);
                       }}
-                      className="p-2.5 bg-white rounded-xl shadow-xs border border-slate-200 cursor-pointer hover:border-purple-400 transition transform hover:scale-[1.02]"
+                      className="relative p-3 bg-white rounded-xl shadow-xs border border-slate-200 cursor-pointer hover:border-purple-400 transition transform hover:scale-[1.02] group"
                       title="Click or tap to Simulate QR Payment Response"
                     >
                       <QRCodeSVG 
-                        value={upiIntentUri} 
+                        value={activeQrCodeValue} 
                         size={170} 
                         level="M" 
                         includeMargin={false} 
                       />
+                      {/* Purple PhonePe circle in center of QR */}
+                      <div className="absolute inset-0 m-auto w-7 h-7 rounded-full bg-[#5f259f] border-2 border-white shadow-md flex items-center justify-center text-white pointer-events-none">
+                        <span className="text-xs font-black font-sans leading-none">पे</span>
+                      </div>
                     </div>
+
+                    {/* Format indicator & link helper */}
                     <div className="text-center w-full">
+                      {qrFormat === 'weblink' ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10.5px] font-medium text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
+                            🌐 Web QR Scanner, Camera & Google Lens scan atan (Link nei)
+                          </span>
+                          {scanPayWebLink && (
+                            <a
+                              href={scanPayWebLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-purple-600 hover:text-purple-800 underline inline-flex items-center gap-1 mt-0.5 font-medium"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Link test / Phone-ah hawng rawh</span>
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10.5px] font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          📱 PhonePe, GPay, Paytm App in-app scanner direct atan (UPI URI)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-center w-full pt-1">
                       <p className="text-[11px] font-bold text-slate-800">
                         Scan & Pay ₹{totalAmount.toFixed(2)}
                       </p>
-                      <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-slate-500">
+                      <div className="flex items-center justify-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
                         <span className="font-mono">{merchantVpa}</span>
                         <button
                           type="button"
@@ -642,7 +737,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
                       </div>
 
                       {/* Direct button to enter Simulate Payment Response for phone web & mobile users */}
-                      <div className="mt-3 pt-2.5 border-t border-purple-100/80">
+                      <div className="mt-2.5 pt-2 border-t border-purple-100/80">
                         <button
                           type="button"
                           onClick={() => {

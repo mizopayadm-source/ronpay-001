@@ -979,23 +979,44 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
     .meta-value { color: #0f172a; font-weight: 700; text-align: right; max-width: 65%; word-break: break-word; }
     .btn {
       width: 100%;
-      padding: 15px 20px;
-      border-radius: 14px;
-      font-size: 15px;
-      font-weight: 800;
+      padding: 13px 18px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       transition: all 0.15s ease;
-      margin-top: 12px;
+      text-decoration: none;
+      box-sizing: border-box;
+      margin-top: 8px;
     }
+    .btn-phonepe {
+      background: #5f259f;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(95, 37, 159, 0.25);
+    }
+    .btn-phonepe:hover, .btn-phonepe:active { background: #4e1c84; }
+    .btn-gpay {
+      background: #ffffff;
+      color: #1a73e8;
+      border: 1.5px solid #dadce0;
+    }
+    .btn-gpay:hover, .btn-gpay:active { background: #f8fafd; }
+    .btn-upi {
+      background: #00baf2;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 186, 242, 0.25);
+    }
+    .btn-upi:hover, .btn-upi:active { background: #0099cc; }
     .btn-success {
       background: #16a34a;
       color: #ffffff;
-      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.25);
+      margin-top: 14px;
     }
     .btn-success:active { transform: scale(0.98); background: #15803d; }
     .btn-fail {
@@ -1004,6 +1025,24 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
       border: 1.5px solid #fecaca;
     }
     .btn-fail:active { background: #fef2f2; }
+    .divider-text {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 14px 0 6px;
+    }
+    .divider-text::before, .divider-text::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .divider-text:not(:empty)::before { margin-right: 8px; }
+    .divider-text:not(:empty)::after { margin-left: 8px; }
     .result-box {
       display: none;
       text-align: center;
@@ -1061,9 +1100,23 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
         <span class="meta-value" style="font-family: monospace; font-size: 11px;">${txnId}</span>
       </div>
 
-      <p style="font-size: 12px; color: #64748b; text-align: center; margin: 18px 0 6px;">
-        QR code scanned successfully! Select a simulated response below to proceed:
-      </p>
+      <div class="divider-text">Pay with Mobile UPI App</div>
+
+      <a href="phonepe://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-phonepe">
+        <span style="font-size: 16px; font-weight: 900;">पे</span>
+        <span>Open in PhonePe App</span>
+      </a>
+
+      <a href="gpay://upi/pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-gpay">
+        <span style="font-size: 15px; font-weight: 800;">G</span>
+        <span>Open in Google Pay</span>
+      </a>
+
+      <a href="upi://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-upi">
+        <span>⚡ Open in Any UPI / Paytm</span>
+      </a>
+
+      <div class="divider-text">Or Instant Sandbox Test</div>
 
       <button type="button" class="btn btn-success" id="btnApprove">
         <span>✅ Authorize Payment (₹${rawAmt.toFixed(2)})</span>
@@ -1074,7 +1127,7 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
       </button>
 
       <p class="note">
-        PhonePe PG Sandbox Simulation. Clicking Authorize will immediately update the merchant checkout window on your screen.
+        PhonePe PG Sandbox Simulation. Clicking Authorize or paying in app updates the merchant checkout window on your screen automatically.
       </p>
     </div>
 
