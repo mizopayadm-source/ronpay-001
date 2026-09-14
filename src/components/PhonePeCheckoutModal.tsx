@@ -273,9 +273,10 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
   }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
-  // 2. Dedicated PhonePe PG Sandbox Scan & Pay mobile web portal link
-  // When scanned by phone camera, Google Lens, or mobile QR scanner, it opens the PhonePe PG Sandbox Scan & Pay portal
+  // 2. Official PhonePe PG Sandbox (mercury-uat.phonepe.com) URL
+  // When scanned by phone camera, Google Lens, or mobile QR scanner, it opens the official mercury-uat portal
   const scanPayWebLink = useMemo(() => {
+    if (officialMercuryUrl) return officialMercuryUrl;
     if (typeof window === 'undefined' || !merchantTxnId) return '';
     const origin = window.location.origin;
     const campId = campaign?.id || 'cmp-custom';
@@ -285,11 +286,11 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     const encCat = encodeURIComponent(effectiveCategory);
     const amt = totalPayable.toFixed(2);
     
-    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
-  }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
+    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&redirect=mercury&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
+  }, [officialMercuryUrl, campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
 
-  // Active QR value: 'weblink' provides a real clickable Web Link for Web Scanners, while 'upiapp' provides direct UPI protocol
-  const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiPaymentUri) : upiPaymentUri;
+  // Active QR value: 'weblink' directly encodes the official mercury-uat.phonepe.com checkout URL for Phone Cameras & Web Scanners
+  const activeQrCodeValue = qrFormat === 'weblink' ? (officialMercuryUrl || scanPayWebLink || upiPaymentUri) : upiPaymentUri;
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1201,19 +1202,19 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               <div className="mt-1 text-center">
                                 {qrFormat === 'weblink' ? (
                                   <div className="flex flex-col items-center gap-1">
-                                    <span className="text-[11px] font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                                      🌐 Web QR Scanner, Camera & Google Lens scan atan (Link nei)
+                                    <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs">
+                                      🌐 Phone Camera & Google Lens scan atan (mercury-uat.phonepe.com direct)
                                     </span>
                                     {scanPayWebLink && (
                                       <a
                                         href={scanPayWebLink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-[11px] text-purple-600 hover:text-purple-800 underline inline-flex items-center gap-1 mt-0.5"
+                                        className="text-[11px] text-purple-600 hover:text-purple-800 underline inline-flex items-center gap-1 mt-0.5 font-semibold"
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         <ExternalLink className="w-3 h-3" />
-                                        <span>Link test / Phone-ah hawng rawh</span>
+                                        <span>Open mercury-uat.phonepe.com (Test Link)</span>
                                       </a>
                                     )}
                                   </div>

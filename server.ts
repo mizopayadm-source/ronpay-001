@@ -938,6 +938,11 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
     if (campId) record.campaignId = campId;
   }
 
+  // If mercuryUrl is requested or available for direct scanner redirect, forward immediately
+  if (record?.mercuryUrl && (req.query.redirect === 'mercury' || req.query.direct === '1')) {
+    return res.redirect(record.mercuryUrl);
+  }
+
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="en">
