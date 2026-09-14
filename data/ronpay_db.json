@@ -701,7 +701,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-11T12:51:15.036Z",
-      "updatedAt": "2026-09-14T09:38:01.765Z"
+      "updatedAt": "2026-09-14T12:14:47.249Z"
     },
     {
       "id": "RPAY_TXN_1788875564993_839",
@@ -722,7 +722,7 @@
       "timestamp": "2026-09-08T13:52:51.026Z",
       "txHash": "UTR696655917834",
       "utr": "UTR696655917834",
-      "updatedAt": "2026-09-14T09:38:01.753Z"
+      "updatedAt": "2026-09-14T12:14:47.229Z"
     },
     {
       "id": "RPAY_TXN_1788875553644_907",
@@ -743,7 +743,7 @@
       "timestamp": "2026-09-08T13:52:38.672Z",
       "txHash": "UTR618148947265",
       "utr": "UTR618148947265",
-      "updatedAt": "2026-09-14T09:38:01.753Z"
+      "updatedAt": "2026-09-14T12:14:47.229Z"
     },
     {
       "id": "RPAY_TXN_1788875532650_290",
@@ -764,7 +764,7 @@
       "timestamp": "2026-09-08T13:52:18.117Z",
       "txHash": "UTR905384675706",
       "utr": "UTR905384675706",
-      "updatedAt": "2026-09-14T09:38:01.753Z"
+      "updatedAt": "2026-09-14T12:14:47.229Z"
     },
     {
       "id": "RPAY_TXN_1788871642767_981",
@@ -782,7 +782,7 @@
       "timestamp": "2026-09-08T12:48:13.246Z",
       "txHash": "UTR382203934538",
       "utr": "UTR382203934538",
-      "updatedAt": "2026-09-14T09:38:01.753Z"
+      "updatedAt": "2026-09-14T12:14:47.229Z"
     },
     {
       "id": "RPAY_TXN_1788870120909_917",
@@ -800,7 +800,7 @@
       "timestamp": "2026-09-08T12:22:08.881Z",
       "txHash": "UTR586230560926",
       "utr": "UTR586230560926",
-      "updatedAt": "2026-09-14T09:38:01.752Z"
+      "updatedAt": "2026-09-14T12:14:47.229Z"
     },
     {
       "id": "RPAY-CASH-266865",
@@ -824,7 +824,7 @@
       "periodLabel": "September 2026",
       "timestamp": "2026-09-07T04:52:42.782Z",
       "txHash": "CASH7L4Z8Q4T",
-      "updatedAt": "2026-09-14T09:38:01.751Z"
+      "updatedAt": "2026-09-14T12:14:47.230Z"
     },
     {
       "id": "RPAY-CASH-552295",
@@ -848,7 +848,7 @@
       "periodLabel": "September 2026",
       "timestamp": "2026-09-07T04:51:40.015Z",
       "txHash": "CASHWFVMS8Z2",
-      "updatedAt": "2026-09-14T09:38:01.750Z"
+      "updatedAt": "2026-09-14T12:14:47.230Z"
     },
     {
       "id": "RPAY-CASH-283302",
@@ -865,7 +865,7 @@
       "status": "pending_verification",
       "timestamp": "2026-09-04T08:47:33.835Z",
       "txHash": "CASH3U1XA4VI",
-      "updatedAt": "2026-09-14T09:38:01.749Z"
+      "updatedAt": "2026-09-14T12:14:47.232Z"
     },
     {
       "id": "RPAY-CASH-704860",
@@ -883,7 +883,7 @@
       "remark": "sd",
       "timestamp": "2026-09-04T08:46:40.631Z",
       "txHash": "CASHH4RPAWEN",
-      "updatedAt": "2026-09-14T09:38:01.749Z"
+      "updatedAt": "2026-09-14T12:14:47.232Z"
     },
     {
       "id": "RPAY-826678",
@@ -902,7 +902,7 @@
       "remark": "ll",
       "timestamp": "2026-09-04T08:44:40.680Z",
       "txHash": "UPI702Z559J2N",
-      "updatedAt": "2026-09-14T09:38:01.749Z"
+      "updatedAt": "2026-09-14T12:14:47.232Z"
     },
     {
       "id": "RPAY-990358",
@@ -921,7 +921,7 @@
       "remark": "Ka lo pui ang che",
       "timestamp": "2026-09-04T08:39:43.029Z",
       "txHash": "UPI4ZV5XR42AY",
-      "updatedAt": "2026-09-14T09:38:01.748Z"
+      "updatedAt": "2026-09-14T12:14:47.232Z"
     },
     {
       "id": "BILL-762947",
@@ -938,7 +938,7 @@
       "remark": "Instant BBPS settlement for Municipal Tax (AMC/LMC)",
       "timestamp": "2026-09-01T17:12:42.947Z",
       "txHash": "RPAY1788282762948",
-      "updatedAt": "2026-09-14T09:38:01.741Z"
+      "updatedAt": "2026-09-14T12:14:47.233Z"
     },
     {
       "id": "RPAY-533602",
@@ -957,7 +957,7 @@
       "timestamp": "2026-09-01T11:36:40.393Z",
       "txHash": "UPIZ6YPMU6W",
       "payerUPI": "Google Pay (GPay)",
-      "updatedAt": "2026-09-14T09:38:01.740Z"
+      "updatedAt": "2026-09-14T12:14:47.233Z"
     },
     {
       "id": "RPAY-635175",
@@ -974,7 +974,7 @@
       "status": "completed",
       "timestamp": "2026-09-01T11:25:06.507Z",
       "txHash": "UPIZWPWY4FXJ2",
-      "updatedAt": "2026-09-14T09:38:01.740Z"
+      "updatedAt": "2026-09-14T12:14:47.233Z"
     },
     {
       "timestamp": "2026-09-01T11:14:04.805Z",
@@ -989,7 +989,7 @@
       "id": "RPAY-624583",
       "txHash": "UPIFX23C3XYWO",
       "platformFee": 5,
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "donorName": "Huna",
       "status": "completed"
     },
@@ -1010,7 +1010,7 @@
       "status": "SUCCESS",
       "isAnonymous": false,
       "totalAmount": 505,
-      "updatedAt": "2026-09-14T09:38:01.741Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "isDependent": false,
       "category": "khawlsak",
       "donorVeng": "Bial 1 (Vengchhak)",
@@ -1026,7 +1026,7 @@
       "donorName": "wew",
       "isAnonymous": false,
       "timestamp": "2026-08-29T17:09:13.293Z",
-      "updatedAt": "2026-09-14T09:38:01.720Z",
+      "updatedAt": "2026-09-14T12:14:47.242Z",
       "campaignId": "cmp-ralna-1",
       "txHash": "UPIQBRQW7HZJ",
       "paymentMethod": "online",
@@ -1049,7 +1049,7 @@
       "status": "completed",
       "paymentMethod": "online",
       "timestamp": "2026-08-29T15:05:43.002Z",
-      "updatedAt": "2026-09-14T09:38:01.720Z",
+      "updatedAt": "2026-09-14T12:14:47.242Z",
       "category": "khawlsak"
     },
     {
@@ -1067,7 +1067,7 @@
       "id": "RPAY-770296",
       "campaignId": "cmp-khawlsak-2",
       "timestamp": "2026-08-29T14:51:05.901Z",
-      "updatedAt": "2026-09-14T09:38:01.720Z",
+      "updatedAt": "2026-09-14T12:14:47.243Z",
       "txHash": "UPI4CUS4VZ4YN"
     },
     {
@@ -1075,7 +1075,7 @@
       "id": "RPAY-629927",
       "donorVeng": "Bial 1 (Vengchhak)",
       "txHash": "UPI2YNFZCZ7EE",
-      "updatedAt": "2026-09-14T09:38:01.720Z",
+      "updatedAt": "2026-09-14T12:14:47.204Z",
       "platformFee": 2,
       "campaignId": "cmp-1787569484926",
       "donorName": "Jimmy",
@@ -1095,7 +1095,7 @@
       "status": "completed",
       "id": "RPAY-828424",
       "isAnonymous": true,
-      "updatedAt": "2026-09-14T09:38:01.720Z",
+      "updatedAt": "2026-09-14T12:14:47.204Z",
       "category": "ralna",
       "campaignTitle": "Lianpuii Ralna",
       "paymentMethod": "online",
@@ -1128,16 +1128,16 @@
       "memberId": "YMAVT-5859",
       "totalAmount": 101,
       "txHash": "UPI5JSGSV99NK",
-      "updatedAt": "2026-09-14T09:38:01.720Z"
+      "updatedAt": "2026-09-14T12:14:47.204Z"
     },
     {
       "txHash": "UPI1787937156410RPAY",
-      "category": "others",
+      "category": "khawlsak",
       "amount": 500,
       "status": "completed",
       "donorName": "RonPay User",
       "remark": "Puihna",
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "timestamp": "2026-08-28T17:12:36.410Z",
       "campaignId": "direct-upi-transfer",
       "id": "UPI-156410",
@@ -1170,7 +1170,7 @@
         "Chhiatni Fund": 100
       },
       "donorPhone": "9876737373",
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "timestamp": "2026-08-28T16:48:47.307Z"
     },
     {
@@ -1179,7 +1179,7 @@
       "campaignId": "cmp-1787829303143",
       "donorName": "Valued Donor",
       "id": "RPAY-274764",
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "timestamp": "2026-08-28T16:46:03.800Z",
       "isAnonymous": false,
       "donorVeng": "Bial 1 (Vengchhak)",
@@ -1213,7 +1213,7 @@
       "timestamp": "2026-08-28T13:26:48.700Z",
       "txHash": "UPI61Y6E90J4H",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "periodType": "monthly",
       "platformFee": 1,
       "donorName": "Valued Donor",
@@ -1222,7 +1222,7 @@
     },
     {
       "timestamp": "2026-08-27T16:50:12.219Z",
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "campaignId": "cmp-khawlsak-3",
       "donorName": "Bawiha",
       "category": "khawlsak",
@@ -1250,7 +1250,7 @@
       "platformFee": 5,
       "campaignTitle": "Zothan Damlo Enkawlna Tanpuina",
       "timestamp": "2026-08-27T16:49:01.147Z",
-      "updatedAt": "2026-09-14T09:38:01.721Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "id": "RPAY-970080",
       "campaignId": "cmp-khawlsak-2",
       "donorVeng": "Bial 1 (Vengchhak)",
@@ -1267,7 +1267,7 @@
       "memberId": "YMAVT-1212",
       "category": "kumtluang",
       "timestamp": "2026-08-27T16:30:50.328Z",
-      "updatedAt": "2026-09-14T09:38:01.722Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "id": "RPAY-632972",
       "txHash": "UPI7SXIBGM4PR",
       "donorPhone": "9865321212",
@@ -1285,7 +1285,7 @@
       "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
       "id": "RPAY-147074",
       "txHash": "UPILSVS2FOZP",
-      "updatedAt": "2026-09-14T09:38:01.722Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "status": "completed",
       "memberId": "YMAVT-8466",
       "periodLabel": "August 2026",
@@ -1320,7 +1320,7 @@
       "campaignTitle": "Pi Lalhmingliani Ralna",
       "remark": "Kan ui hle mai che",
       "campaignId": "cmp-ralna-1",
-      "updatedAt": "2026-09-14T09:38:01.722Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "isAnonymous": false,
       "amount": 500,
       "id": "RPAY-CASH-954805"
@@ -1341,7 +1341,7 @@
       "totalAmount": 505,
       "category": "khawlsak",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.722Z",
+      "updatedAt": "2026-09-14T12:14:47.208Z",
       "txHash": "UPI60GNRWJAL6"
     },
     {
@@ -1356,7 +1356,7 @@
       "isAnonymous": false,
       "campaignTitle": "Kunga Tanpuina",
       "txHash": "UPI16XDJZVFB0",
-      "updatedAt": "2026-09-14T09:38:01.722Z",
+      "updatedAt": "2026-09-14T12:14:47.209Z",
       "id": "RPAY-466066",
       "campaignId": "cmp-khawlsak-3",
       "donorName": "Dampuia",
@@ -1371,12 +1371,12 @@
       "id": "RPAY-594237",
       "timestamp": "2026-08-26T19:15:27.048Z",
       "subCategoryBreakdown": {
-        "Tualchhung": 1400,
-        "Relief": 2100,
         "Synod": 1300,
-        "Mission": 2100,
+        "Relief": 2100,
         "Pathian.Ram": 8100,
-        "Xmas": 1600
+        "Mission": 2100,
+        "Xmas": 1600,
+        "Tualchhung": 1400
       },
       "amount": 16600,
       "isAnonymous": false,
@@ -1391,14 +1391,14 @@
       "campaignTitle": "PCI Sikulpuikawn, Aizawl",
       "periodLabel": "August 2026",
       "totalAmount": 16766,
-      "updatedAt": "2026-09-14T09:38:01.722Z"
+      "updatedAt": "2026-09-14T12:14:47.209Z"
     },
     {
       "donorVeng": "Bial 1 (Vengchhak)",
       "amount": 2000,
       "txHash": "UPIC9J0TDJCHO",
       "campaignId": "cmp-khawlsak-3",
-      "updatedAt": "2026-09-14T09:38:01.723Z",
+      "updatedAt": "2026-09-14T12:14:47.209Z",
       "id": "RPAY-354283",
       "donorName": "Rumvunga",
       "platformFee": 20,
@@ -1420,13 +1420,13 @@
       "totalAmount": 10908,
       "periodType": "monthly",
       "subCategoryBreakdown": {
-        "Tualchhung": 1400,
-        "Building Fund": 1300,
         "Christmas": 600,
         "Buhfaitham": 700,
+        "Tualchhung": 1400,
+        "Relief": 500,
+        "Building Fund": 1300,
         "Pathian Ram Zauna": 5100,
-        "Mission": 1200,
-        "Relief": 500
+        "Mission": 1200
       },
       "donorVeng": "Bial 1 (Vengchhak)",
       "status": "completed",
@@ -1437,7 +1437,7 @@
       "donorName": "Rammuanpuia Ralte",
       "id": "RPAY-415701",
       "donorPhone": "9436141460",
-      "updatedAt": "2026-09-14T09:38:01.723Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "isDependent": false,
       "campaignTitle": "BCM Ebenezer, Zobawk",
       "platformFee": 108,
@@ -1458,7 +1458,7 @@
       "status": "completed",
       "timestamp": "2026-08-18T14:30:00.000Z",
       "txHash": "RPAYZONUN03",
-      "updatedAt": "2026-09-14T09:38:01.723Z"
+      "updatedAt": "2026-09-14T12:14:47.204Z"
     },
     {
       "id": "TXN-ZONUN-001",
@@ -1477,7 +1477,7 @@
       "remark": "Sunna leh thlamuanna chhungte hnenah.",
       "timestamp": "2026-08-18T11:20:00.000Z",
       "txHash": "RPAYZONUN01",
-      "updatedAt": "2026-09-14T09:38:01.723Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-BILL-8802",
@@ -1494,7 +1494,7 @@
       "timestamp": "2026-08-18T10:15:00.000Z",
       "txHash": "RPAYBILL0381Y",
       "donorPhone": "9436127234",
-      "updatedAt": "2026-09-14T09:38:01.723Z"
+      "updatedAt": "2026-09-14T12:14:47.204Z"
     },
     {
       "id": "TXN-BILL-8801",
@@ -1511,7 +1511,7 @@
       "timestamp": "2026-08-18T09:40:00.000Z",
       "txHash": "RPAYBILL0192X",
       "donorPhone": "9862358622",
-      "updatedAt": "2026-09-14T09:38:01.724Z"
+      "updatedAt": "2026-09-14T12:14:47.204Z"
     },
     {
       "id": "TXN-ZONUN-002",
@@ -1533,12 +1533,12 @@
       "periodYear": "2026",
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
-        "Mission": 500,
-        "Pathian Ram Zauna": 500
+        "Pathian Ram Zauna": 500,
+        "Mission": 500
       },
       "timestamp": "2026-08-18T08:15:00.000Z",
       "txHash": "RPAYZONUN02",
-      "updatedAt": "2026-09-14T09:38:01.724Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-EBE-8622-08",
@@ -1560,14 +1560,14 @@
       "periodYear": "2026",
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
-        "Tualchhung": 300,
-        "Building Fund": 500,
+        "Pathian Ram Zauna": 1200,
         "Mission": 800,
-        "Pathian Ram Zauna": 1200
+        "Building Fund": 500,
+        "Tualchhung": 300
       },
       "timestamp": "2026-08-18T07:15:00.000Z",
       "txHash": "RPAYEBE862208",
-      "updatedAt": "2026-09-14T09:38:01.724Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-EBE-9912-08",
@@ -1591,12 +1591,12 @@
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
         "Pathian Ram Zauna": 1500,
-        "Mission": 1000,
-        "Building Fund": 500
+        "Building Fund": 500,
+        "Mission": 1000
       },
       "timestamp": "2026-08-18T06:45:00.000Z",
       "txHash": "RPAYEBE991208",
-      "updatedAt": "2026-09-14T09:38:01.725Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "id": "TXN-EBE-1460-08",
@@ -1619,14 +1619,14 @@
       "periodYear": "2026",
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
-        "Mission": 1000,
-        "Building Fund": 500,
+        "Tualchhung": 500,
         "Pathian Ram Zauna": 1500,
-        "Tualchhung": 500
+        "Mission": 1000,
+        "Building Fund": 500
       },
       "timestamp": "2026-08-18T06:30:00.000Z",
       "txHash": "RPAYEBE146008",
-      "updatedAt": "2026-09-14T09:38:01.725Z"
+      "updatedAt": "2026-09-14T12:14:47.200Z"
     },
     {
       "id": "TXN-9013",
@@ -1645,7 +1645,7 @@
       "remark": "Mani phak tawk chawmna",
       "timestamp": "2026-08-17T19:10:00.000Z",
       "txHash": "RPAY9928104B",
-      "updatedAt": "2026-09-14T09:38:01.725Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-9011",
@@ -1662,7 +1662,7 @@
       "remark": "Sunpui chhungte tan thlamuanna kan dilpui e.",
       "timestamp": "2026-08-17T18:30:00.000Z",
       "txHash": "RPAY9928103A",
-      "updatedAt": "2026-09-14T09:38:01.726Z",
+      "updatedAt": "2026-09-14T12:14:47.203Z",
       "donorPhone": "9862311223",
       "donorVeng": "Bungkawn"
     },
@@ -1680,7 +1680,7 @@
       "status": "completed",
       "timestamp": "2026-08-17T17:15:00.000Z",
       "txHash": "RPAY7721992B",
-      "updatedAt": "2026-09-14T09:38:01.726Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-BILL-8803",
@@ -1696,7 +1696,7 @@
       "status": "completed",
       "timestamp": "2026-08-17T16:25:00.000Z",
       "txHash": "RPAYBILL0772Z",
-      "updatedAt": "2026-09-14T09:38:01.726Z",
+      "updatedAt": "2026-09-14T12:14:47.204Z",
       "donorPhone": "8794563120"
     },
     {
@@ -1714,7 +1714,7 @@
       "remark": "Treasurer hnenah cash-a thehluh a ni e.",
       "timestamp": "2026-08-17T14:20:00.000Z",
       "txHash": "RPAYCASH8831",
-      "updatedAt": "2026-09-14T09:38:01.726Z",
+      "updatedAt": "2026-09-14T12:14:47.203Z",
       "donorPhone": "9436155667",
       "donorVeng": "Kanan Veng",
       "verifiedBy": "Malsawmtluangi Fanai",
@@ -1740,14 +1740,14 @@
       "periodYear": "2026",
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
-        "Building Fund": 300,
-        "Tualchhung": 200,
+        "Mission": 700,
         "Pathian Ram Zauna": 800,
-        "Mission": 700
+        "Tualchhung": 200,
+        "Building Fund": 300
       },
       "timestamp": "2026-08-17T11:00:00.000Z",
       "txHash": "RPAYEBE312008",
-      "updatedAt": "2026-09-14T09:38:01.726Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-KTL-5510-08",
@@ -1769,14 +1769,14 @@
       "periodYear": "2026",
       "periodLabel": "August 2026",
       "subCategoryBreakdown": {
-        "Ramthianghlim": 1000,
-        "Biak In Sakna": 2000,
         "Kohhran Hmeichhia": 500,
-        "Synod Mission": 500
+        "Synod Mission": 500,
+        "Biak In Sakna": 2000,
+        "Ramthianghlim": 1000
       },
       "timestamp": "2026-08-17T09:00:00.000Z",
       "txHash": "RPAYKTL551008",
-      "updatedAt": "2026-09-14T09:38:01.727Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "id": "TXN-RALNA-201",
@@ -1795,7 +1795,7 @@
       "remark": "Chhungte thlamuan nan.",
       "timestamp": "2026-08-17T08:30:00.000Z",
       "txHash": "RPAYRALNA201",
-      "updatedAt": "2026-09-14T09:38:01.727Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-RIKRUM-102",
@@ -1814,7 +1814,7 @@
       "remark": "In kang tuartute tanpui nan.",
       "timestamp": "2026-08-16T16:00:00.000Z",
       "txHash": "RPAYRIK102",
-      "updatedAt": "2026-09-14T09:38:01.727Z"
+      "updatedAt": "2026-09-14T12:14:47.203Z"
     },
     {
       "id": "TXN-EBE-5544-08",
@@ -1842,7 +1842,7 @@
       },
       "timestamp": "2026-08-16T15:20:00.000Z",
       "txHash": "RPAYEBE554408",
-      "updatedAt": "2026-09-14T09:38:01.727Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "id": "TXN-KTL-7234-08",
@@ -1871,7 +1871,7 @@
       },
       "timestamp": "2026-08-16T11:40:00.000Z",
       "txHash": "RPAYKTL723408",
-      "updatedAt": "2026-09-14T09:38:01.728Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "isAnonymous": false,
@@ -1889,7 +1889,7 @@
       "donorPhone": "1718",
       "periodMonth": "August",
       "txHash": "RON-SQWVDTRF",
-      "updatedAt": "2026-09-14T09:38:01.728Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "periodType": "monthly",
       "donorName": "J Lalsangliana",
       "category": "khawlsak"
@@ -1900,7 +1900,7 @@
       "periodType": "monthly",
       "periodMonth": "August",
       "status": "SUCCESS",
-      "updatedAt": "2026-09-14T09:38:01.728Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "donorName": "Upa Thawngphena Tuallawt",
       "timestamp": "2026-08-15T00:00:00.000Z",
       "periodYear": "2026",
@@ -1936,13 +1936,13 @@
       "periodLabel": "July 2026",
       "subCategoryBreakdown": {
         "Pathian Ram Zauna": 800,
+        "Mission": 700,
         "Tualchhung": 200,
-        "Building Fund": 300,
-        "Mission": 700
+        "Building Fund": 300
       },
       "timestamp": "2026-07-18T14:30:00.000Z",
       "txHash": "RPAYEBE312007",
-      "updatedAt": "2026-09-14T09:38:01.728Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "id": "TXN-EBE-8622-07",
@@ -1964,14 +1964,14 @@
       "periodYear": "2026",
       "periodLabel": "July 2026",
       "subCategoryBreakdown": {
-        "Mission": 800,
-        "Tualchhung": 300,
         "Building Fund": 500,
+        "Tualchhung": 300,
+        "Mission": 800,
         "Pathian Ram Zauna": 1200
       },
       "timestamp": "2026-07-16T09:30:00.000Z",
       "txHash": "RPAYEBE862207",
-      "updatedAt": "2026-09-14T09:38:01.729Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-EBE-1460-07",
@@ -1993,14 +1993,14 @@
       "periodYear": "2026",
       "periodLabel": "July 2026",
       "subCategoryBreakdown": {
-        "Tualchhung": 500,
-        "Mission": 1000,
         "Pathian Ram Zauna": 1500,
-        "Building Fund": 500
+        "Mission": 1000,
+        "Building Fund": 500,
+        "Tualchhung": 500
       },
       "timestamp": "2026-07-15T08:00:00.000Z",
       "txHash": "RPAYEBE146007",
-      "updatedAt": "2026-09-14T09:38:01.729Z"
+      "updatedAt": "2026-09-14T12:14:47.200Z"
     },
     {
       "id": "TXN-KTL-5510-07",
@@ -2022,14 +2022,14 @@
       "periodYear": "2026",
       "periodLabel": "July 2026",
       "subCategoryBreakdown": {
-        "Synod Mission": 500,
         "Kohhran Hmeichhia": 500,
-        "Biak In Sakna": 2000,
-        "Ramthianghlim": 1000
+        "Ramthianghlim": 1000,
+        "Synod Mission": 500,
+        "Biak In Sakna": 2000
       },
       "timestamp": "2026-07-14T10:15:00.000Z",
       "txHash": "RPAYKTL551007",
-      "updatedAt": "2026-09-14T09:38:01.729Z"
+      "updatedAt": "2026-09-14T12:14:47.202Z"
     },
     {
       "id": "TXN-EBE-8622-06",
@@ -2051,14 +2051,14 @@
       "periodYear": "2026",
       "periodLabel": "June 2026",
       "subCategoryBreakdown": {
-        "Mission": 800,
-        "Pathian Ram Zauna": 1000,
         "Building Fund": 400,
-        "Tualchhung": 300
+        "Mission": 800,
+        "Tualchhung": 300,
+        "Pathian Ram Zauna": 1000
       },
       "timestamp": "2026-06-18T10:00:00.000Z",
       "txHash": "RPAYEBE862206",
-      "updatedAt": "2026-09-14T09:38:01.729Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-EBE-1460-06",
@@ -2080,14 +2080,14 @@
       "periodYear": "2026",
       "periodLabel": "June 2026",
       "subCategoryBreakdown": {
-        "Building Fund": 500,
         "Tualchhung": 300,
-        "Mission": 1000,
-        "Pathian Ram Zauna": 1200
+        "Building Fund": 500,
+        "Pathian Ram Zauna": 1200,
+        "Mission": 1000
       },
       "timestamp": "2026-06-14T09:10:00.000Z",
       "txHash": "RPAYEBE146006",
-      "updatedAt": "2026-09-14T09:38:01.730Z"
+      "updatedAt": "2026-09-14T12:14:47.200Z"
     },
     {
       "id": "TXN-EBE-8622-05",
@@ -2109,14 +2109,14 @@
       "periodYear": "2026",
       "periodLabel": "May 2026",
       "subCategoryBreakdown": {
+        "Building Fund": 400,
         "Mission": 800,
         "Pathian Ram Zauna": 1000,
-        "Building Fund": 400,
         "Tualchhung": 300
       },
       "timestamp": "2026-05-15T11:45:00.000Z",
       "txHash": "RPAYEBE862205",
-      "updatedAt": "2026-09-14T09:38:01.730Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-EBE-1460-05",
@@ -2139,13 +2139,13 @@
       "periodLabel": "May 2026",
       "subCategoryBreakdown": {
         "Pathian Ram Zauna": 1200,
+        "Tualchhung": 300,
         "Building Fund": 500,
-        "Mission": 1000,
-        "Tualchhung": 300
+        "Mission": 1000
       },
       "timestamp": "2026-05-12T10:20:00.000Z",
       "txHash": "RPAYEBE146005",
-      "updatedAt": "2026-09-14T09:38:01.730Z"
+      "updatedAt": "2026-09-14T12:14:47.200Z"
     },
     {
       "id": "TXN-EBE-1460-04",
@@ -2167,14 +2167,14 @@
       "periodYear": "2026",
       "periodLabel": "April 2026",
       "subCategoryBreakdown": {
-        "Building Fund": 500,
         "Pathian Ram Zauna": 1200,
         "Mission": 1000,
-        "Tualchhung": 300
+        "Tualchhung": 300,
+        "Building Fund": 500
       },
       "timestamp": "2026-04-10T11:00:00.000Z",
       "txHash": "RPAYEBE146004",
-      "updatedAt": "2026-09-14T09:38:01.731Z"
+      "updatedAt": "2026-09-14T12:14:47.200Z"
     },
     {
       "id": "TXN-EBE-1460-03",
@@ -2196,14 +2196,14 @@
       "periodYear": "2026",
       "periodLabel": "March 2026",
       "subCategoryBreakdown": {
+        "Building Fund": 500,
         "Mission": 1000,
-        "Tualchhung": 300,
         "Pathian Ram Zauna": 1200,
-        "Building Fund": 500
+        "Tualchhung": 300
       },
       "timestamp": "2026-03-15T09:45:00.000Z",
       "txHash": "RPAYEBE146003",
-      "updatedAt": "2026-09-14T09:38:01.733Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "campaignId": "cmp-1788107291420",
@@ -2218,7 +2218,7 @@
       "periodLabel": "March 2026",
       "txHash": "RON-MGVL969F",
       "donorName": "Eric C Lallawmpuia",
-      "updatedAt": "2026-09-14T09:38:01.733Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "isAnonymous": false,
       "periodType": "monthly",
       "memberId": "BMPSHL-4259",
@@ -2243,7 +2243,7 @@
       "memberId": "BMPSHL-1718",
       "isAnonymous": false,
       "donorName": "J Lalsangliana",
-      "updatedAt": "2026-09-14T09:38:01.733Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "campaignId": "cmp-1788107291420",
       "category": "khawlsak"
     },
@@ -2254,7 +2254,7 @@
       "paymentMethod": "cash",
       "periodYear": "2026",
       "campaignId": "cmp-1788107291420",
-      "updatedAt": "2026-09-14T09:38:01.733Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "donorName": "Upa Thawngphena Tuallawt",
       "periodType": "monthly",
       "status": "SUCCESS",
@@ -2281,7 +2281,7 @@
       "periodMonth": "February",
       "status": "SUCCESS",
       "id": "TXN-465080",
-      "updatedAt": "2026-09-14T09:38:01.737Z",
+      "updatedAt": "2026-09-14T12:14:47.246Z",
       "donorName": "J Lalsangliana",
       "txHash": "RON-4DNUHOOU",
       "periodType": "monthly",
@@ -2310,13 +2310,13 @@
       "periodLabel": "February 2026",
       "subCategoryBreakdown": {
         "Tualchhung": 300,
-        "Building Fund": 500,
+        "Mission": 1000,
         "Pathian Ram Zauna": 1200,
-        "Mission": 1000
+        "Building Fund": 500
       },
       "timestamp": "2026-02-14T10:00:00.000Z",
       "txHash": "RPAYEBE146002",
-      "updatedAt": "2026-09-14T09:38:01.738Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "id": "TXN-EBE-1460-01",
@@ -2338,14 +2338,14 @@
       "periodYear": "2026",
       "periodLabel": "January 2026",
       "subCategoryBreakdown": {
-        "Tualchhung": 300,
-        "Pathian Ram Zauna": 1200,
         "Mission": 1000,
-        "Building Fund": 500
+        "Tualchhung": 300,
+        "Building Fund": 500,
+        "Pathian Ram Zauna": 1200
       },
       "timestamp": "2026-01-18T11:15:00.000Z",
       "txHash": "RPAYEBE146001",
-      "updatedAt": "2026-09-14T09:38:01.739Z"
+      "updatedAt": "2026-09-14T12:14:47.201Z"
     },
     {
       "periodYear": "2026",
@@ -2359,7 +2359,7 @@
       "status": "pending_verification",
       "isAnonymous": true,
       "donorName": "Anonymous",
-      "updatedAt": "2026-09-14T09:38:01.741Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "campaignId": "cmp-1788107291420",
       "timestamp": "2026-09-03T09:48:25.488Z",
       "id": "RPAY-CASH-756001",
@@ -2385,7 +2385,7 @@
       "campaignTitle": "Pocket Money",
       "platformFee": 0,
       "amount": 200,
-      "updatedAt": "2026-09-14T09:38:01.742Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "isDependent": false,
       "periodType": "monthly",
       "periodLabel": "September 2026",
@@ -2399,7 +2399,7 @@
       "status": "completed",
       "txHash": "CASHBI9H07QO",
       "isAnonymous": true,
-      "updatedAt": "2026-09-14T09:38:01.742Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "platformFee": 0,
       "paymentMethod": "cash",
       "amount": 100,
@@ -2419,7 +2419,7 @@
       "isAnonymous": true,
       "campaignId": "cmp-1787569484926",
       "timestamp": "2026-09-03T11:25:21.932Z",
-      "updatedAt": "2026-09-14T09:38:01.743Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "platformFee": 0,
       "donorName": "Anonymous",
       "category": "ralna",
@@ -2441,7 +2441,7 @@
       "category": "ralna",
       "isAnonymous": true,
       "donorName": "Anonymous",
-      "updatedAt": "2026-09-14T09:38:01.743Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "id": "RPAY-CASH-577936",
       "timestamp": "2026-09-03T11:26:18.762Z",
       "isDependent": false,
@@ -2454,7 +2454,7 @@
     {
       "payerUPI": "PhonePe",
       "timestamp": "2026-09-03T14:21:18.922Z",
-      "updatedAt": "2026-09-14T09:38:01.743Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "campaignId": "cmp-1788262396368",
       "isAnonymous": false,
       "remark": "Condolense",
@@ -2479,7 +2479,7 @@
       "paymentMethod": "online",
       "campaignTitle": "Pocket Money",
       "category": "khawlsak",
-      "updatedAt": "2026-09-14T09:38:01.748Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "totalAmount": 505,
       "isDependent": false,
       "campaignId": "cmp-1788262396368",
@@ -2493,7 +2493,7 @@
       "category": "khawlsak",
       "donorName": "Hjjj",
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.749Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "txHash": "CASHO5D2MYZL",
       "timestamp": "2026-09-04T08:48:06.598Z",
       "campaignTitle": "Pocket Money",
@@ -2518,7 +2518,7 @@
       "campaignTitle": "Pocket Money",
       "platformFee": 0,
       "donorName": "Hjj",
-      "updatedAt": "2026-09-14T09:38:01.749Z",
+      "updatedAt": "2026-09-14T12:14:47.232Z",
       "timestamp": "2026-09-04T09:02:24.610Z",
       "txHash": "CASHLQALR3DU",
       "isAnonymous": false,
@@ -2534,7 +2534,7 @@
       "donorName": "sdas",
       "timestamp": "2026-09-04T09:05:03.948Z",
       "category": "ralna",
-      "updatedAt": "2026-09-11T12:54:10.888Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "platformFee": 0,
       "txHash": "CASHA81PBX4N",
       "id": "RPAY-CASH-805810",
@@ -2553,7 +2553,7 @@
       "isAnonymous": false,
       "isDependent": false,
       "totalAmount": 505,
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "id": "RPAY-229214",
       "timestamp": "2026-09-04T09:05:45.518Z",
       "amount": 500,
@@ -2566,7 +2566,7 @@
     {
       "txHash": "CASHKGUO48DS",
       "id": "RPAY-CASH-419822",
-      "updatedAt": "2026-09-11T12:54:10.888Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "timestamp": "2026-09-04T09:32:31.360Z",
       "platformFee": 0,
       "category": "khawlsak",
@@ -2583,7 +2583,7 @@
     {
       "platformFee": 0,
       "donorName": "Remlala",
-      "updatedAt": "2026-09-11T12:54:10.888Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "timestamp": "2026-09-04T09:54:15.429Z",
       "status": "pending_verification",
       "amount": 2000,
@@ -2611,7 +2611,7 @@
       "id": "RPAY-CASH-298359",
       "donorPhone": "7005153902",
       "txHash": "CASHNYOPRDJC",
-      "updatedAt": "2026-09-14T09:38:01.749Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "isAnonymous": false,
       "paymentMethod": "cash"
     },
@@ -2619,7 +2619,7 @@
       "status": "pending_verification",
       "category": "khawlsak",
       "paymentMethod": "cash",
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "platformFee": 0,
       "campaignTitle": "Pocket Money",
       "donorName": "Biakmuama",
@@ -2647,14 +2647,14 @@
       "platformFee": 0,
       "amount": 500,
       "txHash": "CASHP0PQHEL2",
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "remark": "Cash Approved by Malsawmtluangi Fanai",
       "verifiedAt": "2026-09-04T13:11:15.175Z",
       "verifiedBy": "Malsawmtluangi Fanai"
     },
     {
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "status": "completed",
       "id": "RPAY-CASH-547867",
       "donorName": "Jima",
@@ -2673,7 +2673,7 @@
       "verifiedBy": "Guest Explorer"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "amount": 500,
       "totalAmount": 505,
       "isDependent": false,
@@ -2702,7 +2702,7 @@
       "amount": 500,
       "campaignId": "cmp-1788262396368",
       "totalAmount": 500,
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "isDependent": false,
       "txHash": "CASHZE1KFGFB",
       "id": "RPAY-CASH-200713"
@@ -2717,7 +2717,7 @@
       "timestamp": "2026-09-05T18:37:32.092Z",
       "id": "RPAY-324550",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "paymentMethod": "online",
       "txHash": "UPI7TZGY602CJ",
       "status": "completed",
@@ -2738,7 +2738,7 @@
       "timestamp": "2026-09-07T04:35:06.174Z",
       "status": "completed",
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.750Z",
+      "updatedAt": "2026-09-14T12:14:47.231Z",
       "campaignId": "cmp-1788526889943"
     },
     {
@@ -2746,7 +2746,7 @@
       "txHash": "CASHYP9RAWKO",
       "isAnonymous": true,
       "status": "pending_verification",
-      "updatedAt": "2026-09-11T12:54:10.888Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "amount": 500,
       "campaignId": "cmp-1788262396368",
       "category": "khawlsak",
@@ -2767,7 +2767,7 @@
       "platformFee": 1,
       "campaignId": "cmp-1788526889943",
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "paymentMethod": "online",
       "txHash": "UPI87CTQEU3",
       "isDependent": false,
@@ -2778,7 +2778,7 @@
     },
     {
       "platformFee": 1,
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "totalAmount": 101,
       "campaignTitle": "Lalrinpuii Ralna",
       "status": "completed",
@@ -2817,7 +2817,7 @@
       "totalAmount": 100,
       "paymentMethod": "online",
       "periodMonth": "September",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "donorName": "Anonymous",
       "timestamp": "2026-09-07T13:02:00.898Z"
     },
@@ -2828,7 +2828,7 @@
       "donorName": "Khualmi (Guest User)",
       "timestamp": "2026-09-08T11:44:49.472Z",
       "campaignTitle": "Mobile Recharge Payment",
-      "updatedAt": "2026-09-14T09:38:01.752Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "amount": 299,
       "txHash": "RPAY1788867889472",
       "campaignId": "bill-mobile-recharge",
@@ -2849,7 +2849,7 @@
       "timestamp": "2026-09-08T11:17:04.770Z",
       "donorName": "Khualmi (Guest User)",
       "remark": "Instant BBPS settlement for Mobile Recharge",
-      "updatedAt": "2026-09-14T09:38:01.752Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "amount": 299,
       "txHash": "RPAY1788866224770",
       "category": "others",
@@ -2859,7 +2859,7 @@
       "platformFee": 0,
       "paymentMethod": "online",
       "id": "BILL-818271",
-      "updatedAt": "2026-09-14T09:38:01.752Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "remark": "Instant BBPS settlement for Mobile Recharge",
       "txHash": "RPAY1788864818271",
       "amount": 299,
@@ -2875,7 +2875,7 @@
     {
       "donorName": "Khualmi (Guest User)",
       "timestamp": "2026-09-08T10:43:32.734Z",
-      "updatedAt": "2026-09-14T09:38:01.752Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "status": "completed",
       "donorPhone": "9862300000",
       "campaignTitle": "Mobile Recharge Payment",
@@ -2900,7 +2900,7 @@
       "id": "BILL-773195",
       "campaignTitle": "School & College Fees Payment",
       "campaignId": "bill-school-&-college-fees",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "donorPhone": "8794009999",
       "donorName": "Zonunmawia Pachuau",
       "timestamp": "2026-09-08T10:36:13.195Z",
@@ -2918,7 +2918,7 @@
       "campaignId": "bill-electricity-bill",
       "category": "others",
       "remark": "Instant BBPS settlement for Electricity Bill",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "platformFee": 0,
       "donorName": "Khualmi (Guest User)",
       "timestamp": "2026-09-08T10:33:06.314Z"
@@ -2933,7 +2933,7 @@
       "campaignId": "bill-mobile-recharge",
       "timestamp": "2026-09-08T10:11:22.084Z",
       "donorName": "Khualmi (Guest User)",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "platformFee": 0,
       "id": "BILL-282084",
       "status": "completed",
@@ -2947,7 +2947,7 @@
       "id": "BILL-251316",
       "totalAmount": 299,
       "category": "others",
-      "updatedAt": "2026-09-14T09:38:01.751Z",
+      "updatedAt": "2026-09-14T12:14:47.230Z",
       "campaignTitle": "Mobile Recharge Payment",
       "txHash": "RPAY1788862251316",
       "amount": 299,
@@ -2960,7 +2960,7 @@
     {
       "paymentMethod": "online",
       "txHash": "RPAY1788869395985",
-      "updatedAt": "2026-09-14T09:38:01.752Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "platformFee": 0,
       "campaignTitle": "Mobile Recharge Payment",
       "id": "BILL-395985",
@@ -2981,7 +2981,7 @@
       "totalAmount": 505,
       "category": "ralna",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "txHash": "UTR416893972616",
       "timestamp": "2026-09-08T13:38:05.959Z",
       "campaignId": "cmp-1788526889943",
@@ -2996,7 +2996,7 @@
       "paymentMethod": "phonepe",
       "campaignTitle": "Lalrinpuii Ralna",
       "donorName": "PhonePe UAT Reviewer",
-      "updatedAt": "2026-09-14T09:38:01.753Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "campaignId": "cmp-1788526889943",
       "platformFee": 1,
       "donorPhone": "9862300000",
@@ -3029,7 +3029,7 @@
       "donorVeng": "Aizawl",
       "utr": "UTR833313939859",
       "remark": "UAT End-to-End Test Transaction",
-      "updatedAt": "2026-09-14T09:38:01.753Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "totalAmount": 101,
       "donorName": "PhonePe UAT Reviewer",
       "amount": 100
@@ -3041,7 +3041,7 @@
       "amount": 100,
       "donorName": "Anonymous",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "status": "verified",
       "category": "ralna",
       "isDependent": false,
@@ -3058,7 +3058,7 @@
       "txHash": "UTR780266043076",
       "totalAmount": 101,
       "donorPhone": "9862300000",
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.229Z",
       "donorName": "PhonePe UAT Reviewer",
       "campaignTitle": "Lalrinpuii Ralna",
       "platformFee": 1,
@@ -3089,7 +3089,7 @@
       "donorVeng": "Aizawl",
       "id": "RPAY_TXN_1788876136436_534",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.228Z",
       "donorName": "PhonePe UAT Reviewer",
       "status": "verified",
       "txHash": "UTR216230077184"
@@ -3099,7 +3099,7 @@
       "amount": 100,
       "utr": "UTR376908166969",
       "isAnonymous": true,
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.228Z",
       "donorName": "Anonymous",
       "campaignId": "cmp-1788526889943",
       "status": "verified",
@@ -3115,7 +3115,7 @@
     {
       "totalAmount": 101,
       "isAnonymous": true,
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.228Z",
       "category": "ralna",
       "utr": "UTR542666300455",
       "amount": 100,
@@ -3142,7 +3142,7 @@
       "timestamp": "2026-09-08T14:10:01.449Z",
       "isDependent": false,
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.228Z",
       "totalAmount": 100,
       "isAnonymous": true,
       "periodYear": "2026",
@@ -3160,7 +3160,7 @@
       "isAnonymous": true,
       "id": "RPAY_TXN_1788876628720_711",
       "category": "khawlsak",
-      "updatedAt": "2026-09-14T09:38:01.754Z",
+      "updatedAt": "2026-09-14T12:14:47.225Z",
       "campaignId": "cmp-1788262396368",
       "platformFee": 1,
       "txHash": "UTR346416507981",
@@ -3186,7 +3186,7 @@
       "isDependent": false,
       "platformFee": 1,
       "id": "RPAY_TXN_1788877183767_973",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.224Z",
       "campaignTitle": "Lalrinpuii Ralna",
       "category": "ralna",
       "remark": "UAT End-to-End Test Transaction",
@@ -3204,7 +3204,7 @@
       "amount": 100,
       "remark": "UAT End-to-End Test Transaction",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.224Z",
       "campaignId": "cmp-1788526889943",
       "donorVeng": "Aizawl",
       "donorPhone": "9862300000",
@@ -3229,7 +3229,7 @@
       "platformFee": 1,
       "campaignTitle": "Lalrinpuii Ralna",
       "utr": "UTR978829987238",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.223Z",
       "donorName": "PhonePe UAT Reviewer",
       "timestamp": "2026-09-08T16:40:27.587Z",
       "isDependent": false
@@ -3243,7 +3243,7 @@
       "donorName": "Anonymous",
       "paymentMethod": "phonepe",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.223Z",
       "amount": 100,
       "txHash": "UTR193604551028",
       "campaignTitle": "Lalrinpuii Ralna",
@@ -3266,13 +3266,13 @@
       "category": "ralna",
       "totalAmount": 101,
       "txHash": "UTR608706403905",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.223Z",
       "utr": "UTR608706403905",
       "isDependent": false
     },
     {
       "utr": "UTR655561253683",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.223Z",
       "isAnonymous": true,
       "subCategoryBreakdown": {
         "Chhiatni Fund": 100
@@ -3298,7 +3298,7 @@
     {
       "campaignTitle": "Lalrinpuii Ralna",
       "donorPhone": "9862300000",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.223Z",
       "isDependent": false,
       "paymentMethod": "phonepe",
       "totalAmount": 101,
@@ -3320,7 +3320,7 @@
       "feeOption": "ADD_ON",
       "campaignId": "cmp-1788526889943",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "totalAmount": 101,
       "amount": 100,
       "isDependent": false,
@@ -3338,7 +3338,7 @@
     {
       "feeOption": "ADD_ON",
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "utr": "UTR434242281907",
       "platformFee": 1,
       "status": "verified",
@@ -3368,7 +3368,7 @@
       "isAnonymous": true,
       "campaignId": "cmp-1788262396368",
       "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "campaignNetReceived": 100,
       "utr": "UTR575358579338",
       "status": "verified",
@@ -3383,7 +3383,7 @@
       "amount": 100,
       "feeOption": "ADD_ON",
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "category": "ralna",
       "totalAmount": 101,
       "isAnonymous": false,
@@ -3402,7 +3402,7 @@
       "isAnonymous": true,
       "feeOption": "ADD_ON",
       "campaignNetReceived": 100,
-      "updatedAt": "2026-09-14T09:38:01.755Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "campaignId": "cmp-1788526889943",
       "platformFee": 1,
       "utr": "UTR424902285524",
@@ -3422,7 +3422,7 @@
       "feeOption": "ADD_ON",
       "status": "verified",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "totalAmount": 101,
       "category": "khawlsak",
       "campaignId": "cmp-1788262396368",
@@ -3446,7 +3446,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 100
       },
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "platformFee": 0,
       "campaignTitle": "BMP Shillong,",
       "periodLabel": "August 2026",
@@ -3473,7 +3473,7 @@
       "campaignTitle": "Lalrinpuii Ralna",
       "isDependent": false,
       "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "txHash": "UTR995161528652",
       "utr": "UTR995161528652",
       "campaignId": "cmp-1788526889943",
@@ -3488,7 +3488,7 @@
       "utr": "UTR858003968027",
       "category": "ralna",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "paymentMethod": "phonepe",
       "timestamp": "2026-09-09T08:16:00.081Z",
       "platformFee": 1,
@@ -3512,7 +3512,7 @@
       "category": "ralna",
       "campaignTitle": "Lalrinpuii Ralna",
       "status": "verified",
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "platformFee": 1,
       "campaignId": "cmp-1788526889943",
       "amount": 100,
@@ -3525,7 +3525,7 @@
       "paymentMethod": "phonepe",
       "feeOption": "ADD_ON",
       "status": "verified",
-      "updatedAt": "2026-09-14T09:38:01.705Z",
+      "updatedAt": "2026-09-14T12:14:47.222Z",
       "amount": 100,
       "platformFee": 1,
       "campaignTitle": "Lalrinpuii Ralna",
@@ -3547,7 +3547,7 @@
       "id": "RPAY_TXN_1788942310263_975",
       "campaignNetReceived": 100,
       "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "category": "ralna",
       "amount": 100,
       "isAnonymous": false,
@@ -3576,7 +3576,7 @@
       "category": "ralna",
       "status": "verified",
       "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "id": "RPAY_TXN_1788942344993_244",
       "isAnonymous": true,
       "amount": 200,
@@ -3593,7 +3593,7 @@
       "txHash": "UTR722834028473",
       "donorName": "Valued Donor",
       "utr": "UTR722834028473",
-      "updatedAt": "2026-09-14T09:38:01.705Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "amount": 100,
       "campaignNetReceived": 100,
       "paymentMethod": "phonepe",
@@ -3618,7 +3618,7 @@
       "id": "RPAY_TXN_1788948358649_790",
       "campaignTitle": "Lalrinpuii Ralna",
       "timestamp": "2026-09-09T10:06:06.893Z",
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "isAnonymous": false,
       "utr": "UTR492317351698",
       "status": "verified",
@@ -3628,7 +3628,7 @@
     {
       "campaignId": "cmp-1788526889943",
       "utr": "UTR733328115302",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "feeOption": "DEDUCT",
       "category": "ralna",
       "totalAmount": 100,
@@ -3658,7 +3658,7 @@
       "status": "verified",
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1788957323991_201",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "isAnonymous": true,
       "campaignId": "cmp-1788262396368",
       "feeOption": "ADD_ON",
@@ -3678,7 +3678,7 @@
       "donorName": "Anonymous",
       "status": "verified",
       "timestamp": "2026-09-09T12:36:46.095Z",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "paymentMethod": "phonepe",
       "feeOption": "ADD_ON",
       "id": "RPAY_TXN_1788957399977_590",
@@ -3702,7 +3702,7 @@
       "donorName": "Valued Donor",
       "timestamp": "2026-09-09T12:38:19.241Z",
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.705Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "feeOption": "ADD_ON",
       "utr": "UTR246856896893"
     },
@@ -3720,7 +3720,7 @@
       "timestamp": "2026-09-09T12:39:29.710Z",
       "donorName": "Anonymous",
       "feeOption": "DEDUCT",
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "platformFee": 1,
       "campaignTitle": "Lalrinpuii Ralna",
       "status": "verified",
@@ -3731,7 +3731,7 @@
       "donorName": "puii",
       "totalAmount": 101,
       "paymentMethod": "online",
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "id": "RPAY-110350",
       "txHash": "UPILJO65EHSMD",
       "amount": 100,
@@ -3752,7 +3752,7 @@
       "donorName": "Lianhminga",
       "category": "khawlsak",
       "timestamp": "2026-09-01T12:17:30.962Z",
-      "updatedAt": "2026-09-14T09:38:01.741Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "campaignTitle": "Pocket Money",
       "id": "RPAY-776251",
       "isDependent": false,
@@ -3771,7 +3771,7 @@
       "platformFee": 5,
       "isDependent": false,
       "paymentMethod": "online",
-      "updatedAt": "2026-09-14T09:38:01.741Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "txHash": "UPIIYM8X3YQPL",
       "amount": 500,
       "donorName": "Himna",
@@ -3789,7 +3789,7 @@
       "donorName": "Nathanael",
       "amount": 100,
       "txHash": "UPIXEOV6EIW8O",
-      "updatedAt": "2026-09-14T09:38:01.740Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "isDependent": false,
       "remark": "Qr web link enchhinna",
       "category": "khawlsak",
@@ -3813,7 +3813,7 @@
       "memberId": "BMPSHL-0562",
       "paymentMethod": "online",
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.707Z",
+      "updatedAt": "2026-09-14T12:14:47.233Z",
       "donorName": "Lalruatfela Zadeng",
       "periodLabel": "January 2026",
       "isAnonymous": false,
@@ -3844,7 +3844,7 @@
       "campaignId": "cmp-1788107291420",
       "periodType": "monthly",
       "category": "kumtluang",
-      "updatedAt": "2026-09-14T09:38:01.707Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "donorName": "Lalrinawma Hmar",
       "status": "pending_verification",
       "timestamp": "2026-08-31T18:19:28.675Z",
@@ -3878,7 +3878,7 @@
         "BMP Fund": 200
       },
       "periodLabel": "February 2026",
-      "updatedAt": "2026-09-14T09:38:01.707Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "isAnonymous": false,
       "donorName": "Upa Vanlalliana",
       "timestamp": "2026-08-31T18:18:40.740Z",
@@ -3902,7 +3902,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 100
       },
-      "updatedAt": "2026-09-14T09:38:01.708Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "periodMonth": "February",
       "category": "kumtluang",
       "amount": 100,
@@ -3932,7 +3932,7 @@
       "status": "completed",
       "totalAmount": 300,
       "periodMonth": "February",
-      "updatedAt": "2026-09-14T09:38:01.709Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "memberId": "BMPSHL-8526",
       "id": "RPAY-589803",
       "timestamp": "2026-08-31T18:15:26.267Z",
@@ -3958,7 +3958,7 @@
       "isAnonymous": false,
       "category": "kumtluang",
       "status": "pending_verification",
-      "updatedAt": "2026-09-14T09:38:01.710Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "platformFee": 0,
       "isDependent": false,
       "donorName": "K Lalfakzuala",
@@ -3982,7 +3982,7 @@
       "periodLabel": "February 2026",
       "isAnonymous": false,
       "donorName": "Lalruatfela Zadeng",
-      "updatedAt": "2026-09-14T09:38:01.710Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "subCategoryBreakdown": {
         "BMP Fund": 150
       },
@@ -4005,7 +4005,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 400
       },
-      "updatedAt": "2026-09-14T09:38:01.710Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "periodYear": "2026",
       "isAnonymous": false,
       "periodLabel": "February 2026",
@@ -4035,7 +4035,7 @@
       "periodLabel": "February 2026",
       "isAnonymous": false,
       "periodYear": "2026",
-      "updatedAt": "2026-09-14T09:38:01.710Z",
+      "updatedAt": "2026-09-14T12:14:47.234Z",
       "status": "pending_verification",
       "donorName": "Lalrinawma Hmar",
       "timestamp": "2026-08-31T18:11:10.480Z",
@@ -4060,7 +4060,7 @@
       "campaignId": "cmp-1788107291420",
       "periodType": "monthly",
       "category": "kumtluang",
-      "updatedAt": "2026-09-14T09:38:01.711Z",
+      "updatedAt": "2026-09-14T12:14:47.235Z",
       "status": "pending_verification",
       "donorName": "Micky Marbanag",
       "timestamp": "2026-08-31T17:37:05.710Z",
@@ -4078,7 +4078,7 @@
       "timestamp": "2026-08-31T17:36:40.078Z",
       "periodYear": "2026",
       "donorName": "David Lallianzuala",
-      "updatedAt": "2026-09-14T09:38:01.711Z",
+      "updatedAt": "2026-09-14T12:14:47.235Z",
       "campaignTitle": "BMP Shillong,",
       "periodType": "monthly",
       "campaignId": "cmp-1788107291420",
@@ -4110,7 +4110,7 @@
       "campaignTitle": "BMP Shillong,",
       "totalAmount": 505,
       "memberId": "BMPSHL-2445",
-      "updatedAt": "2026-09-14T09:38:01.711Z",
+      "updatedAt": "2026-09-14T12:14:47.235Z",
       "periodMonth": "March",
       "periodLabel": "March 2026",
       "subCategoryBreakdown": {
@@ -4136,7 +4136,7 @@
       "id": "RPAY-CASH-261428",
       "periodYear": "2026",
       "memberId": "BMPSHL-0562",
-      "updatedAt": "2026-09-14T09:38:01.712Z",
+      "updatedAt": "2026-09-14T12:14:47.236Z",
       "periodLabel": "March 2026",
       "isAnonymous": false,
       "donorName": "Lalruatfela Zadeng",
@@ -4184,7 +4184,7 @@
       "subCategory": "BMP Fund",
       "paymentMethod": "cash",
       "platformFee": 2,
-      "updatedAt": "2026-09-14T09:38:01.712Z"
+      "updatedAt": "2026-09-14T12:14:47.236Z"
     },
     {
       "campaignId": "cmp-1788107291420",
@@ -4197,7 +4197,7 @@
       "platformFee": 2,
       "id": "RPAY-CASH-788852",
       "subCategory": "BMP Fund",
-      "updatedAt": "2026-09-14T09:38:01.712Z",
+      "updatedAt": "2026-09-14T12:14:47.237Z",
       "periodYear": "2026",
       "category": "kumtluang",
       "timestamp": "2026-08-31T17:24:22.676Z",
@@ -4219,7 +4219,7 @@
       "campaignId": "cmp-1788107291420",
       "id": "RPAY-CASH-650692",
       "periodType": "monthly",
-      "updatedAt": "2026-09-14T09:38:01.712Z",
+      "updatedAt": "2026-09-14T12:14:47.237Z",
       "donorPhone": "2222211111",
       "category": "kumtluang",
       "donorName": "Lalhruaisanga",
@@ -4253,7 +4253,7 @@
       "isDependent": false,
       "platformFee": 2,
       "subCategory": "BMP Fund",
-      "updatedAt": "2026-09-14T09:38:01.712Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "category": "kumtluang",
       "periodYear": "2026",
       "status": "pending_verification",
@@ -4291,7 +4291,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 300
       },
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "paymentMethod": "cash",
       "donorName": "Zothanzuala Hrahsel",
       "timestamp": "2026-08-31T17:21:38.443Z",
@@ -4304,7 +4304,7 @@
       "periodLabel": "March 2026",
       "periodType": "monthly",
       "donorPhone": "8787560520",
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "subCategory": "BMP Fund",
       "periodYear": "2026",
       "category": "kumtluang",
@@ -4348,11 +4348,11 @@
       "donorName": "Lalrinawma Hmar",
       "totalAmount": 500,
       "timestamp": "2026-08-31T12:09:57.723Z",
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "status": "pending_verification"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "timestamp": "2026-08-31T12:06:48.589Z",
       "donorName": "David Jahau",
       "paymentMethod": "cash",
@@ -4398,7 +4398,7 @@
       "campaignTitle": "BMP Shillong, Shillong",
       "periodMonth": "August",
       "category": "kumtluang",
-      "updatedAt": "2026-09-14T09:38:01.719Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "totalAmount": 1000,
       "id": "RPAY-208230",
       "donorName": "Richard L Jongte",
@@ -4409,7 +4409,7 @@
       "donorPhone": "9436156368",
       "donorName": "Zoliansanga",
       "id": "RPAY-CASH-154320",
-      "updatedAt": "2026-09-14T09:38:01.718Z",
+      "updatedAt": "2026-09-14T12:14:47.238Z",
       "campaignTitle": "BMP Shillong, Shillong",
       "isAnonymous": false,
       "campaignId": "cmp-1788107291420",
@@ -4447,7 +4447,7 @@
       "category": "kumtluang",
       "paymentMethod": "online",
       "id": "RPAY-899387",
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "txHash": "UPIWY573OM8GF",
       "amount": 500,
       "platformFee": 0,
@@ -4472,7 +4472,7 @@
       "id": "RPAY-444713",
       "donorName": "Upa R Lalhmachhuana",
       "memberId": "BMPSHL-4610",
-      "updatedAt": "2026-09-14T09:38:01.718Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "periodYear": "2026",
       "subCategoryBreakdown": {
         "BMP Fund": 1500
@@ -4486,7 +4486,7 @@
       "isDependent": false
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.718Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "donorName": "Eric C Lallawmpuia",
       "subCategoryBreakdown": {
         "BMP Fund": 700
@@ -4527,7 +4527,7 @@
       "id": "RPAY-CASH-843346",
       "donorPhone": "9620998223",
       "campaignTitle": "BMP Shillong, Shillong",
-      "updatedAt": "2026-09-14T09:38:01.713Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "campaignId": "cmp-1788107291420",
       "periodType": "monthly",
       "category": "kumtluang",
@@ -4560,7 +4560,7 @@
       "donorName": "Upa B Laltanpuia",
       "timestamp": "2026-08-31T11:37:28.837Z",
       "memberId": "BMPSHL-0258",
-      "updatedAt": "2026-09-14T09:38:01.713Z"
+      "updatedAt": "2026-09-14T12:14:47.239Z"
     },
     {
       "txHash": "CASHF6HN017I",
@@ -4577,7 +4577,7 @@
       "campaignTitle": "BMP Shillong, Shillong",
       "platformFee": 0,
       "status": "pending_verification",
-      "updatedAt": "2026-09-14T09:38:01.714Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "isDependent": false,
       "category": "kumtluang",
       "isAnonymous": false,
@@ -4600,7 +4600,7 @@
         "BMP Fund": 100
       },
       "totalAmount": 100,
-      "updatedAt": "2026-09-14T09:38:01.715Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "status": "pending_verification",
       "memberId": "BMPSHL-3106",
       "periodLabel": "August 2026",
@@ -4630,7 +4630,7 @@
         "BMP Fund": 500
       },
       "txHash": "CASH1EHG1AXD",
-      "updatedAt": "2026-09-14T09:38:01.716Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "amount": 500,
       "id": "RPAY-CASH-405047",
       "timestamp": "2026-08-31T11:36:07.910Z",
@@ -4659,7 +4659,7 @@
       "memberId": "BMPSHL-7944",
       "donorName": "Upa C Lalbiaktluanga",
       "paymentMethod": "cash",
-      "updatedAt": "2026-09-14T09:38:01.716Z",
+      "updatedAt": "2026-09-14T12:14:47.239Z",
       "amount": 200,
       "txHash": "UPIWZZLOIZ7XP"
     },
@@ -4683,7 +4683,7 @@
       "campaignTitle": "BMP Shillong, Shillong",
       "isAnonymous": false,
       "periodLabel": "August 2026",
-      "updatedAt": "2026-09-14T09:38:01.717Z",
+      "updatedAt": "2026-09-14T12:14:47.240Z",
       "platformFee": 0,
       "memberId": "BMPSHL-8871",
       "isDependent": false
@@ -4699,7 +4699,7 @@
         "BMP Fund": 500
       },
       "id": "RPAY-CASH-349812",
-      "updatedAt": "2026-09-14T09:38:01.717Z",
+      "updatedAt": "2026-09-14T12:14:47.240Z",
       "donorName": "Upa Thawngphena",
       "totalAmount": 500,
       "timestamp": "2026-08-31T11:34:34.284Z",
@@ -4734,7 +4734,7 @@
       "donorPhone": "2222211111",
       "memberId": "BMPSHL-1111",
       "totalAmount": 200,
-      "updatedAt": "2026-09-14T09:38:01.718Z",
+      "updatedAt": "2026-09-14T12:14:47.240Z",
       "periodType": "monthly",
       "campaignId": "cmp-1788107291420"
     },
@@ -4751,7 +4751,7 @@
       "txHash": "CASHV6EATC0Y",
       "amount": 500,
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.719Z",
+      "updatedAt": "2026-09-14T12:14:47.240Z",
       "campaignTitle": "BMP Shillong, Shillong",
       "platformFee": 0,
       "category": "kumtluang",
@@ -4778,7 +4778,7 @@
       "txHash": "CASHMY3Q1XVD",
       "amount": 500,
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.718Z",
+      "updatedAt": "2026-09-14T12:14:47.240Z",
       "timestamp": "2026-08-31T11:32:31.181Z",
       "memberId": "BMPSHL-1548",
       "donorName": "Zothanzuala Hrahsel",
@@ -4812,7 +4812,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 150
       },
-      "updatedAt": "2026-09-14T09:38:01.709Z",
+      "updatedAt": "2026-09-14T12:14:47.241Z",
       "memberId": "BMPSHL-7128",
       "totalAmount": 150,
       "periodMonth": "February"
@@ -4826,7 +4826,7 @@
       "paymentMethod": "cash",
       "timestamp": "2026-08-31T00:00:00.000Z",
       "category": "kumtluang",
-      "updatedAt": "2026-09-14T09:38:01.706Z",
+      "updatedAt": "2026-09-14T12:14:47.241Z",
       "campaignTitle": "BMP Shillong,",
       "id": "RPAY-CASH-631128",
       "isDependent": false,
@@ -4846,7 +4846,7 @@
     },
     {
       "totalAmount": 152,
-      "updatedAt": "2026-09-14T09:38:01.712Z",
+      "updatedAt": "2026-09-14T12:14:47.241Z",
       "periodMonth": "March",
       "timestamp": "2026-08-31T00:00:00.000Z",
       "donorName": "Lalnuntluanga Vanchhawng",
@@ -4887,7 +4887,7 @@
       "periodType": "monthly",
       "status": "SUCCESS",
       "campaignId": "cmp-1788107291420",
-      "updatedAt": "2026-09-14T09:38:01.719Z",
+      "updatedAt": "2026-09-14T12:14:47.242Z",
       "platformFee": 0,
       "donorVeng": "Section A",
       "isDependent": false,
@@ -4908,7 +4908,7 @@
       "id": "RPAY-771843",
       "timestamp": "2026-08-30T17:17:12.449Z",
       "donorName": "J Lalsangliana",
-      "updatedAt": "2026-09-14T09:38:01.756Z",
+      "updatedAt": "2026-09-14T12:14:47.242Z",
       "category": "kumtluang",
       "txHash": "UPIWCP0TIL8XS",
       "amount": 500,
@@ -4945,7 +4945,7 @@
       "donorName": "Lalzawmliana Sailo",
       "isAnonymous": false,
       "periodLabel": "August 2026",
-      "updatedAt": "2026-09-14T09:38:01.719Z",
+      "updatedAt": "2026-09-14T12:14:47.242Z",
       "status": "pending_verification",
       "paymentMethod": "cash"
     },
@@ -4957,7 +4957,7 @@
       "campaignTitle": "BMP Shillong,",
       "txHash": "CASHKWGBMZ53",
       "amount": 200,
-      "updatedAt": "2026-09-14T09:38:01.731Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "category": "kumtluang",
       "timestamp": "2026-03-29T00:00:00.000Z",
       "periodLabel": "March 2026",
@@ -4988,7 +4988,7 @@
       "subCategory": "BMP Fund",
       "txHash": "CASHYS17L9X6",
       "amount": 500,
-      "updatedAt": "2026-09-14T09:38:01.732Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "platformFee": 5,
       "isDependent": false,
       "timestamp": "2026-03-22T00:00:00.000Z",
@@ -5027,7 +5027,7 @@
       "category": "kumtluang",
       "periodYear": "2026",
       "periodMonth": "March",
-      "updatedAt": "2026-09-14T09:38:01.732Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "status": "SUCCESS",
       "totalAmount": 303,
       "timestamp": "2026-03-22T00:00:00.000Z",
@@ -5044,7 +5044,7 @@
       "subCategoryBreakdown": {
         "BMP Fund": 500
       },
-      "updatedAt": "2026-09-14T09:38:01.732Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "donorName": "Richard L Jongte",
       "periodLabel": "February 2026",
       "isAnonymous": false,
@@ -5078,7 +5078,7 @@
       "totalAmount": 303,
       "periodLabel": "March 2026",
       "isAnonymous": false,
-      "updatedAt": "2026-09-14T09:38:01.732Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "memberId": "BMPSHL-6709",
       "paymentMethod": "cash",
       "id": "RPAY-CASH-213383",
@@ -5114,7 +5114,7 @@
       "donorName": "Zoliansanga",
       "timestamp": "2026-02-22T00:00:00.000Z",
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.734Z"
+      "updatedAt": "2026-09-14T12:14:47.245Z"
     },
     {
       "donorVeng": "Bial 1 (Vengchhak)",
@@ -5141,7 +5141,7 @@
       "donorName": "Upa Thawngphena Tuallawt",
       "timestamp": "2026-02-22T00:00:00.000Z",
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.733Z"
+      "updatedAt": "2026-09-14T12:14:47.245Z"
     },
     {
       "donorVeng": "Section A",
@@ -5168,7 +5168,7 @@
       "donorName": "RC Lalliana",
       "timestamp": "2026-02-22T00:00:00.000Z",
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.735Z"
+      "updatedAt": "2026-09-14T12:14:47.245Z"
     },
     {
       "donorVeng": "Section A",
@@ -5193,7 +5193,7 @@
       "periodMonth": "February",
       "status": "SUCCESS",
       "category": "kumtluang",
-      "updatedAt": "2026-09-14T09:38:01.736Z",
+      "updatedAt": "2026-09-14T12:14:47.245Z",
       "donorName": "Richard L Jongte",
       "timestamp": "2026-02-22T00:00:00.000Z"
     },
@@ -5205,7 +5205,7 @@
       "campaignId": "cmp-1788107291420",
       "periodType": "monthly",
       "campaignTitle": "BMP Shillong,",
-      "updatedAt": "2026-09-14T09:38:01.734Z",
+      "updatedAt": "2026-09-14T12:14:47.246Z",
       "periodYear": "2026",
       "category": "kumtluang",
       "timestamp": "2026-02-22T00:00:00.000Z",
@@ -5242,7 +5242,7 @@
       "paymentMethod": "cash",
       "periodLabel": "February 2026",
       "isAnonymous": false,
-      "updatedAt": "2026-09-14T09:38:01.736Z",
+      "updatedAt": "2026-09-14T12:14:47.246Z",
       "isDependent": false,
       "memberId": "BMPSHL-4610",
       "id": "RPAY-CASH-695443",
@@ -5276,7 +5276,7 @@
       "status": "SUCCESS",
       "donorName": "Lalkhawmuana",
       "campaignTitle": "BMP Shillong,",
-      "updatedAt": "2026-09-14T09:38:01.737Z"
+      "updatedAt": "2026-09-14T12:14:47.246Z"
     },
     {
       "totalAmount": 200,
@@ -5293,7 +5293,7 @@
       "memberId": "BMPSHL-4610",
       "isDependent": false,
       "platformFee": 0,
-      "updatedAt": "2026-09-14T09:38:01.738Z",
+      "updatedAt": "2026-09-14T12:14:47.246Z",
       "id": "RPAY-CASH-625886",
       "periodYear": "2026",
       "amount": 200,
@@ -5312,7 +5312,7 @@
       "periodYear": "2026",
       "status": "SUCCESS",
       "donorPhone": "2079",
-      "updatedAt": "2026-09-14T09:38:01.739Z",
+      "updatedAt": "2026-09-14T12:14:47.246Z",
       "paymentMethod": "online",
       "campaignId": "cmp-1788107291420",
       "donorName": "Richard L Jongte",
@@ -5357,7 +5357,7 @@
       "donorName": "J Lalsangliana",
       "timestamp": "2026-01-19T00:00:00.000Z",
       "memberId": "BMPSHL-1718",
-      "updatedAt": "2026-09-14T09:38:01.739Z"
+      "updatedAt": "2026-09-14T12:14:47.247Z"
     },
     {
       "status": "SUCCESS",
@@ -5371,7 +5371,7 @@
       "periodMonth": "January",
       "txHash": "CASHLNMW5DHU",
       "amount": 150,
-      "updatedAt": "2026-09-14T09:38:01.740Z",
+      "updatedAt": "2026-09-14T12:14:47.247Z",
       "periodLabel": "January 2026",
       "isAnonymous": false,
       "periodYear": "2026",
@@ -5399,7 +5399,7 @@
       "paymentMethod": "cash",
       "isDependent": false,
       "campaignTitle": "BMP Shillong,",
-      "updatedAt": "2026-09-14T09:38:01.740Z",
+      "updatedAt": "2026-09-14T12:14:47.247Z",
       "id": "RPAY-CASH-245233",
       "memberId": "BMPSHL-4259",
       "timestamp": "2026-01-18T00:00:00.000Z",
@@ -5417,7 +5417,7 @@
       "isDependent": false,
       "campaignNetReceived": 99,
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "campaignTitle": "Lalrinpuii Ralna",
       "totalAmount": 100,
       "category": "ralna",
@@ -5438,7 +5438,7 @@
       "platformFee": 2,
       "category": "ralna",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "campaignNetReceived": 198,
       "feeOption": "DEDUCT",
       "isAnonymous": true,
@@ -5471,7 +5471,7 @@
       "campaignId": "cmp-1788262396368",
       "totalAmount": 101,
       "id": "RPAY_TXN_1788970301368_71",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.221Z",
       "feeOption": "ADD_ON"
     },
     {
@@ -5484,7 +5484,7 @@
       "utr": "UTR756305689165",
       "periodYear": "2026",
       "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.220Z",
       "donorName": "Anonymous",
       "paymentMethod": "phonepe",
       "timestamp": "2026-09-09T16:12:30.254Z",
@@ -5511,7 +5511,7 @@
       "utr": "UTR604679114200",
       "campaignTitle": "Lalrinpuii Ralna",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.757Z",
+      "updatedAt": "2026-09-14T12:14:47.220Z",
       "id": "RPAY_TXN_1788970399663_696",
       "feeOption": "DEDUCT",
       "timestamp": "2026-09-09T16:13:37.909Z",
@@ -5522,7 +5522,7 @@
       "isAnonymous": true
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.218Z",
       "category": "kumtluang",
       "amount": 100,
       "feeOption": "ADD_ON",
@@ -5554,7 +5554,7 @@
       "status": "completed",
       "isAnonymous": true,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.216Z",
       "feeOption": "ADD_ON",
       "timestamp": "2026-09-09T18:11:03.884Z",
       "totalAmount": 101,
@@ -5569,7 +5569,7 @@
       "timestamp": "2026-09-09T18:21:52.773Z",
       "feeOption": "ADD_ON",
       "paymentMethod": "online",
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.216Z",
       "totalAmount": 101,
       "isDependent": false,
       "id": "RPAY-650955",
@@ -5596,7 +5596,7 @@
       "paymentMethod": "phonepe",
       "timestamp": "2026-09-10T03:56:32.174Z",
       "donorName": "Anonymous",
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "status": "completed",
       "amount": 500,
       "campaignNetReceived": 500,
@@ -5613,7 +5613,7 @@
       "txHash": "UTR910543147594",
       "status": "completed",
       "totalAmount": 500,
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.216Z",
       "campaignId": "cmp-1787569484926",
       "category": "ralna",
       "isAnonymous": true,
@@ -5636,7 +5636,7 @@
       "campaignTitle": "Lalrinpuii Ralna",
       "timestamp": "2026-09-10T09:55:38.964Z",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "campaignId": "cmp-1788526889943",
       "category": "ralna",
       "totalAmount": 101,
@@ -5663,7 +5663,7 @@
       "donorName": "Valued Donor",
       "txHash": "UTR748434974016",
       "campaignNetReceived": 100,
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "timestamp": "2026-09-10T10:27:45.230Z",
       "donorVeng": "Bial 1 (Vengchhak)"
     },
@@ -5682,7 +5682,7 @@
       "status": "completed",
       "category": "ralna",
       "donorName": "Valued Donor",
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "donorVeng": "Bial 1 (Vengchhak)",
       "timestamp": "2026-09-10T11:47:30.170Z",
       "campaignNetReceived": 100,
@@ -5701,7 +5701,7 @@
       "txHash": "UTR415773186750",
       "totalAmount": 101,
       "timestamp": "2026-09-10T11:54:44.672Z",
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "category": "ralna",
       "status": "completed",
       "donorName": "Anonymous",
@@ -5716,7 +5716,7 @@
       "platformFee": 1,
       "isAnonymous": true,
       "amount": 100,
-      "updatedAt": "2026-09-14T09:38:01.758Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "timestamp": "2026-09-10T12:17:05.702Z",
       "campaignNetReceived": 100,
       "totalAmount": 101,
@@ -5737,7 +5737,7 @@
       "campaignTitle": "Lalrinpuii Ralna",
       "donorName": "Valued Donor",
       "timestamp": "2026-09-10T12:52:00.454Z",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "id": "RPAY_TXN_1789044712393_274",
       "status": "completed",
       "txHash": "UTR802703267473",
@@ -5766,7 +5766,7 @@
       "utr": "UTR724021292667",
       "status": "completed",
       "category": "khawlsak",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "amount": 100
     },
     {
@@ -5784,7 +5784,7 @@
       "id": "RPAY_TXN_1789046625520_943",
       "isAnonymous": true,
       "totalAmount": 202,
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "campaignTitle": "BCM Ebenezer",
       "category": "khawlsak",
       "utr": "UTR690262067698"
@@ -5795,7 +5795,7 @@
       "amount": 100,
       "platformFee": 1,
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "category": "ralna",
       "campaignNetReceived": 100,
       "campaignId": "cmp-1788526889943",
@@ -5814,7 +5814,7 @@
       "id": "RPAY_TXN_1789054906769_202",
       "platformFee": 5,
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.215Z",
       "campaignNetReceived": 500,
       "totalAmount": 505,
       "isDependent": false,
@@ -5839,12 +5839,12 @@
       "amount": 200,
       "paymentMethod": "phonepe",
       "txHash": "UTR508141050933",
-      "category": "others",
+      "category": "khawlsak",
       "feeOption": "ADD_ON",
       "platformFee": 2,
       "campaignNetReceived": 200,
       "id": "RPAY_TXN_1789055627850_921",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.214Z",
       "totalAmount": 202,
       "utr": "UTR508141050933",
       "campaignId": "scan-1789055602147"
@@ -5860,7 +5860,7 @@
       "feeOption": "ADD_ON",
       "txHash": "UTR369027688238",
       "platformFee": 2,
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.213Z",
       "campaignId": "cmp-1788526889943",
       "category": "ralna",
       "campaignTitle": "Lalrinpuii Ralna",
@@ -5886,7 +5886,7 @@
       "status": "completed",
       "txHash": "UTR932044991564",
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.213Z",
       "feeOption": "ADD_ON",
       "isDependent": false
     },
@@ -5895,7 +5895,7 @@
       "isAnonymous": true,
       "txHash": "UTR889027008297",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.759Z",
+      "updatedAt": "2026-09-14T12:14:47.212Z",
       "feeOption": "ADD_ON",
       "campaignNetReceived": 100,
       "campaignTitle": "Lalrinpuii Ralna",
@@ -5911,7 +5911,7 @@
       "platformFee": 1
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "status": "completed",
       "isAnonymous": true,
       "campaignTitle": "Lalrinpuii Ralna",
@@ -5936,7 +5936,7 @@
       "campaignNetReceived": 100,
       "campaignId": "cmp-1788526889943",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.765Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "utr": "OM2609111637267978240183",
       "amount": 100,
       "donorName": "Anonymous",
@@ -5958,7 +5958,7 @@
       "totalAmount": 121,
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1789124609924_138",
-      "updatedAt": "2026-09-14T09:38:01.764Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "campaignNetReceived": 120,
       "campaignTitle": "Lalrinpuii Ralna",
       "utr": "OM2609111633313388240062",
@@ -5973,7 +5973,7 @@
     },
     {
       "utr": "OM2609111627540758240793",
-      "updatedAt": "2026-09-14T09:38:01.764Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "campaignNetReceived": 152,
       "isDependent": false,
       "referenceNo": "OM2609111627540758240793",
@@ -5994,10 +5994,10 @@
     {
       "paymentMethod": "phonepe",
       "subCategoryBreakdown": {
-        "Khawtlang Inrelbawlna": 200,
-        "YMA Chhiatni Fund": 300,
-        "Thawhlawm": 100,
         "Building Fund": 400,
+        "Khawtlang Inrelbawlna": 200,
+        "Thawhlawm": 100,
+        "YMA Chhiatni Fund": 300,
         "Youth & Sports": 500
       },
       "platformFee": 15,
@@ -6006,7 +6006,7 @@
       "isDependent": false,
       "periodType": "monthly",
       "campaignId": "cmp-kumtluang-ymavt",
-      "updatedAt": "2026-09-14T09:38:01.764Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "status": "pending",
       "campaignTitle": "YMA Vengthar Branch",
       "periodLabel": "August 2026",
@@ -6028,7 +6028,7 @@
       "platformFee": 15,
       "isDependent": false,
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.764Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "id": "RPAY_TXN_1789124014610_205",
       "category": "kumtluang",
       "periodLabel": "August 2026",
@@ -6037,11 +6037,11 @@
       "periodMonth": "August",
       "status": "pending",
       "subCategoryBreakdown": {
-        "Youth & Sports": 500,
         "Building Fund": 400,
-        "Thawhlawm": 100,
         "Khawtlang Inrelbawlna": 200,
-        "YMA Chhiatni Fund": 300
+        "Thawhlawm": 100,
+        "YMA Chhiatni Fund": 300,
+        "Youth & Sports": 500
       },
       "isAnonymous": true,
       "totalAmount": 1515,
@@ -6055,7 +6055,7 @@
       "isDependent": false,
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1789123925529_918",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "status": "pending",
       "campaignId": "cmp-1788526889943",
       "feeOption": "ADD_ON",
@@ -6069,7 +6069,7 @@
     },
     {
       "campaignId": "cmp-1788262396368",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "id": "RPAY_TXN_1789123893663_852",
       "platformFee": 1,
       "campaignNetReceived": 121,
@@ -6086,7 +6086,7 @@
       "campaignTitle": "BCM Ebenezer"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "id": "RPAY_TXN_1789123792171_838",
       "campaignId": "cmp-1788262396368",
       "platformFee": 1,
@@ -6108,7 +6108,7 @@
     },
     {
       "feeOption": "ADD_ON",
-      "timestamp": "2026-09-11T10:47:03.142Z",
+      "timestamp": "2026-09-11T10:47:12.653Z",
       "campaignTitle": "BCM Ebenezer",
       "donorName": "Anonymous",
       "id": "RPAY_TXN_1789123604888_865",
@@ -6116,7 +6116,7 @@
       "amount": 77,
       "totalAmount": 78,
       "status": "completed",
-      "isAnonymous": true,
+      "isAnonymous": false,
       "txHash": "UTR453388240595",
       "paymentMethod": "phonepe",
       "isDependent": false,
@@ -6124,7 +6124,10 @@
       "utr": "UTR453388240595",
       "campaignNetReceived": 77,
       "category": "khawlsak",
-      "updatedAt": "2026-09-14T09:38:01.702Z"
+      "updatedAt": "2026-09-14T12:14:47.199Z",
+      "donorPhone": "9862300000",
+      "referenceNo": "OMO2609111616453388240374",
+      "verifiedAt": "2026-09-11T10:47:12.653Z"
     },
     {
       "isAnonymous": true,
@@ -6134,9 +6137,9 @@
       "status": "pending",
       "id": "RPAY_TXN_1789123589190_174",
       "campaignNetReceived": 100,
-      "updatedAt": "2026-09-11T12:54:10.904Z",
+      "updatedAt": "2026-09-14T12:14:47.249Z",
       "amount": 100,
-      "campaignTitle": "Pocket Money",
+      "campaignTitle": "BCM Ebenezer",
       "donorName": "Anonymous",
       "timestamp": "2026-09-11T10:46:29.190Z",
       "feeOption": "ADD_ON",
@@ -6155,7 +6158,7 @@
       "campaignNetReceived": 100,
       "campaignId": "cmp-1788526889943",
       "status": "pending",
-      "updatedAt": "2026-09-11T12:54:10.904Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "id": "RPAY_TXN_1789123551338_906",
       "category": "ralna",
       "amount": 100,
@@ -6176,7 +6179,7 @@
       "id": "RPAY_TXN_1789123551285_699",
       "campaignTitle": "Lalrinpuii Ralna",
       "donorVeng": "Bial 1 (Vengchhak)",
-      "updatedAt": "2026-09-11T12:54:10.904Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "platformFee": 1,
       "paymentMethod": "phonepe",
       "isDependent": false,
@@ -6188,12 +6191,12 @@
       "campaignNetReceived": 86,
       "isDependent": false,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.702Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "verifiedAt": "2026-09-11T10:32:40.442Z",
       "utr": "UTR538738240710",
       "amount": 100,
       "donorName": "PhonePe Verified Donor",
-      "category": "others",
+      "category": "ralna",
       "feeOption": "ADD_ON",
       "timestamp": "2026-09-11T10:32:40.442Z",
       "status": "completed",
@@ -6210,11 +6213,11 @@
       "platformFee": 1,
       "donorPhone": "9862300000",
       "amount": 100,
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "status": "completed",
       "paymentMethod": "phonepe",
       "donorName": "PhonePe Verified Donor",
-      "category": "others",
+      "category": "ralna",
       "id": "RPAY_TXN_1789122537888_111",
       "verifiedAt": "2026-09-11T10:29:15.274Z",
       "feeOption": "ADD_ON",
@@ -6228,8 +6231,8 @@
       "id": "RPAY_TXN_1789122432877_57",
       "totalAmount": 101,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
-      "category": "others",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
+      "category": "ralna",
       "verifiedAt": "2026-09-11T10:27:39.102Z",
       "paymentMethod": "phonepe",
       "amount": 100,
@@ -6262,7 +6265,7 @@
       "paymentMethod": "phonepe",
       "isAnonymous": true,
       "periodYear": "2026",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "periodType": "monthly",
       "campaignId": "cmp-1788107291420",
       "periodMonth": "August",
@@ -6271,20 +6274,20 @@
     {
       "paymentMethod": "phonepe",
       "donorPhone": "9862300000",
-      "campaignTitle": "BCM Ebenezer",
+      "campaignTitle": "Lalrinpuii Ralna",
       "status": "completed",
       "id": "RPAY_TXN_1789122038750_689",
-      "donorName": "Anonymous",
-      "amount": 111,
-      "totalAmount": 112,
-      "timestamp": "2026-09-11T10:20:50.441Z",
+      "donorName": "PhonePe Verified Donor",
+      "amount": 100,
+      "totalAmount": 101,
+      "timestamp": "2026-09-11T10:20:59.189Z",
       "feeOption": "ADD_ON",
-      "category": "khawlsak",
+      "category": "ralna",
       "referenceNo": "T1789122059189",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "platformFee": 1,
       "verifiedAt": "2026-09-11T10:20:59.189Z",
-      "campaignId": "cmp-1788262396368",
+      "campaignId": "cmp-1788526889943",
       "txHash": "OM2609111550399748240021",
       "isAnonymous": true,
       "campaignNetReceived": 111,
@@ -6296,7 +6299,7 @@
       "verifiedAt": "2026-09-11T10:17:26.225Z",
       "status": "completed",
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "id": "RPAY_TXN_1789121801582_898",
       "platformFee": 1,
       "referenceNo": "T1789121846225",
@@ -6307,14 +6310,14 @@
       "donorName": "PhonePe Verified Donor",
       "totalAmount": 101,
       "campaignTitle": "Lalrinpuii Ralna",
-      "category": "others"
+      "category": "ralna"
     },
     {
       "status": "completed",
       "amount": 100,
       "paymentMethod": "phonepe",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "donorPhone": "9862300000",
       "campaignTitle": "Lalrinpuii Ralna",
       "platformFee": 1,
@@ -6324,11 +6327,11 @@
       "timestamp": "2026-09-11T10:15:57.962Z",
       "campaignId": "cmp-1788526889943",
       "id": "RPAY_TXN_1789121736661_774",
-      "category": "others",
+      "category": "ralna",
       "verifiedAt": "2026-09-11T10:15:57.962Z"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1789121661786_574",
       "platformFee": 1,
@@ -6337,7 +6340,7 @@
       "amount": 100,
       "campaignTitle": "Lalrinpuii Ralna",
       "verifiedAt": "2026-09-11T10:14:51.346Z",
-      "category": "others",
+      "category": "ralna",
       "status": "completed",
       "feeOption": "ADD_ON",
       "timestamp": "2026-09-11T10:14:51.346Z",
@@ -6356,17 +6359,17 @@
       "verifiedAt": "2026-09-11T10:13:48.314Z",
       "donorName": "PhonePe Verified Donor",
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "platformFee": 1,
       "referenceNo": "T1789121628314",
       "campaignTitle": "Lalrinpuii Ralna",
-      "category": "others",
+      "category": "ralna",
       "donorPhone": "9862300000"
     },
     {
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1789121456921_779",
-      "updatedAt": "2026-09-14T09:38:01.763Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "donorPhone": "9862300000",
       "campaignTitle": "Lalrinpuii Ralna",
       "referenceNo": "T1789121495769",
@@ -6374,7 +6377,7 @@
       "verifiedAt": "2026-09-11T10:11:35.769Z",
       "totalAmount": 101,
       "status": "completed",
-      "category": "others",
+      "category": "ralna",
       "amount": 100,
       "campaignId": "cmp-1788526889943",
       "donorName": "PhonePe Verified Donor",
@@ -6395,8 +6398,8 @@
       "paymentMethod": "phonepe",
       "donorPhone": "9862300000",
       "id": "RPAY_TXN_1789121424636_698",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
-      "category": "others",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
+      "category": "ralna",
       "totalAmount": 101
     },
     {
@@ -6414,17 +6417,17 @@
       "referenceNo": "T1789121309971",
       "platformFee": 1,
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
-      "category": "others"
+      "updatedAt": "2026-09-14T12:14:47.248Z",
+      "category": "ralna"
     },
     {
       "amount": 100,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "status": "completed",
       "verifiedAt": "2026-09-11T10:01:41.423Z",
       "totalAmount": 101,
-      "category": "others",
+      "category": "ralna",
       "platformFee": 1,
       "referenceNo": "T1789120901423",
       "id": "RPAY_TXN_1789120858492_951",
@@ -6446,10 +6449,10 @@
       "amount": 100,
       "verifiedAt": "2026-09-11T09:58:12.144Z",
       "status": "completed",
-      "category": "others",
+      "category": "ralna",
       "campaignTitle": "Lalrinpuii Ralna",
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.248Z",
       "platformFee": 1,
       "referenceNo": "T1789120692144"
     },
@@ -6459,7 +6462,7 @@
       "totalAmount": 101,
       "donorName": "PhonePe Verified Donor",
       "donorPhone": "9862300000",
-      "category": "others",
+      "category": "ralna",
       "campaignId": "cmp-1788526889943",
       "status": "completed",
       "campaignTitle": "Lalrinpuii Ralna",
@@ -6467,7 +6470,7 @@
       "verifiedAt": "2026-09-11T08:50:58.148Z",
       "platformFee": 1,
       "referenceNo": "OMO2609111416158708240465",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "paymentMethod": "phonepe",
       "id": "RPAY_TXN_1789116375830_111"
     },
@@ -6484,14 +6487,14 @@
       "status": "completed",
       "amount": 100,
       "donorPhone": "9862300000",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.247Z",
       "platformFee": 1,
       "referenceNo": "T1789116145170",
-      "category": "others"
+      "category": "ralna"
     },
     {
       "platformFee": 1,
-      "category": "others",
+      "category": "ralna",
       "referenceNo": "OMO2609111357542818240425",
       "campaignTitle": "Lalrinpuii Ralna",
       "donorName": "PhonePe Verified Donor",
@@ -6501,7 +6504,7 @@
       "amount": 100,
       "donorPhone": "9862300000",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.762Z",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
       "campaignId": "cmp-1788526889943",
       "totalAmount": 101,
       "id": "RPAY_TXN_1789115274208_363",
@@ -6526,7 +6529,7 @@
       "isDependent": false,
       "campaignTitle": "Lalrinpuii Ralna",
       "platformFee": 1,
-      "updatedAt": "2026-09-14T09:38:01.762Z"
+      "updatedAt": "2026-09-14T12:14:47.247Z"
     },
     {
       "donorName": "PhonePe Verified Donor",
@@ -6545,10 +6548,10 @@
       "id": "RPAY_TXN_1789114803997_566",
       "isDependent": false,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.200Z",
       "verifiedAt": "2026-09-11T08:20:50.553Z",
       "campaignNetReceived": 130,
-      "category": "others",
+      "category": "ralna",
       "utr": "UTR041448240351"
     },
     {
@@ -6563,7 +6566,7 @@
       "isDependent": false,
       "platformFee": 1,
       "id": "RPAY_TXN_1789114697614_417",
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.247Z",
       "totalAmount": 101,
       "paymentMethod": "phonepe",
       "category": "ralna",
@@ -6579,7 +6582,7 @@
       "feeOption": "ADD_ON",
       "donorName": "PhonePe Verified Donor",
       "verifiedAt": "2026-09-11T08:13:07.454Z",
-      "category": "others",
+      "category": "ralna",
       "totalAmount": 101,
       "paymentMethod": "phonepe",
       "platformFee": 1,
@@ -6587,17 +6590,17 @@
       "id": "RPAY_TXN_1789114102914_948",
       "donorPhone": "9862300000",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.200Z",
       "amount": 100
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.200Z",
       "donorPhone": "9862300000",
       "platformFee": 1,
       "referenceNo": "T1789114340122",
       "amount": 100,
       "status": "completed",
-      "category": "others",
+      "category": "ralna",
       "totalAmount": 101,
       "id": "RPAY_TXN_1789114259768_818",
       "verifiedAt": "2026-09-11T08:12:20.122Z",
@@ -6625,7 +6628,7 @@
       "id": "RPAY_TXN_1789114194028_982",
       "campaignId": "cmp-1788526889943",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.200Z",
       "verifiedAt": "2026-09-11T08:10:35.196Z",
       "campaignNetReceived": 100,
       "category": "ralna",
@@ -6637,7 +6640,7 @@
       "campaignId": "cmp-1788526889943",
       "campaignTitle": "Lalrinpuii Ralna",
       "donorVeng": "Bial 1 (Vengchhak)",
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "amount": 100,
       "txHash": "UTR102811263172",
       "status": "completed",
@@ -6663,7 +6666,7 @@
       "paymentMethod": "phonepe",
       "txHash": "UTR162347912078",
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "campaignTitle": "Lalrinpuii Ralna",
       "amount": 100,
       "donorName": "Valued Donor",
@@ -6678,7 +6681,7 @@
       "totalAmount": 51,
       "campaignId": "cmp-1788526889943",
       "campaignTitle": "Lalrinpuii Ralna",
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "amount": 50,
       "txHash": "UTR252218240248",
       "status": "completed",
@@ -6709,7 +6712,7 @@
       "platformFee": 1,
       "isAnonymous": true,
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "campaignNetReceived": 100,
       "id": "RPAY_TXN_1789071125537_724"
     },
@@ -6728,7 +6731,7 @@
       "txHash": "UTR391340695027",
       "id": "RPAY_TXN_1789070287529_538",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "isAnonymous": true,
       "category": "ralna",
       "utr": "UTR391340695027"
@@ -6742,7 +6745,7 @@
       "amount": 100,
       "category": "ralna",
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "paymentMethod": "phonepe",
       "campaignNetReceived": 100,
       "feeOption": "ADD_ON",
@@ -6771,7 +6774,7 @@
       "isDependent": false,
       "platformFee": 1,
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.703Z",
+      "updatedAt": "2026-09-14T12:14:47.210Z",
       "campaignTitle": "Lalrinpuii Ralna"
     },
     {
@@ -6783,7 +6786,7 @@
       "status": "completed",
       "paymentMethod": "online",
       "txHash": "UPIA6TJ4RVFHX",
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.243Z",
       "amount": 500,
       "campaignTitle": "Zothan Damlo Enkawlna Tanpuina",
       "category": "khawlsak",
@@ -6808,10 +6811,10 @@
       "isDependent": false,
       "amount": 500,
       "id": "RPAY-922246",
-      "updatedAt": "2026-09-14T09:38:01.760Z"
+      "updatedAt": "2026-09-14T12:14:47.243Z"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.243Z",
       "isAnonymous": false,
       "totalAmount": 505,
       "campaignTitle": "Zothan Damlo Enkawlna Tanpuina",
@@ -6841,7 +6844,7 @@
       "id": "RPAY-585959",
       "totalAmount": 558,
       "amount": 552,
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "isAnonymous": false,
       "status": "completed",
       "txHash": "UPI1D4059GNPI",
@@ -6856,7 +6859,7 @@
       "campaignId": "cmp-khawlsak-3",
       "isAnonymous": false,
       "totalAmount": 505,
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "platformFee": 5,
       "campaignTitle": "Kunga Tanpuina",
       "isDependent": false,
@@ -6881,7 +6884,7 @@
       "id": "RPAY-412837",
       "status": "completed",
       "txHash": "UPIP2SQQSW72Q",
-      "updatedAt": "2026-09-14T09:38:01.760Z"
+      "updatedAt": "2026-09-14T12:14:47.244Z"
     },
     {
       "totalAmount": 1010,
@@ -6893,7 +6896,7 @@
       "category": "khawlsak",
       "status": "completed",
       "txHash": "UPIEZXQR20QDG",
-      "updatedAt": "2026-09-14T09:38:01.760Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "amount": 1000,
       "campaignTitle": "Kunga Tanpuina",
       "platformFee": 10,
@@ -6906,7 +6909,7 @@
       "id": "RPAY-391493",
       "paymentMethod": "online",
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "campaignTitle": "Kunga Tanpuina",
       "platformFee": 5,
       "isAnonymous": false,
@@ -6921,7 +6924,7 @@
     },
     {
       "campaignId": "cmp-khawlsak-2",
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "category": "khawlsak",
       "isDependent": false,
       "donorVeng": "Bial 1 (Vengchhak)",
@@ -6948,7 +6951,7 @@
       "id": "RPAY-931967",
       "amount": 500,
       "platformFee": 5,
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "isDependent": false,
       "txHash": "UPINDT2X8LQ2K",
       "status": "completed",
@@ -6960,14 +6963,14 @@
       "donorPhone": "9862555510",
       "totalAmount": 1515,
       "subCategoryBreakdown": {
-        "Biak In Sakna": 100,
         "Ramthianghlim": 200,
-        "Kohhran Hmeichhia": 400,
         "KTP Thawhlawm": 500,
-        "Synod Mission": 300
+        "Synod Mission": 300,
+        "Biak In Sakna": 100,
+        "Kohhran Hmeichhia": 400
       },
       "isAnonymous": false,
-      "updatedAt": "2026-09-14T09:38:01.761Z",
+      "updatedAt": "2026-09-14T12:14:47.244Z",
       "isDependent": false,
       "amount": 1500,
       "timestamp": "2026-08-27T14:16:29.936Z",
@@ -7000,7 +7003,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-11T12:51:23.973Z",
-      "updatedAt": "2026-09-14T09:38:01.765Z"
+      "updatedAt": "2026-09-14T12:14:47.249Z"
     },
     {
       "id": "RPAY_TXN_1789131106990_162",
@@ -7018,7 +7021,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-11T12:51:46.990Z",
-      "updatedAt": "2026-09-14T09:38:01.765Z"
+      "updatedAt": "2026-09-14T12:14:47.249Z"
     },
     {
       "id": "RPAY_TXN_1789131134199_447",
@@ -7041,7 +7044,7 @@
       "donorPhone": "9862300000",
       "referenceNo": "OMO2609111822150698240483",
       "verifiedAt": "2026-09-11T12:52:44.265Z",
-      "updatedAt": "2026-09-14T09:38:01.765Z"
+      "updatedAt": "2026-09-14T12:14:47.249Z"
     },
     {
       "id": "RPAY_TXN_1789131250866_375",
@@ -7064,7 +7067,7 @@
       "donorPhone": "9862300000",
       "referenceNo": "OMO2609111824116948240214",
       "verifiedAt": "2026-09-11T12:54:35.305Z",
-      "updatedAt": "2026-09-14T09:38:01.765Z"
+      "updatedAt": "2026-09-14T12:14:47.249Z"
     },
     {
       "id": "RPAY_TXN_1789230408473_390",
@@ -7082,7 +7085,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-12T16:26:48.473Z",
-      "updatedAt": "2026-09-14T09:38:01.701Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "id": "RPAY_TXN_1789217521173_886",
@@ -7100,10 +7103,10 @@
       "totalAmount": 101,
       "paymentMethod": "phonepe",
       "status": "completed",
-      "timestamp": "2026-09-12T12:52:18.738Z",
+      "timestamp": "2026-09-12T12:52:35.474Z",
       "txHash": "UTR018648240793",
       "utr": "UTR018648240793",
-      "updatedAt": "2026-09-14T09:38:01.701Z",
+      "updatedAt": "2026-09-14T12:14:47.509Z",
       "referenceNo": "OMO2609121822018648240785",
       "verifiedAt": "2026-09-12T12:52:35.475Z",
       "donorPhone": "9862300000"
@@ -7125,7 +7128,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-12T12:52:01.126Z",
-      "updatedAt": "2026-09-14T09:38:01.701Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "id": "RPAY_TXN_1789216855648_851",
@@ -7134,7 +7137,7 @@
       "category": "ralna",
       "donorName": "Anonymous",
       "isDependent": false,
-      "isAnonymous": true,
+      "isAnonymous": false,
       "amount": 500,
       "platformFee": 5,
       "feeOption": "ADD_ON",
@@ -7142,10 +7145,10 @@
       "totalAmount": 505,
       "paymentMethod": "phonepe",
       "status": "completed",
-      "timestamp": "2026-09-12T12:41:29.406Z",
+      "timestamp": "2026-09-12T12:41:27.902Z",
       "txHash": "UTR284315281039",
-      "utr": "UTR284315281039",
-      "updatedAt": "2026-09-14T09:38:01.701Z",
+      "utr": "UTR232753684636",
+      "updatedAt": "2026-09-14T12:14:47.198Z",
       "referenceNo": "T1789216887902",
       "verifiedAt": "2026-09-12T12:41:27.902Z",
       "donorPhone": "9862300000"
@@ -7175,7 +7178,7 @@
       "timestamp": "2026-09-12T12:35:59.404Z",
       "txHash": "UTR843759212058",
       "utr": "UTR843759212058",
-      "updatedAt": "2026-09-14T09:38:01.701Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "id": "RPAY_TXN_1789216249010_949",
@@ -7184,7 +7187,7 @@
       "category": "ralna",
       "donorName": "Anonymous",
       "isDependent": false,
-      "isAnonymous": true,
+      "isAnonymous": false,
       "amount": 500,
       "platformFee": 5,
       "feeOption": "ADD_ON",
@@ -7192,10 +7195,10 @@
       "totalAmount": 505,
       "paymentMethod": "phonepe",
       "status": "completed",
-      "timestamp": "2026-09-12T12:31:40.226Z",
+      "timestamp": "2026-09-12T12:31:39.589Z",
       "txHash": "UTR711653544033",
-      "utr": "UTR711653544033",
-      "updatedAt": "2026-09-14T09:38:01.701Z",
+      "utr": "UTR332367306023",
+      "updatedAt": "2026-09-14T12:14:47.198Z",
       "referenceNo": "T1789216299589",
       "donorPhone": "9862300000",
       "verifiedAt": "2026-09-12T12:31:39.589Z"
@@ -7225,7 +7228,7 @@
       "timestamp": "2026-09-12T12:30:02.161Z",
       "txHash": "UTR912703253927",
       "utr": "UTR912703253927",
-      "updatedAt": "2026-09-14T09:38:01.701Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "id": "RPAY_TXN_1789214811690_331",
@@ -7245,7 +7248,7 @@
       "timestamp": "2026-09-12T12:07:49.309Z",
       "txHash": "UTR523668240629",
       "utr": "UTR523668240629",
-      "updatedAt": "2026-09-14T09:38:01.702Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "id": "RPAY_TXN_1789214101219_473",
@@ -7254,7 +7257,7 @@
       "category": "ralna",
       "donorName": "Anonymous",
       "isDependent": false,
-      "isAnonymous": true,
+      "isAnonymous": false,
       "amount": 500,
       "platformFee": 5,
       "feeOption": "ADD_ON",
@@ -7262,10 +7265,13 @@
       "totalAmount": 505,
       "paymentMethod": "phonepe",
       "status": "completed",
-      "timestamp": "2026-09-12T11:55:20.324Z",
+      "timestamp": "2026-09-12T11:55:48.103Z",
       "txHash": "UTR988782874135",
-      "utr": "UTR988782874135",
-      "updatedAt": "2026-09-14T09:38:01.702Z"
+      "utr": "UTR529116215228",
+      "updatedAt": "2026-09-14T12:14:47.199Z",
+      "donorPhone": "9862300000",
+      "referenceNo": "OMO2609121725019748240313",
+      "verifiedAt": "2026-09-12T11:55:48.103Z"
     },
     {
       "id": "RPAY_TXN_1789129221882_365",
@@ -7274,7 +7280,7 @@
       "category": "kumtluang",
       "donorName": "Anonymous",
       "isDependent": false,
-      "isAnonymous": true,
+      "isAnonymous": false,
       "amount": 100,
       "platformFee": 1,
       "feeOption": "ADD_ON",
@@ -7289,10 +7295,13 @@
       "periodMonth": "August",
       "periodYear": "2026",
       "periodLabel": "August 2026",
-      "timestamp": "2026-09-11T12:21:33.367Z",
+      "timestamp": "2026-09-11T12:21:38.318Z",
       "txHash": "UTR226638240214",
       "utr": "UTR226638240214",
-      "updatedAt": "2026-09-14T09:38:01.702Z"
+      "updatedAt": "2026-09-14T12:14:47.199Z",
+      "donorPhone": "9862300000",
+      "referenceNo": "OMO2609111750226638240495",
+      "verifiedAt": "2026-09-11T12:21:38.318Z"
     },
     {
       "campaignTitle": "Pocket Money",
@@ -7306,7 +7315,7 @@
       "status": "pending",
       "isDependent": false,
       "campaignId": "cmp-1788262396368",
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "campaignNetReceived": 100,
       "donorName": "Anonymous",
       "isAnonymous": true,
@@ -7328,7 +7337,7 @@
       "campaignNetReceived": 100,
       "campaignTitle": "Lalrinpuii Ralna",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "donorVeng": "Bial 1 (Vengchhak)"
     },
     {
@@ -7346,7 +7355,7 @@
       "campaignNetReceived": 100,
       "platformFee": 1,
       "donorVeng": "Bial 1 (Vengchhak)",
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "category": "ralna",
       "campaignId": "cmp-1788526889943"
     },
@@ -7357,7 +7366,7 @@
       "timestamp": "2026-09-11T13:14:57.421Z",
       "donorName": "Anonymous",
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "campaignTitle": "Pocket Money",
       "platformFee": 1,
       "status": "pending",
@@ -7380,7 +7389,7 @@
       "donorName": "Anonymous",
       "isAnonymous": true,
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "status": "pending",
       "id": "RPAY_TXN_1789132741153_831",
       "amount": 33,
@@ -7395,11 +7404,11 @@
       "periodYear": "2026",
       "status": "completed",
       "subCategoryBreakdown": {
-        "Synod Mission": 300,
-        "KTP Thawhlawm": 500,
         "Biak In Sakna": 100,
+        "KTP Thawhlawm": 500,
         "Kohhran Hmeichhia": 400,
-        "Ramthianghlim": 200
+        "Ramthianghlim": 200,
+        "Synod Mission": 300
       },
       "amount": 1500,
       "campaignTitle": "Khatla Presbyterian Kohhran",
@@ -7411,7 +7420,7 @@
       "donorName": "Anonymous",
       "id": "RPAY_TXN_1789150081286_405",
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.766Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "platformFee": 15,
       "periodLabel": "August 2026",
       "txHash": "UTR024608240961",
@@ -7426,13 +7435,13 @@
       "donorName": "Anonymous",
       "campaignTitle": "Khatla Presbyterian Kohhran",
       "subCategoryBreakdown": {
-        "Kohhran Hmeichhia": 400,
         "Biak In Sakna": 100,
-        "Ramthianghlim": 200,
         "KTP Thawhlawm": 500,
+        "Kohhran Hmeichhia": 400,
+        "Ramthianghlim": 200,
         "Synod Mission": 300
       },
-      "updatedAt": "2026-09-14T09:38:01.767Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "periodType": "monthly",
       "isDependent": false,
       "campaignNetReceived": 1500,
@@ -7460,7 +7469,7 @@
       "donorName": "Anonymous",
       "amount": 45,
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.767Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "platformFee": 1,
       "campaignTitle": "Lalrinpuii Ralna",
       "txHash": "OM2609111754088618240327",
@@ -7475,9 +7484,9 @@
       "id": "RPAY_TXN_1789122131180_103",
       "campaignTitle": "Lalrinpuii Ralna",
       "amount": 100,
-      "category": "others",
+      "category": "ralna",
       "platformFee": 1,
-      "updatedAt": "2026-09-14T09:38:01.767Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "donorPhone": "9862300000",
       "campaignId": "cmp-1788526889943",
       "donorName": "PhonePe Verified Donor",
@@ -7498,7 +7507,7 @@
       "campaignId": "cmp-1788526889943",
       "paymentMethod": "phonepe",
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.767Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "id": "RPAY_TXN_1789131378017_161",
       "isDependent": false,
       "txHash": "OM2609111826197088240797",
@@ -7506,7 +7515,7 @@
       "referenceNo": "OM2609111826197088240797"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.767Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "periodMonth": "September",
       "totalAmount": 101,
       "timestamp": "2026-09-12T07:18:16.992Z",
@@ -7534,7 +7543,7 @@
       "referenceNo": "OM2609121248002108240376"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "periodYear": "2026",
       "totalAmount": 101,
       "periodMonth": "September",
@@ -7559,7 +7568,7 @@
       "feeOption": "ADD_ON"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z",
       "isDependent": false,
       "category": "khawlsak",
       "donorName": "Anonymous",
@@ -7577,7 +7586,7 @@
       "amount": 33
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "isDependent": false,
       "category": "khawlsak",
       "id": "RPAY_TXN_1789132070351_171",
@@ -7597,7 +7606,7 @@
     {
       "campaignNetReceived": 250,
       "category": "ralna",
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "totalAmount": 253,
       "campaignId": "cmp-1788526889943",
       "isAnonymous": true,
@@ -7619,7 +7628,7 @@
       "campaignId": "cmp-1788526889943",
       "campaignTitle": "Lalrinpuii Ralna",
       "totalAmount": 556,
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "isAnonymous": true,
       "category": "ralna",
       "paymentMethod": "phonepe",
@@ -7640,7 +7649,7 @@
       "campaignTitle": "Pocket Money",
       "isAnonymous": true,
       "amount": 150,
-      "updatedAt": "2026-09-14T09:38:01.768Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "paymentMethod": "phonepe",
       "category": "khawlsak",
       "isDependent": false,
@@ -7666,12 +7675,12 @@
       "campaignNetReceived": 500,
       "totalAmount": 505,
       "paymentMethod": "phonepe",
-      "status": "completed",
-      "timestamp": "2026-09-12T11:56:15.185Z",
+      "status": "pending",
+      "timestamp": "2026-09-12T11:56:06.319Z",
       "txHash": "UTR700127264435",
       "utr": "UTR777923441872",
       "referenceNo": "OMO2609121726067438240864",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.198Z"
     },
     {
       "id": "RPAY_TXN_1789214212065_353",
@@ -7692,7 +7701,7 @@
       "txHash": "UTR288340135482",
       "utr": "UTR683426633888",
       "referenceNo": "OMO2609121726525348240954",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.198Z"
     },
     {
       "id": "RPAY_TXN_1789214316241_221",
@@ -7717,7 +7726,7 @@
       "periodYear": "2026",
       "periodLabel": "September 2026",
       "timestamp": "2026-09-12T11:58:36.241Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.198Z"
     },
     {
       "id": "RPAY_TXN_1789216955899_781",
@@ -7733,9 +7742,9 @@
       "campaignNetReceived": 500,
       "totalAmount": 505,
       "paymentMethod": "phonepe",
-      "status": "completed",
-      "timestamp": "2026-09-12T12:50:02.685Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z",
+      "status": "pending",
+      "timestamp": "2026-09-12T12:42:35.899Z",
+      "updatedAt": "2026-09-14T12:14:47.198Z",
       "txHash": "UTR367068240069",
       "utr": "UTR367068240069"
     },
@@ -7755,7 +7764,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-12T12:43:14.059Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.198Z"
     },
     {
       "id": "RPAY_TXN_1789217268587_770",
@@ -7773,7 +7782,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-12T12:47:48.587Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.198Z"
     },
     {
       "id": "RPAY_TXN_1789215178908_627",
@@ -7791,7 +7800,7 @@
       "paymentMethod": "phonepe",
       "status": "pending",
       "timestamp": "2026-09-12T12:12:58.908Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z"
+      "updatedAt": "2026-09-14T12:14:47.251Z"
     },
     {
       "isAnonymous": false,
@@ -7809,7 +7818,7 @@
       "category": "ralna",
       "platformFee": 1,
       "timestamp": "2026-09-12T12:04:58.683Z",
-      "updatedAt": "2026-09-14T09:38:01.769Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "amount": 100
     },
     {
@@ -7818,7 +7827,7 @@
       "campaignNetReceived": 100,
       "timestamp": "2026-09-12T12:07:49.607Z",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.769Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "platformFee": 1,
       "id": "RPAY_TXN_1789214845477_553",
       "isDependent": false,
@@ -7850,7 +7859,7 @@
       "amount": 100,
       "category": "kumtluang",
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.769Z",
+      "updatedAt": "2026-09-14T12:14:47.251Z",
       "platformFee": 1,
       "isDependent": false,
       "status": "completed",
@@ -7868,7 +7877,7 @@
       "campaignId": "cmp-1788526889943",
       "timestamp": "2026-09-12T13:24:06.362Z",
       "campaignNetReceived": 100,
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "paymentMethod": "phonepe",
       "totalAmount": 101,
       "donorName": "Valued Donor",
@@ -7896,7 +7905,7 @@
       "platformFee": 1,
       "isAnonymous": true,
       "amount": 123,
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "txHash": "UTR345346954212",
       "feeOption": "ADD_ON",
       "id": "RPAY_TXN_1789219465260_745",
@@ -7909,7 +7918,7 @@
       "campaignNetReceived": 500,
       "isAnonymous": true,
       "platformFee": 5,
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "feeOption": "ADD_ON",
       "remark": "111",
       "totalAmount": 505,
@@ -7933,7 +7942,7 @@
       "feeOption": "ADD_ON",
       "campaignId": "cmp-1788526889943",
       "campaignNetReceived": 112,
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "status": "completed",
       "paymentMethod": "phonepe",
       "totalAmount": 113,
@@ -7949,7 +7958,7 @@
     {
       "campaignTitle": "Pocket Money",
       "id": "RPAY_TXN_1789219806147_373",
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "category": "khawlsak",
       "paymentMethod": "phonepe",
       "platformFee": 1,
@@ -7977,7 +7986,7 @@
       "feeOption": "ADD_ON",
       "totalAmount": 101,
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "campaignId": "cmp-1788526889943",
       "isDependent": false,
       "campaignTitle": "Lalrinpuii Ralna",
@@ -8006,7 +8015,7 @@
       "periodYear": "2026",
       "periodLabel": "September 2026",
       "timestamp": "2026-09-13T15:45:11.092Z",
-      "updatedAt": "2026-09-14T09:38:01.700Z"
+      "updatedAt": "2026-09-14T12:14:47.252Z"
     },
     {
       "campaignId": "cmp-1787829303143",
@@ -8031,7 +8040,7 @@
       "campaignNetReceived": 100,
       "category": "kumtluang",
       "periodLabel": "September 2026",
-      "updatedAt": "2026-09-14T09:38:01.770Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "utr": "UTR161909792984",
       "txHash": "UTR161909792984"
     },
@@ -8040,7 +8049,7 @@
       "campaignId": "cmp-1787917594696",
       "platformFee": 5,
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.771Z",
+      "updatedAt": "2026-09-14T12:14:47.252Z",
       "campaignTitle": "Biakmuana Ralna",
       "category": "ralna",
       "donorName": "Anonymous",
@@ -8060,7 +8069,7 @@
       "campaignId": "cmp-khawlsak-3",
       "platformFee": 1,
       "amount": 100,
-      "updatedAt": "2026-09-14T09:38:01.771Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "txHash": "UTR355934859066",
       "isDependent": false,
       "status": "completed",
@@ -8073,7 +8082,8 @@
       "donorName": "Anonymous",
       "feeOption": "ADD_ON",
       "timestamp": "2026-09-13T13:50:48.968Z",
-      "campaignTitle": "Kunga Tanpuina"
+      "campaignTitle": "Kunga Tanpuina",
+      "category": "khawlsak"
     },
     {
       "donorVeng": "Bungkawn, Aizawl",
@@ -8082,7 +8092,7 @@
       "totalAmount": 505,
       "isAnonymous": true,
       "id": "RPAY_TXN_1789311130734_370",
-      "updatedAt": "2026-09-14T09:38:01.771Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "campaignTitle": "Biakmuana Ralna",
       "utr": "UTR475416126393",
       "amount": 500,
@@ -8093,7 +8103,8 @@
       "donorName": "Anonymous",
       "timestamp": "2026-09-13T14:52:15.372Z",
       "isDependent": false,
-      "feeOption": "ADD_ON"
+      "feeOption": "ADD_ON",
+      "category": "ralna"
     },
     {
       "isAnonymous": true,
@@ -8113,10 +8124,11 @@
       "campaignNetReceived": 100,
       "platformFee": 1,
       "isDependent": false,
-      "updatedAt": "2026-09-14T09:38:01.771Z"
+      "updatedAt": "2026-09-14T12:14:47.253Z",
+      "category": "khawlsak"
     },
     {
-      "updatedAt": "2026-09-14T09:38:01.771Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "periodYear": "2026",
       "category": "kumtluang",
       "periodLabel": "August 2026",
@@ -8149,7 +8161,7 @@
       "id": "RPAY_TXN_1789319313549_715",
       "campaignNetReceived": 500,
       "paymentMethod": "phonepe",
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "totalAmount": 505,
       "isAnonymous": true,
       "feeOption": "ADD_ON",
@@ -8161,7 +8173,8 @@
       "amount": 500,
       "campaignId": "cmp-1788262396368",
       "txHash": "UTR978055707978",
-      "status": "completed"
+      "status": "completed",
+      "category": "khawlsak"
     },
     {
       "status": "completed",
@@ -8173,7 +8186,7 @@
       "paymentMethod": "phonepe",
       "platformFee": 1,
       "campaignNetReceived": 100,
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "isDependent": false,
       "id": "RPAY_TXN_1789321417975_188",
       "feeOption": "ADD_ON",
@@ -8188,7 +8201,8 @@
       "utr": "UTR736807445141",
       "campaignId": "cmp-1787829303143",
       "periodType": "monthly",
-      "periodMonth": "September"
+      "periodMonth": "September",
+      "category": "khawlsak"
     },
     {
       "totalAmount": 505,
@@ -8207,7 +8221,7 @@
       "id": "RPAY_TXN_1789321895626_865",
       "category": "khawlsak",
       "campaignNetReceived": 499.95,
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.253Z",
       "status": "completed",
       "donorPhone": "9862300000"
     },
@@ -8229,7 +8243,7 @@
       "category": "khawlsak",
       "paymentMethod": "phonepe",
       "campaignId": "cmp-custom",
-      "updatedAt": "2026-09-14T09:38:01.772Z"
+      "updatedAt": "2026-09-14T12:14:47.253Z"
     },
     {
       "utr": "UTR679133708583",
@@ -8250,7 +8264,7 @@
       "isDependent": false,
       "amount": 500,
       "campaignTitle": "Pocket Money",
-      "updatedAt": "2026-09-14T09:38:01.772Z"
+      "updatedAt": "2026-09-14T12:14:47.253Z"
     },
     {
       "feeOption": "ADD_ON",
@@ -8267,7 +8281,7 @@
       "campaignTitle": "Pocket Money",
       "isDependent": false,
       "campaignNetReceived": 235,
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "platformFee": 2
     },
     {
@@ -8291,7 +8305,7 @@
       "amount": 100,
       "paymentMethod": "phonepe",
       "platformFee": 1,
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
       "periodLabel": "August 2026",
       "txHash": "OM2609112316510738240760",
@@ -8302,7 +8316,7 @@
       "isDependent": false,
       "platformFee": 1,
       "donorVeng": "Bial 1 (Vengchhak)",
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "donorName": "Valued Donor",
       "amount": 100,
       "paymentMethod": "phonepe",
@@ -8335,7 +8349,7 @@
       "amount": 100,
       "donorVeng": "Bial 1 (Vengchhak)",
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.772Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "isAnonymous": false,
       "id": "RPAY_TXN_1789149487473_967"
     },
@@ -8344,7 +8358,7 @@
       "amount": 55,
       "isDependent": false,
       "status": "completed",
-      "updatedAt": "2026-09-14T09:38:01.773Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "donorName": "Anonymous",
       "feeOption": "ADD_ON",
       "campaignTitle": "Lalrinpuii Ralna",
@@ -8363,7 +8377,7 @@
     {
       "status": "completed",
       "amount": 100,
-      "updatedAt": "2026-09-14T09:38:01.773Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "platformFee": 1,
       "donorVeng": "Bial 1 (Vengchhak)",
       "isDependent": false,
@@ -8384,7 +8398,7 @@
     },
     {
       "totalAmount": 101,
-      "updatedAt": "2026-09-14T09:38:01.773Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "category": "kumtluang",
       "isAnonymous": true,
       "periodMonth": "September",
@@ -8417,18 +8431,79 @@
       "campaignTitle": "Lalrinpuii Ralna",
       "category": "ralna",
       "campaignId": "cmp-1788526889943",
-      "updatedAt": "2026-09-14T09:38:01.773Z",
+      "updatedAt": "2026-09-14T12:14:47.254Z",
       "amount": 22,
       "campaignNetReceived": 22,
       "id": "RPAY_TXN_1789217717833_843",
       "status": "pending",
       "totalAmount": 23,
       "isAnonymous": true
+    },
+    {
+      "id": "RPAY_TXN_1789387843894_575",
+      "category": "ralna",
+      "campaignId": "cmp-1788526889943",
+      "campaignTitle": "Lalrinpuii Ralna",
+      "donorName": "Valued Donor",
+      "donorVeng": "Bial 1 (Vengchhak)",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 100,
+      "platformFee": 1,
+      "feeOption": "ADD_ON",
+      "campaignNetReceived": 100,
+      "totalAmount": 101,
+      "paymentMethod": "phonepe",
+      "status": "completed",
+      "timestamp": "2026-09-14T12:11:31.212Z",
+      "txHash": "UTR465068240124",
+      "utr": "UTR465068240124",
+      "updatedAt": "2026-09-14T12:14:47.254Z"
+    },
+    {
+      "id": "RPAY_TXN_1789388050816_399",
+      "campaignId": "cmp-1788526889943",
+      "campaignTitle": "Lalrinpuii Ralna",
+      "category": "ralna",
+      "donorName": "Anonymous",
+      "isDependent": false,
+      "isAnonymous": true,
+      "amount": 500,
+      "platformFee": 5,
+      "totalAmount": 505,
+      "paymentMethod": "phonepe",
+      "status": "completed",
+      "timestamp": "2026-09-14T12:14:47.503Z",
+      "feeOption": "ADD_ON",
+      "campaignNetReceived": 500,
+      "donorPhone": "9862300000",
+      "referenceNo": "OMO2609141744135528240931",
+      "verifiedAt": "2026-09-14T12:14:47.503Z",
+      "utr": "UTR930867784242",
+      "updatedAt": "2026-09-14T12:14:47.509Z"
+    },
+    {
+      "id": "RPAY_TXN_1789129488999_160",
+      "campaignId": "cmp-1788526889943",
+      "campaignTitle": "Lalrinpuii Ralna",
+      "category": "ralna",
+      "donorName": "Anonymous",
+      "isDependent": false,
+      "isAnonymous": true,
+      "amount": 32,
+      "platformFee": 1,
+      "feeOption": "ADD_ON",
+      "campaignNetReceived": 32,
+      "totalAmount": 33,
+      "paymentMethod": "phonepe",
+      "status": "pending",
+      "timestamp": "2026-09-11T12:24:48.999Z",
+      "updatedAt": "2026-09-14T12:14:47.250Z"
     }
   ],
   "creators": [],
   "pricingConfig": null,
   "announcement": null,
   "auditLogs": [],
-  "lastUpdated": "2026-09-14T12:05:22.985Z"
+  "lastUpdated": "2026-09-14T12:20:00.327Z"
 }

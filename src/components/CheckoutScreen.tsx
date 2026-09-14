@@ -84,6 +84,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isRedirectingToPhonePe, setIsRedirectingToPhonePe] = useState<boolean>(false);
   const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
   const [isVerifyingInMainTab, setIsVerifyingInMainTab] = useState<boolean>(false);
+  const [phonePeVerifyMsg, setPhonePeVerifyMsg] = useState<{ type: 'error' | 'pending' | 'success'; text: string } | null>(null);
 
   // Background listener to detect when user finishes payment in the New Tab
   useEffect(() => {
@@ -709,7 +710,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
       try {
         localStorage.setItem(`RONPAY_PENDING_TX_${merchantTxnId}`, JSON.stringify(pendingTx));
-        saveTransaction(pendingTx);
+        // Note: We do NOT call saveTransaction(pendingTx) here so uncompleted or cancelled
+        // gateway attempts do not pollute the Sulhnu transaction history.
       } catch (e) {}
 
       // Open new tab synchronously during user click action to bypass browser popup blockers
@@ -2208,33 +2210,89 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               )}
 
+              {/* PhonePe verification feedback alert */}
+              {phonePeVerifyMsg && (
+                <div
+                  className={`w-full p-3.5 rounded-2xl text-xs font-medium flex items-start gap-2.5 transition text-left animate-in fade-in duration-150 ${
+                    phonePeVerifyMsg.type === 'error'
+                      ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                      : phonePeVerifyMsg.type === 'pending'
+                      ? 'bg-amber-50 border border-amber-200 text-amber-900'
+                      : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  }`}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    {phonePeVerifyMsg.type === 'error' ? (
+                      <AlertCircle className="w-4 h-4 text-rose-600" />
+                    ) : phonePeVerifyMsg.type === 'pending' ? (
+                      <Clock className="w-4 h-4 text-amber-600" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 leading-relaxed">
+                    {phonePeVerifyMsg.text}
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={async () => {
                   if (!activePendingTxn) return;
                   setIsVerifyingInMainTab(true);
+                  setPhonePeVerifyMsg(null);
                   try {
                     const r = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
                     const d = await r.json();
-                    const finalTx: Transaction = {
-                      ...activePendingTxn,
-                      status: 'completed',
-                      referenceNo: d?.data?.transactionId || d?.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
-                      utr: d?.data?.paymentInstrument?.utr || activePendingTxn.utr
-                    };
-                    saveTransaction(finalTx);
-                    setIsRedirectingToPhonePe(false);
-                    setIsProcessing(false);
-                    onPaymentSuccess(finalTx);
+
+                    const isSuccess =
+                      d?.code === 'PAYMENT_SUCCESS' ||
+                      d?.code === 'SUCCESS' ||
+                      d?.data?.state === 'COMPLETED' ||
+                      d?.data?.status === 'SUCCESS' ||
+                      d?.data?.status === 'PAYMENT_SUCCESS' ||
+                      d?.data?.responseCode === 'SUCCESS';
+
+                    const isFailed =
+                      d?.code === 'PAYMENT_ERROR' ||
+                      d?.data?.state === 'FAILED' ||
+                      d?.data?.responseCode === 'PAYMENT_ERROR';
+
+                    if (isSuccess) {
+                      setPhonePeVerifyMsg({
+                        type: 'success',
+                        text: 'PhonePe Gateway atangin payment a hlawhtling e! Receipt kan buatsaih mek e...'
+                      });
+                      const finalTx: Transaction = {
+                        ...activePendingTxn,
+                        status: 'completed',
+                        referenceNo: d?.data?.transactionId || d?.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
+                        utr: d?.data?.paymentInstrument?.utr || activePendingTxn.utr
+                      };
+                      saveTransaction(finalTx);
+                      setTimeout(() => {
+                        setIsRedirectingToPhonePe(false);
+                        setIsProcessing(false);
+                        onPaymentSuccess(finalTx);
+                      }, 600);
+                    } else if (isFailed) {
+                      setPhonePeVerifyMsg({
+                        type: 'error',
+                        text: 'PhonePe atangin payment a hlawhtling lo (Failed / Cancelled). Khawngaihin a hnuai lamah "Kalsan rih rawh" hmetin i ti tha leh dawn nia.'
+                      });
+                    } else {
+                      // Status is still PENDING: User has NOT completed payment on mercury-uat
+                      setPhonePeVerifyMsg({
+                        type: 'pending',
+                        text: 'PhonePe atangin payment confirmation a la thleng lo (Status: A la pending mek). Khawngaihin New Tab-a PhonePe portal ah khan payment ti zo phawt la, chumi hnuah "Payment ka ti zo tawh e" hi hmet nawn leh rawh le.'
+                      });
+                    }
                   } catch (e) {
-                    const finalTx: Transaction = {
-                      ...activePendingTxn,
-                      status: 'completed'
-                    };
-                    saveTransaction(finalTx);
-                    setIsRedirectingToPhonePe(false);
-                    setIsProcessing(false);
-                    onPaymentSuccess(finalTx);
+                    setPhonePeVerifyMsg({
+                      type: 'error',
+                      text: 'PhonePe status check a buai rih deuh. Internet connection enfiah la, PhonePe page ah khan payment a tlang tawh ngei em check nawn leh rawh le.'
+                    });
                   } finally {
                     setIsVerifyingInMainTab(false);
                   }
@@ -2255,6 +2313,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 onClick={() => {
                   setIsRedirectingToPhonePe(false);
                   setIsProcessing(false);
+                  setPhonePeVerifyMsg(null);
                 }}
                 className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 cursor-pointer"
               >

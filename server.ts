@@ -648,7 +648,7 @@ app.get([
   const xVerify = generateChecksum('', endpoint, PHONEPE_CLIENT_SECRET, '1');
 
   res.json({
-    success: isSuccess || isPending,
+    success: isSuccess,
     code: isSuccess ? 'PAYMENT_SUCCESS' : (isFailed ? 'PAYMENT_ERROR' : 'PAYMENT_PENDING'),
     message: isSuccess 
       ? 'Your payment has been successfully processed.' 
