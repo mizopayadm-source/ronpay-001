@@ -8,6 +8,7 @@ export interface ParsedRoute {
   campaign?: Campaign;
   category?: BawmCategory;
   receiptId?: string;
+  failureReason?: string;
   receiptMeta?: {
     amount?: number;
     baseAmount?: number;
@@ -80,36 +81,83 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const screenParam = searchParams.get('screen') || searchParams.get('page');
     const viewParam = searchParams.get('view');
     const statusParam = searchParams.get('status');
+    const codeParam = searchParams.get('code');
+    const failedParam = searchParams.get('failed');
 
     const isExplicitFailStatus = statusParam === 'PAYMENT_ERROR' || 
                                  statusParam === 'FAILED' || 
                                  statusParam === 'PAYMENT_DECLINED' || 
                                  statusParam === 'CANCELLED' ||
+                                 codeParam === 'PAYMENT_ERROR' ||
+                                 codeParam === 'FAILED' ||
+                                 failedParam === '1' ||
+                                 failedParam === 'true' ||
                                  screenParam === 'failed';
 
     let receiptId = '';
-    if (!isExplicitFailStatus) {
-      receiptId = searchParams.get('receipt') || 
-                  searchParams.get('tx') || 
-                  searchParams.get('txn') || 
-                  searchParams.get('txnId') ||
-                  searchParams.get('merchantTransactionId') ||
-                  searchParams.get('orderId') ||
-                  searchParams.get('receiptId') ||
-                  searchParams.get('phonepe_txn_id') ||
-                  '';
+    const explicitFailedTxId = searchParams.get('receipt') || 
+                               searchParams.get('tx') || 
+                               searchParams.get('txn') || 
+                               searchParams.get('txnId') ||
+                               searchParams.get('merchantTransactionId') ||
+                               searchParams.get('orderId') ||
+                               searchParams.get('receiptId') ||
+                               searchParams.get('phonepe_txn_id') ||
+                               '';
 
-      // If status or code is PAYMENT_SUCCESS but no receiptId passed
-      if ((!receiptId || receiptId.trim() === '') && (statusParam === 'PAYMENT_SUCCESS' || searchParams.get('code') === 'PAYMENT_SUCCESS')) {
-        receiptId = `RPAY_TXN_${Date.now()}`;
-      }
+    if (!isExplicitFailStatus) {
+      receiptId = explicitFailedTxId;
     }
 
     // Special catch: If arriving at /callback or /phonepe/callback
     if (pathname.includes('/callback') || pathname.includes('/phonepe/callback')) {
+      if (isExplicitFailStatus) {
+        return {
+          screen: 'failed',
+          receiptId: explicitFailedTxId,
+          failureReason: searchParams.get('reason') || 'PhonePe payment was cancelled or declined',
+          view: 'app',
+        };
+      }
       return {
         screen: 'success',
-        receiptId: receiptId || `RPAY_TXN_${Date.now()}`,
+        receiptId: receiptId,
+        view: 'app',
+      };
+    }
+
+    // If explicit fail status requested anywhere in the app URL
+    if (isExplicitFailStatus) {
+      const amtParam = searchParams.get('amt');
+      const baseAmtParam = searchParams.get('baseAmt');
+      const feeParam = searchParams.get('fee');
+      const feeOptParam = searchParams.get('feeOpt');
+      const cidParam = searchParams.get('cid');
+      const ctitleParam = searchParams.get('ctitle');
+      const catParam = searchParams.get('cat') || searchParams.get('category');
+      const donorParam = searchParams.get('donor');
+      const donorPhoneParam = searchParams.get('donorPhone');
+      const anonParam = searchParams.get('anon');
+      const reasonParam = searchParams.get('reason') || searchParams.get('msg') || searchParams.get('error') || 'Payment cancelled or declined on PhonePe';
+
+      const receiptMeta = (amtParam || baseAmtParam || cidParam || ctitleParam || donorParam) ? {
+        amount: amtParam ? parseFloat(amtParam) : undefined,
+        baseAmount: baseAmtParam ? parseFloat(baseAmtParam) : undefined,
+        platformFee: feeParam ? parseFloat(feeParam) : undefined,
+        feeOption: (feeOptParam as any) || 'ADD_ON',
+        campaignId: cidParam || undefined,
+        campaignTitle: ctitleParam || undefined,
+        category: (catParam as BawmCategory) || undefined,
+        donorName: donorParam || undefined,
+        donorPhone: donorPhoneParam || undefined,
+        isAnonymous: anonParam === '1' || anonParam === 'true',
+      } : undefined;
+
+      return {
+        screen: 'failed',
+        receiptId: explicitFailedTxId,
+        failureReason: reasonParam,
+        receiptMeta,
         view: 'app',
       };
     }
@@ -232,7 +280,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     }
 
     // 2. If Receipt ID is present
-    if (receiptId && receiptId.trim() !== '') {
+    if (receiptId && receiptId.trim() !== '' && !isExplicitFailStatus) {
       const amtParam = searchParams.get('amt');
       const baseAmtParam = searchParams.get('baseAmt');
       const feeParam = searchParams.get('fee');
@@ -284,7 +332,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     // 5. If specific screen or category requested
     if (screenParam) {
-      const validScreens: ScreenId[] = ['home', 'website', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'cash_pending'];
+      const validScreens: ScreenId[] = ['home', 'website', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'failed', 'cash_pending'];
       const matched = validScreens.find(s => s === screenParam.toLowerCase());
       if (matched) {
         return {

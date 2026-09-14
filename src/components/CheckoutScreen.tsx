@@ -50,6 +50,7 @@ interface CheckoutScreenProps {
   pricingConfig?: SystemPricingConfig;
   onBack: () => void;
   onPaymentSuccess: (transaction: Transaction) => void;
+  onPaymentFailure?: (transaction: Transaction, reason?: string) => void;
   onCashPending: (transaction: Transaction) => void;
   onOpenPhonePePortal?: () => void;
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
@@ -67,6 +68,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   pricingConfig = DEFAULT_PRICING_CONFIG,
   onBack,
   onPaymentSuccess,
+  onPaymentFailure,
   onCashPending,
   onOpenPhonePePortal,
   onPreviewImage,
@@ -105,6 +107,27 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       onPaymentSuccess(finalTx);
     };
 
+    const triggerFailed = (reason?: string) => {
+      if (isFinished) return;
+      isFinished = true;
+      setIsRedirectingToPhonePe(false);
+      setIsProcessing(false);
+      if (activePendingTxn) {
+        const failedTx: Transaction = {
+          ...activePendingTxn,
+          status: 'failed',
+        };
+        if (onPaymentFailure) {
+          onPaymentFailure(failedTx, reason);
+          return;
+        }
+      }
+      setPhonePeVerifyMsg({
+        type: 'error',
+        text: `⚠️ PhonePe atangin payment a tlang lo (Failed / Cancelled). Pawisa i bank atangin a in cut lo e.${reason ? ` (${reason})` : ''} Khawngaihin i ti tha leh dawn nia.`
+      });
+    };
+
     // 1. BroadcastChannel (fastest across browser tabs on same origin)
     let bc: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
@@ -115,6 +138,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             if (!event.data?.receiptId || event.data.receiptId === activePendingTxn.id) {
               triggerSuccess();
             }
+          } else if (event.data?.type === 'PHONEPE_PAYMENT_FAILED' || event.data?.type === 'PHONEPE_PAYMENT_CANCELLED') {
+            if (!event.data?.receiptId || event.data.receiptId === activePendingTxn.id) {
+              triggerFailed(event.data?.reason);
+            }
           }
         };
       } catch (e) {}
@@ -122,9 +149,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     // 2. window.addEventListener('message') from window.opener
     const handleMsg = (event: MessageEvent) => {
-      if (event.data?.type === 'PHONEPE_PAYMENT_RESULT' && event.data?.status === 'PAYMENT_SUCCESS') {
-        if (!event.data?.txnId || event.data.txnId === activePendingTxn.id) {
-          triggerSuccess();
+      if (event.data?.type === 'PHONEPE_PAYMENT_RESULT') {
+        if (event.data?.status === 'PAYMENT_SUCCESS') {
+          if (!event.data?.txnId || event.data.txnId === activePendingTxn.id) {
+            triggerSuccess();
+          }
+        } else if (event.data?.status === 'PAYMENT_ERROR' || event.data?.status === 'FAILED' || event.data?.status === 'CANCELLED') {
+          if (!event.data?.txnId || event.data.txnId === activePendingTxn.id) {
+            triggerFailed(event.data?.reason);
+          }
         }
       }
     };
@@ -135,8 +168,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (parsed?.id === activePendingTxn.id && parsed?.status === 'PAYMENT_SUCCESS') {
-            triggerSuccess();
+          if (parsed?.id === activePendingTxn.id) {
+            if (parsed?.status === 'PAYMENT_SUCCESS') {
+              triggerSuccess();
+            } else if (parsed?.status === 'PAYMENT_ERROR' || parsed?.status === 'FAILED') {
+              triggerFailed();
+            }
           }
         } catch {}
       }
@@ -150,9 +187,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         const json = await res.json();
         if (json?.data?.state === 'COMPLETED' || json?.data?.responseCode === 'SUCCESS' || json?.code === 'PAYMENT_SUCCESS' || json?.data?.status === 'PAYMENT_SUCCESS') {
           triggerSuccess({
-            referenceNo: json.data.transactionId || json.data.paymentInstrument?.utr || activePendingTxn.referenceNo,
-            utr: json.data.paymentInstrument?.utr || activePendingTxn.utr
+            referenceNo: json.data?.transactionId || json.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
+            utr: json.data?.paymentInstrument?.utr || activePendingTxn.utr
           });
+        } else if (json?.data?.state === 'FAILED' || json?.data?.state === 'CANCELLED' || json?.data?.state === 'EXPIRED' || json?.code === 'PAYMENT_ERROR') {
+          triggerFailed(json?.data?.detailedErrorCode || json?.data?.errorCode || 'Payment failed on PhonePe');
         }
       } catch (e) {}
     }, 2200);
@@ -163,7 +202,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       window.removeEventListener('storage', handleStorage);
       clearInterval(interval);
     };
-  }, [isRedirectingToPhonePe, activePendingTxn, onPaymentSuccess]);
+  }, [isRedirectingToPhonePe, activePendingTxn, onPaymentSuccess, onPaymentFailure]);
 
   // Dynamic Cause Translation when user/donor views in English
   const { translatedCause, isTranslating: isTranslatingCause } = useCampaignCauseTranslation(campaign, language);
@@ -2257,7 +2296,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     const isFailed =
                       d?.code === 'PAYMENT_ERROR' ||
                       d?.data?.state === 'FAILED' ||
-                      d?.data?.responseCode === 'PAYMENT_ERROR';
+                      d?.data?.state === 'CANCELLED' ||
+                      d?.data?.state === 'EXPIRED' ||
+                      Boolean(d?.data?.errorCode) ||
+                      d?.data?.responseCode === 'PAYMENT_ERROR' ||
+                      d?.data?.responseCode === 'FAILED';
 
                     if (isSuccess) {
                       setPhonePeVerifyMsg({
@@ -2277,6 +2320,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                         onPaymentSuccess(finalTx);
                       }, 600);
                     } else if (isFailed) {
+                      setIsRedirectingToPhonePe(false);
+                      setIsProcessing(false);
+                      if (activePendingTxn) {
+                        const failedTx: Transaction = {
+                          ...activePendingTxn,
+                          status: 'failed',
+                        };
+                        if (onPaymentFailure) {
+                          onPaymentFailure(failedTx, d?.data?.detailedErrorCode || d?.data?.errorCode || 'PhonePe atangin payment a hlawhtling lo (Failed / Cancelled).');
+                          return;
+                        }
+                      }
                       setPhonePeVerifyMsg({
                         type: 'error',
                         text: 'PhonePe atangin payment a hlawhtling lo (Failed / Cancelled). Khawngaihin a hnuai lamah "Kalsan rih rawh" hmetin i ti tha leh dawn nia.'

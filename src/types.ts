@@ -7,6 +7,7 @@ export type ScreenId =
   | 'creator_reg' 
   | 'reports' 
   | 'success' 
+  | 'failed'
   | 'cash_pending'
   | 'phonepe_checkout';
 

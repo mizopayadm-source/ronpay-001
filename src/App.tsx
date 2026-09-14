@@ -65,6 +65,7 @@ import { CreateQRScreen } from './components/CreateQRScreen';
 import { CreatorRegScreen } from './components/CreatorRegScreen';
 import { ReportsScreen } from './components/ReportsScreen';
 import { SuccessScreen } from './components/SuccessScreen';
+import { FailedScreen } from './components/FailedScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
 import { PhonePeStandardCheckout } from './components/PhonePeStandardCheckout';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
@@ -117,7 +118,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
-    if (initialRoute?.receiptId) {
+    if (initialRoute?.receiptId && initialRoute?.screen !== 'failed') {
       const txs = getStoredTransactions();
       const found = txs.find(t => t.id.toLowerCase() === initialRoute.receiptId?.toLowerCase());
       if (found) return found;
@@ -175,6 +176,60 @@ export default function App() {
     }
     return null;
   });
+
+  const [failedTransaction, setFailedTransaction] = useState<Transaction | null>(() => {
+    if (initialRoute?.screen === 'failed' && initialRoute?.receiptId) {
+      const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`);
+      if (pendingRaw) {
+        try {
+          const parsed = JSON.parse(pendingRaw);
+          if (parsed && parsed.id) {
+            return {
+              ...parsed,
+              status: 'failed',
+            };
+          }
+        } catch (e) {}
+      }
+
+      if (initialRoute.receiptMeta) {
+        const meta = initialRoute.receiptMeta;
+        const total = meta.amount || (meta.baseAmount ? (meta.feeOption === 'ADD_ON' ? meta.baseAmount + (meta.platformFee || 1) : meta.baseAmount) : 0);
+        const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
+        const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
+        const allCamps = getStoredCampaigns();
+        const mCamp = allCamps.find(c => c.id === meta.campaignId);
+        const resolvedTitle = (mCamp ? getCampaignCauseTitle(mCamp) : '') ||
+          (meta.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
+          (meta.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
+          meta.campaignTitle ||
+          'RonPay Community Bawm';
+
+        return {
+          id: initialRoute.receiptId,
+          campaignId: meta.campaignId || 'cmp-custom',
+          campaignTitle: resolvedTitle,
+          category: meta.category || 'others',
+          donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued User'),
+          donorPhone: meta.donorPhone,
+          isAnonymous: Boolean(meta.isAnonymous),
+          amount: base,
+          platformFee: fee,
+          totalAmount: total,
+          feeOption: meta.feeOption || 'ADD_ON',
+          campaignNetReceived: base,
+          paymentMethod: 'phonepe',
+          status: 'failed',
+          timestamp: new Date().toISOString(),
+          referenceNo: `T${Date.now()}`,
+          utr: meta.utr
+        };
+      }
+    }
+    return null;
+  });
+
+  const [failureReason, setFailureReason] = useState<string | undefined>(() => initialRoute?.failureReason);
   const [isDesktopView, setIsDesktopView] = useState<boolean>(false);
   const [language, setLanguage] = useState<Language>('mizo');
   const [notificationCount, setNotificationCount] = useState<number>(3);
@@ -515,151 +570,128 @@ export default function App() {
       }
     }
     if (route.receiptId) {
-      try {
-        if (typeof BroadcastChannel !== 'undefined') {
-          const bc = new BroadcastChannel('ronpay_payment_channel');
-          bc.postMessage({ type: 'PHONEPE_PAYMENT_SUCCESS', receiptId: route.receiptId });
-        }
-        localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
-          id: route.receiptId,
-          status: 'PAYMENT_SUCCESS',
-          timestamp: Date.now()
-        }));
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'PHONEPE_PAYMENT_RESULT', status: 'PAYMENT_SUCCESS', receiptId: route.receiptId }, '*');
-        }
-      } catch (e) {}
-
       const txs = getStoredTransactions();
-      let found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+      const found = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
 
-      if (!found) {
-        const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`);
-        if (pendingRaw) {
-          try {
-            const parsed = JSON.parse(pendingRaw);
-            if (parsed && parsed.id) {
-              found = {
-                ...parsed,
-                status: 'completed',
-                verifiedAt: new Date().toISOString()
-              };
-              saveTransaction(found);
-            }
-          } catch (e) {}
-        }
+      const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${route.receiptId}`);
+      let parsedPending: Transaction | null = null;
+      if (pendingRaw) {
+        try {
+          parsedPending = JSON.parse(pendingRaw);
+        } catch (e) {}
       }
 
-      if (found) {
-        setCompletedTransaction(found);
-        recordUserPaidTxId(found.id);
-        // Query server status to confirm if recorded and fetch real UTR
-        fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data?.data) {
-              const updatedTx: Transaction = {
-                ...found!,
-                referenceNo: data.data.transactionId || data.data.paymentInstrument?.utr || found!.referenceNo,
-                utr: data.data.paymentInstrument?.utr || found!.utr,
-                status: (data.data.state === 'COMPLETED' || data.data.responseCode === 'SUCCESS' || data.code === 'PAYMENT_SUCCESS') ? 'completed' : found!.status
-              };
-              setCompletedTransaction(updatedTx);
-              saveTransaction(updatedTx);
-            }
-          })
-          .catch(() => {});
-      } else {
-        // Query server status endpoint to retrieve the recorded transaction metadata
-        fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
-          .then(r => r.json())
-          .then(res => {
-            const sData = res?.data;
+      // Authoritative status verification with server before trusting route
+      fetch(`/api/phonepe/status/${encodeURIComponent(route.receiptId)}`)
+        .then(r => r.json())
+        .then(data => {
+          const isConfirmedFailed =
+            data?.code === 'PAYMENT_ERROR' ||
+            data?.data?.state === 'FAILED' ||
+            data?.data?.state === 'CANCELLED' ||
+            data?.data?.state === 'EXPIRED' ||
+            Boolean(data?.data?.errorCode) ||
+            data?.data?.responseCode === 'PAYMENT_ERROR' ||
+            data?.data?.responseCode === 'FAILED';
+
+          const isConfirmedSuccess =
+            data?.code === 'PAYMENT_SUCCESS' ||
+            data?.data?.state === 'COMPLETED' ||
+            data?.data?.responseCode === 'SUCCESS' ||
+            data?.data?.status === 'SUCCESS' ||
+            data?.data?.status === 'PAYMENT_SUCCESS';
+
+          if (isConfirmedFailed) {
+            // Remove any erroneously stored record
+            deleteStoredTransaction(route.receiptId!);
+            setCompletedTransaction(null);
+            setCurrentScreen('home');
+            try {
+              if (typeof BroadcastChannel !== 'undefined') {
+                const bc = new BroadcastChannel('ronpay_payment_channel');
+                bc.postMessage({ type: 'PHONEPE_PAYMENT_FAILED', receiptId: route.receiptId });
+              }
+              localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+                id: route.receiptId,
+                status: 'PAYMENT_ERROR',
+                timestamp: Date.now()
+              }));
+            } catch (e) {}
+            return;
+          }
+
+          if (isConfirmedSuccess) {
+            try {
+              if (typeof BroadcastChannel !== 'undefined') {
+                const bc = new BroadcastChannel('ronpay_payment_channel');
+                bc.postMessage({ type: 'PHONEPE_PAYMENT_SUCCESS', receiptId: route.receiptId });
+              }
+              localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+                id: route.receiptId,
+                status: 'PAYMENT_SUCCESS',
+                timestamp: Date.now()
+              }));
+              if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({ type: 'PHONEPE_PAYMENT_RESULT', status: 'PAYMENT_SUCCESS', receiptId: route.receiptId }, '*');
+              }
+            } catch (e) {}
+
+            const sData = data?.data;
             const meta = route.receiptMeta;
+            const baseTx = found || parsedPending;
 
             const allCamps = [...campaigns, ...getStoredCampaigns()];
-            const targetCampId = sData?.campaignId || meta?.campaignId || '';
+            const targetCampId = sData?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
             const matchedCamp = allCamps.find(c => c.id === targetCampId);
 
-            const total = sData?.amountRupees || (sData?.amount ? sData.amount / 100 : null) || meta?.amount || 0;
-            const base = sData?.baseAmountRupees || meta?.baseAmount || (total > 1 ? total - 1 : total);
-            const fee = sData?.platformFeeRupees !== undefined ? sData.platformFeeRupees : (meta?.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base));
+            const total = sData?.amountRupees || (sData?.amount ? sData.amount / 100 : null) || meta?.amount || baseTx?.totalAmount || 0;
+            const base = sData?.baseAmountRupees || meta?.baseAmount || baseTx?.amount || (total > 1 ? total - 1 : total);
+            const fee = sData?.platformFeeRupees !== undefined ? sData.platformFeeRupees : (meta?.platformFee !== undefined ? meta.platformFee : (baseTx?.platformFee ?? Math.max(0, total - base)));
 
             const resolvedCampTitle = (matchedCamp ? getCampaignCauseTitle(matchedCamp) : '') ||
+              baseTx?.campaignTitle ||
               (sData?.campaignTitle && sData.campaignTitle !== 'BCM Ebenezer' ? sData.campaignTitle : '') ||
               (meta?.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
               (sData?.category === 'ralna' || meta?.category === 'ralna' || matchedCamp?.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
-              sData?.campaignTitle ||
-              meta?.campaignTitle ||
               'RonPay Community Bawm';
 
             const verifiedTx: Transaction = {
               id: route.receiptId!,
               campaignId: targetCampId || matchedCamp?.id || 'cmp-custom',
               campaignTitle: resolvedCampTitle,
-              donorName: sData?.isAnonymous || meta?.isAnonymous ? 'Anonymous' : (sData?.donorName || meta?.donorName || 'Valued Donor'),
-              donorPhone: sData?.donorPhone || meta?.donorPhone,
-              isAnonymous: Boolean(sData?.isAnonymous || meta?.isAnonymous),
+              donorName: baseTx?.donorName || (sData?.isAnonymous || meta?.isAnonymous ? 'Anonymous' : (sData?.donorName || meta?.donorName || 'Valued Donor')),
+              donorPhone: baseTx?.donorPhone || sData?.donorPhone || meta?.donorPhone,
+              isAnonymous: Boolean(baseTx?.isAnonymous || sData?.isAnonymous || meta?.isAnonymous),
               amount: base,
               platformFee: fee,
               totalAmount: total,
-              category: (sData?.category || meta?.category || matchedCamp?.category || 'others') as any,
+              category: (baseTx?.category || sData?.category || meta?.category || matchedCamp?.category || 'others') as any,
               paymentMethod: 'phonepe',
               status: 'completed',
-              timestamp: new Date().toISOString(),
-              referenceNo: sData?.transactionId || `T${Date.now()}`,
+              timestamp: baseTx?.timestamp || new Date().toISOString(),
+              referenceNo: sData?.transactionId || sData?.paymentInstrument?.utr || baseTx?.referenceNo || `T${Date.now()}`,
               verifiedAt: new Date().toISOString(),
-              feeOption: (sData?.feeOption || meta?.feeOption || 'ADD_ON') as any,
+              feeOption: (baseTx?.feeOption || sData?.feeOption || meta?.feeOption || 'ADD_ON') as any,
               campaignNetReceived: base,
-              utr: sData?.paymentInstrument?.utr || meta?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
+              utr: sData?.paymentInstrument?.utr || baseTx?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
             };
 
             setCompletedTransaction(verifiedTx);
             saveTransaction(verifiedTx);
             recordUserPaidTxId(verifiedTx.id);
-          })
-          .catch(() => {
-            if (route.receiptMeta && (route.receiptMeta.amount || route.receiptMeta.baseAmount)) {
-              const meta = route.receiptMeta;
-              const total = meta.amount || (meta.baseAmount ? (meta.feeOption === 'ADD_ON' ? meta.baseAmount + (meta.platformFee || 1) : meta.baseAmount) : 0);
-              const base = meta.baseAmount || (meta.feeOption === 'ADD_ON' ? Math.max(1, total - (meta.platformFee || 1)) : total);
-              const fee = meta.platformFee !== undefined ? meta.platformFee : Math.max(0, total - base);
-              const allCampsFallback = [...campaigns, ...getStoredCampaigns()];
-              const matchedFallback = allCampsFallback.find(c => c.id === meta.campaignId);
-              const resolvedMetaCampTitle = (matchedFallback ? getCampaignCauseTitle(matchedFallback) : '') ||
-                (meta.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
-                (meta.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
-                meta.campaignTitle ||
-                'RonPay Community Bawm';
-
-              const verifiedTx: Transaction = {
-                id: route.receiptId!,
-                campaignId: meta.campaignId || 'cmp-custom',
-                campaignTitle: resolvedMetaCampTitle,
-                donorName: meta.isAnonymous ? 'Anonymous' : (meta.donorName || 'Valued Donor'),
-                donorPhone: meta.donorPhone,
-                isAnonymous: Boolean(meta.isAnonymous),
-                amount: base,
-                platformFee: fee,
-                totalAmount: total,
-                category: (meta.category || 'others') as any,
-                paymentMethod: 'phonepe',
-                status: 'completed',
-                timestamp: new Date().toISOString(),
-                referenceNo: `T${Date.now()}`,
-                verifiedAt: new Date().toISOString(),
-                feeOption: meta.feeOption || 'ADD_ON',
-                campaignNetReceived: base,
-                utr: meta.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
-              };
-              setCompletedTransaction(verifiedTx);
-              saveTransaction(verifiedTx);
-              recordUserPaidTxId(verifiedTx.id);
-            }
-          });
-      }
-      setCurrentScreen('success');
-      setAppView('app');
+            setCurrentScreen('success');
+            setAppView('app');
+          }
+        })
+        .catch(() => {
+          // If server query failed, only honor if previously recorded as completed
+          if (found && found.status === 'completed') {
+            setCompletedTransaction(found);
+            recordUserPaidTxId(found.id);
+            setCurrentScreen('success');
+            setAppView('app');
+          }
+        });
     }
     if (route.isMemberRollOpen) {
       setKumtluangInitialCampaignId(route.memberRollCampaignId);
@@ -833,6 +865,14 @@ export default function App() {
     handleNavigate('success');
   };
 
+  const handlePaymentFailure = (transaction: Transaction, reason?: string) => {
+    setAutoOpenPhonePeCheckout(false);
+    setFailedTransaction(transaction);
+    setFailureReason(reason);
+    setCurrentScreen('failed');
+    updateBrowserUrl('failed', selectedCampaign, selectedCategory);
+  };
+
   const handleCashPending = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
@@ -1001,7 +1041,7 @@ export default function App() {
       setCreatorProfile(GUEST_CREATOR_PROFILE);
     }
     if (targetScreen) {
-      const validScreens: ScreenId[] = ['home', 'explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'cash_pending'];
+      const validScreens: ScreenId[] = ['home', 'explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'failed', 'cash_pending'];
       const matched = validScreens.find(s => s === targetScreen);
       if (matched) {
         if (matched === 'create_qr') {
@@ -1173,6 +1213,9 @@ export default function App() {
                 setAutoOpenPhonePeCheckout(false);
                 handlePaymentSuccess(tx);
               }}
+              onPaymentFailure={(tx, reason) => {
+                handlePaymentFailure(tx, reason);
+              }}
               onCashPending={handleCashPending}
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onPreviewImage={handlePreviewImage}
@@ -1298,6 +1341,22 @@ export default function App() {
           {currentScreen === 'success' && (
             <SuccessScreen
               transaction={completedTransaction}
+              onGoHome={() => handleNavigate('home')}
+              onExploreMore={() => handleNavigate('explorer')}
+            />
+          )}
+
+          {currentScreen === 'failed' && (
+            <FailedScreen
+              transaction={failedTransaction}
+              reason={failureReason}
+              onRetry={() => {
+                if (failedTransaction?.campaignId) {
+                  const camp = campaigns.find(c => c.id === failedTransaction.campaignId) || selectedCampaign;
+                  if (camp) setSelectedCampaign(camp);
+                }
+                handleNavigate('checkout');
+              }}
               onGoHome={() => handleNavigate('home')}
               onExploreMore={() => handleNavigate('explorer')}
             />
