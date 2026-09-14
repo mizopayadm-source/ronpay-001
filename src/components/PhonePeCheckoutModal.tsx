@@ -273,10 +273,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
   }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
-  // 2. Official PhonePe PG Sandbox (mercury-uat.phonepe.com) URL
-  // When scanned by phone camera, Google Lens, or mobile QR scanner, it opens the official mercury-uat portal
+  // 2. Smart Mobile Gateway URL for Phone Camera & Web Scanners
+  // When scanned by phone camera or Google Lens, it opens the mobile gateway supporting both UPI and Net Banking
   const scanPayWebLink = useMemo(() => {
-    if (officialMercuryUrl) return officialMercuryUrl;
     if (typeof window === 'undefined' || !merchantTxnId) return '';
     const origin = window.location.origin;
     const campId = campaign?.id || 'cmp-custom';
@@ -286,11 +285,11 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     const encCat = encodeURIComponent(effectiveCategory);
     const amt = totalPayable.toFixed(2);
     
-    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&redirect=mercury&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
-  }, [officialMercuryUrl, campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
+    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
+  }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
 
-  // Active QR value: 'weblink' directly encodes the official mercury-uat.phonepe.com checkout URL for Phone Cameras & Web Scanners
-  const activeQrCodeValue = qrFormat === 'weblink' ? (officialMercuryUrl || scanPayWebLink || upiPaymentUri) : upiPaymentUri;
+  // Active QR value: 'weblink' directly encodes the smart mobile gateway URL for Phone Cameras & Web Scanners
+  const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiPaymentUri) : upiPaymentUri;
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1203,20 +1202,34 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                 {qrFormat === 'weblink' ? (
                                   <div className="flex flex-col items-center gap-1">
                                     <span className="text-[11px] font-semibold text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs">
-                                      🌐 Phone Camera & Google Lens scan atan (mercury-uat.phonepe.com direct)
+                                      🌐 Phone Camera & Google Lens scan atan (UPI & Net Banking direct)
                                     </span>
-                                    {scanPayWebLink && (
-                                      <a
-                                        href={scanPayWebLink}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[11px] text-purple-600 hover:text-purple-800 underline inline-flex items-center gap-1 mt-0.5 font-semibold"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        <span>Open mercury-uat.phonepe.com (Test Link)</span>
-                                      </a>
-                                    )}
+                                    <div className="flex items-center gap-3 mt-0.5">
+                                      {scanPayWebLink && (
+                                        <a
+                                          href={scanPayWebLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[11px] text-purple-700 hover:text-purple-900 underline inline-flex items-center gap-1 font-semibold"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                          <span>PhonePe Mobile Portal</span>
+                                        </a>
+                                      )}
+                                      {officialMercuryUrl && (
+                                        <a
+                                          href={officialMercuryUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[11px] text-slate-500 hover:text-slate-700 underline inline-flex items-center gap-1 font-medium"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                          <span>Raw mercury-uat Net Banking</span>
+                                        </a>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : (
                                   <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">

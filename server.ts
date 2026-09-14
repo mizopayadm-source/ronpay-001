@@ -157,6 +157,7 @@ interface PaymentRecord {
   donorName?: string;
   donorPhone?: string;
   isAnonymous?: boolean;
+  paymentMethod?: string;
   mercuryUrl?: string;
 }
 
@@ -692,7 +693,8 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
     donorName,
     donorPhone,
     isAnonymous,
-    feeOption
+    feeOption,
+    paymentMethod
   } = req.body;
   if (!merchantTransactionId) {
     return res.status(400).json({ success: false, message: 'Missing merchantTransactionId' });
@@ -717,6 +719,7 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
       donorName: donorName || 'Valued Donor',
       donorPhone: donorPhone || '',
       isAnonymous: Boolean(isAnonymous),
+      paymentMethod: paymentMethod || 'PhonePe UPI',
       status: status || 'PAYMENT_SUCCESS',
       createdAt: new Date().toISOString(),
       phonePeTransactionId: `T${Date.now()}`,
@@ -732,6 +735,7 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
     if (campaignId) record.campaignId = campaignId;
     if (donorName) record.donorName = donorName;
     if (category) record.category = category;
+    if (paymentMethod) record.paymentMethod = paymentMethod;
   }
 
   record.status = status;
@@ -1256,7 +1260,51 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
         <span class="meta-value" style="font-family: monospace; font-size: 11px;">${txnId}</span>
       </div>
 
-      <div class="divider-text">Pay with Mobile UPI App</div>
+      <!-- Friendly Sandbox UPI Notice -->
+      <div style="background: #faf5ff; border: 1.5px solid #d8b4fe; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 12px; color: #581c87; line-height: 1.45;">
+        <div style="font-weight: 800; font-size: 13px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: #6b21a8;">
+          <span>⚡ PhonePe PG Sandbox Mobile Gateway</span>
+        </div>
+        Phone-a PhonePe / GPay app hi Live (real account) a nih avangin UAT test merchant-ah NPCI-in direct pay a dang thin a. A hnuaia <strong>'Pay with PhonePe UPI (Instant)'</strong> emaw <strong>'Net Banking'</strong> hmang hian awlsam takin i tlang nghal thei e!
+      </div>
+
+      <div class="divider-text">Pay with UPI (PhonePe / GPay / Any UPI)</div>
+
+      <!-- Instant PhonePe UPI Pay -->
+      <button type="button" class="btn btn-phonepe" onclick="sendSimulation('SUCCESS', 'PhonePe UPI')" style="box-shadow: 0 4px 14px rgba(95, 37, 159, 0.35); padding: 14px 16px; margin-top: 4px;">
+        <span style="font-size: 20px; font-weight: 900;">पे</span>
+        <div style="text-align: left; flex: 1;">
+          <div style="font-size: 14px; font-weight: 800; letter-spacing: -0.01em;">Pay with PhonePe UPI (Instant)</div>
+          <div style="font-size: 11px; opacity: 0.9; font-weight: 500;">Direct UPI Authorization • Tlang nghal theih</div>
+        </div>
+        <span style="font-size: 16px;">➔</span>
+      </button>
+
+      <!-- Instant Google Pay -->
+      <button type="button" class="btn btn-gpay" onclick="sendSimulation('SUCCESS', 'Google Pay')" style="padding: 12px 16px; margin-top: 8px;">
+        <span style="font-size: 16px; font-weight: 800;">G</span>
+        <div style="text-align: left; flex: 1;">
+          <div style="font-size: 13px; font-weight: 800; color: #1a73e8;">Pay with Google Pay (Instant)</div>
+          <div style="font-size: 11px; color: #5f6368; font-weight: 500;">Instant UPI Payment for GPay</div>
+        </div>
+        <span style="font-size: 14px; color: #1a73e8;">➔</span>
+      </button>
+
+      <!-- Launch External App Options -->
+      <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 12px; margin-top: 10px;">
+        <div style="font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 8px;">Emaw PhonePe / GPay App-ah hawng chhin rawh:</div>
+        <div style="display: flex; gap: 8px;">
+          <a href="phonepe://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-phonepe upi-app-link" onclick="handleUpiAppLaunch('PhonePe')" style="flex: 1; padding: 10px; font-size: 12px; margin: 0;">
+            <span>पे PhonePe</span>
+          </a>
+          <a href="gpay://upi/pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-gpay upi-app-link" onclick="handleUpiAppLaunch('Google Pay')" style="flex: 1; padding: 10px; font-size: 12px; margin: 0;">
+            <span>G GPay</span>
+          </a>
+          <a href="upi://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-upi upi-app-link" onclick="handleUpiAppLaunch('UPI App')" style="flex: 1; padding: 10px; font-size: 12px; margin: 0;">
+            <span>⚡ Any UPI</span>
+          </a>
+        </div>
+      </div>
 
       <!-- App Return Confirmation Banner -->
       <div id="upiConfirmPrompt" style="display:none; background:#ecfdf5; border:1.5px solid #10b981; border-radius:16px; padding:14px; margin:12px 0; text-align:center;">
@@ -1276,19 +1324,31 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
         </div>
       </div>
 
-      <a href="phonepe://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-phonepe upi-app-link" onclick="handleUpiAppLaunch('PhonePe')">
-        <span style="font-size: 16px; font-weight: 900;">पे</span>
-        <span>Open in PhonePe App</span>
+      <!-- Custom UPI ID / VPA -->
+      <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 12px; margin-top: 10px;">
+        <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 6px;">Enter Custom UPI ID (VPA)</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="customVpaInput" placeholder="e.g. 9862300000@ybl" value="mizopay@ybl" style="flex: 1; padding: 9px 12px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 13px; font-weight: 600; color: #0f172a; outline: none;">
+          <button type="button" class="btn btn-phonepe" onclick="handleVpaPay()" style="margin: 0; padding: 9px 14px; font-size: 12px; white-space: nowrap;">
+            Pay via UPI
+          </button>
+        </div>
+      </div>
+
+      <div class="divider-text">Pay with Net Banking (Working)</div>
+
+      <a href="${record?.mercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3'}" target="_blank" class="btn" style="background: #ffffff; border: 1.5px solid #0284c7; color: #0369a1; padding: 13px 16px; margin-top: 4px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.08);">
+        <span style="font-size: 18px;">🏛️</span>
+        <div style="text-align: left; flex: 1;">
+          <div style="font-size: 14px; font-weight: 800;">Open PhonePe Net Banking Portal</div>
+          <div style="font-size: 11px; color: #0284c7; font-weight: 500;">SBI, HDFC, ICICI, Axis Bank (Direct Working Portal)</div>
+        </div>
+        <span style="font-size: 14px; font-weight: 700;">↗</span>
       </a>
 
-      <a href="gpay://upi/pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-gpay upi-app-link" onclick="handleUpiAppLaunch('Google Pay')">
-        <span style="font-size: 15px; font-weight: 800;">G</span>
-        <span>Open in Google Pay</span>
-      </a>
-
-      <a href="upi://pay?pa=mab060000049448@aubank&pn=TSPMIZOPAYUAT&am=${rawAmt.toFixed(2)}&cu=INR&tn=RonPay:${encodeURIComponent(causeTitle)}&tr=${encodeURIComponent(txnId)}" class="btn btn-upi upi-app-link" onclick="handleUpiAppLaunch('UPI App')">
-        <span>⚡ Open in Any UPI / Paytm</span>
-      </a>
+      <button type="button" class="btn" onclick="sendSimulation('SUCCESS', 'Net Banking (SBI)')" style="background: #f0f9ff; border: 1.5px solid #bae6fd; color: #0284c7; margin-top: 8px; padding: 10px 14px;">
+        <span>⚡ Instant Net Banking Approve (Simulated Bank)</span>
+      </button>
 
       <div class="divider-text">PhonePe UAT Sandbox Outcomes</div>
 
@@ -1415,10 +1475,16 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
       }, 1000);
     }
 
-    async function sendSimulation(status) {
+    function handleVpaPay() {
+      const vpaInput = document.getElementById('customVpaInput');
+      const vpa = (vpaInput ? vpaInput.value : '') || 'mizopay@ybl';
+      sendSimulation('SUCCESS', 'UPI (' + vpa + ')');
+    }
+
+    async function sendSimulation(status, method) {
       document.getElementById('actionSection').style.opacity = '0.5';
-      document.getElementById('btnApprove').disabled = true;
-      document.getElementById('btnDecline').disabled = true;
+      const btns = document.querySelectorAll('button');
+      btns.forEach(b => { try { b.disabled = true; } catch(e){} });
 
       try {
         const resp = await fetch('/api/phonepe/confirm-paid', {
@@ -1431,7 +1497,8 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
             donorName: donorName,
             campaignTitle: causeTitle,
             campaignId: campId,
-            category: categoryParam
+            category: categoryParam,
+            paymentMethod: method || (status === 'SUCCESS' ? 'PhonePe UPI' : undefined)
           })
         });
         const data = await resp.json();
