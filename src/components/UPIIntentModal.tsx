@@ -15,8 +15,8 @@ import {
   Info,
   Download
 } from 'lucide-react';
-import { Campaign, Transaction } from '../types';
-import { getCampaignCauseTitle } from '../utils/translations';
+import { Campaign, Transaction, BawmCategory } from '../types';
+import { getCampaignCauseTitle, getEffectiveCategory } from '../utils/translations';
 import {
   validateUpiId,
   buildUpiIntentUrl,
@@ -30,6 +30,7 @@ interface UPIIntentModalProps {
   isOpen: boolean;
   onClose: () => void;
   campaign?: Campaign;
+  category?: BawmCategory;
   amount: number;
   platformFee?: number;
   feeOption?: 'ADD_ON' | 'DEDUCT';
@@ -54,6 +55,7 @@ export function UPIIntentModal({
   isOpen,
   onClose,
   campaign,
+  category,
   amount,
   platformFee = 0,
   feeOption = 'ADD_ON',
@@ -214,7 +216,7 @@ export function UPIIntentModal({
         id: txRef,
         campaignId: campaign?.id || 'cmp-custom',
         campaignTitle: getCampaignCauseTitle(campaign, 'RonPay Bawm'),
-        category: campaign?.category || 'others',
+        category: category || campaign?.category || getEffectiveCategory({ campaignTitle: getCampaignCauseTitle(campaign, 'RonPay Bawm'), campaignId: campaign?.id }),
         donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (donorPhone?.trim() || undefined),
         donorVeng: isAnonymous ? undefined : (donorVeng?.trim() || undefined),

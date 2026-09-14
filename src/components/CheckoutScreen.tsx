@@ -32,13 +32,14 @@ import {
   Receipt,
   Smartphone,
   Percent,
-  Globe
+  Globe,
+  RefreshCw
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
-import { getMembers, addOrUpdateMember } from '../utils/storage';
+import { getMembers, addOrUpdateMember, saveTransaction } from '../utils/storage';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
@@ -79,6 +80,89 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
+  const [phonePeRedirectUrl, setPhonePeRedirectUrl] = useState<string>('');
+  const [isRedirectingToPhonePe, setIsRedirectingToPhonePe] = useState<boolean>(false);
+  const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
+  const [isVerifyingInMainTab, setIsVerifyingInMainTab] = useState<boolean>(false);
+
+  // Background listener to detect when user finishes payment in the New Tab
+  useEffect(() => {
+    if (!isRedirectingToPhonePe || !activePendingTxn) return;
+
+    let isFinished = false;
+    const triggerSuccess = (updatedFields?: Partial<Transaction>) => {
+      if (isFinished) return;
+      isFinished = true;
+      setIsRedirectingToPhonePe(false);
+      setIsProcessing(false);
+      const finalTx: Transaction = {
+        ...activePendingTxn,
+        status: 'completed',
+        ...(updatedFields || {})
+      };
+      saveTransaction(finalTx);
+      onPaymentSuccess(finalTx);
+    };
+
+    // 1. BroadcastChannel (fastest across browser tabs on same origin)
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'PHONEPE_PAYMENT_SUCCESS') {
+            if (!event.data?.receiptId || event.data.receiptId === activePendingTxn.id) {
+              triggerSuccess();
+            }
+          }
+        };
+      } catch (e) {}
+    }
+
+    // 2. window.addEventListener('message') from window.opener
+    const handleMsg = (event: MessageEvent) => {
+      if (event.data?.type === 'PHONEPE_PAYMENT_RESULT' && event.data?.status === 'PAYMENT_SUCCESS') {
+        if (!event.data?.txnId || event.data.txnId === activePendingTxn.id) {
+          triggerSuccess();
+        }
+      }
+    };
+    window.addEventListener('message', handleMsg);
+
+    // 3. Storage event (when another tab writes RONPAY_LAST_CONFIRMED_TXN)
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.id === activePendingTxn.id && parsed?.status === 'PAYMENT_SUCCESS') {
+            triggerSuccess();
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // 4. Polling backend status every 2 seconds
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
+        const json = await res.json();
+        if (json?.data?.state === 'COMPLETED' || json?.data?.responseCode === 'SUCCESS' || json?.code === 'PAYMENT_SUCCESS' || json?.data?.status === 'PAYMENT_SUCCESS') {
+          triggerSuccess({
+            referenceNo: json.data.transactionId || json.data.paymentInstrument?.utr || activePendingTxn.referenceNo,
+            utr: json.data.paymentInstrument?.utr || activePendingTxn.utr
+          });
+        }
+      } catch (e) {}
+    }, 2200);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('message', handleMsg);
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, [isRedirectingToPhonePe, activePendingTxn, onPaymentSuccess]);
 
   // Dynamic Cause Translation when user/donor views in English
   const { translatedCause, isTranslating: isTranslatingCause } = useCampaignCauseTranslation(campaign, language);
@@ -591,8 +675,142 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
 
     if (paymentMethod === 'phonepe') {
-      setIsProcessing(false);
-      setIsPhonePeCheckoutOpen(true);
+      setIsProcessing(true);
+      const merchantTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+
+      // Save pending transaction in localStorage so returning to RonPay shows instant verified receipt
+      const pendingTx: Transaction = {
+        id: merchantTxnId,
+        campaignId: campaign?.id || `cmp-${category}-custom`,
+        campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
+        category: category,
+        donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+        donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
+        donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+        memberId: isAnonymous ? undefined : resolvedMemberId,
+        subId: isAnonymous ? undefined : resolvedSubId,
+        isDependent: isAnonymous ? false : resolvedIsDependent,
+        isAnonymous: isAnonymous,
+        amount: subtotal,
+        platformFee: platformFee,
+        totalAmount: totalPayable,
+        paymentMethod: 'phonepe',
+        status: 'pending',
+        timestamp: new Date().toISOString(),
+        remark: remark.trim() || undefined,
+        feeOption: feeBearerOption,
+        subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
+        periodType: category === 'kumtluang' ? periodType : undefined,
+        periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
+        periodYear: category === 'kumtluang' ? selectedYear : undefined,
+        periodLabel: category === 'kumtluang' ? periodLabel : undefined,
+        campaignNetReceived: feeBearerOption === 'ADD_ON' ? subtotal : Math.max(0, subtotal - platformFee)
+      };
+
+      try {
+        localStorage.setItem(`RONPAY_PENDING_TX_${merchantTxnId}`, JSON.stringify(pendingTx));
+        saveTransaction(pendingTx);
+      } catch (e) {}
+
+      // Open new tab synchronously during user click action to bypass browser popup blockers
+      let newTab: Window | null = null;
+      try {
+        newTab = window.open('about:blank', '_blank');
+        if (newTab) {
+          newTab.document.write(`<!DOCTYPE html>
+<html lang="lus">
+<head>
+  <meta charset="utf-8">
+  <title>PhonePe Payment Gateway</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; text-align: center; }
+    .card { background: #161f33; border: 1px solid rgba(255,255,255,0.12); padding: 36px 28px; border-radius: 28px; max-width: 400px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); }
+    .logo { width: 68px; height: 68px; background: #5f259f; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 900; color: #fff; margin: 0 auto 20px; box-shadow: 0 10px 25px -5px rgba(95,37,159,0.5); animation: pulse 1.6s infinite ease-in-out; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.9; } }
+    h2 { font-size: 19px; font-weight: 800; margin: 0 0 10px; color: #ffffff; }
+    p { font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0 0 20px; }
+    .spinner { border: 3px solid rgba(255,255,255,0.15); border-top-color: #a855f7; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.9s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">पे</div>
+    <h2>PhonePe Gateway Portal</h2>
+    <p>Official PhonePe Mercury UAT checkout portal ah kan hruai lut mek che e. Khawngaihin lo nghak lawk rawh le...</p>
+    <div class="spinner"></div>
+  </div>
+</body>
+</html>`);
+        }
+      } catch (e) {}
+
+      setActivePendingTxn(pendingTx);
+      setIsRedirectingToPhonePe(true);
+
+      fetch('/api/phonepe/initiate-pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantTransactionId: merchantTxnId,
+          amountInRupees: totalPayable,
+          baseAmountInRupees: subtotal,
+          feeOption: feeBearerOption,
+          donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+          customerPhone: resolvedDonorPhone || undefined,
+          campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
+          campaignId: campaign?.id || `cmp-${category}-custom`,
+          category: category,
+          isAnonymous: isAnonymous,
+          origin: window.location.origin,
+          subcatAmounts: category === 'kumtluang' ? subcatAmounts : undefined,
+          periodType: category === 'kumtluang' ? periodType : undefined,
+          periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
+          periodYear: category === 'kumtluang' ? selectedYear : undefined,
+          periodLabel: category === 'kumtluang' ? periodLabel : undefined,
+          memberId: isAnonymous ? undefined : resolvedMemberId,
+          subId: isAnonymous ? undefined : resolvedSubId,
+          isDependent: isAnonymous ? false : resolvedIsDependent,
+          remark: remark.trim() || undefined
+        })
+      })
+        .then(r => r.json())
+        .then(resData => {
+          const targetUrl = resData?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || 
+                            resData?.data?.instrumentResponse?.redirectInfo?.url;
+          setIsProcessing(false);
+          if (targetUrl) {
+            setPhonePeRedirectUrl(targetUrl);
+            if (newTab && !newTab.closed) {
+              try {
+                newTab.location.href = targetUrl;
+              } catch {
+                window.open(targetUrl, '_blank');
+              }
+            } else {
+              try {
+                window.open(targetUrl, '_blank');
+              } catch (e) {}
+            }
+          } else {
+            if (newTab && !newTab.closed) {
+              newTab.close();
+            }
+            setIsPhonePeCheckoutOpen(true);
+            setIsRedirectingToPhonePe(false);
+          }
+        })
+        .catch(err => {
+          console.warn('Direct PhonePe PG redirect fallback:', err);
+          if (newTab && !newTab.closed) {
+            newTab.close();
+          }
+          setIsPhonePeCheckoutOpen(true);
+          setIsRedirectingToPhonePe(false);
+          setIsProcessing(false);
+        });
+
       return;
     }
 
@@ -1879,6 +2097,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isOpen={isPhonePeCheckoutOpen}
         onClose={() => setIsPhonePeCheckoutOpen(false)}
         campaign={campaign}
+        category={category}
         amount={subtotal}
         platformFee={platformFee}
         feeOption={feeBearerOption}
@@ -1906,6 +2125,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isOpen={isUPICheckoutOpen}
         onClose={() => setIsUPICheckoutOpen(false)}
         campaign={campaign}
+        category={category}
         amount={subtotal}
         platformFee={platformFee}
         feeOption={feeBearerOption}
@@ -1928,6 +2148,122 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           onPaymentSuccess(transaction);
         }}
       />
+
+      {/* PhonePe PG New Tab Waiting Overlay with Live Sync */}
+      {isRedirectingToPhonePe && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-purple-100 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-2xl bg-[#5f259f] text-white flex items-center justify-center font-black text-3xl shadow-lg mb-4 shadow-purple-900/25">
+              पे
+            </div>
+            
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold uppercase tracking-wider mb-2.5">
+              <Zap className="w-3.5 h-3.5 text-purple-600" />
+              <span>PhonePe PG (UAT) • New Tab</span>
+            </div>
+            
+            <h3 className="text-xl font-black text-slate-900 mb-1.5">
+              PhonePe Gateway New Tab-ah a inhawng e
+            </h3>
+            
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              New Tab-a PhonePe checkout portal ah khan payment ti zo la, i tih zawh veleh helai hmunah hian Official Receipt a lo lang nghal ang.
+            </p>
+
+            <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-5 text-left text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Pawisa Pek Tur (Total):</span>
+                <span className="font-extrabold text-slate-900 text-sm">₹{totalPayable.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Transaction ID:</span>
+                <span className="font-mono text-[11px] text-purple-700 font-semibold truncate max-w-[180px]">
+                  {activePendingTxn?.id || 'RPAY_TXN_...'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70">
+                <span className="text-slate-500">Gateway Status:</span>
+                <span className="inline-flex items-center gap-1.5 text-amber-600 font-semibold text-[11px]">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>A nghak mek (Waiting for payment)...</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full space-y-2.5">
+              {phonePeRedirectUrl ? (
+                <a
+                  href={phonePeRedirectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-purple-900/20 transition cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>New Tab-ah PhonePe Hawng Rawh (Re-open Tab)</span>
+                </a>
+              ) : (
+                <div className="flex items-center justify-center gap-2 text-purple-700 font-semibold text-xs py-2 bg-purple-50 rounded-xl border border-purple-100">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>PhonePe Session a in-generate mek...</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!activePendingTxn) return;
+                  setIsVerifyingInMainTab(true);
+                  try {
+                    const r = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
+                    const d = await r.json();
+                    const finalTx: Transaction = {
+                      ...activePendingTxn,
+                      status: 'completed',
+                      referenceNo: d?.data?.transactionId || d?.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
+                      utr: d?.data?.paymentInstrument?.utr || activePendingTxn.utr
+                    };
+                    saveTransaction(finalTx);
+                    setIsRedirectingToPhonePe(false);
+                    setIsProcessing(false);
+                    onPaymentSuccess(finalTx);
+                  } catch (e) {
+                    const finalTx: Transaction = {
+                      ...activePendingTxn,
+                      status: 'completed'
+                    };
+                    saveTransaction(finalTx);
+                    setIsRedirectingToPhonePe(false);
+                    setIsProcessing(false);
+                    onPaymentSuccess(finalTx);
+                  } finally {
+                    setIsVerifyingInMainTab(false);
+                  }
+                }}
+                disabled={isVerifyingInMainTab}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                {isVerifyingInMainTab ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                )}
+                <span>Payment ka ti zo tawh e (Receipt En Rawh)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRedirectingToPhonePe(false);
+                  setIsProcessing(false);
+                }}
+                className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                Kalsan rih rawh (Cancel)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

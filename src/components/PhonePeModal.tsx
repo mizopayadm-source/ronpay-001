@@ -112,6 +112,29 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     setTestWebhookSending(true);
     try {
       const testTxn = `RPAY_TEST_${Date.now()}`;
+      const payloadObj = {
+        success: true,
+        code: 'PAYMENT_SUCCESS',
+        message: 'Your payment has been successfully processed.',
+        data: {
+          merchantId: credentials.merchantId,
+          merchantTransactionId: testTxn,
+          transactionId: `T${Date.now()}`,
+          amount: testAmount * 100,
+          state: 'COMPLETED',
+          responseCode: 'SUCCESS',
+          paymentInstrument: {
+            type: 'UPI',
+            utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
+            vpa: 'testuser@phonepe'
+          }
+        }
+      };
+
+      // Browser-compatible base64 encoding without Node.js Buffer dependency
+      const jsonStr = JSON.stringify(payloadObj);
+      const base64Payload = btoa(unescape(encodeURIComponent(jsonStr)));
+
       await fetch('/api/phonepe/webhook', {
         method: 'POST',
         headers: {
@@ -120,24 +143,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           'x-merchant-id': credentials.merchantId
         },
         body: JSON.stringify({
-          response: Buffer.from(JSON.stringify({
-            success: true,
-            code: 'PAYMENT_SUCCESS',
-            message: 'Your payment has been successfully processed.',
-            data: {
-              merchantId: credentials.merchantId,
-              merchantTransactionId: testTxn,
-              transactionId: `T${Date.now()}`,
-              amount: testAmount * 100,
-              state: 'COMPLETED',
-              responseCode: 'SUCCESS',
-              paymentInstrument: {
-                type: 'UPI',
-                utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
-                vpa: 'testuser@phonepe'
-              }
-            }
-          })).toString('base64')
+          response: base64Payload
         })
       });
       await fetchWebhookLogs();
@@ -336,24 +342,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           
           {/* TAB 0: EMAIL CHECKLIST & TECH AUDIT */}
           {activeTab === 'checklist' && (
-            <div className="space-y-3.5 animate-fadeIn">
-              
-              {/* Introduction Card */}
-              <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-2xl p-3.5 space-y-2 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-black text-xs">
-                    <ListChecks className="w-4 h-4 text-amber-400" />
-                    PhonePe Tech Mail Audit & Compliance
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 font-extrabold text-[9px] px-2 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> 100% CONFIGURED
-                  </span>
-                </div>
-                <p className="text-[10px] text-purple-200 leading-relaxed font-medium">
-                  Swati (PhonePe Tech Team) mail atanga link leh ruahmanna 8 (Standard Checkout, TSP Headers, Webhook, UAT Sandbox, Partner Checklist, Settlement & Split Settlement) te chu RonPay backend leh frontend-ah fel takin thlunzawm a ni e.
-                </p>
-              </div>
-
+            <div className="space-y-3 animate-fadeIn">
               {/* Checklist Items */}
               <div className="space-y-2.5">
 

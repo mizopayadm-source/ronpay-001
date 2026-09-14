@@ -17,18 +17,20 @@ import {
   Lock,
   CheckCircle2,
   Globe,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Campaign, Transaction } from '../types';
+import { Campaign, Transaction, BawmCategory } from '../types';
 import { saveTransaction } from '../utils/storage';
-import { getCampaignCauseTitle } from '../utils/translations';
+import { getCampaignCauseTitle, getEffectiveCategory } from '../utils/translations';
 
 interface PhonePeCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   campaign?: Campaign;
+  category?: BawmCategory;
   amount: number;
   platformFee?: number;
   feeOption?: 'ADD_ON' | 'DEDUCT';
@@ -54,12 +56,14 @@ type CheckoutStage =
   | 'pre_simulate_loading' // Transition white loading screen
   | 'simulate_response'    // Official PhonePe Simulate Payment Response screen
   | 'final_processing'     // Final brief processing before receipt
-  | 'failure_view';        // Simulated failure screen
+  | 'failure_view'         // Simulated failure screen
+  | 'pending_view';        // PhonePe UAT Sandbox Pending status screen
 
 export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   isOpen,
   onClose,
   campaign,
+  category,
   amount,
   platformFee = 0,
   feeOption = 'ADD_ON',
@@ -96,12 +100,15 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [selectedBank, setSelectedBank] = useState<string>('SBI');
 
   const [isBreakupOpen, setIsBreakupOpen] = useState<boolean>(false);
-  const [simulatedStatus, setSimulatedStatus] = useState<'SUCCESS' | 'FAILURE' | 'SUBMITTED'>('SUCCESS');
+  const [simulatedStatus, setSimulatedStatus] = useState<'SUCCESS' | 'FAILURE' | 'PENDING' | 'SUBMITTED'>('SUCCESS');
+  const [isPollingStatus, setIsPollingStatus] = useState<boolean>(false);
+  const [pollStatusMessage, setPollStatusMessage] = useState<string>('');
   const [timeLeft, setTimeLeft] = useState<number>(298); // 04:58 mins
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
   const [currentFeeOption, setCurrentFeeOption] = useState<'ADD_ON' | 'DEDUCT'>(feeOption);
   const [merchantTxnId, setMerchantTxnId] = useState<string>('');
   const [pendingMethodName, setPendingMethodName] = useState<string>('UPI QR Scan');
+  const [officialMercuryUrl, setOfficialMercuryUrl] = useState<string>('');
   const [qrFormat, setQrFormat] = useState<'weblink' | 'upiapp'>('weblink');
   const [hasLaunchedUpiApp, setHasLaunchedUpiApp] = useState<boolean>(false);
 
@@ -112,6 +119,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
   const campaignShare = currentFeeOption === 'ADD_ON' ? amount : Math.max(0, amount - effectiveFee);
   const campaignTitle = getCampaignCauseTitle(campaign);
+  const effectiveCategory: BawmCategory = useMemo(() => {
+    return category || campaign?.category || getEffectiveCategory({ campaignTitle, campaignId: campaign?.id });
+  }, [category, campaign, campaignTitle]);
 
   // Close modal on Escape key press
   useEffect(() => {
@@ -160,9 +170,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         donorPhone: donorPhone,
         category: campaign?.category || 'others',
         feeOption: currentFeeOption,
+        origin: window.location.origin,
         simulateStatus: 'PENDING'
       })
-    }).catch(() => {});
+    })
+      .then(r => r.json())
+      .then(d => {
+        const u = d?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || d?.data?.instrumentResponse?.redirectInfo?.url;
+        if (u) {
+          setOfficialMercuryUrl(u);
+        }
+      })
+      .catch(() => {});
 
     // Initial loading screen with PhonePe Logo
     const timer = setTimeout(() => {
@@ -263,10 +282,11 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     const encTitle = encodeURIComponent(campaignTitle || campaign?.title || 'RonPay Bawm');
     const encDonor = encodeURIComponent(isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'));
     const encLoc = encodeURIComponent(campaign?.location || donorVeng || 'Mizoram');
+    const encCat = encodeURIComponent(effectiveCategory);
     const amt = totalPayable.toFixed(2);
     
-    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}`;
-  }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous]);
+    return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
+  }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
 
   // Active QR value: 'weblink' provides a real clickable Web Link for Web Scanners, while 'upiapp' provides direct UPI protocol
   const activeQrCodeValue = qrFormat === 'weblink' ? (scanPayWebLink || upiPaymentUri) : upiPaymentUri;
@@ -312,11 +332,22 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     }
   };
 
-  // Demo card auto-fill helper
-  const handleQuickFillDemoCard = () => {
-    setCardNumber('4532 8888 1234 5678');
-    setCardExpiry('12/28');
-    setCardCvv('892');
+  // Official PhonePe UAT Sandbox card auto-fill helper
+  const handleQuickFillDemoCard = (brand: 'visa' | 'mastercard' | 'rupay' = 'visa') => {
+    if (brand === 'visa') {
+      // Official PhonePe UAT documentation test card
+      setCardNumber('4208 5851 9011 6667');
+      setCardExpiry('06/27');
+      setCardCvv('508');
+    } else if (brand === 'mastercard') {
+      setCardNumber('5123 4567 8901 2345');
+      setCardExpiry('12/28');
+      setCardCvv('123');
+    } else {
+      setCardNumber('6070 1234 5678 9010');
+      setCardExpiry('10/28');
+      setCardCvv('456');
+    }
     setCardHolder(donorName || 'Valued Donor');
   };
 
@@ -355,10 +386,29 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     proceedToSimulation(`UPI ID (${customVpa})`);
   };
 
-  // Final confirmation of the simulated response
+  // Final confirmation of the simulated response (Aligning with PhonePe UAT Sandbox: Success, Failure, Pending)
   const handleSubmitSimulatedResponse = () => {
     if (simulatedStatus === 'FAILURE') {
       setStage('failure_view');
+      return;
+    }
+
+    if (simulatedStatus === 'PENDING') {
+      setStage('pending_view');
+      setPollStatusMessage('');
+      fetch('/api/phonepe/confirm-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantTransactionId: merchantTxnId,
+          status: 'PAYMENT_PENDING',
+          amountInRupees: totalPayable,
+          donorName: donorName,
+          campaignTitle: campaignTitle,
+          campaignId: campaign?.id,
+          category: effectiveCategory
+        })
+      }).catch(() => {});
       return;
     }
 
@@ -373,12 +423,40 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     finalizeSuccess();
   };
 
+  // Poll Check Status API (/pg/v1/status) for pending transactions
+  const handlePollPhonePeStatus = async () => {
+    setIsPollingStatus(true);
+    setPollStatusMessage('Checking PhonePe PG /pg/v1/status API...');
+    try {
+      const resp = await fetch(`/api/phonepe/status/${encodeURIComponent(merchantTxnId)}`);
+      const data = await resp.json();
+      if (data?.data?.state === 'COMPLETED' || data?.code === 'PAYMENT_SUCCESS') {
+        setPollStatusMessage('Transaction confirmed by PhonePe PG! Moving to receipt...');
+        setTimeout(() => {
+          finalizeSuccess(data?.data?.paymentInstrument?.utr);
+        }, 600);
+      } else if (data?.data?.state === 'FAILED' || data?.code === 'PAYMENT_ERROR') {
+        setPollStatusMessage('PhonePe PG reported payment Failed.');
+        setTimeout(() => {
+          setStage('failure_view');
+        }, 800);
+      } else {
+        setPollStatusMessage('PhonePe PG Status: PENDING (Transaction still awaiting bank settlement).');
+      }
+    } catch (err) {
+      setPollStatusMessage('Network error communicating with PG status endpoint.');
+    } finally {
+      setIsPollingStatus(false);
+    }
+  };
+
   const finalizeSuccess = (existingUtr?: string) => {
     setStage('final_processing');
 
     const utrCode = existingUtr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
     const completedTx: Transaction = {
       id: merchantTxnId,
+      category: effectiveCategory,
       campaignId: campaign?.id || 'general-fund',
       campaignTitle: campaignTitle,
       donorName: donorName?.trim() || 'Valued Donor',
@@ -537,7 +615,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     simulatedStatus === 'SUCCESS' ? 'border-2 border-slate-950 ring-2 ring-slate-950 scale-[1.02]' : 'border-2 border-transparent'
                   }`}
                 >
-                  Success
+                  Success (PAYMENT_SUCCESS)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSimulatedStatus('PENDING')}
+                  className={`w-full py-3 px-4 rounded-md text-sm font-bold text-amber-900 transition-all cursor-pointer text-center bg-amber-200 hover:bg-amber-300 border border-amber-400 shadow-xs flex items-center justify-center gap-1.5 ${
+                    simulatedStatus === 'PENDING' ? 'border-2 border-slate-950 ring-2 ring-slate-950 scale-[1.02]' : ''
+                  }`}
+                >
+                  <Clock className="w-4 h-4 text-amber-700" />
+                  <span>Pending (PAYMENT_PENDING)</span>
                 </button>
 
                 <button
@@ -547,7 +636,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                     simulatedStatus === 'FAILURE' ? 'border-2 border-slate-950 ring-2 ring-slate-950 scale-[1.02]' : 'border-2 border-transparent'
                   }`}
                 >
-                  <span>Failure</span>
+                  <span>Failure (PAYMENT_ERROR)</span>
                   <span className="text-xs">▸</span>
                 </button>
 
@@ -568,7 +657,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                 onClick={handleSubmitSimulatedResponse}
                 className="w-full max-w-xs mt-7 py-3 px-4 rounded-md bg-[#5f259f] hover:bg-[#521d8b] text-white font-bold text-base transition shadow-md cursor-pointer active:scale-[0.99] text-center"
               >
-                Submit
+                Submit Response
               </button>
             </div>
 
@@ -605,6 +694,108 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
               >
                 Cancel & Close
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* STAGE: PhonePe UAT Sandbox Pending State Screen               */}
+        {/* ------------------------------------------------------------- */}
+        {stage === 'pending_view' && (
+          <div className="flex-1 bg-white text-slate-900 flex flex-col justify-between items-center px-6 py-8 max-w-md mx-auto w-full min-h-[500px]">
+            <div className="w-full flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => setStage('checkout')}
+                className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Options</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center text-center my-auto py-3 w-full">
+              <div className="w-16 h-16 rounded-full bg-amber-50 border-2 border-amber-300 text-amber-600 flex items-center justify-center shadow-xs mb-3 animate-pulse">
+                <Clock className="w-8 h-8 text-amber-600" />
+              </div>
+
+              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+                <span>PAYMENT_PENDING</span>
+              </div>
+
+              <h2 className="text-xl font-bold text-slate-900 mb-1">
+                Transaction is Pending
+              </h2>
+              <p className="text-xs text-slate-500 mb-4 max-w-xs leading-relaxed">
+                As per PhonePe PG Sandbox rules, this transaction has been submitted and awaits asynchronous confirmation or status verification.
+              </p>
+
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 text-left text-xs font-mono space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Merchant Txn:</span>
+                  <span className="font-bold text-slate-800">{merchantTxnId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Amount:</span>
+                  <span className="font-bold text-slate-800">₹{totalPayable.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Status Check:</span>
+                  <span className="text-purple-700 font-semibold">GET /pg/v1/status</span>
+                </div>
+              </div>
+
+              {pollStatusMessage && (
+                <div className="w-full p-2.5 mb-4 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs font-medium text-center">
+                  {pollStatusMessage}
+                </div>
+              )}
+
+              <div className="w-full space-y-2">
+                <button
+                  type="button"
+                  onClick={handlePollPhonePeStatus}
+                  disabled={isPollingStatus}
+                  className="w-full py-2.5 px-4 bg-[#5f259f] hover:bg-[#511e89] text-white rounded-xl font-bold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isPollingStatus ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  <span>{isPollingStatus ? 'Checking PhonePe PG...' : 'Poll Check Status API'}</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => finalizeSuccess()}
+                    className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Simulate Approval</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStage('failure_view')}
+                    className="py-2.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Simulate Decline</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full text-center text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+              PhonePe PG UAT Sandbox Testing Environment
             </div>
           </div>
         )}
@@ -742,7 +933,18 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                   </div>
 
                   {/* Desktop Cancel / Close Button in Left Column */}
-                  <div className="mt-4 pt-2 hidden md:block">
+                  <div className="mt-4 pt-2 hidden md:block space-y-2">
+                    {officialMercuryUrl && (
+                      <a
+                        href={officialMercuryUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-[#5f259f] font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open PhonePe Portal (`mercury-uat`)</span>
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={onClose}
@@ -1142,16 +1344,21 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                 <p className="text-[11px] text-red-600 font-medium">{vpaError}</p>
                               )}
 
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                <span className="text-[10px] text-slate-400">Demo test IDs:</span>
-                                {['testuser@phonepe', 'donor@okhdfcbank', '9862300000@ybl'].map((tid) => (
+                              <div className="flex flex-wrap gap-1.5 pt-1 items-center">
+                                <span className="text-[10px] text-slate-400 font-medium">PhonePe UAT VPAs:</span>
+                                {[
+                                  { id: 'success@upi', label: 'success@upi (Auto-Pass)' },
+                                  { id: 'pending@upi', label: 'pending@upi (Pending)' },
+                                  { id: 'failure@upi', label: 'failure@upi (Decline)' },
+                                  { id: 'testuser@phonepe', label: 'testuser@phonepe' }
+                                ].map((item) => (
                                   <button
-                                    key={tid}
+                                    key={item.id}
                                     type="button"
-                                    onClick={() => setCustomVpa(tid)}
-                                    className="text-[10px] font-mono bg-slate-100 hover:bg-purple-100 text-purple-700 px-2 py-0.5 rounded cursor-pointer transition"
+                                    onClick={() => setCustomVpa(item.id)}
+                                    className="text-[10px] font-mono bg-purple-50 hover:bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200 cursor-pointer transition"
                                   >
-                                    {tid}
+                                    {item.label}
                                   </button>
                                 ))}
                               </div>
@@ -1179,14 +1386,38 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               <h3 className="text-xs sm:text-sm font-bold text-slate-800">
                                 Enter Card Details
                               </h3>
-                              <button
-                                type="button"
-                                onClick={handleQuickFillDemoCard}
-                                className="text-[10px] font-bold text-[#5f259f] bg-purple-50 hover:bg-purple-100 px-2 py-1 rounded-lg border border-purple-200 cursor-pointer transition flex items-center gap-1"
-                              >
-                                <Sparkles className="w-3 h-3 text-amber-500" />
-                                <span>Quick Fill Demo Card</span>
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-slate-400">PhonePe UAT:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickFillDemoCard('visa')}
+                                  className="text-[10px] font-bold text-[#5f259f] bg-purple-50 hover:bg-purple-100 px-2 py-1 rounded-lg border border-purple-200 cursor-pointer transition flex items-center gap-1"
+                                  title="Official PhonePe UAT Visa: 4208 5851 9011 6667, 06/27, CVV 508"
+                                >
+                                  <Sparkles className="w-3 h-3 text-amber-500" />
+                                  <span>Visa (UAT)</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickFillDemoCard('mastercard')}
+                                  className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer transition"
+                                >
+                                  Mastercard
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickFillDemoCard('rupay')}
+                                  className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg border border-slate-200 cursor-pointer transition"
+                                >
+                                  RuPay
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* PhonePe UAT Sandbox Card Helper Badge */}
+                            <div className="p-2 mb-3 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-mono text-slate-600 flex justify-between items-center">
+                              <span>PhonePe UAT Visa: <strong>4208 5851 9011 6667</strong></span>
+                              <span className="text-slate-400">Exp: 06/27 • CVV: 508 • OTP: 123456</span>
                             </div>
 
                             <form onSubmit={handlePayByCard} className="space-y-3">
@@ -1354,7 +1585,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                           </div>
 
                           <div className="pt-2 text-center text-[10px] text-slate-400">
-                            You will be redirected to {selectedBank} NetBanking to authorize payment
+                            PhonePe PG UAT Sandbox: Authorize with mock OTP <strong>123456</strong>
                           </div>
                         </div>
                       )}
