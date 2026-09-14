@@ -1228,6 +1228,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                         <span>Raw mercury-uat Net Banking</span>
                                       </a>
                                     </div>
+                                    <div className="mt-1.5 px-2.5 py-1.5 bg-amber-50/90 border border-amber-200 rounded-lg text-[10.5px] text-amber-900 leading-snug text-center">
+                                      <span className="font-bold text-amber-950">⚠️ PhonePe UAT Note:</span> PhonePe portal-ah khian <b>UPI thlang lovin &apos;Net Banking&apos;</b> thlang rawh. Real PhonePe App (Play Store) hian Sandbox UAT pawisa a direct lak phal loh avangin UPI-ah chuan <i>&apos;Something went wrong&apos;</i> a rawn ti thin a ni.
+                                    </div>
                                   </div>
                                 ) : (
                                   <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
