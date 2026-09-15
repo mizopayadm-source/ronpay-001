@@ -708,14 +708,16 @@ export default function App() {
       setIsWalletOpen(true);
     }
     if (route.isPhonePeOpen) {
+      const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
+      try {
+        window.open(`/api/phonepe/launch-pay?amt=100&origin=${encodeURIComponent(origin)}`, '_blank');
+      } catch (e) {}
       const stored = getStoredCampaigns();
       const targetCamp = campaigns[0] || stored[0];
       if (targetCamp) {
         setSelectedCampaign(targetCamp);
         setSelectedCategory(targetCamp.category);
       }
-      setAutoOpenPhonePeCheckout(true);
-      setPhonePeCheckoutAmount(100);
       setCurrentScreen('checkout');
       setAppView('app');
     }
@@ -1066,16 +1068,13 @@ export default function App() {
   };
 
   const handleOpenPhonePeCheckout = (amount: number = 100) => {
-    const targetCamp = campaigns[0] || getStoredCampaigns()[0];
-    if (targetCamp) {
-      setSelectedCampaign(targetCamp);
-      setSelectedCategory(targetCamp.category);
+    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
+    const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
+    try {
+      window.open(launchUrl, '_blank');
+    } catch (e) {
+      window.location.href = launchUrl;
     }
-    setPhonePeCheckoutAmount(amount);
-    setAutoOpenPhonePeCheckout(true);
-    setCurrentScreen('checkout');
-    setAppView('app');
-    updateBrowserView('app', 'checkout');
   };
 
   // Filter transactions for Sulhnu History

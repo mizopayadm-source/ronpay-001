@@ -82,21 +82,23 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
-  const [phonePeRedirectUrl, setPhonePeRedirectUrl] = useState<string>('');
-  const [isRedirectingToPhonePe, setIsRedirectingToPhonePe] = useState<boolean>(false);
+
+  // PhonePe PG New Tab Live State Synchronization
   const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
+  const [isWaitingPhonePePG, setIsWaitingPhonePePG] = useState<boolean>(false);
+  const [phonePeLaunchUrl, setPhonePeLaunchUrl] = useState<string>('');
   const [isVerifyingInMainTab, setIsVerifyingInMainTab] = useState<boolean>(false);
   const [phonePeVerifyMsg, setPhonePeVerifyMsg] = useState<{ type: 'error' | 'pending' | 'success'; text: string } | null>(null);
 
-  // Background listener to detect when user finishes payment in the New Tab
+  // Background listener to detect when user finishes payment on PhonePe (New Tab)
   useEffect(() => {
-    if (!isRedirectingToPhonePe || !activePendingTxn) return;
+    if (!isWaitingPhonePePG || !activePendingTxn) return;
 
     let isFinished = false;
     const triggerSuccess = (updatedFields?: Partial<Transaction>) => {
       if (isFinished) return;
       isFinished = true;
-      setIsRedirectingToPhonePe(false);
+      setIsWaitingPhonePePG(false);
       setIsProcessing(false);
       const finalTx: Transaction = {
         ...activePendingTxn,
@@ -110,25 +112,23 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const triggerFailed = (reason?: string) => {
       if (isFinished) return;
       isFinished = true;
-      setIsRedirectingToPhonePe(false);
+      setIsWaitingPhonePePG(false);
       setIsProcessing(false);
-      if (activePendingTxn) {
-        const failedTx: Transaction = {
-          ...activePendingTxn,
-          status: 'failed',
-        };
-        if (onPaymentFailure) {
-          onPaymentFailure(failedTx, reason);
-          return;
-        }
+      const failedTx: Transaction = {
+        ...activePendingTxn,
+        status: 'failed',
+      };
+      if (onPaymentFailure) {
+        onPaymentFailure(failedTx, reason || 'PhonePe payment cancelled or failed');
+      } else {
+        setPhonePeVerifyMsg({
+          type: 'error',
+          text: `⚠️ PhonePe atangin payment a tlang lo (${reason || 'Failed / Cancelled'}). I bank account atangin pawisa a in cut lo.`
+        });
       }
-      setPhonePeVerifyMsg({
-        type: 'error',
-        text: `⚠️ PhonePe atangin payment a tlang lo (Failed / Cancelled). Pawisa i bank atangin a in cut lo e.${reason ? ` (${reason})` : ''} Khawngaihin i ti tha leh dawn nia.`
-      });
     };
 
-    // 1. BroadcastChannel (fastest across browser tabs on same origin)
+    // 1. BroadcastChannel (fastest cross-tab message)
     let bc: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
       try {
@@ -147,7 +147,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       } catch (e) {}
     }
 
-    // 2. window.addEventListener('message') from window.opener
+    // 2. window.addEventListener('message')
     const handleMsg = (event: MessageEvent) => {
       if (event.data?.type === 'PHONEPE_PAYMENT_RESULT') {
         if (event.data?.status === 'PAYMENT_SUCCESS') {
@@ -163,7 +163,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     };
     window.addEventListener('message', handleMsg);
 
-    // 3. Storage event (when another tab writes RONPAY_LAST_CONFIRMED_TXN)
+    // 3. Storage event
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'RONPAY_LAST_CONFIRMED_TXN' && e.newValue) {
         try {
@@ -180,29 +180,64 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     };
     window.addEventListener('storage', handleStorage);
 
-    // 4. Polling backend status every 2 seconds
+    // 4. Polling PhonePe sandbox order status every 1.8 seconds
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
+        if (!res.ok) return;
         const json = await res.json();
-        if (json?.data?.state === 'COMPLETED' || json?.data?.responseCode === 'SUCCESS' || json?.code === 'PAYMENT_SUCCESS' || json?.data?.status === 'PAYMENT_SUCCESS') {
+        const isSuccess =
+          json?.code === 'PAYMENT_SUCCESS' ||
+          json?.code === 'SUCCESS' ||
+          json?.data?.state === 'COMPLETED' ||
+          json?.data?.status === 'SUCCESS' ||
+          json?.data?.status === 'PAYMENT_SUCCESS' ||
+          json?.data?.responseCode === 'SUCCESS';
+
+        const isFailed =
+          json?.code === 'PAYMENT_ERROR' ||
+          json?.data?.state === 'FAILED' ||
+          json?.data?.state === 'CANCELLED' ||
+          json?.data?.state === 'EXPIRED' ||
+          Boolean(json?.data?.errorCode) ||
+          json?.data?.responseCode === 'PAYMENT_ERROR' ||
+          json?.data?.responseCode === 'FAILED';
+
+        if (isSuccess) {
           triggerSuccess({
             referenceNo: json.data?.transactionId || json.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
             utr: json.data?.paymentInstrument?.utr || activePendingTxn.utr
           });
-        } else if (json?.data?.state === 'FAILED' || json?.data?.state === 'CANCELLED' || json?.data?.state === 'EXPIRED' || json?.code === 'PAYMENT_ERROR') {
-          triggerFailed(json?.data?.detailedErrorCode || json?.data?.errorCode || 'Payment failed on PhonePe');
+        } else if (isFailed) {
+          triggerFailed(json?.data?.detailedErrorCode || json?.data?.errorCode || 'PhonePe payment failed or cancelled');
         }
       } catch (e) {}
-    }, 2200);
+    }, 1800);
+
+    // 5. Window focus event
+    const handleFocus = async () => {
+      try {
+        const res = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.code === 'PAYMENT_SUCCESS' || json?.data?.state === 'COMPLETED') {
+          triggerSuccess({
+            referenceNo: json.data?.transactionId || json.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
+            utr: json.data?.paymentInstrument?.utr || activePendingTxn.utr
+          });
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       if (bc) bc.close();
       window.removeEventListener('message', handleMsg);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
-  }, [isRedirectingToPhonePe, activePendingTxn, onPaymentSuccess, onPaymentFailure]);
+  }, [isWaitingPhonePePG, activePendingTxn, onPaymentSuccess, onPaymentFailure]);
 
   // Dynamic Cause Translation when user/donor views in English
   const { translatedCause, isTranslating: isTranslatingCause } = useCampaignCauseTranslation(campaign, language);
@@ -715,10 +750,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
 
     if (paymentMethod === 'phonepe') {
-      setIsProcessing(true);
       const merchantTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
 
-      // Save pending transaction in localStorage so returning to RonPay shows instant verified receipt
       const pendingTx: Transaction = {
         id: merchantTxnId,
         campaignId: campaign?.id || `cmp-${category}-custom`,
@@ -749,109 +782,34 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
       try {
         localStorage.setItem(`RONPAY_PENDING_TX_${merchantTxnId}`, JSON.stringify(pendingTx));
-        // Note: We do NOT call saveTransaction(pendingTx) here so uncompleted or cancelled
-        // gateway attempts do not pollute the Sulhnu transaction history.
       } catch (e) {}
 
-      // Open new tab synchronously during user click action to bypass browser popup blockers
-      let newTab: Window | null = null;
-      try {
-        newTab = window.open('about:blank', '_blank');
-        if (newTab) {
-          newTab.document.write(`<!DOCTYPE html>
-<html lang="lus">
-<head>
-  <meta charset="utf-8">
-  <title>PhonePe Payment Gateway</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; text-align: center; }
-    .card { background: #161f33; border: 1px solid rgba(255,255,255,0.12); padding: 36px 28px; border-radius: 28px; max-width: 400px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); }
-    .logo { width: 68px; height: 68px; background: #5f259f; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 900; color: #fff; margin: 0 auto 20px; box-shadow: 0 10px 25px -5px rgba(95,37,159,0.5); animation: pulse 1.6s infinite ease-in-out; }
-    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.9; } }
-    h2 { font-size: 19px; font-weight: 800; margin: 0 0 10px; color: #ffffff; }
-    p { font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0 0 20px; }
-    .spinner { border: 3px solid rgba(255,255,255,0.15); border-top-color: #a855f7; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.9s linear infinite; margin: 0 auto; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">पे</div>
-    <h2>PhonePe Gateway Portal</h2>
-    <p>Official PhonePe Mercury UAT checkout portal ah kan hruai lut mek che e. Khawngaihin lo nghak lawk rawh le...</p>
-    <div class="spinner"></div>
-  </div>
-</body>
-</html>`);
-        }
-      } catch (e) {}
+      const launchParams = new URLSearchParams({
+        txnId: merchantTxnId,
+        amt: String(totalPayable),
+        baseAmt: String(subtotal),
+        feeOpt: feeBearerOption,
+        donor: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+        donorPhone: resolvedDonorPhone || '9862000000',
+        ctitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
+        cid: campaign?.id || `cmp-${category}-custom`,
+        cat: category,
+        anon: isAnonymous ? '1' : '0',
+        origin: window.location.origin
+      });
 
+      const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
+      setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
-      setIsRedirectingToPhonePe(true);
+      setIsWaitingPhonePePG(true);
+      setIsProcessing(false);
 
-      fetch('/api/phonepe/initiate-pay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          merchantTransactionId: merchantTxnId,
-          amountInRupees: totalPayable,
-          baseAmountInRupees: subtotal,
-          feeOption: feeBearerOption,
-          donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-          customerPhone: resolvedDonorPhone || undefined,
-          campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
-          campaignId: campaign?.id || `cmp-${category}-custom`,
-          category: category,
-          isAnonymous: isAnonymous,
-          origin: window.location.origin,
-          subcatAmounts: category === 'kumtluang' ? subcatAmounts : undefined,
-          periodType: category === 'kumtluang' ? periodType : undefined,
-          periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
-          periodYear: category === 'kumtluang' ? selectedYear : undefined,
-          periodLabel: category === 'kumtluang' ? periodLabel : undefined,
-          memberId: isAnonymous ? undefined : resolvedMemberId,
-          subId: isAnonymous ? undefined : resolvedSubId,
-          isDependent: isAnonymous ? false : resolvedIsDependent,
-          remark: remark.trim() || undefined
-        })
-      })
-        .then(r => r.json())
-        .then(resData => {
-          const targetUrl = resData?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || 
-                            resData?.data?.instrumentResponse?.redirectInfo?.url;
-          setIsProcessing(false);
-          if (targetUrl) {
-            setPhonePeRedirectUrl(targetUrl);
-            if (newTab && !newTab.closed) {
-              try {
-                newTab.location.href = targetUrl;
-              } catch {
-                window.open(targetUrl, '_blank');
-              }
-            } else {
-              try {
-                window.open(targetUrl, '_blank');
-              } catch (e) {}
-            }
-          } else {
-            if (newTab && !newTab.closed) {
-              newTab.close();
-            }
-            setIsPhonePeCheckoutOpen(true);
-            setIsRedirectingToPhonePe(false);
-          }
-        })
-        .catch(err => {
-          console.warn('Direct PhonePe PG redirect fallback:', err);
-          if (newTab && !newTab.closed) {
-            newTab.close();
-          }
-          setIsPhonePeCheckoutOpen(true);
-          setIsRedirectingToPhonePe(false);
-          setIsProcessing(false);
-        });
-
+      // Open official PhonePe PG portal directly in a new tab
+      try {
+        window.open(fullLaunchUrl, '_blank');
+      } catch (e) {
+        console.warn('Window.open fallback:', e);
+      }
       return;
     }
 
@@ -2131,6 +2089,157 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             </>
           )}
         </button>
+
+        {/* PhonePe PG Live Sync Card when waiting for payment in new tab */}
+        {isWaitingPhonePePG && activePendingTxn && (
+          <div className="mt-4 p-5 rounded-3xl bg-slate-900 text-white border border-purple-500/40 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#5f259f] flex items-center justify-center font-black text-2xl shadow-lg shadow-purple-900/50">
+                  पे
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-white">PhonePe PG (UAT)</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold tracking-wide border border-emerald-500/30 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      New Tab-ah a inhawng e
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    PhonePe portal tab-ah khan payment ti zo la, helai hmunah hian Receipt a lo lang nghal ang.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWaitingPhonePePG(false);
+                  setActivePendingTxn(null);
+                  setPhonePeVerifyMsg(null);
+                }}
+                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                title="Kharna (Cancel)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-800/80 rounded-2xl p-3.5 border border-slate-700/60 flex justify-between items-center text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Pawisa Pek Tur</span>
+                <span className="font-black text-white text-base">₹{totalPayable.toFixed(2)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">Gateway Status</span>
+                <span className="inline-flex items-center gap-1.5 text-amber-400 font-bold text-xs">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>A nghak mek (Waiting)...</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!activePendingTxn) return;
+                  setIsVerifyingInMainTab(true);
+                  setPhonePeVerifyMsg(null);
+                  try {
+                    const r = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
+                    const d = await r.json();
+                    const isSuccess =
+                      d?.code === 'PAYMENT_SUCCESS' ||
+                      d?.code === 'SUCCESS' ||
+                      d?.data?.state === 'COMPLETED' ||
+                      d?.data?.status === 'SUCCESS' ||
+                      d?.data?.status === 'PAYMENT_SUCCESS' ||
+                      d?.data?.responseCode === 'SUCCESS';
+
+                    const isFailed =
+                      d?.code === 'PAYMENT_ERROR' ||
+                      d?.data?.state === 'FAILED' ||
+                      d?.data?.state === 'CANCELLED' ||
+                      d?.data?.state === 'EXPIRED' ||
+                      Boolean(d?.data?.errorCode) ||
+                      d?.data?.responseCode === 'PAYMENT_ERROR' ||
+                      d?.data?.responseCode === 'FAILED';
+
+                    if (isSuccess) {
+                      const finalTx: Transaction = {
+                        ...activePendingTxn,
+                        status: 'completed',
+                        referenceNo: d?.data?.transactionId || d?.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
+                        utr: d?.data?.paymentInstrument?.utr || activePendingTxn.utr
+                      };
+                      saveTransaction(finalTx);
+                      setIsWaitingPhonePePG(false);
+                      onPaymentSuccess(finalTx);
+                    } else if (isFailed) {
+                      setIsWaitingPhonePePG(false);
+                      if (onPaymentFailure) {
+                        onPaymentFailure(activePendingTxn, d?.data?.detailedErrorCode || d?.data?.errorCode || 'PhonePe payment cancelled or failed');
+                      }
+                    } else {
+                      setPhonePeVerifyMsg({
+                        type: 'pending',
+                        text: 'PhonePe status: A la pending mek. PhonePe portal-ah khan payment i zo tawh em?'
+                      });
+                    }
+                  } catch (e) {
+                    setPhonePeVerifyMsg({
+                      type: 'error',
+                      text: 'Status check a theih rih lo e. Internet enfiah la lo nghak lawk rawh le.'
+                    });
+                  } finally {
+                    setIsVerifyingInMainTab(false);
+                  }
+                }}
+                disabled={isVerifyingInMainTab}
+                className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30 transition cursor-pointer"
+              >
+                {isVerifyingInMainTab ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
+                <span>Payment Ka Ti Zo Tawh E</span>
+              </button>
+
+              <a
+                href={phonePeLaunchUrl || `/api/phonepe/launch-pay?txnId=${activePendingTxn.id}&amt=${totalPayable}`}
+                target="_blank"
+                rel="noreferrer"
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Tab Re-open Rawh</span>
+              </a>
+            </div>
+
+            {phonePeVerifyMsg && (
+              <p className={`text-xs p-2.5 rounded-xl border ${
+                phonePeVerifyMsg.type === 'error' ? 'bg-rose-950/40 border-rose-800/60 text-rose-300' : 'bg-amber-950/40 border-amber-800/60 text-amber-300'
+              }`}>
+                {phonePeVerifyMsg.text}
+              </p>
+            )}
+
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWaitingPhonePePG(false);
+                  setIsPhonePeCheckoutOpen(true);
+                }}
+                className="text-[11px] text-purple-300 hover:text-purple-200 underline cursor-pointer"
+              >
+                Emba In-App PhonePe Modal-a scan zawk i duh em?
+              </button>
+            </div>
+          </div>
+        )}
       </form>
 
       {/* Embedded PhonePe PG Checkout Modal */}
@@ -2189,195 +2298,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           onPaymentSuccess(transaction);
         }}
       />
-
-      {/* PhonePe PG New Tab Waiting Overlay with Live Sync */}
-      {isRedirectingToPhonePe && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-purple-100 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-[#5f259f] text-white flex items-center justify-center font-black text-3xl shadow-lg mb-4 shadow-purple-900/25">
-              पे
-            </div>
-            
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold uppercase tracking-wider mb-2.5">
-              <Zap className="w-3.5 h-3.5 text-purple-600" />
-              <span>PhonePe PG (UAT) • New Tab</span>
-            </div>
-            
-            <h3 className="text-xl font-black text-slate-900 mb-1.5">
-              PhonePe Gateway New Tab-ah a inhawng e
-            </h3>
-            
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              New Tab-a PhonePe checkout portal ah khan payment ti zo la, i tih zawh veleh helai hmunah hian Official Receipt a lo lang nghal ang.
-            </p>
-
-            <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-5 text-left text-xs space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Pawisa Pek Tur (Total):</span>
-                <span className="font-extrabold text-slate-900 text-sm">₹{totalPayable.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Transaction ID:</span>
-                <span className="font-mono text-[11px] text-purple-700 font-semibold truncate max-w-[180px]">
-                  {activePendingTxn?.id || 'RPAY_TXN_...'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70">
-                <span className="text-slate-500">Gateway Status:</span>
-                <span className="inline-flex items-center gap-1.5 text-amber-600 font-semibold text-[11px]">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  <span>A nghak mek (Waiting for payment)...</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="w-full space-y-2.5">
-              {phonePeRedirectUrl ? (
-                <a
-                  href={phonePeRedirectUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3.5 px-4 rounded-xl bg-[#5f259f] hover:bg-[#511e89] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-purple-900/20 transition cursor-pointer"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>New Tab-ah PhonePe Hawng Rawh (Re-open Tab)</span>
-                </a>
-              ) : (
-                <div className="flex items-center justify-center gap-2 text-purple-700 font-semibold text-xs py-2 bg-purple-50 rounded-xl border border-purple-100">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>PhonePe Session a in-generate mek...</span>
-                </div>
-              )}
-
-              {/* PhonePe verification feedback alert */}
-              {phonePeVerifyMsg && (
-                <div
-                  className={`w-full p-3.5 rounded-2xl text-xs font-medium flex items-start gap-2.5 transition text-left animate-in fade-in duration-150 ${
-                    phonePeVerifyMsg.type === 'error'
-                      ? 'bg-rose-50 border border-rose-200 text-rose-800'
-                      : phonePeVerifyMsg.type === 'pending'
-                      ? 'bg-amber-50 border border-amber-200 text-amber-900'
-                      : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                  }`}
-                >
-                  <div className="shrink-0 mt-0.5">
-                    {phonePeVerifyMsg.type === 'error' ? (
-                      <AlertCircle className="w-4 h-4 text-rose-600" />
-                    ) : phonePeVerifyMsg.type === 'pending' ? (
-                      <Clock className="w-4 h-4 text-amber-600" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    )}
-                  </div>
-                  <div className="flex-1 leading-relaxed">
-                    {phonePeVerifyMsg.text}
-                  </div>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!activePendingTxn) return;
-                  setIsVerifyingInMainTab(true);
-                  setPhonePeVerifyMsg(null);
-                  try {
-                    const r = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
-                    const d = await r.json();
-
-                    const isSuccess =
-                      d?.code === 'PAYMENT_SUCCESS' ||
-                      d?.code === 'SUCCESS' ||
-                      d?.data?.state === 'COMPLETED' ||
-                      d?.data?.status === 'SUCCESS' ||
-                      d?.data?.status === 'PAYMENT_SUCCESS' ||
-                      d?.data?.responseCode === 'SUCCESS';
-
-                    const isFailed =
-                      d?.code === 'PAYMENT_ERROR' ||
-                      d?.data?.state === 'FAILED' ||
-                      d?.data?.state === 'CANCELLED' ||
-                      d?.data?.state === 'EXPIRED' ||
-                      Boolean(d?.data?.errorCode) ||
-                      d?.data?.responseCode === 'PAYMENT_ERROR' ||
-                      d?.data?.responseCode === 'FAILED';
-
-                    if (isSuccess) {
-                      setPhonePeVerifyMsg({
-                        type: 'success',
-                        text: 'PhonePe Gateway atangin payment a hlawhtling e! Receipt kan buatsaih mek e...'
-                      });
-                      const finalTx: Transaction = {
-                        ...activePendingTxn,
-                        status: 'completed',
-                        referenceNo: d?.data?.transactionId || d?.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
-                        utr: d?.data?.paymentInstrument?.utr || activePendingTxn.utr
-                      };
-                      saveTransaction(finalTx);
-                      setTimeout(() => {
-                        setIsRedirectingToPhonePe(false);
-                        setIsProcessing(false);
-                        onPaymentSuccess(finalTx);
-                      }, 600);
-                    } else if (isFailed) {
-                      setIsRedirectingToPhonePe(false);
-                      setIsProcessing(false);
-                      if (activePendingTxn) {
-                        const failedTx: Transaction = {
-                          ...activePendingTxn,
-                          status: 'failed',
-                        };
-                        if (onPaymentFailure) {
-                          onPaymentFailure(failedTx, d?.data?.detailedErrorCode || d?.data?.errorCode || 'PhonePe atangin payment a hlawhtling lo (Failed / Cancelled).');
-                          return;
-                        }
-                      }
-                      setPhonePeVerifyMsg({
-                        type: 'error',
-                        text: 'PhonePe atangin payment a hlawhtling lo (Failed / Cancelled). Khawngaihin a hnuai lamah "Kalsan rih rawh" hmetin i ti tha leh dawn nia.'
-                      });
-                    } else {
-                      // Status is still PENDING: User has NOT completed payment on mercury-uat
-                      setPhonePeVerifyMsg({
-                        type: 'pending',
-                        text: 'PhonePe atangin payment confirmation a la thleng lo (Status: A la pending mek). Khawngaihin New Tab-a PhonePe portal ah khan payment ti zo phawt la, chumi hnuah "Payment ka ti zo tawh e" hi hmet nawn leh rawh le.'
-                      });
-                    }
-                  } catch (e) {
-                    setPhonePeVerifyMsg({
-                      type: 'error',
-                      text: 'PhonePe status check a buai rih deuh. Internet connection enfiah la, PhonePe page ah khan payment a tlang tawh ngei em check nawn leh rawh le.'
-                    });
-                  } finally {
-                    setIsVerifyingInMainTab(false);
-                  }
-                }}
-                disabled={isVerifyingInMainTab}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                {isVerifyingInMainTab ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                )}
-                <span>Payment ka ti zo tawh e (Receipt En Rawh)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRedirectingToPhonePe(false);
-                  setIsProcessing(false);
-                  setPhonePeVerifyMsg(null);
-                }}
-                className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                Kalsan rih rawh (Cancel)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

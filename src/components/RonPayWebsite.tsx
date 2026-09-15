@@ -86,6 +86,25 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [phonePeUatAmount, setPhonePeUatAmount] = useState<number>(100);
   const [copiedPhonePeLink, setCopiedPhonePeLink] = useState<boolean>(false);
   const [showSimulatedReceipt, setShowSimulatedReceipt] = useState<boolean>(false);
+
+  // Direct PhonePe Official PG UAT Portal Launch Helper (mercury-uat.phonepe.com)
+  const openPhonePeUatPortal = (amount: number = 100) => {
+    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
+    const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
+    try {
+      window.open(launchUrl, '_blank');
+    } catch (e) {
+      window.location.href = launchUrl;
+    }
+  };
+
+  const copyPhonePeUatLink = (amount: number = 100) => {
+    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
+    const link = `${origin}/api/phonepe/launch-pay?amt=${amount}`;
+    navigator.clipboard.writeText(link);
+    setCopiedPhonePeLink(true);
+    setTimeout(() => setCopiedPhonePeLink(false), 2000);
+  };
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   // Eye Comfort Theme (Mit Tihahdam Theme) - true = soothing warm light, false = muted dark
   const [eyeComfortMode, setEyeComfortMode] = useState<boolean>(true);
@@ -755,19 +774,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
             </button>
 
             {/* PhonePe PG Checkout Direct Button (UAT Review) */}
-            {onOpenPhonePeCheckout && (
-              <button
-                type="button"
-                id="website-phonepe-checkout-nav-btn"
-                onClick={() => onOpenPhonePeCheckout(100)}
-                className="bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] active:scale-95 text-white font-bold sm:font-black text-[11px] sm:text-xs md:text-sm px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-md transition cursor-pointer border border-purple-400/50 shrink-0 whitespace-nowrap"
-                title="Open PhonePe PG Standard Checkout Page (UAT Review)"
-              >
-                <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 fill-amber-300 shrink-0" />
-                <span className="whitespace-nowrap">PhonePe</span>
-                <span className="hidden md:inline-block text-[9px] bg-white/20 text-white font-bold px-1 rounded">UAT</span>
-              </button>
-            )}
+            <button
+              type="button"
+              id="website-phonepe-checkout-nav-btn"
+              onClick={() => openPhonePeUatPortal(100)}
+              className="bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] active:scale-95 text-white font-bold sm:font-black text-[11px] sm:text-xs md:text-sm px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl flex items-center gap-1 sm:gap-1.5 shadow-md transition cursor-pointer border border-purple-400/50 shrink-0 whitespace-nowrap"
+              title="Open Official PhonePe PG UAT Portal (mercury-uat.phonepe.com)"
+            >
+              <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 fill-amber-300 shrink-0" />
+              <span className="whitespace-nowrap">PhonePe</span>
+              <span className="hidden md:inline-block text-[9px] bg-white/20 text-white font-bold px-1 rounded">UAT</span>
+            </button>
 
             {/* Launch App Main CTA ("App Lut Rawh") - 100% visible, fully padded, never clipped on mobile */}
             <button
@@ -1048,19 +1065,17 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
-                {onOpenPhonePeCheckout && (
-                  <button
-                    type="button"
-                    id="hero-phonepe-checkout-btn"
-                    onClick={() => onOpenPhonePeCheckout(100)}
-                    className="bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#511e89] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg hover:shadow-purple-900/40 transition cursor-pointer border border-purple-400/40 active:scale-95 shrink-0"
-                    title="Open PhonePe PG V2 Standard Checkout Page"
-                  >
-                    <Zap className="w-5 h-5 text-amber-300 fill-amber-300" />
-                    <span>{isMizo ? '⚡ PhonePe PG Checkout En Rawh' : '⚡ Test PhonePe Checkout'}</span>
-                    <span className="text-[10px] bg-white/20 text-white font-bold px-1.5 py-0.5 rounded-md">UAT</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  id="hero-phonepe-checkout-btn"
+                  onClick={() => openPhonePeUatPortal(100)}
+                  className="bg-gradient-to-r from-[#5f259f] via-[#7b2cbf] to-[#511e89] hover:from-[#511e89] hover:to-[#6a24a6] text-white font-black text-sm sm:text-base px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg hover:shadow-purple-900/40 transition cursor-pointer border border-purple-400/40 active:scale-95 shrink-0"
+                  title="Open Official PhonePe PG UAT Portal (mercury-uat.phonepe.com)"
+                >
+                  <Zap className="w-5 h-5 text-amber-300 fill-amber-300" />
+                  <span>{isMizo ? '⚡ PhonePe PG Checkout En Rawh' : '⚡ Test PhonePe Checkout'}</span>
+                  <span className="text-[10px] bg-white/20 text-white font-bold px-1.5 py-0.5 rounded-md">UAT</span>
+                </button>
 
                 <a
                   href="#services"
@@ -1354,11 +1369,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('https://ronpay.app/?phonepe=true');
-                    setCopiedPhonePeLink(true);
-                    setTimeout(() => setCopiedPhonePeLink(false), 2000);
-                  }}
+                  onClick={() => copyPhonePeUatLink(phonePeUatAmount)}
                   className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
                     copiedPhonePeLink
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
@@ -1366,10 +1377,10 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                       ? 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
                       : 'bg-slate-800 text-purple-200 border-slate-700 hover:bg-slate-750'
                   }`}
-                  title="Copy Direct PhonePe Checkout URL"
+                  title="Copy Official PhonePe PG UAT Direct Link"
                 >
                   {copiedPhonePeLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedPhonePeLink ? 'Copied Direct Link!' : 'Copy Direct UAT Link'}</span>
+                  <span>{copiedPhonePeLink ? 'Copied Direct UAT Link!' : 'Copy Direct UAT Link'}</span>
                 </button>
               </div>
             </div>
@@ -1390,7 +1401,7 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                     Initiate Test Transactions
                   </h4>
                   <p className={`text-xs ${eyeComfortMode ? 'text-slate-600' : 'text-slate-400'} leading-relaxed`}>
-                    Validate full end-to-end checkout flow across UPI, Cards, NetBanking, and Wallets.
+                    Validate full end-to-end checkout flow across UPI, Cards, NetBanking, and Wallets on PhonePe official UAT portal.
                   </p>
                   
                   {/* Preset Amount Selectors */}
@@ -1422,11 +1433,12 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <div className="pt-4">
                   <button
                     type="button"
-                    onClick={() => onOpenPhonePeCheckout?.(phonePeUatAmount)}
+                    onClick={() => openPhonePeUatPortal(phonePeUatAmount)}
                     className="w-full py-2.5 px-3 bg-gradient-to-r from-[#5f259f] to-[#7b2cbf] hover:from-[#511e89] hover:to-[#6a24a6] text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                    title="Open Official PhonePe UAT Portal in New Tab"
                   >
                     <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                    <span>Launch Checkout (₹{phonePeUatAmount})</span>
+                    <span>Launch Official PhonePe UAT (₹{phonePeUatAmount})</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1500,11 +1512,12 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                 <div className="pt-4">
                   <button
                     type="button"
-                    onClick={() => onOpenPhonePeCheckout?.(100)}
+                    onClick={() => openPhonePeUatPortal(100)}
                     className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98"
+                    title="Run PhonePe PG Verification Flow in New Tab"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Run Verification Flow</span>
+                    <span>Launch PhonePe UAT (₹100)</span>
                   </button>
                 </div>
               </div>
@@ -1516,15 +1529,15 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-purple-600 shrink-0" />
                 <span className={eyeComfortMode ? 'text-slate-700' : 'text-slate-300'}>
-                  <b>PhonePe UAT Direct Link:</b> Use <code className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 font-mono text-purple-900 dark:text-purple-200 font-bold">https://ronpay.app/?phonepe=true</code> to open the PG checkout page instantly without manual navigation.
+                  <b>PhonePe UAT Direct Link:</b> Use <code className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 font-mono text-purple-900 dark:text-purple-200 font-bold">https://ronpay.app/api/phonepe/launch-pay?amt=100</code> (or <code className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 font-mono text-purple-900 dark:text-purple-200 font-bold">/phonepe</code>) to open the official PhonePe PG UAT portal (mercury-uat.phonepe.com) instantly.
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => onOpenPhonePeCheckout?.(100)}
+                onClick={() => openPhonePeUatPortal(100)}
                 className="px-3 py-1.5 bg-[#5f259f] text-white font-bold text-xs rounded-xl shadow-xs hover:bg-[#511e89] transition cursor-pointer shrink-0"
               >
-                Open Checkout Screen Now
+                Open Official PhonePe UAT Now
               </button>
             </div>
 

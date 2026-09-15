@@ -49,6 +49,8 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
   // Live Test States
   const [testAmount, setTestAmount] = useState<number>(500);
   const [simStatus, setSimStatus] = useState<'SUCCESS' | 'PENDING' | 'FAILURE'>('SUCCESS');
+  const [uatTemplate, setUatTemplate] = useState<'SUCCESS' | 'FAILURE' | 'PENDING'>('SUCCESS');
+  const [templateLoading, setTemplateLoading] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [apiResponse, setApiResponse] = useState<any>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -284,6 +286,10 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
             merchantRefundId: `REFUND_${Date.now()}`
           })
         });
+      } else if (key === 'checklist') {
+        res = await fetch('/api/phonepe/partner-checklist');
+      } else if (key === 'template') {
+        res = await fetch('/api/phonepe/template?mid=' + credentials.merchantId);
       }
       if (!res) throw new Error('No response from endpoint');
       const text = await res.text();
@@ -300,6 +306,32 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
       showNotification(`Error testing ${key}: ${e.message}`, 'error');
     } finally {
       setTestingItem(null);
+    }
+  };
+
+  const handleSetUatTemplate = async (template: 'SUCCESS' | 'FAILURE' | 'PENDING') => {
+    setTemplateLoading(true);
+    try {
+      const res = await fetch('/api/phonepe/template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MERCHANT-ID': credentials.merchantId
+        },
+        body: JSON.stringify({
+          mid: credentials.merchantId,
+          template: template
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update template');
+      setUatTemplate(template);
+      setChecklistTestResult({ key: 'template', data });
+      showNotification(`✅ UAT Mock Response template set to ${template} for ${credentials.merchantId}`, 'success');
+    } catch (e: any) {
+      showNotification('Error configuring template: ' + e.message, 'error');
+    } finally {
+      setTemplateLoading(false);
     }
   };
 
@@ -528,7 +560,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                 </div>
 
                 {/* 4. UAT Sandbox Simulation */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
@@ -547,21 +579,71 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                       </div>
                     </div>
                     <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
-                      SIMULATOR READY
+                      TEMPLATE READY
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-600 leading-relaxed">
-                    End-to-end payment flows: <b>Success</b>, <b>Failure</b>, leh <b>Pending</b> te chu Simulator tab leh status API ah chiang takin a mock theih vek.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleTestChecklistItem('status')}
-                    disabled={testingItem === 'status'}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Activity className="w-3 h-3" />
-                    <span>{testingItem === 'status' ? 'Checking Status...' : 'Test Transaction Status API'}</span>
-                  </button>
+
+                  {/* Official PhonePe UAT Note */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[9.5px] text-amber-900 leading-snug">
+                    <p className="font-bold text-amber-950 mb-0.5 flex items-center gap-1">
+                      <span>📌 PhonePe Official Rule:</span>
+                    </p>
+                    <p className="italic">
+                      "In the UAT environment, you should set the template using the end merchant’s MID to get the mock response. In the production, Partner needs to make sure to pass the end merchant's MID in the header X-MERCHANT-ID"
+                    </p>
+                  </div>
+
+                  {/* Template Switcher Buttons */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-slate-700">
+                      <span>Set Mock Template for <code className="text-purple-700 bg-purple-50 px-1 py-0.5 rounded">{credentials.merchantId}</code>:</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-200 font-bold text-slate-800">
+                        Active: {uatTemplate}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['SUCCESS', 'FAILURE', 'PENDING'] as const).map((tmpl) => (
+                        <button
+                          key={tmpl}
+                          type="button"
+                          onClick={() => handleSetUatTemplate(tmpl)}
+                          disabled={templateLoading}
+                          className={`py-1 px-2 rounded-lg text-[10px] font-bold transition border cursor-pointer ${
+                            uatTemplate === tmpl
+                              ? tmpl === 'SUCCESS'
+                                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                : tmpl === 'FAILURE'
+                                ? 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                                : 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tmpl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('template')}
+                      disabled={testingItem === 'template'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Layers className="w-3 h-3" />
+                      <span>{testingItem === 'template' ? 'Fetching...' : 'Query Template API'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('status')}
+                      disabled={testingItem === 'status'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Activity className="w-3 h-3" />
+                      <span>{testingItem === 'status' ? 'Checking...' : 'Check Status API'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 5. Partner Checklist (Standard) */}
@@ -595,6 +677,16 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                     <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> Pricing / Fee Model</div>
                     <div className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-600" /> S2S Webhook Return 200</div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('checklist')}
+                    disabled={testingItem === 'checklist'}
+                    className="w-full mt-1 py-1.5 px-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px] hover:bg-emerald-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>{testingItem === 'checklist' ? 'Auditing Requirements...' : 'Run Full Partner Checklist Live Audit (100%)'}</span>
+                  </button>
                 </div>
 
                 {/* 6. Settlement & Split Settlement API */}
