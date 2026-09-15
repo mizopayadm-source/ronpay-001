@@ -93,7 +93,9 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     setLogsLoading(true);
     try {
       const res = await fetch('/api/phonepe/webhook-logs');
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {}
       setWebhookLogs(data.logs || []);
     } catch (e) {
       console.error('Error fetching webhook logs:', e);
@@ -160,7 +162,12 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     setTokenLoading(true);
     try {
       const res = await fetch('/api/phonepe/token', { method: 'POST' });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {
+        throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.substring(0, 60)}`);
+      }
+      if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       if (data.success) {
         setAuthToken(data.data.access_token);
         setApiResponse(data);
@@ -188,7 +195,12 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           customerPhone: '9862300000'
         })
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {
+        throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.substring(0, 60)}`);
+      }
+      if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       setApiResponse(data);
       showNotification('✅ Payment initiation API executed! Base64 payload & Checksum generated.', 'success');
     } catch (e: any) {
@@ -238,7 +250,15 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
       } else if (key === 'settlement') {
         res = await fetch('/api/phonepe/settlements');
       }
-      const data = await res.json();
+      if (!res) throw new Error('No response from endpoint');
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.substring(0, 60)}`);
+      }
+      if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       setChecklistTestResult({ key, data });
       showNotification(`✅ Tested ${key.toUpperCase()} successfully!`, 'success');
     } catch (e: any) {

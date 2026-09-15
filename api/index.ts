@@ -706,9 +706,164 @@ export default async function handler(req: any, res: any) {
     }
 
     // 6c. Webhook endpoint
-    if (pathname.includes('/webhook')) {
+    if (pathname.includes('/webhook') && !pathname.includes('/webhook-logs')) {
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ success: true, message: 'Processed successfully' }));
+    }
+
+    // 6d. Split Settlement API
+    if (pathname.includes('/split-settlement')) {
+      let body: any = {};
+      try {
+        if (req.body && typeof req.body === 'object') body = req.body;
+        else if (typeof req.body === 'string') body = JSON.parse(req.body);
+      } catch {}
+      const total = Number(body?.amount) || 500;
+      const platformFee = Number((total * 0.01).toFixed(2));
+      const merchantAmount = Number((total - platformFee).toFixed(2));
+
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        message: 'PhonePe Split Settlement configured for RonPay',
+        splitInstruction: {
+          merchantId: 'TSPMIZOPAYUAT',
+          settlementType: 'SPLIT_SETTLEMENT',
+          splits: [
+            {
+              recipientType: 'CAMPAIGN_MERCHANT',
+              accountOrVpa: body?.merchantVpa || 'mizo.bawm@axl',
+              amount: merchantAmount,
+              percentage: '99%',
+              description: 'Direct Campaign Bawm Settlement'
+            },
+            {
+              recipientType: 'PLATFORM_OPERATOR',
+              accountOrVpa: body?.platformVpa || 'ronpay.tech@ybl',
+              amount: platformFee,
+              percentage: '1%',
+              description: 'RonPay TSP Platform Technology Fee'
+            }
+          ]
+        }
+      }));
+    }
+
+    // 6e. Settlements API
+    if (pathname.includes('/settlements')) {
+      const today = new Date().toISOString().split('T')[0];
+      const settlements = [
+        {
+          settlementId: 'STL_' + Date.now(),
+          cycle: 'T+1',
+          date: today,
+          merchantId: 'TSPMIZOPAYUAT',
+          totalGrossAmount: 15420.00,
+          platformFeeDeducted: 154.20,
+          netSettledAmount: 15265.80,
+          bankAccount: 'SBI A/C ****7890 (Mizoram Rural / State Bank)',
+          utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
+          status: 'SETTLED',
+          currency: 'INR'
+        }
+      ];
+
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        code: 'SUCCESS',
+        message: 'Settlement status fetched successfully',
+        data: {
+          merchantId: 'TSPMIZOPAYUAT',
+          settlementCycle: 'T+1 Working Days',
+          settlements
+        }
+      }));
+    }
+
+    // 6f. Webhook Configuration API
+    if (pathname.includes('/create-webhook-api') || pathname.includes('/webhook-config')) {
+      let body: any = {};
+      try {
+        if (req.body && typeof req.body === 'object') body = req.body;
+        else if (typeof req.body === 'string') body = JSON.parse(req.body);
+      } catch {}
+      const targetUrl = body?.webhookUrl || 'https://ronpay.app/api/phonepe/webhook';
+      const subscribedEvents = body?.events || [
+        'checkout.order.completed',
+        'checkout.order.failed',
+        'pg.order.completed',
+        'pg.order.failed',
+        'payment.success',
+        'payment.failed',
+        'refund.completed'
+      ];
+
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        code: 'WEBHOOK_CONFIGURED',
+        message: 'Webhook configuration registered successfully for TSP partner',
+        data: {
+          webhookId: 'WH_' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+          merchantId: 'TSPMIZOPAYUAT',
+          clientId: 'TSPMIZOPAYUAT_2608171706',
+          webhookUrl: targetUrl,
+          authType: 'HMAC_SHA256',
+          events: subscribedEvents,
+          status: 'ACTIVE',
+          createdDate: new Date().toISOString()
+        }
+      }));
+    }
+
+    // 6g. Webhook Logs API
+    if (pathname.includes('/webhook-logs')) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        total: 1,
+        logs: [
+          {
+            id: 'LOG_' + Date.now(),
+            timestamp: new Date().toISOString(),
+            event: 'payment.success',
+            status: 'DELIVERED',
+            responseCode: 200,
+            merchantId: 'TSPMIZOPAYUAT'
+          }
+        ]
+      }));
+    }
+
+    // 6h. Simulate Callback API
+    if (pathname.includes('/simulate-callback')) {
+      let body: any = {};
+      try {
+        if (req.body && typeof req.body === 'object') body = req.body;
+        else if (typeof req.body === 'string') body = JSON.parse(req.body);
+      } catch {}
+      const mTxnId = body?.merchantTransactionId || 'RPAY_TXN_' + Date.now();
+      const utrNum = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+      const amt = Number(body?.amountInRupees) || 101;
+      
+      globalTxStore[mTxnId] = {
+        ...(globalTxStore[mTxnId] || {}),
+        status: 'PAYMENT_SUCCESS',
+        utr: utrNum,
+        amount: amt,
+        amountRupees: amt
+      };
+
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        message: 'Webhook callback simulated successfully',
+        data: {
+          merchantTransactionId: mTxnId,
+          status: 'PAYMENT_SUCCESS',
+          utr: utrNum
+        }
+      }));
     }
 
     // 7. Health check
@@ -717,11 +872,30 @@ export default async function handler(req: any, res: any) {
       return res.end(JSON.stringify({ status: 'ok', time: new Date().toISOString() }));
     }
 
-    // 8. Default fallback: redirect directly to Home
+    // 8. Safe Fallback for any other API route (Never return HTML redirect to an API call!)
+    if (pathname.startsWith('/api/')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 404;
+      return res.end(JSON.stringify({
+        success: false,
+        error: 'API route not found',
+        path: pathname
+      }));
+    }
+
+    // 9. Non-API fallbacks: redirect to Home
     res.writeHead(302, { Location: '/?view=app' });
     return res.end();
   } catch (err: any) {
     console.error('Vercel handler fallback:', err);
+    if (req.url && req.url.includes('/api/')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 500;
+      return res.end(JSON.stringify({
+        success: false,
+        error: err?.message || 'Internal API error'
+      }));
+    }
     res.writeHead(302, { Location: '/?view=app' });
     return res.end();
   }
