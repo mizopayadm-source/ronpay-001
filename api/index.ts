@@ -76,7 +76,114 @@ export default async function handler(req: any, res: any) {
     const isExplicitSuccess = (code === 'PAYMENT_SUCCESS' || code === 'SUCCESS' || code === 'COMPLETED');
     const status = isExplicitSuccess ? 'PAYMENT_SUCCESS' : (code ? 'PAYMENT_ERROR' : 'PENDING');
 
-    // 1. PhonePe Callback Handler - Triggered when user finishes payment on PhonePe and gets redirected back
+    // 1. PhonePe Launch Pay direct gateway launcher (GET /api/phonepe/launch-pay, /phonepe, /phonepe-uat, /uat)
+    if (pathname.includes('/launch-pay') || pathname === '/phonepe' || pathname === '/phonepe-uat' || pathname === '/uat') {
+      const rawAmt = Number(searchParams.get('amt') || searchParams.get('amountInRupees')) || 100;
+      const baseAmtStr = searchParams.get('baseAmt');
+      const baseAmt = baseAmtStr !== null && baseAmtStr !== '' ? Number(baseAmtStr) : undefined;
+      const feeOption = searchParams.get('feeOpt') || searchParams.get('feeOption') || 'ADD_ON';
+      const clientTxnId = searchParams.get('txnId') || searchParams.get('merchantTransactionId') || '';
+      const donorName = searchParams.get('donor') || searchParams.get('donorName') || 'Valued Donor';
+      const customerPhone = searchParams.get('donorPhone') || searchParams.get('customerPhone') || '9862000000';
+      const campaignTitle = searchParams.get('ctitle') || searchParams.get('campaignTitle') || 'RonPay Community Bawm';
+      const campaignId = searchParams.get('cid') || searchParams.get('campaignId') || '';
+      const category = searchParams.get('cat') || searchParams.get('category') || 'others';
+      const isAnonymous = searchParams.get('anon') === '1' || searchParams.get('isAnonymous') === 'true';
+
+      let merchantSharePaise = 0;
+      let platformFeePaise = 0;
+      let totalPayablePaise = 0;
+
+      if (baseAmt !== undefined && baseAmt > 0) {
+        if (feeOption === 'ADD_ON') {
+          merchantSharePaise = Math.round(baseAmt * 100);
+          platformFeePaise = Math.round(Math.max(1, Math.round(baseAmt * 0.01)) * 100);
+          totalPayablePaise = merchantSharePaise + platformFeePaise;
+        } else {
+          totalPayablePaise = Math.round(baseAmt * 100);
+          platformFeePaise = Math.round(Math.max(1, Math.round(baseAmt * 0.01)) * 100);
+          merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
+        }
+      } else {
+        totalPayablePaise = Math.round(rawAmt * 100);
+        platformFeePaise = Math.max(100, Math.round(totalPayablePaise * 0.01));
+        merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
+      }
+
+      const amountInPaise = totalPayablePaise;
+      const merchantTransactionId = clientTxnId || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+      const livePhonePeToken = await getOrFetchPhonePeOAuthToken();
+
+      let phonePeCheckoutUrl = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(livePhonePeToken)}`;
+      let phonePeOrderId = `OMO${Date.now()}`;
+
+      const directReturnUrl = `${proto}://${rawHost}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTransactionId)}&phonepe_txn_id=${encodeURIComponent(merchantTransactionId)}&status=PAYMENT_SUCCESS&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(customerPhone)}&anon=${isAnonymous ? '1' : '0'}`;
+
+      try {
+        const v2Resp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `O-Bearer ${livePhonePeToken}`
+          },
+          body: JSON.stringify({
+            merchantOrderId: merchantTransactionId,
+            amount: amountInPaise,
+            paymentFlow: {
+              type: 'PG_CHECKOUT',
+              merchantUrls: {
+                redirectUrl: directReturnUrl
+              }
+            },
+            deviceContext: {
+              deviceOS: 'ANDROID'
+            },
+            paymentModeConfig: {
+              version: 'V2',
+              enabledPaymentModes: [
+                { type: 'UPI', flows: ['INTENT', 'COLLECT', 'QR'] },
+                { type: 'CARD' },
+                { type: 'NET_BANKING' }
+              ]
+            }
+          })
+        });
+
+        if (v2Resp.ok) {
+          const v2Data: any = await v2Resp.json();
+          if (v2Data?.orderId) phonePeOrderId = v2Data.orderId;
+          if (v2Data?.redirectUrl) phonePeCheckoutUrl = v2Data.redirectUrl;
+        }
+      } catch (e) {
+        console.warn('PhonePe v2 pay initiate fallback in api/index.ts:', e);
+      }
+
+      // Store in memory
+      globalTxStore[merchantTransactionId] = {
+        status: 'PENDING',
+        amount: totalPayablePaise / 100,
+        amountRupees: totalPayablePaise / 100,
+        baseAmountRupees: merchantSharePaise / 100,
+        platformFeeRupees: platformFeePaise / 100,
+        feeOption: feeOption,
+        campaignId: campaignId,
+        campaignTitle: campaignTitle,
+        category: category,
+        donorName: donorName,
+        donorPhone: customerPhone,
+        isAnonymous: isAnonymous,
+        createdAt: new Date().toISOString(),
+        phonePeTransactionId: phonePeOrderId,
+        mercuryUrl: phonePeCheckoutUrl
+      };
+
+      res.setHeader('Location', phonePeCheckoutUrl);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.statusCode = 302;
+      return res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=${phonePeCheckoutUrl}"><title>Redirecting to PhonePe...</title></head><body style="background:#0f172a;color:#fff;font-family:sans-serif;padding:30px;text-align:center;"><h3>Opening PhonePe Payment Gateway...</h3><p><a href="${phonePeCheckoutUrl}" style="color:#a855f7;">Click here if not redirected automatically</a></p></body></html>`);
+    }
+
+    // 1b. PhonePe Callback Handler - Triggered when user finishes payment on PhonePe and gets redirected back
     if (pathname.includes('/callback') || pathname.includes('/phonepe/callback')) {
       const finalStatus = code === 'PAYMENT_ERROR' ? 'PAYMENT_ERROR' : 'PAYMENT_SUCCESS';
       
@@ -949,7 +1056,8 @@ export default async function handler(req: any, res: any) {
     }
 
     // 9. Non-API fallbacks: redirect to Home
-    res.writeHead(302, { Location: '/?view=app' });
+    res.setHeader('Location', '/?view=app');
+    res.statusCode = 302;
     return res.end();
   } catch (err: any) {
     console.error('Vercel handler fallback:', err);
@@ -961,7 +1069,8 @@ export default async function handler(req: any, res: any) {
         error: err?.message || 'Internal API error'
       }));
     }
-    res.writeHead(302, { Location: '/?view=app' });
+    res.setHeader('Location', '/?view=app');
+    res.statusCode = 302;
     return res.end();
   }
 }
