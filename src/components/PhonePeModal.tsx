@@ -274,6 +274,16 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         });
       } else if (key === 'settlement') {
         res = await fetch('/api/phonepe/settlements');
+      } else if (key === 'refund') {
+        res = await fetch('/api/phonepe/refund', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchantTransactionId: 'RPAY_TXN_TEST_REFUND',
+            amount: 10000,
+            merchantRefundId: `REFUND_${Date.now()}`
+          })
+        });
       }
       if (!res) throw new Error('No response from endpoint');
       const text = await res.text();
@@ -646,6 +656,73 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                   </div>
                 </div>
 
+                {/* 7. Refund API & Refund Status API (Mandatory UAT Item) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        7
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">Refund & Refund Status API</h4>
+                        <a 
+                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/refund-api"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          Refund API Docs <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      SUPPORTED
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    Transaction hlawhtling tawh refund nan unique <code className="font-mono bg-slate-200 px-1 rounded">merchantRefundId</code>, original txn ID leh amount hmangin <code className="font-mono bg-slate-200 px-1 rounded">/api/phonepe/refund</code> ah a in-set thlap.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleTestChecklistItem('refund')}
+                    disabled={testingItem === 'refund'}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>{testingItem === 'refund' ? 'Testing Refund API...' : 'Test Refund API Call'}</span>
+                  </button>
+                </div>
+
+                {/* 8. Handling PENDING Transactions & Reconciliation Schedule */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
+                        8
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">PENDING Transactions & Reconciliation</h4>
+                        <a 
+                          href="https://developer.phonepe.com/payment-gateway/uat-testing-go-live/uat-checklist"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
+                        >
+                          Official UAT Checklist <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
+                      COMPLIANT
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-[9.5px] text-slate-600 leading-relaxed bg-white/80 p-2 rounded-xl border border-slate-200">
+                    <p>• <b>Pending State Policy:</b> Pawisa pending laiin donor hnenah Receipt pek nghal ngawt a ni lo. Terminal status (COMPLETED / FAILED) thlen hma chu Status check zel a ni.</p>
+                    <p>• <b>Status Check Schedule:</b> First check 20-25 secs, chumi hnuah every 1 minute, 2 minutes thleng automated server polling & S2S Webhook hmanga verify a ni.</p>
+                    <p>• <b>Token Lifecycle:</b> OAuth token <code className="font-mono bg-slate-100 px-1 rounded">expires_at</code> hmangin server-in a cache a, request tinah a dil thar lo.</p>
+                  </div>
+                </div>
+
               </div>
 
               {/* Real-time Checklist Test Output Display */}
@@ -789,21 +866,40 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-between items-center bg-slate-900 text-slate-200 p-3 rounded-xl">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">TSP OAuth Token:</p>
-                  <p className="font-mono text-[10.5px] text-emerald-400 truncate max-w-[200px]">
-                    {authToken ? `${authToken.substring(0, 18)}...` : 'Not generated yet'}
-                  </p>
+              <div className="bg-slate-900 text-slate-200 p-3 rounded-xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">PhonePe OAuth Authorization:</span>
+                      <span className="text-[9px] bg-indigo-500/30 text-indigo-300 font-mono px-1.5 py-0.2 rounded">token_type: O-Bearer</span>
+                    </div>
+                    <p className="font-mono text-[10.5px] text-emerald-400 truncate max-w-[220px] sm:max-w-xs mt-0.5">
+                      {authToken ? `O-Bearer ${authToken.substring(0, 22)}...` : 'Not generated yet'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleGenerateToken}
+                    disabled={tokenLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-3 py-1.5 rounded-lg text-[10px] transition flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${tokenLoading ? 'animate-spin' : ''}`} />
+                    {authToken ? 'Refresh Token' : 'Generate Token'}
+                  </button>
                 </div>
-                <button
-                  onClick={handleGenerateToken}
-                  disabled={tokenLoading}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-3 py-1.5 rounded-lg text-[10px] transition flex items-center gap-1 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3 h-3 ${tokenLoading ? 'animate-spin' : ''}`} />
-                  {authToken ? 'Refresh Token' : 'Generate Token'}
-                </button>
+                {authToken && (
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[9.5px]">
+                    <span className="text-slate-400 font-mono">
+                      Header: <code className="text-indigo-300">Authorization: O-Bearer &lt;token&gt;</code>
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(`O-Bearer ${authToken}`, 'auth_header')}
+                      className="text-slate-300 hover:text-white flex items-center gap-1 font-medium bg-slate-800 px-2 py-0.5 rounded cursor-pointer"
+                    >
+                      {copiedKey === 'auth_header' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                      <span>{copiedKey === 'auth_header' ? 'Copied' : 'Copy Header'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* PhonePe Official UAT Sandbox Test Cards & Universal OTP */}
