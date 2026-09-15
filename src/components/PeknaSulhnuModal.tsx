@@ -540,12 +540,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 <span class="label">Bawm / Pawisa thawh chhan:</span>
                 <span class="val" style="font-weight: bold; color: #1e1b4b;">${resolveTxCampaignTitle(tx)}</span>
               </div>
-              ${bawmLocation ? `
-              <div class="row">
-                <span class="label">Bawm Awmna Hmun:</span>
-                <span class="val" style="color: #475569; font-weight: 600;">${bawmLocation}</span>
-              </div>
-              ` : ''}
               <div class="row">
                 <span class="label">Petu Hming:</span>
                 <span class="val">${tx.isAnonymous ? 'Anonymous' : (tx.donorName || 'Valued Donor')}</span>

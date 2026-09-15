@@ -318,12 +318,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               <span class="label">Bawm / Pawisa thawh chhan:</span>
               <span class="val" style="font-weight: bold; color: #1e1b4b;">${displayCampaignTitle}</span>
             </div>
-            ${bawmLocation ? `
-            <div class="row">
-              <span class="label">Bawm Awmna Hmun:</span>
-              <span class="val" style="color: #475569; font-weight: 600;">${bawmLocation}</span>
-            </div>
-            ` : ''}
             <div class="row">
               <span class="label">Petu Hming:</span>
               <span class="val">${transaction.isAnonymous ? 'Anonymous' : (transaction.donorName || 'User')}</span>
@@ -449,15 +443,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
               {transaction?.isAnonymous ? 'Anonymous (Hming thup)' : (transaction?.donorName || 'Community Member')}
             </span>
           </div>
-
-          {bawmLocation && (
-            <div className="flex justify-between items-center text-slate-600">
-              <span className="font-medium">Bawm Awmna Hmun:</span>
-              <span className="font-bold text-slate-800 text-[11px] text-right max-w-[65%]">
-                {bawmLocation}
-              </span>
-            </div>
-          )}
 
           {(transaction?.memberId || transaction?.subId) && (
             <div className="flex justify-between items-center text-slate-600">
