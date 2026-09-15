@@ -24,7 +24,9 @@ import {
   Play,
   ListChecks,
   CheckCircle2,
-  CreditCard
+  CreditCard,
+  Landmark,
+  Clock
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
@@ -105,9 +107,31 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     }
   };
 
+  // Settlement API State
+  const [settlementData, setSettlementData] = useState<any>(null);
+  const [settlementLoading, setSettlementLoading] = useState<boolean>(false);
+
+  const fetchSettlementData = async () => {
+    setSettlementLoading(true);
+    try {
+      const res = await fetch('/api/phonepe/settlements');
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch {}
+      setSettlementData(data?.data || data);
+    } catch (e) {
+      console.error('Error fetching settlements:', e);
+    } finally {
+      setSettlementLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'webhooks') {
       fetchWebhookLogs();
+    }
+    if (activeTab === 'split') {
+      fetchSettlementData();
     }
   }, [activeTab]);
 
@@ -350,11 +374,12 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('split')}
-            className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer ${
+            className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1 ${
               activeTab === 'split' ? 'bg-white text-indigo-700 shadow-xs' : 'hover:text-slate-900'
             }`}
           >
-            Split API
+            <Landmark className="w-3 h-3 text-emerald-600" />
+            <span>Settlement & Split</span>
           </button>
         </div>
 
@@ -1199,6 +1224,100 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                   <pre className="text-[9.5px] font-mono bg-slate-950/70 p-2.5 rounded-xl overflow-x-auto text-emerald-300 border border-slate-800">
 {JSON.stringify(splitPayloadSample, null, 2)}
                   </pre>
+                </div>
+
+                {/* Live Settlement & Reconciliation Card (PhonePe T+1 Settlement API) */}
+                <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-slate-100 p-3.5 rounded-2xl border border-indigo-900/60 space-y-3 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Landmark className="w-4 h-4 text-emerald-400" />
+                      <span className="font-black text-xs text-white">PhonePe Settlement & Payout Status (T+1)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchSettlementData}
+                      disabled={settlementLoading}
+                      className="px-2 py-1 bg-indigo-700/60 hover:bg-indigo-600 text-indigo-200 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${settlementLoading ? 'animate-spin' : ''}`} />
+                      <span>{settlementLoading ? 'Checking...' : 'Check Settlement API'}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[10.5px] text-slate-300 leading-relaxed">
+                    PhonePe-a pawisa lut te hi <b>T+1 Banking Day</b> (a tuk bank inhon ni)-ah Merchant Bank Account-ah direct-in a lut a, <b>Bank UTR</b> hmangin bank passbook nena in-reconcile zung zung theih a ni.
+                  </p>
+
+                  {/* Settlement Metrics */}
+                  {settlementData?.settlements?.[0] ? (() => {
+                    const stl = settlementData.settlements[0];
+                    return (
+                      <div className="bg-slate-950/70 border border-indigo-500/30 rounded-xl p-3 space-y-2.5">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                          <span className="text-[10px] text-slate-400 font-mono">Batch ID: <strong className="text-white">{stl.settlementId}</strong></span>
+                          <span className="text-[9.5px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {stl.status || 'SETTLED'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-slate-400 block">Gross Collection:</span>
+                            <span className="text-slate-200 font-bold font-mono">₹{stl.totalGrossAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Platform/MDR Fee:</span>
+                            <span className="text-purple-300 font-bold font-mono">-₹{stl.platformFeeDeducted?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Net Bank Payout:</span>
+                            <span className="text-emerald-400 font-black font-mono text-xs">₹{stl.netSettledAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px]">
+                          <span className="text-slate-300">
+                            Bank: <strong className="text-white">{stl.bankAccount}</strong>
+                          </span>
+                          <span className="font-mono text-indigo-300 flex items-center gap-1">
+                            UTR: <strong className="text-emerald-300">{stl.utr}</strong>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(stl.utr, 'settlement_utr')}
+                              className="text-slate-400 hover:text-white"
+                            >
+                              {copiedKey === 'settlement_utr' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <div className="bg-slate-950/60 p-2.5 rounded-xl text-center text-slate-400 text-[10.5px]">
+                      Loading settlement cycle status from PhonePe API...
+                    </div>
+                  )}
+
+                  {/* 4 Essential Settlement Pillars */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] pt-1">
+                    <div className="bg-white/5 border border-white/10 p-2 rounded-xl space-y-1">
+                      <span className="font-bold text-amber-300 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" /> 1. Settlement Cycle (T+1)
+                      </span>
+                      <p className="text-slate-300 text-[9.5px] leading-relaxed">
+                        Nimin a pawisa lut chu vawiin (chawhma 11 AM - 2 PM inkarah) bank-ah an thun thin. Weekend leh Bank holiday chu a dawt banking day-ah a kal tlang thin.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 p-2 rounded-xl space-y-1">
+                      <span className="font-bold text-indigo-300 flex items-center gap-1">
+                        <Key className="w-3 h-3 text-indigo-400" /> 2. UTR Passbook Match
+                      </span>
+                      <p className="text-slate-300 text-[9.5px] leading-relaxed">
+                        Bank passbook/statement-ah 12-digit UTR a chuang zel a, hei hi RonPay transaction list leh settlement report nena in-reconcile nan a pawimawh ber.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Doc Links */}
