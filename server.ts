@@ -1864,7 +1864,7 @@ app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'],
   const homeUrl = `${effectiveBase}/?view=app&screen=home`;
   const mercuryUrl = record.mercuryUrl || `https://mercury-uat.phonepe.com/transact/uat_v3`;
 
-  if (req.query.simulate !== 'true') {
+  if (req.query.redirect === 'mercury' || req.query.raw === '1') {
     return res.redirect(mercuryUrl);
   }
 

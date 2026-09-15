@@ -281,14 +281,14 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return officialMercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3';
   }, [officialMercuryUrl]);
 
-  // 3. Smart Mobile Gateway URL for Phone Camera & Web Scanners (Auto uses current domain like www.ronpay.app)
+  // 3. Smart Mobile Gateway URL for Phone Camera & Web Scanners (Auto uses current domain or public domain)
   const scanPayWebLink = useMemo(() => {
     if (typeof window === 'undefined' || !merchantTxnId) return '';
-    // If on ais-dev or localhost, prefer ronpay.app if configured or current origin
     let origin = window.location.origin;
+    // When running inside ais-dev (which blocks external phones unless logged in to Google AI Studio),
+    // automatically use the shared public preview or configured domain so the phone camera loads the page!
     if (origin.includes('ais-dev-')) {
-      // In dev container, also allow scanning via the public domain or shared URL
-      origin = window.location.origin;
+      origin = origin.replace('ais-dev-', 'ais-pre-');
     }
     const campId = campaign?.id || 'cmp-custom';
     const encTitle = encodeURIComponent(campaignTitle || campaign?.title || 'RonPay Bawm');
