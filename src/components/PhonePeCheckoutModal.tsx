@@ -273,14 +273,15 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encName}&am=${totalPayable.toFixed(2)}&cu=INR&tn=${encNote}&tr=${encodeURIComponent(merchantTxnId)}`;
   }, [merchantVpa, merchantName, totalPayable, merchantTxnId, campaign?.id]);
 
-  // 2. Official Raw mercury-uat Gateway URL (Full Net Banking support on PhonePe official portal)
+  // 2. Official Raw mercury-uat Gateway URL (Direct Official PhonePe Portal)
   const rawMercuryLink = useMemo(() => {
-    if (officialMercuryUrl) return officialMercuryUrl;
-    if (typeof window === 'undefined' || !merchantTxnId) return 'https://mercury-uat.phonepe.com/transact/uat_v3';
-    return `${window.location.origin}/api/phonepe/scan-pay?redirect=mercury&txnId=${encodeURIComponent(merchantTxnId)}`;
-  }, [officialMercuryUrl, merchantTxnId]);
+    if (officialMercuryUrl && officialMercuryUrl.startsWith('https://mercury-uat.phonepe.com')) {
+      return officialMercuryUrl;
+    }
+    return officialMercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3';
+  }, [officialMercuryUrl]);
 
-  // 3. Smart Mobile Gateway URL for Phone Camera & Web Scanners
+  // 3. Fallback Smart Mobile Gateway URL if needed
   const scanPayWebLink = useMemo(() => {
     if (typeof window === 'undefined' || !merchantTxnId) return '';
     const origin = window.location.origin;
@@ -294,12 +295,13 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
   }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
 
-  // Active QR value: 'mercury' (Raw mercury-uat) is ACTIVE by default for direct Net Banking & PhonePe PG
+  // Active QR value: 'mercury' (PhonePe official mercury-uat portal) is ACTIVE by default
   const activeQrCodeValue = useMemo(() => {
-    if (qrFormat === 'mercury') {
-      return rawMercuryLink || officialMercuryUrl || upiPaymentUri;
+    if (qrFormat === 'upiapp') {
+      return upiPaymentUri;
     }
-    return upiPaymentUri;
+    // Default ('mercury'): DIRECT official mercury-uat URL so phone camera opens PhonePe directly without ais-dev!
+    return rawMercuryLink || officialMercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3';
   }, [qrFormat, rawMercuryLink, officialMercuryUrl, upiPaymentUri]);
 
   const formatTimer = (seconds: number) => {
@@ -1160,32 +1162,32 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                 </svg>
                               </div>
 
-                              {/* QR Format Selector: Raw mercury-uat vs Direct UPI App */}
-                              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-xl border border-slate-200 my-2 w-full max-w-[290px] text-xs font-semibold gap-1">
+                              {/* QR Format Selector: Official mercury-uat vs Direct UPI App */}
+                              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-xl border border-slate-200 my-2 w-full max-w-[320px] text-xs font-semibold gap-1">
                                 <button
                                   type="button"
                                   onClick={() => setQrFormat('mercury')}
-                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer text-[11px] ${
+                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
                                     qrFormat === 'mercury'
-                                      ? 'bg-white text-blue-700 shadow-xs font-bold border border-blue-200'
+                                      ? 'bg-white text-purple-900 shadow-xs font-bold border border-purple-200'
                                       : 'text-slate-500 hover:text-slate-800'
                                   }`}
-                                  title="Official PhonePe UAT mercury-uat checkout with full Net Banking support"
+                                  title="Official PhonePe UAT mercury-uat checkout - Direct link for phone camera and browser"
                                 >
-                                  <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>Raw mercury-uat</span>
+                                  <ExternalLink className="w-3 h-3 text-[#5f259f]" />
+                                  <span>PhonePe mercury-uat</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setQrFormat('upiapp')}
-                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer text-[11px] ${
+                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
                                     qrFormat === 'upiapp'
                                       ? 'bg-white text-emerald-700 shadow-xs font-bold border border-emerald-200'
                                       : 'text-slate-500 hover:text-slate-800'
                                   }`}
                                   title="Direct upi://pay URI for scanning directly inside UPI apps"
                                 >
-                                  <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                                  <Smartphone className="w-3 h-3 text-emerald-600" />
                                   <span>UPI App QR</span>
                                 </button>
                               </div>
@@ -1193,7 +1195,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               {/* Center QR Code with PhonePe Logo overlay in center */}
                               <div 
                                 onClick={() => proceedToSimulation('UPI QR Scan')}
-                                className="relative my-1 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all transform hover:scale-[1.01] group"
+                                className="relative my-1 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-purple-400 hover:shadow-md transition-all transform hover:scale-[1.01] group"
                                 title="Scan with phone or click to simulate payment"
                               >
                                 <QRCodeSVG 
@@ -1212,24 +1214,24 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                               <div className="mt-1 text-center w-full">
                                 {qrFormat === 'mercury' ? (
                                   <div className="flex flex-col items-center gap-1.5">
-                                    <span className="text-[11px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 shadow-2xs inline-flex items-center gap-1.5">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                                      <span>Active: Raw mercury-uat Net Banking (Tested & Working)</span>
+                                    <span className="text-[11px] font-bold text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs inline-flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                                      <span>Active: Official PhonePe mercury-uat (Direct)</span>
                                     </span>
                                     <div className="flex items-center justify-center gap-2 mt-0.5">
                                       <a
                                         href={rawMercuryLink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-[11px] text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-md inline-flex items-center gap-1 font-bold transition"
+                                        className="text-[11px] text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-0.5 rounded-md inline-flex items-center gap-1 font-bold transition"
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         <ExternalLink className="w-3 h-3" />
-                                        <span>Raw mercury-uat Net Banking</span>
+                                        <span>Hawng Rawh (mercury-uat.phonepe.com)</span>
                                       </a>
                                     </div>
-                                    <div className="mt-1.5 px-2.5 py-1.5 bg-amber-50/90 border border-amber-200 rounded-lg text-[10.5px] text-amber-900 leading-snug text-center">
-                                      <span className="font-bold text-amber-950">⚠️ PhonePe UAT Note:</span> PhonePe portal-ah khian <b>UPI thlang lovin &apos;Net Banking&apos;</b> thlang rawh. Real PhonePe App (Play Store) hian Sandbox UAT pawisa a direct lak phal loh avangin UPI-ah chuan <i>&apos;Something went wrong&apos;</i> a rawn ti thin a ni.
+                                    <div className="mt-1.5 px-2.5 py-1.5 bg-purple-50/90 border border-purple-200 rounded-lg text-[10.5px] text-purple-900 leading-snug text-center">
+                                      <span className="font-bold text-purple-950">✅ Phone-a Scan Dan:</span> Phone Camera emaw Google Lens hmangin he QR hi scan la, <b>ais-dev-ah kal lovin</b> PhonePe Official Portal <b>(mercury-uat.phonepe.com)</b> ah a lut tlang nghal ang.
                                     </div>
                                   </div>
                                 ) : (
