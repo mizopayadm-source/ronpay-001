@@ -410,14 +410,14 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                         1
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-xs">PG V2 PAY API (Standard Checkout)</h4>
+                        <h4 className="font-bold text-slate-900 text-xs">Create Payment / Initiate Payment API</h4>
                         <a 
-                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website"
+                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-reference/create-payment/initiate-payment"
                           target="_blank"
                           rel="noreferrer"
                           className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
                         >
-                          View PhonePe Pay API Docs <ExternalLink className="w-2.5 h-2.5" />
+                          Official Initiate Payment Docs <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       </div>
                     </div>
@@ -426,7 +426,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-600 leading-relaxed">
-                    Base64 encoded payload, SHA-256 checksum (<code className="font-mono bg-slate-200 px-1 rounded">X-VERIFY</code>), leh redirectMode: POST hmangin <code className="font-mono bg-slate-200 px-1 rounded">/api/phonepe/initiate-pay</code> ah a in-set thlap.
+                    <code className="font-mono bg-slate-200 px-1 rounded">POST /apis/pg-sandbox/checkout/v2/pay</code> hmangin <code className="font-mono bg-slate-200 px-1 rounded">merchantOrderId</code>, <code className="font-mono bg-slate-200 px-1 rounded">amount</code> (Paise), <code className="font-mono bg-slate-200 px-1 rounded">expireAfter</code>, <code className="font-mono bg-slate-200 px-1 rounded">metaInfo (udf1-5)</code>, leh <code className="font-mono bg-slate-200 px-1 rounded">paymentFlow</code> a in-pass thlap.
                   </p>
                   <button
                     type="button"

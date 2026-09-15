@@ -331,6 +331,14 @@ export default async function handler(req: any, res: any) {
           body: JSON.stringify({
             merchantOrderId: merchantTxnId,
             amount: amountInPaise,
+            expireAfter: 1200,
+            metaInfo: {
+              udf1: campaignId,
+              udf2: campaignTitle,
+              udf3: donorName,
+              udf4: donorPhone || '',
+              udf5: 'RonPay Community Platform'
+            },
             paymentFlow: {
               type: 'PG_CHECKOUT',
               merchantUrls: {
@@ -403,7 +411,12 @@ export default async function handler(req: any, res: any) {
         message: 'PhonePe PG V2 Payment Session Created',
         data: {
           merchantTransactionId: merchantTxnId,
+          merchantOrderId: merchantTxnId,
           phonepeOrderId: orderId,
+          orderId: orderId,
+          state: 'CREATED',
+          redirectUrl: checkoutUrl,
+          expireAfter: 1200,
           instrumentResponse: {
             type: 'PAY_PAGE',
             redirectInfo: {
