@@ -109,7 +109,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const [merchantTxnId, setMerchantTxnId] = useState<string>('');
   const [pendingMethodName, setPendingMethodName] = useState<string>('UPI QR Scan');
   const [officialMercuryUrl, setOfficialMercuryUrl] = useState<string>('');
-  const [qrFormat, setQrFormat] = useState<'mercury' | 'upiapp'>('mercury');
+  const [qrFormat, setQrFormat] = useState<'gateway' | 'mercury' | 'upiapp'>('gateway');
   const [hasLaunchedUpiApp, setHasLaunchedUpiApp] = useState<boolean>(false);
 
   const merchantName = 'TSPMIZOPAYUAT';
@@ -281,10 +281,15 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return officialMercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3';
   }, [officialMercuryUrl]);
 
-  // 3. Fallback Smart Mobile Gateway URL if needed
+  // 3. Smart Mobile Gateway URL for Phone Camera & Web Scanners (Auto uses current domain like www.ronpay.app)
   const scanPayWebLink = useMemo(() => {
     if (typeof window === 'undefined' || !merchantTxnId) return '';
-    const origin = window.location.origin;
+    // If on ais-dev or localhost, prefer ronpay.app if configured or current origin
+    let origin = window.location.origin;
+    if (origin.includes('ais-dev-')) {
+      // In dev container, also allow scanning via the public domain or shared URL
+      origin = window.location.origin;
+    }
     const campId = campaign?.id || 'cmp-custom';
     const encTitle = encodeURIComponent(campaignTitle || campaign?.title || 'RonPay Bawm');
     const encDonor = encodeURIComponent(isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'));
@@ -295,14 +300,17 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     return `${origin}/api/phonepe/scan-pay?txnId=${encodeURIComponent(merchantTxnId)}&amt=${amt}&donor=${encDonor}&cause=${encTitle}&mid=TSPMIZOPAYUAT&campId=${encodeURIComponent(campId)}&loc=${encLoc}&cat=${encCat}`;
   }, [campaign, campaignTitle, merchantTxnId, totalPayable, donorName, donorVeng, isAnonymous, effectiveCategory]);
 
-  // Active QR value: 'mercury' (PhonePe official mercury-uat portal) is ACTIVE by default
+  // Active QR value: supports 'gateway' (PhonePe UPI Apps Demo), 'mercury' (PhonePe portal), and 'upiapp' (Direct UPI)
   const activeQrCodeValue = useMemo(() => {
+    if (qrFormat === 'gateway') {
+      return scanPayWebLink || rawMercuryLink || upiPaymentUri;
+    }
     if (qrFormat === 'upiapp') {
       return upiPaymentUri;
     }
-    // Default ('mercury'): DIRECT official mercury-uat URL so phone camera opens PhonePe directly without ais-dev!
+    // 'mercury': DIRECT official mercury-uat URL
     return rawMercuryLink || officialMercuryUrl || 'https://mercury-uat.phonepe.com/transact/uat_v3';
-  }, [qrFormat, rawMercuryLink, officialMercuryUrl, upiPaymentUri]);
+  }, [qrFormat, scanPayWebLink, rawMercuryLink, officialMercuryUrl, upiPaymentUri]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -1162,25 +1170,38 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                 </svg>
                               </div>
 
-                              {/* QR Format Selector: Official mercury-uat vs Direct UPI App */}
-                              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-xl border border-slate-200 my-2 w-full max-w-[320px] text-xs font-semibold gap-1">
+                              {/* QR Format Selector: PhonePe Gateway (UPI Apps Demo) vs Official mercury-uat vs Direct UPI App */}
+                              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-xl border border-slate-200 my-2 w-full max-w-[340px] text-xs font-semibold gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setQrFormat('gateway')}
+                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer text-[11px] ${
+                                    qrFormat === 'gateway'
+                                      ? 'bg-white text-purple-900 shadow-xs font-bold border border-purple-200'
+                                      : 'text-slate-500 hover:text-slate-800'
+                                  }`}
+                                  title="PhonePe PG Sandbox Mobile Gateway with UPI Apps (Works on www.ronpay.app and phone browser)"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
+                                  <span>UPI Apps Demo</span>
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => setQrFormat('mercury')}
-                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
+                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer text-[11px] ${
                                     qrFormat === 'mercury'
                                       ? 'bg-white text-purple-900 shadow-xs font-bold border border-purple-200'
                                       : 'text-slate-500 hover:text-slate-800'
                                   }`}
-                                  title="Official PhonePe UAT mercury-uat checkout - Direct link for phone camera and browser"
+                                  title="Official PhonePe UAT mercury-uat checkout"
                                 >
                                   <ExternalLink className="w-3 h-3 text-[#5f259f]" />
-                                  <span>PhonePe mercury-uat</span>
+                                  <span>mercury-uat</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setQrFormat('upiapp')}
-                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer text-[11px] ${
+                                  className={`flex-1 py-1.5 px-2 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer text-[11px] ${
                                     qrFormat === 'upiapp'
                                       ? 'bg-white text-emerald-700 shadow-xs font-bold border border-emerald-200'
                                       : 'text-slate-500 hover:text-slate-800'
@@ -1188,7 +1209,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                   title="Direct upi://pay URI for scanning directly inside UPI apps"
                                 >
                                   <Smartphone className="w-3 h-3 text-emerald-600" />
-                                  <span>UPI App QR</span>
+                                  <span>UPI URI</span>
                                 </button>
                               </div>
 
@@ -1212,7 +1233,29 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
 
                               {/* Format indicator & link helper */}
                               <div className="mt-1 text-center w-full">
-                                {qrFormat === 'mercury' ? (
+                                {qrFormat === 'gateway' ? (
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className="text-[11px] font-bold text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs inline-flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                                      <span>Active: PhonePe PG Gateway (UPI Apps Demo)</span>
+                                    </span>
+                                    <div className="flex items-center justify-center gap-2 mt-0.5">
+                                      <a
+                                        href={scanPayWebLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-0.5 rounded-md inline-flex items-center gap-1 font-bold transition"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        <span>Hawng Rawh (Open PhonePe PG Gateway)</span>
+                                      </a>
+                                    </div>
+                                    <div className="mt-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[10.5px] text-emerald-900 leading-snug text-center">
+                                      <span className="font-bold text-emerald-950">✅ PhonePe UPI Apps Demo:</span> Phone Camera hmanga scan hian <b>PhonePe, GPay, Paytm</b> payment gateway a in-hawng ang a, 1-click in payment a tlang nghal ang!
+                                    </div>
+                                  </div>
+                                ) : qrFormat === 'mercury' ? (
                                   <div className="flex flex-col items-center gap-1.5">
                                     <span className="text-[11px] font-bold text-purple-900 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200 shadow-2xs inline-flex items-center gap-1.5">
                                       <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
@@ -1231,7 +1274,7 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
                                       </a>
                                     </div>
                                     <div className="mt-1.5 px-2.5 py-1.5 bg-purple-50/90 border border-purple-200 rounded-lg text-[10.5px] text-purple-900 leading-snug text-center">
-                                      <span className="font-bold text-purple-950">✅ Phone-a Scan Dan:</span> Phone Camera emaw Google Lens hmangin he QR hi scan la, <b>ais-dev-ah kal lovin</b> PhonePe Official Portal <b>(mercury-uat.phonepe.com)</b> ah a lut tlang nghal ang.
+                                      <span className="font-bold text-purple-950">✅ Phone-a Scan Dan:</span> Phone Camera emaw Google Lens hmangin he QR hi scan la, PhonePe Official Portal <b>(mercury-uat.phonepe.com)</b> ah a lut tlang nghal ang.
                                     </div>
                                   </div>
                                 ) : (
