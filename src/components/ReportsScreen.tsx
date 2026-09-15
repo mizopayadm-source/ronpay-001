@@ -258,8 +258,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return 'Mizoram, India';
   }, [selectedCampaignObj, creatorProfile]);
 
-  // Active uploaded image associated with campaign / QR
-  const activeCampaignImage = selectedCampaignObj?.imageUrl || (availableCampaigns.find(c => Boolean(c.imageUrl))?.imageUrl);
+  // Active uploaded image associated with campaign / QR (Only use specific campaign's image when explicitly selected)
+  const activeCampaignImage = selectedCampaignId !== 'all' ? selectedCampaignObj?.imageUrl : undefined;
 
   const dateRangeText = startDate && endDate
     ? `${formatDateDDMMYYYY(startDate)} to ${formatDateDDMMYYYY(endDate)}`
@@ -816,6 +816,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                         <ZoomIn className="w-2.5 h-2.5" /> Thlalak
                       </span>
                     </div>
+                  </div>
+                ) : selectedCampaignId === 'all' ? (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-900/90 via-slate-900 to-indigo-950 border-2 border-indigo-500/40 flex flex-col items-center justify-center text-indigo-200 shrink-0 gap-1.5 shadow-md">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                      <Layers className="w-4 h-4 text-indigo-300" />
+                    </div>
+                    <span className="text-[8.5px] text-indigo-200 font-extrabold uppercase tracking-wider text-center px-1">
+                      All Campaigns
+                    </span>
                   </div>
                 ) : (
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
