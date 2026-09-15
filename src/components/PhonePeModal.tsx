@@ -23,7 +23,8 @@ import {
   Bell,
   Play,
   ListChecks,
-  CheckCircle2
+  CheckCircle2,
+  CreditCard
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
@@ -778,6 +779,71 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                   <RefreshCw className={`w-3 h-3 ${tokenLoading ? 'animate-spin' : ''}`} />
                   {authToken ? 'Refresh Token' : 'Generate Token'}
                 </button>
+              </div>
+
+              {/* PhonePe Official UAT Sandbox Test Cards & Universal OTP */}
+              <div className="bg-gradient-to-br from-indigo-50/90 to-purple-50/90 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-indigo-950 font-black text-xs">
+                    <CreditCard className="w-4 h-4 text-indigo-700" />
+                    PhonePe UAT Sandbox Test Cards & Universal OTP
+                  </span>
+                  <span className="text-[9.5px] font-extrabold bg-indigo-200/80 text-indigo-900 px-2 py-0.5 rounded-full">
+                    developer.phonepe.com
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-indigo-950/80 leading-relaxed">
+                  UAT environment-ah hian bank card tak tak hman theih a nih loh avangin, hetiang test cards leh universal OTP hi PhonePe-in simulation atan a dah sa a ni:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {/* Credit Card Box */}
+                  <div className="bg-white/90 border border-indigo-100 p-2.5 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-purple-900 uppercase">Visa Credit Card (UAT)</span>
+                      <button
+                        onClick={() => copyToClipboard('4208585190116667', 'test_cc')}
+                        className="text-[9.5px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5"
+                      >
+                        {copiedKey === 'test_cc' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        {copiedKey === 'test_cc' ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="font-mono font-black text-slate-800 text-[11px] select-all">4208 5851 9011 6667</div>
+                    <div className="text-[10px] text-slate-500 font-medium">Exp: <strong>06/2027</strong> • CVV: <strong>508</strong></div>
+                  </div>
+
+                  {/* Debit Card Box */}
+                  <div className="bg-white/90 border border-indigo-100 p-2.5 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-purple-900 uppercase">Visa Debit Card (UAT)</span>
+                      <button
+                        onClick={() => copyToClipboard('4242424242424242', 'test_dc')}
+                        className="text-[9.5px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5"
+                      >
+                        {copiedKey === 'test_dc' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        {copiedKey === 'test_dc' ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="font-mono font-black text-slate-800 text-[11px] select-all">4242 4242 4242 4242</div>
+                    <div className="text-[10px] text-slate-500 font-medium">Exp: <strong>12/2027</strong> • CVV: <strong>936</strong></div>
+                  </div>
+                </div>
+
+                {/* Universal OTP Box */}
+                <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-emerald-900 uppercase block">Universal Bank OTP (All Tests)</span>
+                    <span className="font-mono font-black text-emerald-800 text-sm tracking-widest">123456</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard('123456', 'test_otp')}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black flex items-center gap-1 transition"
+                  >
+                    {copiedKey === 'test_otp' ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3 text-white" />}
+                    {copiedKey === 'test_otp' ? 'Copied' : 'Copy OTP'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
