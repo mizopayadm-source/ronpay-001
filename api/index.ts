@@ -1,5 +1,6 @@
 // Vercel Serverless Function Handler for RonPay
 // Handles API calls, PhonePe redirects, callbacks, and status queries smoothly without crashing
+import { getScanPayHtml } from './scanPayHtml.js';
 
 interface ServerlessTxRecord {
   status: string;
@@ -597,8 +598,115 @@ export default async function handler(req: any, res: any) {
       }));
     }
 
-    // 6. Webhook and confirm-paid endpoints
-    if (pathname.includes('/webhook') || pathname.includes('/confirm-paid')) {
+    // 6a. PhonePe Mobile QR Scanner Landing Page (Scan to Pay Gateway)
+    if (pathname.includes('/scan-pay')) {
+      const scanTxnId = searchParams.get('txnId') || searchParams.get('id') || searchParams.get('merchantTransactionId') || '';
+      const amtStr = searchParams.get('amt') || '23.00';
+      const rawAmt = Number(amtStr) || 23;
+      const donorName = searchParams.get('donor') || 'Valued Donor';
+      const causeTitle = searchParams.get('cause') || 'RonPay Community Bawm';
+      const categoryParam = searchParams.get('cat') || searchParams.get('category') || '';
+      const campId = searchParams.get('campId') || '';
+
+      let effectiveCategory = categoryParam;
+      if (!effectiveCategory || effectiveCategory === 'others') {
+        const titleL = causeTitle.toLowerCase();
+        if (titleL.includes('ralna') || campId === 'cmp-1788526889943') effectiveCategory = 'ralna';
+        else if (titleL.includes('rikrum') || campId === 'cmp-1788528889947') effectiveCategory = 'rikrum';
+        else if (titleL.includes('kumtluang') || campId === 'cmp-1788529889949') effectiveCategory = 'kumtluang';
+        else effectiveCategory = 'khawlsak';
+      }
+
+      let record = globalTxStore[scanTxnId];
+      if (!record && scanTxnId) {
+        const feePaise = Math.round(rawAmt * 100 * 0.01);
+        record = {
+          status: 'PENDING',
+          amount: rawAmt,
+          amountRupees: rawAmt,
+          baseAmountRupees: rawAmt - (feePaise / 100),
+          platformFeeRupees: feePaise / 100,
+          feeOption: 'ADD_ON',
+          campaignId: campId,
+          campaignTitle: causeTitle,
+          category: effectiveCategory,
+          donorName: donorName
+        };
+        globalTxStore[scanTxnId] = record;
+      }
+
+      const baseAmt = record?.baseAmountRupees !== undefined ? record.baseAmountRupees : (rawAmt * 0.99);
+      const feeAmt = record?.platformFeeRupees !== undefined ? record.platformFeeRupees : (rawAmt * 0.01);
+
+      const html = getScanPayHtml({
+        txnId: scanTxnId,
+        rawAmt,
+        donorName,
+        causeTitle,
+        effectiveCategory,
+        campId,
+        baseAmt,
+        feeAmt
+      });
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.end(html);
+    }
+
+    // 6b. Confirm-paid endpoint (invoked when user authorizes payment on mobile scan-pay page)
+    if (pathname.includes('/confirm-paid')) {
+      let body: any = {};
+      try {
+        if (req.body && typeof req.body === 'object') {
+          body = req.body;
+        } else if (typeof req.body === 'string') {
+          body = JSON.parse(req.body);
+        } else {
+          const buffers: any[] = [];
+          for await (const chunk of req) {
+            buffers.push(chunk);
+          }
+          const raw = Buffer.concat(buffers).toString();
+          if (raw) body = JSON.parse(raw);
+        }
+      } catch {
+        body = {};
+      }
+
+      const confirmTxnId = body?.merchantTransactionId || body?.txnId || searchParams.get('txnId') || searchParams.get('merchantTransactionId') || txnId;
+      const utrNum = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+      const amtNum = Number(body?.amountInRupees) || Number(body?.amount) || 101;
+
+      if (confirmTxnId) {
+        globalTxStore[confirmTxnId] = {
+          ...(globalTxStore[confirmTxnId] || {}),
+          status: 'PAYMENT_SUCCESS',
+          utr: utrNum,
+          amount: amtNum,
+          amountRupees: amtNum,
+          donorName: body?.donorName || 'Valued Donor',
+          campaignTitle: body?.campaignTitle || 'RonPay Community Bawm',
+          campaignId: body?.campaignId || '',
+          category: body?.category || 'others'
+        };
+      }
+
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        code: 'PAYMENT_SUCCESS',
+        message: 'Transaction successfully marked as completed',
+        data: {
+          merchantTransactionId: confirmTxnId,
+          status: 'PAYMENT_SUCCESS',
+          state: 'COMPLETED',
+          utr: utrNum
+        }
+      }));
+    }
+
+    // 6c. Webhook endpoint
+    if (pathname.includes('/webhook')) {
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ success: true, message: 'Processed successfully' }));
     }
