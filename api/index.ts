@@ -119,6 +119,10 @@ async function parseJsonBody(req: any): Promise<any> {
   });
 }
 
+// PhonePe OAuth Token URLs (Sandbox & Production)
+const PHONEPE_OAUTH_URL_SANDBOX = 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token';
+const PHONEPE_OAUTH_URL_PROD = 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token';
+
 let cachedPhonePeOAuthToken = '';
 let cachedPhonePeOAuthExpiry = 0;
 
@@ -127,13 +131,16 @@ async function getOrFetchPhonePeOAuthToken(): Promise<string> {
     return cachedPhonePeOAuthToken;
   }
   try {
+    const isProd = process.env.PHONEPE_ENV === 'PROD' || process.env.PHONEPE_ENV === 'PRODUCTION';
+    const targetOAuthUrl = isProd ? PHONEPE_OAUTH_URL_PROD : PHONEPE_OAUTH_URL_SANDBOX;
+
     const tokenParams = new URLSearchParams();
-    tokenParams.append('client_id', 'TSPMIZOPAYUAT_2608171706');
-    tokenParams.append('client_version', '1');
-    tokenParams.append('client_secret', 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4');
+    tokenParams.append('client_id', process.env.PHONEPE_CLIENT_ID || 'TSPMIZOPAYUAT_2608171706');
+    tokenParams.append('client_version', process.env.PHONEPE_CLIENT_VERSION || '1');
+    tokenParams.append('client_secret', process.env.PHONEPE_CLIENT_SECRET || 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4');
     tokenParams.append('grant_type', 'client_credentials');
 
-    const oauthResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token', {
+    const oauthResp = await fetch(targetOAuthUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: tokenParams.toString()
