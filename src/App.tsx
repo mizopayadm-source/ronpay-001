@@ -453,6 +453,19 @@ export default function App() {
     window.addEventListener('ronpay_data_synced', reloadLocalData);
     window.addEventListener('storage', handleStorageChange);
 
+    // Cross-tab real-time sync via BroadcastChannel
+    let syncBroadcast: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        syncBroadcast = new BroadcastChannel('ronpay_realtime_sync');
+        syncBroadcast.onmessage = () => {
+          reloadLocalData();
+        };
+      }
+    } catch (err) {
+      console.warn('BroadcastChannel sync init:', err);
+    }
+
     // Sync database state from server on startup
     if (typeof fetch !== 'undefined') {
       fetch('/api/data/state')
@@ -528,6 +541,9 @@ export default function App() {
       window.removeEventListener('ronpay_members_updated', handleMembersSync);
       window.removeEventListener('ronpay_data_synced', reloadLocalData);
       window.removeEventListener('storage', handleStorageChange);
+      if (syncBroadcast) {
+        try { syncBroadcast.close(); } catch (e) {}
+      }
     };
   }, []);
 

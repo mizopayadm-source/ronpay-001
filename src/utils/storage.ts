@@ -23,6 +23,16 @@ const CAMPAIGNS_LAST_SYNC_KEY = 'ronpay_campaigns_last_sync_v1';
 const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
 const ANNOUNCEMENT_KEY = 'ronpay_announcement_v1';
 
+export const broadcastTabSync = (type: string) => {
+  try {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bc = new BroadcastChannel('ronpay_realtime_sync');
+      bc.postMessage({ type, timestamp: Date.now() });
+      bc.close();
+    }
+  } catch (e) {}
+};
+
 export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
   {
     id: 'ann-1',
@@ -319,6 +329,7 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
     // Broadcast local event for immediate real-time sync across all components
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: sortedSanitized }));
+      broadcastTabSync('campaigns');
     }
 
     // Direct Sync to Firebase Firestore
@@ -549,6 +560,7 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
     // Broadcast local event for immediate real-time sync across components/tabs
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
+      broadcastTabSync('transactions');
     }
   } catch (e) {
     console.error('Failed to save transactions', e);

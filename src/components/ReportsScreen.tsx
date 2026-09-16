@@ -580,6 +580,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <div className="hidden sm:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-700 border border-slate-200" title="RonPay-a Bawm awm zat">
+            <span>📦</span>
+            <span>Bawm: {campaigns.length}</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 bg-indigo-50 px-2.5 py-1 rounded-xl text-[11px] font-bold text-indigo-700 border border-indigo-200" title="Transactions lo lut zat">
+            <span>💳</span>
+            <span>Txns: {transactions.length}</span>
+          </div>
           <button
             onClick={handleManualCloudSync}
             disabled={isSyncingCloud}
@@ -591,7 +599,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             title="Refresh latest data directly from Cloud Database"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-            <span>{isSyncingCloud ? 'Syncing...' : `Sync Cloud (${transactions.length})`}</span>
+            <span>{isSyncingCloud ? 'Syncing...' : 'Sync Cloud'}</span>
           </button>
           <span className="text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5" title="Connected to Central Cloud Database">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />

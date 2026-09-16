@@ -80,9 +80,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   initialIsAnonymous,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
-  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => 
-    Boolean(initialOpenPhonePeCheckout && ((initialAmount && initialAmount > 0) || (campaign?.customAmount && campaign.customAmount > 0)))
-  );
+  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(false);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
 
   // PhonePe PG New Tab Live State Synchronization
@@ -248,7 +246,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const hasAmt = (initialAmount && initialAmount > 0) || (campaign?.customAmount && campaign.customAmount > 0);
     if (initialOpenPhonePeCheckout && hasAmt) {
       setPaymentMethod('phonepe');
-      setIsPhonePeCheckoutOpen(true);
     }
   }, [initialOpenPhonePeCheckout, initialAmount, campaign?.customAmount]);
 
@@ -807,12 +804,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
+      setIsWaitingPhonePePG(true);
+      setIsPhonePeCheckoutOpen(false);
       setIsProcessing(false);
 
-      // Open official PhonePe PG checkout modal directly in-app
-      setIsPhonePeCheckoutOpen(true);
-
-      // Also attempt opening in new tab for direct gateway portal
+      // Open PhonePe official PG checkout in new tab (do not open modal in main window)
       try {
         window.open(fullLaunchUrl, '_blank');
       } catch (e) {
@@ -2293,20 +2289,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 {phonePeVerifyMsg.text}
               </p>
             )}
-
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsWaitingPhonePePG(false);
-                  setIsPhonePeCheckoutOpen(true);
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 text-[12px] font-semibold text-purple-300 hover:text-purple-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>📱</span>
-                <span>Hemi screen-ah hian PhonePe / UPI QR hmangin pe rawh (In-App Modal)</span>
-              </button>
-            </div>
           </div>
         )}
       </form>
