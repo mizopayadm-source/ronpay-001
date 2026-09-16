@@ -1,5 +1,7 @@
 // Vercel Serverless Function Handler for RonPay
 // Handles API calls, PhonePe redirects, callbacks, and status queries smoothly without crashing
+import fs from 'fs';
+import path from 'path';
 import { getScanPayHtml } from './scanPayHtml.js';
 
 interface ServerlessTxRecord {
@@ -26,6 +28,96 @@ interface ServerlessTxRecord {
 // In-memory store for serverless container instances to track real transaction states
 const globalTxStore: Record<string, ServerlessTxRecord> = 
   (globalThis as any).__RONPAY_TX_STORE || ((globalThis as any).__RONPAY_TX_STORE = {});
+
+interface CentralDatabase {
+  campaigns: any[];
+  members: any[];
+  transactions: any[];
+  creators: any[];
+  pricingConfig: any;
+  announcement: any;
+  auditLogs: any[];
+  lastUpdated: string;
+}
+
+let memoryDb: CentralDatabase | null = (globalThis as any).__RONPAY_CENTRAL_DB || null;
+
+function getCentralDatabase(): CentralDatabase {
+  if (memoryDb) return memoryDb;
+  try {
+    const filePath = path.join(process.cwd(), 'data', 'ronpay_db.json');
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      memoryDb = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Failed to load data/ronpay_db.json in Vercel handler:', e);
+  }
+  if (!memoryDb) {
+    memoryDb = {
+      campaigns: [],
+      members: [],
+      transactions: [],
+      creators: [],
+      pricingConfig: {},
+      announcement: {},
+      auditLogs: [],
+      lastUpdated: new Date().toISOString()
+    };
+  }
+  (globalThis as any).__RONPAY_CENTRAL_DB = memoryDb;
+  return memoryDb;
+}
+
+function saveCentralDatabase(db: CentralDatabase) {
+  db.lastUpdated = new Date().toISOString();
+  memoryDb = db;
+  (globalThis as any).__RONPAY_CENTRAL_DB = db;
+  try {
+    const filePath = path.join(process.cwd(), 'data', 'ronpay_db.json');
+    if (fs.existsSync(path.dirname(filePath))) {
+      fs.writeFileSync(filePath, JSON.stringify(db, null, 2), 'utf-8');
+    }
+  } catch {
+    // In read-only Vercel serverless containers, disk write to cwd will throw EROFS, which is expected
+    try {
+      const tmpPath = path.join('/tmp', 'ronpay_db.json');
+      fs.writeFileSync(tmpPath, JSON.stringify(db, null, 2), 'utf-8');
+    } catch {}
+  }
+}
+
+function mergeCollections<T extends Record<string, any>>(existing: T[] = [], incoming: T[] = [], key: string = 'id'): T[] {
+  const map = new Map<string, T>();
+  for (const item of (existing || [])) {
+    if (item && item[key]) {
+      map.set(String(item[key]).toLowerCase().trim(), item);
+    }
+  }
+  for (const item of (incoming || [])) {
+    if (item && item[key]) {
+      const k = String(item[key]).toLowerCase().trim();
+      const prev = map.get(k);
+      map.set(k, { ...(prev || {}), ...item });
+    }
+  }
+  return Array.from(map.values());
+}
+
+async function parseJsonBody(req: any): Promise<any> {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (typeof req.body === 'string') {
+    try { return JSON.parse(req.body); } catch { return {}; }
+  }
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (chunk: any) => { data += chunk; });
+    req.on('end', () => {
+      try { resolve(JSON.parse(data)); } catch { resolve({}); }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
 
 let cachedPhonePeOAuthToken = '';
 let cachedPhonePeOAuthExpiry = 0;
@@ -818,6 +910,32 @@ export default async function handler(req: any, res: any) {
           campaignId: body?.campaignId || '',
           category: body?.category || 'others'
         };
+
+        try {
+          const db = getCentralDatabase();
+          const newTxRecord = {
+            id: confirmTxnId,
+            campaignId: body?.campaignId || 'cmp-kumtluang-1',
+            campaignTitle: body?.campaignTitle || 'RonPay Community Bawm',
+            category: body?.category || 'kumtluang',
+            donorName: body?.donorName || 'Valued Donor',
+            donorPhone: body?.donorPhone || '',
+            amount: amtNum,
+            platformFee: 0,
+            totalAmount: amtNum,
+            paymentMethod: 'phonepe_upi',
+            status: 'completed',
+            isAnonymous: Boolean(body?.isAnonymous),
+            remark: body?.remark || 'Payment via PhonePe Gateway',
+            timestamp: new Date().toISOString(),
+            utr: utrNum,
+            txHash: 'RPAY' + Date.now()
+          };
+          db.transactions = mergeCollections(db.transactions, [newTxRecord], 'id');
+          saveCentralDatabase(db);
+        } catch (e) {
+          console.warn('Failed to save to central db during confirm-paid:', e);
+        }
       }
 
       res.setHeader('Content-Type', 'application/json');
@@ -1149,6 +1267,126 @@ export default async function handler(req: any, res: any) {
           updatedAt: new Date().toISOString()
         }
       }));
+    }
+
+    // 6m. Cloud Central Database State API (GET /api/data/state)
+    if (pathname === '/api/data/state') {
+      const db = getCentralDatabase();
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        data: db,
+        timestamp: db.lastUpdated || new Date().toISOString()
+      }));
+    }
+
+    // 6n. Cloud Central Database Sync API (POST /api/data/sync)
+    if (pathname === '/api/data/sync') {
+      const body = await parseJsonBody(req);
+      const db = getCentralDatabase();
+
+      if (Array.isArray(body.campaigns) && body.campaigns.length > 0) {
+        db.campaigns = mergeCollections(db.campaigns, body.campaigns, 'id');
+      }
+      if (Array.isArray(body.members) && body.members.length > 0) {
+        db.members = mergeCollections(db.members, body.members, 'id');
+      }
+      if (Array.isArray(body.transactions) && body.transactions.length > 0) {
+        db.transactions = mergeCollections(db.transactions, body.transactions, 'id');
+      }
+      if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
+        const deletedSet = new Set(body.deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
+        db.transactions = db.transactions.filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
+      }
+      if (Array.isArray(body.creators) && body.creators.length > 0) {
+        db.creators = mergeCollections(db.creators, body.creators, 'phone');
+      }
+      if (body.pricingConfig && typeof body.pricingConfig === 'object') {
+        db.pricingConfig = { ...(db.pricingConfig || {}), ...body.pricingConfig };
+      }
+      if (body.announcement && typeof body.announcement === 'object') {
+        db.announcement = { ...(db.announcement || {}), ...body.announcement };
+      }
+      if (Array.isArray(body.auditLogs) && body.auditLogs.length > 0) {
+        db.auditLogs = mergeCollections(db.auditLogs, body.auditLogs, 'id');
+      }
+
+      saveCentralDatabase(db);
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({
+        success: true,
+        message: 'Synchronized successfully with RonPay cloud storage',
+        data: db,
+        timestamp: db.lastUpdated
+      }));
+    }
+
+    // 6o. Transactions API (GET, POST, DELETE)
+    if (pathname === '/api/transactions/delete-batch' && req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      const ids = Array.isArray(body.ids) ? body.ids : (Array.isArray(body.transactionIds) ? body.transactionIds : []);
+      const db = getCentralDatabase();
+      const idSet = new Set(ids.map((id: any) => String(id).toLowerCase().trim()));
+      db.transactions = db.transactions.filter(t => !idSet.has(String(t.id).toLowerCase().trim()));
+      saveCentralDatabase(db);
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ success: true, count: ids.length }));
+    }
+
+    if (pathname.startsWith('/api/transactions/') && req.method === 'DELETE') {
+      const txId = decodeURIComponent(pathname.replace('/api/transactions/', '').trim());
+      const db = getCentralDatabase();
+      db.transactions = db.transactions.filter(t => String(t.id).toLowerCase().trim() !== txId.toLowerCase());
+      saveCentralDatabase(db);
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ success: true, id: txId }));
+    }
+
+    if (pathname === '/api/transactions') {
+      const db = getCentralDatabase();
+      if (req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({
+          success: true,
+          count: db.transactions.length,
+          transactions: db.transactions
+        }));
+      }
+
+      if (req.method === 'POST') {
+        const tx = await parseJsonBody(req);
+        if (tx && tx.id) {
+          db.transactions = mergeCollections(db.transactions, [tx], 'id');
+          saveCentralDatabase(db);
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ success: true, transaction: tx }));
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ success: false, error: 'Transaction ID is required' }));
+      }
+    }
+
+    // 6p. Campaigns API (GET, POST)
+    if (pathname === '/api/campaigns') {
+      const db = getCentralDatabase();
+      if (req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({
+          success: true,
+          count: db.campaigns.length,
+          campaigns: db.campaigns
+        }));
+      }
+      if (req.method === 'POST') {
+        const camp = await parseJsonBody(req);
+        if (camp && camp.id) {
+          db.campaigns = mergeCollections(db.campaigns, [camp], 'id');
+          saveCentralDatabase(db);
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ success: true, campaign: camp }));
+        }
+      }
     }
 
     // 7. Health check

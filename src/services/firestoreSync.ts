@@ -92,6 +92,18 @@ export function sanitizeForFirestore<T>(obj: T): T {
   return obj;
 }
 
+function getLocalDeletedTxIds(): Set<string> {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem('ronpay_deleted_tx_ids');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
+    }
+  } catch {}
+  return new Set();
+}
+
 /**
  * Merge local and remote collections by unique key, keeping newest and most complete records
  */
@@ -232,13 +244,35 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
 
       if (remoteTxList.length > 0) {
-        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', INITIAL_TRANSACTIONS);
-        const merged = smartMerge(localTx, remoteTxList, 'id');
+        const deletedIds = getLocalDeletedTxIds();
+        const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
+
+        // Retain local transactions that are genuinely pending/offline (< 10 mins old)
+        const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+        const now = Date.now();
+        const remoteIds = new Set(cleanRemote.map(t => String(t.id).toLowerCase().trim()));
+        
+        const pendingLocal = (localTx || []).filter(t => {
+          if (!t || !t.id) return false;
+          const k = String(t.id).toLowerCase().trim();
+          if (remoteIds.has(k) || deletedIds.has(k)) return false;
+          const age = t.timestamp ? (now - new Date(t.timestamp).getTime()) : Infinity;
+          return age >= 0 && age < 10 * 60 * 1000;
+        });
+
+        const merged = [...cleanRemote, ...pendingLocal];
+        merged.sort((a, b) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return timeB - timeA;
+        });
+
         setLocalJson('ronpay_transactions_v2', merged);
         if (callbacks.onTransactionsUpdate) {
           callbacks.onTransactionsUpdate(merged);
         }
         try {
+          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
           window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
         } catch {}
       }
@@ -697,3 +731,41 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     return { success: false, count: 0 };
   }
 }
+
+/**
+ * Force an immediate read of all transactions from Firestore and sync to local storage & state.
+ */
+export async function forceRefreshFirestore(): Promise<Transaction[]> {
+  try {
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
+    const snapshot = await getDocs(txQuery);
+    const remoteTxList: Transaction[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as Transaction;
+      if (data && data.id) {
+        remoteTxList.push(data);
+      }
+    });
+
+    if (remoteTxList.length > 0) {
+      const deletedIds = getLocalDeletedTxIds();
+      const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
+      cleanRemote.sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      });
+
+      setLocalJson('ronpay_transactions_v2', cleanRemote);
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanRemote }));
+        window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: cleanRemote }));
+      } catch {}
+      return cleanRemote;
+    }
+  } catch (err) {
+    console.warn('forceRefreshFirestore error:', err);
+  }
+  return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+}
+

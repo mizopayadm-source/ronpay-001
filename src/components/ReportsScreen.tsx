@@ -41,7 +41,8 @@ import {
   Banknote,
   MessageSquare,
   Target,
-  Printer
+  Printer,
+  RefreshCw
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
 import { 
@@ -73,6 +74,7 @@ interface ReportsScreenProps {
   onDeleteTransaction?: (transactionId: string) => void;
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
+  onRefreshCloud?: () => Promise<void> | void;
 }
 
 export const ReportsScreen: React.FC<ReportsScreenProps> = ({
@@ -87,15 +89,21 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onDeleteTransaction,
   onOpenImagePreview,
   onOpenMemberRoll,
+  onRefreshCloud,
 }) => {
-  const [selectedFilter, setSelectedFilter] = useState<string>('kumtluang');
+  // Default to 'all' so every donation across all categories is visible immediately
+  const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>(() => getCurrentMonthStartString());
-  const [endDate, setEndDate] = useState<string>(() => getCurrentMonthEndString());
+  // Date range defaults to empty ('All Time') so transactions from all months appear without artificial cutoff
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'>('date-desc');
   
+  // Cloud sync spinner state
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+
   // Transaction Editing State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   
@@ -526,6 +534,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
   };
 
+  const handleManualCloudSync = async () => {
+    setIsSyncingCloud(true);
+    try {
+      if (onRefreshCloud) {
+        await onRefreshCloud();
+      }
+      setExportFeedback({
+        message: `Cloud sync complete! ${transactions.length} transactions live in sync across all devices.`,
+        count: transactions.length
+      });
+      setTimeout(() => setExportFeedback(null), 3500);
+    } catch (err) {
+      console.warn('Manual cloud sync note:', err);
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
       {/* Enhanced Top Screen Header */}
@@ -553,10 +579,23 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="text-[10.5px] bg-slate-100 text-slate-700 font-bold px-3 py-1.5 rounded-xl border border-slate-300 flex items-center gap-1.5">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            onClick={handleManualCloudSync}
+            disabled={isSyncingCloud}
+            className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs ${
+              isSyncingCloud
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 opacity-80'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-indigo-400'
+            }`}
+            title="Pull latest data directly from Cloud Firestore & Central Server"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+            <span>{isSyncingCloud ? 'Syncing Cloud...' : `Sync Cloud (${transactions.length})`}</span>
+          </button>
+          <span className="text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Active Session
+            Cloud Live
           </span>
         </div>
       </div>
@@ -662,11 +701,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   }}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition text-xs"
                 >
+                  <option value="all">🌟 All Categories & Bawms (Show All Txns)</option>
                   <option value="kumtluang">Kumtluang Bawm (Category Matrix View)</option>
                   <option value="ralna">Ralna Bawm (Chhiatni)</option>
                   <option value="khawlsak">Khawlsak Bawm (Riangvai)</option>
                   <option value="rikrum">Rikrum Bawm (Emergency)</option>
-                  <option value="all">All My Created Categories</option>
                 </select>
               </div>
 
@@ -747,25 +786,79 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* Date pickers */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                />
+            {/* Date pickers with quick presets */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[10.5px] font-bold text-slate-700">
+                  Date Range Filter: {!startDate && !endDate ? (
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">All Time (Engkim a lang vek)</span>
+                  ) : (
+                    <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{startDate || 'Any'} chanchin to {endDate || 'Now'}</span>
+                  )}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      !startDate && !endDate
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    All Time (Lang Kim Vek)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(getCurrentMonthStartString());
+                      setEndDate(getCurrentMonthEndString());
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                      startDate === getCurrentMonthStartString()
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    This Month
+                  </button>
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartDate('');
+                        setEndDate('');
+                      }}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
+                    >
+                      Clear Date
+                    </button>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                />
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">From Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">To Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+                  />
+                </div>
               </div>
             </div>
 

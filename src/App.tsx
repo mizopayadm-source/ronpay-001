@@ -54,7 +54,9 @@ import {
   syncCreatorToFirestore,
   syncPricingConfigToFirestore,
   syncAnnouncementToFirestore,
+  forceRefreshFirestore,
 } from './services/firestoreSync';
+import { syncAllWithServer } from './utils/syncEngine';
 
 // Components
 import { Header } from './components/Header';
@@ -543,6 +545,52 @@ export default function App() {
     setAuditLogs(getStoredAuditLogs());
     setMembersState(getMembers());
     setUserPaidIds(getStoredUserPaidTxIds());
+  }, []);
+
+  // Force cloud refresh across Firestore and Server Database
+  const handleRefreshCloudData = useCallback(async () => {
+    try {
+      const firestoreTxs = await forceRefreshFirestore();
+      if (firestoreTxs && firestoreTxs.length > 0) {
+        setTransactions(firestoreTxs);
+      }
+      const syncResult = await syncAllWithServer();
+      if (syncResult?.transactions && syncResult.transactions.length > 0) {
+        setTransactions(syncResult.transactions);
+      }
+      if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
+        setCampaigns(syncResult.campaigns);
+      }
+      reloadLocalData();
+    } catch (e) {
+      console.warn('Cloud refresh note:', e);
+    }
+  }, [reloadLocalData]);
+
+  // Periodic background sync and on-focus sync to ensure multi-device and multi-browser accuracy
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      syncAllWithServer().catch(() => {});
+    }, 20000);
+
+    const onWindowFocus = () => {
+      syncAllWithServer().catch(() => {});
+      forceRefreshFirestore().catch(() => {});
+    };
+
+    window.addEventListener('focus', onWindowFocus);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        onWindowFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', onWindowFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
@@ -1334,6 +1382,7 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               onOpenImagePreview={handlePreviewImage}
               onOpenMemberRoll={handleOpenMemberRoll}
+              onRefreshCloud={handleRefreshCloudData}
             />
           )}
 

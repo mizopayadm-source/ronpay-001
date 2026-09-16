@@ -13,7 +13,8 @@ import {
   getStoredAnnouncement, 
   saveStoredAnnouncement, 
   getStoredAuditLogs, 
-  saveStoredAuditLogs 
+  saveStoredAuditLogs,
+  getDeletedTransactionIds
 } from './storage';
 import {
   initFirestoreRealtimeSync,
@@ -65,6 +66,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         campaigns: localCampaigns,
         members: localMembers,
         transactions: localTransactions,
+        deletedTransactionIds: Array.from(getDeletedTransactionIds()),
         creators: localCreators,
         pricingConfig: localPricingConfig,
         announcement: localAnnouncement,
@@ -99,18 +101,27 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         saveMembers(Array.from(memMap.values()));
       }
       if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
+        const deletedIds = getDeletedTransactionIds();
         const currentTxs = getStoredTransactions();
         const txMap = new Map<string, any>();
         for (const t of currentTxs) {
-          if (t && t.id) txMap.set(t.id.toLowerCase(), t);
+          if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+            txMap.set(String(t.id).toLowerCase().trim(), t);
+          }
         }
         for (const t of serverData.transactions) {
-          if (t && t.id) {
-            const k = t.id.toLowerCase();
+          if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+            const k = String(t.id).toLowerCase().trim();
             txMap.set(k, { ...(txMap.get(k) || {}), ...t });
           }
         }
-        saveStoredTransactions(Array.from(txMap.values()));
+        const cleanTxs = Array.from(txMap.values());
+        cleanTxs.sort((a, b) => {
+          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return timeB - timeA;
+        });
+        saveStoredTransactions(cleanTxs);
       }
       if (Array.isArray(serverData.creators)) {
         saveStoredCreatorsList(serverData.creators);
