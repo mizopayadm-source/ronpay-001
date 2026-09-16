@@ -798,6 +798,11 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
       }
     };
 
+    // If client requested local sandbox or PhonePe UAT simulator fallback
+    if (req.query.gateway === 'local' || req.query.mock === 'true' || req.query.mode === 'simulator' || req.query.fallback === 'true') {
+      return res.redirect(302, `${effectiveOrigin}/api/phonepe/checkout?txnId=${encodeURIComponent(merchantTransactionId)}`);
+    }
+
     // Instant 302 Redirect straight to the official PhonePe page!
     return res.redirect(302, phonePeCheckoutUrl);
   } catch (error: any) {
