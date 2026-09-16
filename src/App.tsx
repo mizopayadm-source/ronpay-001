@@ -120,16 +120,16 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
   const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
-    if (initialRoute?.receiptId && initialRoute?.screen !== 'failed') {
+    if (initialRoute?.receiptId && initialRoute?.screen === 'success') {
       const txs = getStoredTransactions();
-      const found = txs.find(t => t.id.toLowerCase() === initialRoute.receiptId?.toLowerCase());
+      const found = txs.find(t => t.id.toLowerCase() === initialRoute.receiptId?.toLowerCase() && t.status === 'completed');
       if (found) return found;
 
       const pendingRaw = localStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`) || sessionStorage.getItem(`RONPAY_PENDING_TX_${initialRoute.receiptId}`);
       if (pendingRaw) {
         try {
           const parsed = JSON.parse(pendingRaw);
-          if (parsed && parsed.id) {
+          if (parsed && parsed.id && parsed.status !== 'failed') {
             return {
               ...parsed,
               status: 'completed',
@@ -627,16 +627,50 @@ export default function App() {
             // Remove any erroneously stored record
             deleteStoredTransaction(route.receiptId!);
             setCompletedTransaction(null);
-            setCurrentScreen('home');
+            const resolvedReason = data?.data?.detailedErrorCode || data?.data?.errorCode || data?.message || 'PhonePe payment reported failed or cancelled';
+            setFailureReason(resolvedReason);
+
+            const meta = route.receiptMeta;
+            const baseTx = found || parsedPending;
+            const allCamps = [...campaigns, ...getStoredCampaigns()];
+            const targetCampId = data?.data?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
+            const matchedCamp = allCamps.find(c => c.id === targetCampId);
+            const total = data?.data?.amountRupees || (data?.data?.amount ? data.data.amount / 100 : null) || meta?.amount || baseTx?.totalAmount || 0;
+            const base = data?.data?.baseAmountRupees || meta?.baseAmount || baseTx?.amount || (total > 1 ? total - 1 : total);
+            const fee = data?.data?.platformFeeRupees !== undefined ? data.data.platformFeeRupees : (meta?.platformFee !== undefined ? meta.platformFee : (baseTx?.platformFee ?? Math.max(0, total - base)));
+
+            const failedTx: Transaction = {
+              id: route.receiptId!,
+              campaignId: targetCampId || matchedCamp?.id || 'cmp-custom',
+              campaignTitle: (matchedCamp ? getCampaignCauseTitle(matchedCamp) : '') || baseTx?.campaignTitle || 'RonPay Community Bawm',
+              donorName: baseTx?.donorName || (meta?.isAnonymous ? 'Anonymous' : (meta?.donorName || 'Valued Donor')),
+              donorPhone: baseTx?.donorPhone || meta?.donorPhone,
+              isAnonymous: Boolean(baseTx?.isAnonymous || meta?.isAnonymous),
+              amount: base,
+              platformFee: fee,
+              totalAmount: total,
+              category: (baseTx?.category || meta?.category || matchedCamp?.category || 'others') as any,
+              paymentMethod: 'phonepe',
+              status: 'failed',
+              timestamp: baseTx?.timestamp || new Date().toISOString(),
+              referenceNo: data?.data?.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
+              feeOption: (baseTx?.feeOption || meta?.feeOption || 'ADD_ON') as any,
+              campaignNetReceived: base
+            };
+
+            setFailedTransaction(failedTx);
+            setCurrentScreen('failed');
+            setAppView('app');
             try {
               if (typeof BroadcastChannel !== 'undefined') {
                 const bc = new BroadcastChannel('ronpay_payment_channel');
-                bc.postMessage({ type: 'PHONEPE_PAYMENT_FAILED', receiptId: route.receiptId });
+                bc.postMessage({ type: 'PHONEPE_PAYMENT_FAILED', receiptId: route.receiptId, reason: resolvedReason });
               }
               localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
                 id: route.receiptId,
                 status: 'PAYMENT_ERROR',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                reason: resolvedReason
               }));
             } catch (e) {}
             return;

@@ -213,14 +213,16 @@ export default async function handler(req: any, res: any) {
       let phonePeCheckoutUrl = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(livePhonePeToken)}`;
       let phonePeOrderId = `OMO${Date.now()}`;
 
-      const directReturnUrl = `${proto}://${rawHost}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTransactionId)}&phonepe_txn_id=${encodeURIComponent(merchantTransactionId)}&status=PAYMENT_SUCCESS&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(customerPhone)}&anon=${isAnonymous ? '1' : '0'}`;
+      const callbackUrl = `${proto}://${rawHost}/api/phonepe/callback?txnId=${encodeURIComponent(merchantTransactionId)}&origin=${encodeURIComponent(`${proto}://${rawHost}`)}&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(customerPhone)}&anon=${isAnonymous ? '1' : '0'}`;
 
       try {
+        const isAndroidClient = req.headers['x-client-platform'] === 'android';
         const v2Resp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `O-Bearer ${livePhonePeToken}`
+            'Authorization': `O-Bearer ${livePhonePeToken}`,
+            'X-MERCHANT-ID': 'TSPMIZOPAYUAT'
           },
           body: JSON.stringify({
             merchantOrderId: merchantTransactionId,
@@ -228,12 +230,10 @@ export default async function handler(req: any, res: any) {
             paymentFlow: {
               type: 'PG_CHECKOUT',
               merchantUrls: {
-                redirectUrl: directReturnUrl
+                redirectUrl: callbackUrl
               }
             },
-            deviceContext: {
-              deviceOS: 'ANDROID'
-            },
+            ...(isAndroidClient ? { deviceContext: { deviceOS: 'ANDROID' } } : {}),
             paymentModeConfig: {
               version: 'V2',
               enabledPaymentModes: [
@@ -281,22 +281,264 @@ export default async function handler(req: any, res: any) {
 
     // 1b. PhonePe Callback Handler - Triggered when user finishes payment on PhonePe and gets redirected back
     if (pathname.includes('/callback') || pathname.includes('/phonepe/callback')) {
-      const finalStatus = code === 'PAYMENT_ERROR' ? 'PAYMENT_ERROR' : 'PAYMENT_SUCCESS';
-      
+      const incomingRawCode = (code || searchParams.get('code') || searchParams.get('responseCode') || searchParams.get('status') || '').toUpperCase();
+      const incomingRawState = (searchParams.get('state') || '').toUpperCase();
+      const isDeclinedOrFailed = 
+        incomingRawCode === 'PAYMENT_ERROR' || 
+        incomingRawCode === 'FAILED' || 
+        incomingRawCode === 'CANCELLED' || 
+        incomingRawCode === 'PAYMENT_DECLINED' || 
+        incomingRawCode === 'TRANSACTION_NOT_FOUND' ||
+        incomingRawCode === 'EXPIRED' ||
+        incomingRawState === 'FAILED' ||
+        incomingRawState === 'CANCELLED' ||
+        incomingRawState === 'EXPIRED';
+
+      let isSuccess = incomingRawCode === 'PAYMENT_SUCCESS' || incomingRawCode === 'SUCCESS' || incomingRawCode === 'COMPLETED' || incomingRawState === 'COMPLETED';
+      let isFailed = isDeclinedOrFailed;
+      let failureReason = isFailed ? (incomingRawCode || 'PhonePe payment was cancelled or declined') : '';
+      let phonePeUtr = '';
+
+      // Check live PhonePe PG Sandbox Order status API
+      if (txnId) {
+        try {
+          const liveToken = await getOrFetchPhonePeOAuthToken();
+          const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(txnId)}/status`, {
+            headers: {
+              'Authorization': `O-Bearer ${liveToken}`,
+              'X-MERCHANT-ID': 'TSPMIZOPAYUAT'
+            }
+          });
+          if (sResp.status === 200) {
+            const sData: any = await sResp.json();
+            if (sData?.state === 'COMPLETED' || sData?.responseCode === 'SUCCESS') {
+              isSuccess = true;
+              isFailed = false;
+              if (sData?.paymentDetails?.[0]?.transactionId) {
+                phonePeUtr = 'UTR' + sData.paymentDetails[0].transactionId.replace(/\D/g, '').slice(-12);
+              }
+            } else if (sData?.state === 'FAILED' || sData?.state === 'CANCELLED' || sData?.state === 'EXPIRED' || sData?.errorCode || sData?.responseCode === 'FAILED' || sData?.responseCode === 'PAYMENT_ERROR') {
+              isFailed = true;
+              isSuccess = false;
+              failureReason = sData?.detailedErrorCode || sData?.errorCode || 'PhonePe payment failed or declined';
+            }
+          }
+        } catch (e) {
+          console.warn('PhonePe callback status check error:', e);
+        }
+      }
+
+      if (!isSuccess && !isFailed) {
+        if (incomingRawCode !== 'PAYMENT_SUCCESS' && incomingRawCode !== 'SUCCESS') {
+          isFailed = true;
+          failureReason = 'Payment was not confirmed as completed by PhonePe';
+        }
+      }
+
+      const finalStatus = isSuccess ? 'PAYMENT_SUCCESS' : 'PAYMENT_ERROR';
+
       // Update store on return
       if (txnId) {
         globalTxStore[txnId] = {
           ...(globalTxStore[txnId] || {}),
           status: finalStatus,
-          utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000)
+          utr: phonePeUtr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
         };
       }
 
-      const redirectTarget = `/?view=app&screen=success&receipt=${encodeURIComponent(txnId)}&phonepe_txn_id=${encodeURIComponent(txnId)}&status=${encodeURIComponent(finalStatus)}`;
+      const amtParam = searchParams.get('amt') || '';
+      const baseAmtParam = searchParams.get('baseAmt') || '';
+      const feeParam = searchParams.get('fee') || '';
+      const feeOptParam = searchParams.get('feeOpt') || 'ADD_ON';
+      const cidParam = searchParams.get('cid') || '';
+      const ctitleParam = searchParams.get('ctitle') || '';
+      const donorParam = searchParams.get('donor') || '';
+      const donorPhoneParam = searchParams.get('donorPhone') || '';
+      const anonParam = searchParams.get('anon') || '0';
+
+      const commonMetaParams = `amt=${encodeURIComponent(amtParam)}&baseAmt=${encodeURIComponent(baseAmtParam)}&fee=${encodeURIComponent(feeParam)}&feeOpt=${encodeURIComponent(feeOptParam)}&cid=${encodeURIComponent(cidParam)}&ctitle=${encodeURIComponent(ctitleParam)}&donor=${encodeURIComponent(donorParam)}&donorPhone=${encodeURIComponent(donorPhoneParam)}&anon=${encodeURIComponent(anonParam)}`;
+
+      const redirectTarget = isSuccess
+        ? `/?view=app&screen=success&receipt=${encodeURIComponent(txnId)}&phonepe_txn_id=${encodeURIComponent(txnId)}&status=PAYMENT_SUCCESS&${commonMetaParams}`
+        : `/?view=app&screen=failed&receipt=${encodeURIComponent(txnId)}&phonepe_txn_id=${encodeURIComponent(txnId)}&status=PAYMENT_ERROR&failed=1&reason=${encodeURIComponent(failureReason)}&${commonMetaParams}`;
+
+      const retryTarget = `/?view=app&screen=checkout&cid=${encodeURIComponent(cidParam)}&amt=${encodeURIComponent(baseAmtParam || amtParam)}&status=PAYMENT_ERROR&failed=1`;
       const homeTarget = `/?view=app&screen=home`;
 
       // If client requests HTML (browser redirect from PhonePe)
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+      if (isFailed) {
+        const failHtml = `<!DOCTYPE html>
+<html lang="lus">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RonPay - Payment Failed | Pawisa Pek A Hlawhtling Lo</title>
+  <meta http-equiv="refresh" content="3;url=${redirectTarget}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    body {
+      min-height: 100vh;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 24px;
+      max-width: 440px;
+      width: 100%;
+      padding: 32px 24px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .badge-fail {
+      width: 76px;
+      height: 76px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.4);
+    }
+    .badge-fail svg {
+      width: 40px;
+      height: 40px;
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #f87171;
+      margin-bottom: 8px;
+    }
+    .sub {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+    .info-box {
+      background: #0f172a;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    .info-label { color: #64748b; }
+    .info-val { color: #f1f5f9; font-weight: 600; font-family: monospace; word-break: break-all; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      margin-bottom: 12px;
+    }
+    .btn-retry {
+      background: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: #cbd5e1;
+    }
+    .timer {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge-fail">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </div>
+    <h1>Pawisa Pek A Tlang Lo</h1>
+    <p class="sub">PhonePe gateway kaltlanga pawisa pek tumna hi a hlawhtling lo (Failed / Cancelled). Pawisa lak a ni lo e.</p>
+
+    <div class="info-box">
+      <div class="info-row">
+        <span class="info-label">Transaction ID:</span>
+        <span class="info-val">${txnId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Gateway:</span>
+        <span class="info-val" style="color:#a855f7;">PhonePe PG V2</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Status:</span>
+        <span class="info-val" style="color:#ef4444;">FAILED / DECLINED</span>
+      </div>
+      ${failureReason ? `<div class="info-row"><span class="info-label">Reason:</span><span class="info-val" style="color:#f87171;">${failureReason}</span></div>` : ''}
+    </div>
+
+    <a href="${redirectTarget}" class="btn btn-retry">⚠️ Failure Details En Rawh</a>
+    <a href="${retryTarget}" class="btn btn-secondary">🔄 Hmeh Nawn Leh Rawh (Retry)</a>
+    <a href="${homeTarget}" class="btn btn-secondary">🏠 RonPay Home-ah Let Rawh</a>
+    
+    <div class="timer">Second 3 hnuah app screen-ah a let ang...</div>
+  </div>
+
+  <script>
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.postMessage({ type: 'PHONEPE_PAYMENT_FAILED', receiptId: '${txnId}', reason: '${failureReason}' });
+      }
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({
+          type: 'PHONEPE_PAYMENT_RESULT',
+          status: 'PAYMENT_ERROR',
+          txnId: '${txnId}',
+          reason: '${failureReason}'
+        }, '*');
+      }
+      localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+        id: '${txnId}',
+        status: 'PAYMENT_ERROR',
+        timestamp: Date.now(),
+        reason: '${failureReason}'
+      }));
+    } catch(e) {}
+
+    setTimeout(function() {
+      window.location.href = "${redirectTarget}";
+    }, 2800);
+  </script>
+</body>
+</html>`;
+        return res.end(failHtml);
+      }
+
+      // SUCCESS HTML
       const html = `<!DOCTYPE html>
 <html lang="lus">
 <head>
@@ -449,6 +691,10 @@ export default async function handler(req: any, res: any) {
   <script>
     // Notify parent window if opened in popup/tab
     try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('ronpay_payment_channel');
+        bc.postMessage({ type: 'PHONEPE_PAYMENT_SUCCESS', receiptId: '${txnId}' });
+      }
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage({
           type: 'PHONEPE_PAYMENT_RESULT',
@@ -456,6 +702,11 @@ export default async function handler(req: any, res: any) {
           txnId: '${txnId}'
         }, '*');
       }
+      localStorage.setItem('RONPAY_LAST_CONFIRMED_TXN', JSON.stringify({
+        id: '${txnId}',
+        status: 'PAYMENT_SUCCESS',
+        timestamp: Date.now()
+      }));
     } catch(e) {}
 
     // Auto redirect

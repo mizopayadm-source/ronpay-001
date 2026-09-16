@@ -80,16 +80,27 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     const screenParam = searchParams.get('screen') || searchParams.get('page');
     const viewParam = searchParams.get('view');
-    const statusParam = searchParams.get('status');
-    const codeParam = searchParams.get('code');
+    const statusParam = (searchParams.get('status') || '').toUpperCase();
+    const codeParam = (searchParams.get('code') || '').toUpperCase();
+    const responseCodeParam = (searchParams.get('responseCode') || '').toUpperCase();
+    const stateParam = (searchParams.get('state') || '').toUpperCase();
     const failedParam = searchParams.get('failed');
 
     const isExplicitFailStatus = statusParam === 'PAYMENT_ERROR' || 
                                  statusParam === 'FAILED' || 
                                  statusParam === 'PAYMENT_DECLINED' || 
                                  statusParam === 'CANCELLED' ||
+                                 statusParam === 'EXPIRED' ||
                                  codeParam === 'PAYMENT_ERROR' ||
                                  codeParam === 'FAILED' ||
+                                 codeParam === 'CANCELLED' ||
+                                 codeParam === 'TRANSACTION_NOT_FOUND' ||
+                                 responseCodeParam === 'PAYMENT_ERROR' ||
+                                 responseCodeParam === 'FAILED' ||
+                                 responseCodeParam === 'CANCELLED' ||
+                                 stateParam === 'FAILED' ||
+                                 stateParam === 'CANCELLED' ||
+                                 stateParam === 'EXPIRED' ||
                                  failedParam === '1' ||
                                  failedParam === 'true' ||
                                  screenParam === 'failed';
@@ -126,7 +137,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       };
     }
 
-    // If explicit fail status requested anywhere in the app URL
+    // If explicit fail status requested anywhere in the app URL (takes strict priority over screen=success)
     if (isExplicitFailStatus) {
       const amtParam = searchParams.get('amt');
       const baseAmtParam = searchParams.get('baseAmt');
