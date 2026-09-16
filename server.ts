@@ -403,7 +403,7 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // API 3: Initiate Standard Checkout (PG V2 Pay API)
 // -------------------------------------------------------------
-app.post('/api/phonepe/initiate-pay', async (req: Request, res: Response) => {
+app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async (req: Request, res: Response) => {
   try {
     const { 
       amountInRupees, 

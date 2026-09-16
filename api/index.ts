@@ -727,7 +727,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 2. PhonePe Payment Initiation endpoint
-    if (pathname.includes('/initiate-pay')) {
+    if (pathname.includes('/initiate-pay') || pathname.endsWith('/pay') || pathname.includes('/pg/v1/pay')) {
       let body: any = {};
       try {
         if (req.body && typeof req.body === 'object') {
