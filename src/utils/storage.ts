@@ -546,24 +546,9 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 
-    // Broadcast local event for immediate real-time sync
+    // Broadcast local event for immediate real-time sync across components/tabs
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
-    }
-
-    // Direct Sync to Firebase Firestore
-    for (const tx of transactions) {
-      if (tx && tx.id) {
-        syncTransactionToFirestore(tx).catch(() => {});
-      }
-    }
-
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions })
-      }).catch(() => {});
     }
   } catch (e) {
     console.error('Failed to save transactions', e);

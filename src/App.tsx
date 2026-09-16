@@ -567,32 +567,6 @@ export default function App() {
     }
   }, [reloadLocalData]);
 
-  // Periodic background sync and on-focus sync to ensure multi-device and multi-browser accuracy
-  useEffect(() => {
-    const syncInterval = setInterval(() => {
-      syncAllWithServer().catch(() => {});
-    }, 20000);
-
-    const onWindowFocus = () => {
-      syncAllWithServer().catch(() => {});
-      forceRefreshFirestore().catch(() => {});
-    };
-
-    window.addEventListener('focus', onWindowFocus);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        onWindowFocus();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', onWindowFocus);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, []);
-
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
   const applyRouteFromUrl = useCallback(() => {
     const route = getUrlRoute();

@@ -569,8 +569,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
                 Reports & Financial Statements
               </h2>
-              <span className="text-[9.5px] font-black px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-300 uppercase tracking-wide">
-                Live Audit
+              <span className="text-[9.5px] font-black px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200 uppercase tracking-wide">
+                Audited Statements
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -588,14 +588,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 ? 'bg-indigo-50 border-indigo-200 text-indigo-700 opacity-80'
                 : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-indigo-400'
             }`}
-            title="Pull latest data directly from Cloud Firestore & Central Server"
+            title="Refresh latest data directly from Cloud Database"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
-            <span>{isSyncingCloud ? 'Syncing Cloud...' : `Sync Cloud (${transactions.length})`}</span>
+            <span>{isSyncingCloud ? 'Syncing...' : `Sync Cloud (${transactions.length})`}</span>
           </button>
-          <span className="text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Cloud Live
+          <span className="text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5" title="Connected to Central Cloud Database">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Cloud Synced
           </span>
         </div>
       </div>
