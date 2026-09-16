@@ -80,7 +80,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   initialIsAnonymous,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
-  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => !!initialOpenPhonePeCheckout);
+  const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(() => 
+    Boolean(initialOpenPhonePeCheckout && ((initialAmount && initialAmount > 0) || (campaign?.customAmount && campaign.customAmount > 0)))
+  );
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
 
   // PhonePe PG New Tab Live State Synchronization
@@ -243,11 +245,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const { translatedCause, isTranslating: isTranslatingCause } = useCampaignCauseTranslation(campaign, language);
 
   useEffect(() => {
-    if (initialOpenPhonePeCheckout) {
+    const hasAmt = (initialAmount && initialAmount > 0) || (campaign?.customAmount && campaign.customAmount > 0);
+    if (initialOpenPhonePeCheckout && hasAmt) {
       setPaymentMethod('phonepe');
       setIsPhonePeCheckoutOpen(true);
     }
-  }, [initialOpenPhonePeCheckout]);
+  }, [initialOpenPhonePeCheckout, initialAmount, campaign?.customAmount]);
 
   // Multi-tier Fee Mode resolution:
   // Level 1: Bawm / Campaign specific override (campaign.feeOptionRule)
@@ -277,12 +280,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setFeeBearerOption('DEDUCT');
     }
   }, [effectiveFeeMode]);
-  const [standardAmount, setStandardAmount] = useState<number>(() => {
+  const [standardAmount, setStandardAmount] = useState<number | ''>(() => {
     if (initialAmount && initialAmount > 0) return initialAmount;
     if (campaign?.customAmount && campaign.customAmount > 0) return campaign.customAmount;
-    if (campaign?.targetAmount && campaign.targetAmount > 0) return campaign.targetAmount;
-    return 500;
+    return '';
   });
+  const [amountError, setAmountError] = useState<string>('');
   const [donorName, setDonorName] = useState<string>(() => initialDonorName || '');
   const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(() => Boolean(initialIsAnonymous));
@@ -404,8 +407,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       ? initialAmount
       : (campaign?.customAmount && campaign.customAmount > 0)
       ? campaign.customAmount
-      : (campaign?.targetAmount && campaign.targetAmount > 0)
-      ? campaign.targetAmount
       : null;
     if (explicitAmt && explicitAmt > 0) {
       setStandardAmount(explicitAmt);
@@ -414,8 +415,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (category === 'kumtluang') {
       if (campaign?.subCategories && campaign.subCategories.length > 0) {
         const initialMap: { [key: string]: number } = {};
-        campaign.subCategories.forEach((cat, idx) => {
-          initialMap[cat] = (idx + 1) * 100;
+        campaign.subCategories.forEach((cat) => {
+          initialMap[cat] = 0;
         });
         setSubcatAmounts(initialMap);
       }
@@ -613,7 +614,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   // Calculate totals
   const subtotal = category === 'kumtluang'
     ? (Object.values(subcatAmounts) as number[]).reduce((acc: number, curr: number) => acc + curr, 0)
-    : standardAmount;
+    : (typeof standardAmount === 'number' ? standardAmount : 0);
 
   // Dynamic Platform Fee based on Admin Pricing Config & Per-Creator Overrides
   const feeRule = pricingConfig?.categories[category] || DEFAULT_PRICING_CONFIG.categories[category];
@@ -653,10 +654,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     fixedFee = 0;
   }
 
-  const basePlatformFee = feeRatePercent > 0 
+  const basePlatformFee = (subtotal > 0 && feeRatePercent > 0)
     ? Math.max(1, Math.round((subtotal * (feeRatePercent / 100)) + fixedFee))
     : 0;
-  const platformFee = (isOnlinePayment && feeRatePercent > 0) ? basePlatformFee : 0;
+  const platformFee = (isOnlinePayment && feeRatePercent > 0 && subtotal > 0) ? basePlatformFee : 0;
 
   // Split API rule:
   // ADD_ON: Donor pays subtotal + fee (e.g. 100 + 1 = 101), Campaign receives full 100
@@ -704,7 +705,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       return;
     }
     if (subtotal <= 0) {
-      alert('Khawngaihin pek tur zat (amount) chhu lut rawh!');
+      setAmountError('Khawngaihin pek tur zat (amount) chhu lut rawh le!');
+      const amountInput = document.querySelector('input[type="number"]') as HTMLInputElement | null;
+      if (amountInput) {
+        amountInput.focus();
+        amountInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -801,10 +807,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
-      setIsWaitingPhonePePG(true);
       setIsProcessing(false);
 
-      // Open official PhonePe PG portal directly in a new tab
+      // Open official PhonePe PG checkout modal directly in-app
+      setIsPhonePeCheckoutOpen(true);
+
+      // Also attempt opening in new tab for direct gateway portal
       try {
         window.open(fullLaunchUrl, '_blank');
       } catch (e) {
@@ -1922,11 +1930,28 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   type="number"
                   min={1}
                   required
-                  value={standardAmount}
-                  onChange={(e) => setStandardAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  value={standardAmount === '' ? '' : standardAmount}
+                  onChange={(e) => {
+                    if (amountError) setAmountError('');
+                    const val = e.target.value;
+                    if (val === '') {
+                      setStandardAmount('');
+                    } else {
+                      const num = parseFloat(val);
+                      setStandardAmount(isNaN(num) ? '' : num);
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 pl-8 pr-3 font-black text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
+
+              {amountError && (
+                <p className="text-xs text-rose-600 font-bold flex items-center gap-1.5 animate-in fade-in duration-150">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{amountError}</span>
+                </p>
+              )}
 
               {/* Quick Amount Buttons */}
               <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1">
@@ -1934,7 +1959,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <button
                     key={amt}
                     type="button"
-                    onClick={() => setStandardAmount(amt)}
+                    onClick={() => {
+                      if (amountError) setAmountError('');
+                      setStandardAmount(amt);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                       standardAmount === amt 
                         ? 'bg-indigo-600 text-white shadow-xs' 
@@ -2054,7 +2082,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         {/* Pay Button */}
         <button
           type="submit"
-          disabled={isProcessing || subtotal <= 0 || isExpired}
+          disabled={isProcessing || isExpired}
           className={`w-full py-3.5 px-4 rounded-2xl font-black text-sm text-white shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
             isExpired
               ? 'bg-slate-700 hover:bg-slate-700'
@@ -2078,12 +2106,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               {paymentMethod === 'phonepe' ? (
                 <>
                   <Zap className="w-4 h-4 text-amber-300" />
-                  <span>Pay ₹{totalPayable.toLocaleString('en-IN')} via PhonePe PG (UAT)</span>
+                  <span>
+                    {subtotal > 0 
+                      ? `Pay ₹${totalPayable.toLocaleString('en-IN')} via PhonePe PG (UAT)`
+                      : 'Pay via PhonePe PG (UAT)'}
+                  </span>
                 </>
               ) : (
                 <>
                   <Banknote className="w-4 h-4" />
-                  <span>Submit ₹{subtotal.toLocaleString('en-IN')} Cash Slip</span>
+                  <span>
+                    {subtotal > 0 
+                      ? `Submit ₹${subtotal.toLocaleString('en-IN')} Cash Slip`
+                      : 'Submit Cash Slip'}
+                  </span>
                 </>
               )}
             </>

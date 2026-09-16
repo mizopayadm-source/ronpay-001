@@ -178,14 +178,13 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
                    searchParams.get('memberRoll');
     const phonepeParam = searchParams.get('phonepe') || 
                          searchParams.get('pg') || 
-                         searchParams.get('phonepe_checkout') || 
-                         searchParams.get('checkout');
+                         searchParams.get('phonepe_checkout');
     const catParam = searchParams.get('cat') || searchParams.get('category');
     const sulhnuParam = searchParams.get('sulhnu') || searchParams.get('history');
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
     const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') ? viewParam : undefined;
-    const isPhonePePath = pathname.toLowerCase() === '/checkout' || pathname.toLowerCase() === '/phonepe';
+    const isPhonePePath = pathname.toLowerCase() === '/phonepe';
     const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1' || phonepeParam === 'phonepe' || isPhonePePath;
 
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
@@ -199,7 +198,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
       const existing = allCampaigns.find(c => c.id.toLowerCase() === cleanId.toLowerCase());
       
-      const urlAmtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('target') || searchParams.get('total') || searchParams.get('am');
+      // Only explicit donation amount params (amt, amount, am, payAmt), NEVER target or total
+      const urlAmtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('am') || searchParams.get('payAmt');
       const numUrlAmt = (urlAmtStr && !isNaN(parseFloat(urlAmtStr)) && parseFloat(urlAmtStr) > 0) ? parseFloat(urlAmtStr) : undefined;
 
       const donorParam = searchParams.get('donor') || searchParams.get('payer') || searchParams.get('name');
@@ -210,9 +210,9 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         return {
           screen: 'checkout',
           campaignId: existing.id,
-          campaign: numUrlAmt ? { ...existing, customAmount: numUrlAmt, targetAmount: numUrlAmt } : existing,
+          campaign: numUrlAmt ? { ...existing, customAmount: numUrlAmt } : existing,
           category: existing.category,
-          isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
+          isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true')),
           view: parsedView || 'app',
           donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
           donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
@@ -264,9 +264,9 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       return {
         screen: 'checkout',
         campaignId: cleanId,
-        campaign: numUrlAmt ? { ...reconstructed, customAmount: numUrlAmt, targetAmount: numUrlAmt } : reconstructed,
+        campaign: numUrlAmt ? { ...reconstructed, customAmount: numUrlAmt } : reconstructed,
         category: deducedCategory,
-        isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true' || isPhonePePath)),
+        isPhonePeOpen: isPhonePeOpen || Boolean(numUrlAmt && (searchParams.get('pay') === '1' || searchParams.get('pay') === 'true')),
         view: parsedView || 'app',
         donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
         donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,

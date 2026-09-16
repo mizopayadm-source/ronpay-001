@@ -64,7 +64,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
       const parsed = parseFloat(urlAmt);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
-    return 505.00;
+    return 0;
   }, [initialAmount, queryParams]);
 
   const baseAmount = useMemo(() => {
@@ -74,7 +74,7 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
       const parsed = parseFloat(urlBase);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
-    return Math.max(1, totalAmount - 5);
+    return totalAmount > 5 ? totalAmount - 5 : totalAmount;
   }, [initialBaseAmount, queryParams, totalAmount]);
 
   const platformFee = useMemo(() => {

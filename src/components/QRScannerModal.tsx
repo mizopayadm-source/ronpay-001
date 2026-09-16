@@ -93,15 +93,18 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const upi = url.searchParams.get('upi') || url.searchParams.get('pa') || url.searchParams.get('vpa');
       const loc = url.searchParams.get('loc');
       const org = url.searchParams.get('org');
-      const target = url.searchParams.get('target') || 
-                     url.searchParams.get('amt') || 
+      const targetStr = url.searchParams.get('target');
+      const amtStr = url.searchParams.get('amt') || 
                      url.searchParams.get('amount') || 
                      url.searchParams.get('am') ||
-                     url.searchParams.get('total') ||
-                     url.searchParams.get('price');
+                     url.searchParams.get('payAmt');
 
-      let numTargetAmt = (target !== null && !isNaN(parseFloat(target)) && parseFloat(target) > 0)
-        ? parseFloat(target)
+      const numTargetGoal = (targetStr !== null && !isNaN(parseFloat(targetStr)) && parseFloat(targetStr) > 0)
+        ? parseFloat(targetStr)
+        : undefined;
+
+      let numCustomAmt = (amtStr !== null && !isNaN(parseFloat(amtStr)) && parseFloat(amtStr) > 0)
+        ? parseFloat(amtStr)
         : undefined;
 
       let merchantTitle = title ? decodeURIComponent(title) : '';
@@ -124,9 +127,9 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
             const decodedJsonStr = atob(base64);
             const decoded = JSON.parse(decodedJsonStr);
             if (decoded) {
-              if (decoded.amount !== undefined && !numTargetAmt) {
+              if (decoded.amount !== undefined && !numCustomAmt) {
                 const numVal = parseFloat(String(decoded.amount));
-                numTargetAmt = numVal > 500 && numVal % 100 === 0 ? numVal / 100 : numVal;
+                numCustomAmt = numVal > 500 && numVal % 100 === 0 ? numVal / 100 : numVal;
               }
               if (decoded.merchantId && !merchantTitle) {
                 merchantTitle = String(decoded.merchantId);
@@ -148,8 +151,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       }
 
       // If amount looks like paise without decimals (e.g. 23700 for ₹237), convert to rupees
-      if (numTargetAmt && numTargetAmt >= 1000 && Number.isInteger(numTargetAmt) && (urlString.includes('phonepe') || urlString.includes('razorpay'))) {
-        numTargetAmt = numTargetAmt / 100;
+      if (numCustomAmt && numCustomAmt >= 1000 && Number.isInteger(numCustomAmt) && (urlString.includes('phonepe') || urlString.includes('razorpay'))) {
+        numCustomAmt = numCustomAmt / 100;
       }
 
       if (campId) {
@@ -157,7 +160,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         if (matched) {
           return {
             type: matched.status === 'pending_approval' ? 'pending' : matched.category,
-            campaign: numTargetAmt ? { ...matched, customAmount: numTargetAmt, targetAmount: numTargetAmt } : matched,
+            campaign: numCustomAmt ? { ...matched, customAmount: numCustomAmt } : matched,
             rawText: cleanText
           };
         }
@@ -171,8 +174,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           gpsCoords: '23.7271, 92.7176',
           upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
           orgCode: org ? decodeURIComponent(org) : undefined,
-          targetAmount: numTargetAmt,
-          customAmount: numTargetAmt,
+          targetAmount: numTargetGoal,
+          customAmount: numCustomAmt,
           validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
           gatewaySessionExpiresAt: sessionExpiresAt,
           status: 'active',
@@ -194,8 +197,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         url.hostname.includes('razorpay') ||
         url.hostname.includes('paytm') ||
         Boolean(token) ||
-        Boolean(merchantIdParam) ||
-        Boolean(numTargetAmt);
+        Boolean(merchantIdParam);
 
       if (isPaymentGateway) {
         const displayMerchant = merchantTitle || (url.hostname.includes('phonepe') ? 'PhonePe PG Merchant' : 'Payment Gateway Merchant');
@@ -206,8 +208,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           location: url.hostname.includes('uat') || url.hostname.includes('simulator') ? 'PhonePe UAT Sandbox (Single-use)' : 'Payment Gateway (Single-use)',
           gpsCoords: '23.7271, 92.7176',
           upiId: upi ? decodeURIComponent(upi) : (url.hostname.includes('phonepe') ? 'pg-gateway@phonepe' : 'gateway@upi'),
-          targetAmount: numTargetAmt,
-          customAmount: numTargetAmt,
+          targetAmount: numTargetGoal,
+          customAmount: numCustomAmt,
           validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
           gatewaySessionExpiresAt: sessionExpiresAt,
           isDynamicGateway: true,
@@ -457,12 +459,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // 2. If standard App.tsx modal props are provided
     if (result.type === 'pending' && result.campaign) {
       if (onSelectCampaign) {
-        onSelectCampaign(result.campaign, true);
+        onSelectCampaign(result.campaign, false);
       }
     } else if (result.type === 'general-upi' && result.campaign) {
-      // Direct route to campaign checkout & payment modal so user does not have to configure from scratch
+      // Route to campaign checkout screen
       if (onSelectCampaign) {
-        onSelectCampaign(result.campaign, true);
+        onSelectCampaign(result.campaign, false);
       } else if (onOpenExternalLanding) {
         onOpenExternalLanding(result.campaign);
       }
@@ -472,11 +474,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         if (onMismatchDetected) {
           onMismatchDetected(result.campaign.category);
         } else if (onSelectCampaign) {
-          onSelectCampaign(result.campaign, true);
+          onSelectCampaign(result.campaign, false);
         }
       } else {
         if (onSelectCampaign) {
-          onSelectCampaign(result.campaign, true);
+          onSelectCampaign(result.campaign, false);
         }
       }
     }

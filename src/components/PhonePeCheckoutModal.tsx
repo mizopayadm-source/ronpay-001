@@ -115,7 +115,9 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   const merchantName = 'TSPMIZOPAYUAT';
   const merchantVpa = 'mab060000049448@aubank';
 
-  const effectiveFee = platformFee > 0 ? platformFee : Math.max(1, Math.round(amount * 0.01));
+  const effectiveFee = platformFee > 0 
+    ? platformFee 
+    : (amount > 0 ? Math.max(1, Math.round(amount * 0.01)) : 0);
   const totalPayable = currentFeeOption === 'ADD_ON' ? amount + effectiveFee : amount;
   const campaignShare = currentFeeOption === 'ADD_ON' ? amount : Math.max(0, amount - effectiveFee);
   const campaignTitle = getCampaignCauseTitle(campaign);

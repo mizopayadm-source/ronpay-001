@@ -263,15 +263,12 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isBankTransferOpen, setIsBankTransferOpen] = useState<boolean>(false);
   const [isPhonePeOpen, setIsPhonePeOpen] = useState<boolean>(false);
-  const [autoOpenPhonePeCheckout, setAutoOpenPhonePeCheckout] = useState<boolean>(() => !!initialRoute?.isPhonePeOpen);
+  const [autoOpenPhonePeCheckout, setAutoOpenPhonePeCheckout] = useState<boolean>(() => Boolean(initialRoute?.isPhonePeOpen && initialRoute?.campaign?.customAmount));
   const [phonePeCheckoutAmount, setPhonePeCheckoutAmount] = useState<number>(() => {
     if (initialRoute?.campaign?.customAmount && initialRoute.campaign.customAmount > 0) {
       return initialRoute.campaign.customAmount;
     }
-    if (initialRoute?.campaign?.targetAmount && initialRoute.campaign.targetAmount > 0) {
-      return initialRoute.campaign.targetAmount;
-    }
-    return 100;
+    return 0;
   });
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
@@ -585,11 +582,12 @@ export default function App() {
     if (route.category && !route.campaign) {
       setSelectedCategory(route.category);
     }
-    if (route.isPhonePeOpen) {
+    if (route.isPhonePeOpen && route.campaign?.customAmount) {
       setAutoOpenPhonePeCheckout(true);
-      if (route.campaign?.customAmount || route.campaign?.targetAmount) {
-        setPhonePeCheckoutAmount(route.campaign.customAmount || route.campaign.targetAmount || 100);
-      }
+      setPhonePeCheckoutAmount(route.campaign.customAmount);
+    } else {
+      setAutoOpenPhonePeCheckout(false);
+      setPhonePeCheckoutAmount(route.campaign?.customAmount || 0);
     }
     if (route.receiptId) {
       const txs = getStoredTransactions();
@@ -856,11 +854,12 @@ export default function App() {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
     const hasPresetAmount = Boolean(campaign.customAmount && campaign.customAmount > 0);
-    if (forceAutoOpenPayment || hasPresetAmount) {
+    if (forceAutoOpenPayment && hasPresetAmount) {
       setAutoOpenPhonePeCheckout(true);
-      setPhonePeCheckoutAmount(campaign.customAmount || campaign.targetAmount || 0);
+      setPhonePeCheckoutAmount(campaign.customAmount || 0);
     } else {
       setAutoOpenPhonePeCheckout(false);
+      setPhonePeCheckoutAmount(campaign.customAmount || 0);
     }
     updateBrowserUrl('checkout', campaign, campaign.category);
     setCurrentScreen('checkout');
@@ -1276,7 +1275,7 @@ export default function App() {
               onPreviewImage={handlePreviewImage}
               language={language}
               initialOpenPhonePeCheckout={autoOpenPhonePeCheckout}
-              initialAmount={autoOpenPhonePeCheckout ? phonePeCheckoutAmount : (selectedCampaign?.customAmount || selectedCampaign?.targetAmount)}
+              initialAmount={autoOpenPhonePeCheckout ? phonePeCheckoutAmount : selectedCampaign?.customAmount}
               initialDonorName={initialRoute?.donorName}
               initialDonorSection={initialRoute?.donorVeng}
               initialIsAnonymous={initialRoute?.isAnonymous}

@@ -8,13 +8,13 @@ import {
 } from "firebase/firestore";
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyDbLHlj2yEDQVxm2LRJjY8OMpuBab-TxEk",
-  authDomain: "ronpay-7fc69.firebaseapp.com",
-  projectId: "ronpay-7fc69",
-  storageBucket: "ronpay-7fc69.firebasestorage.app",
-  messagingSenderId: "807189818533",
-  appId: "1:807189818533:web:2ab29ad49be78f9824b14c",
-  measurementId: "G-P29J9QMYK6"
+  apiKey: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_API_KEY) || "AIzaSyDbLHlj2yEDQVxm2LRJjY8OMpuBab-TxEk",
+  authDomain: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN) || "ronpay-7fc69.firebaseapp.com",
+  projectId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID) || "ronpay-7fc69",
+  storageBucket: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET) || "ronpay-7fc69.firebasestorage.app",
+  messagingSenderId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID) || "807189818533",
+  appId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_APP_ID) || "1:807189818533:web:2ab29ad49be78f9824b14c",
+  measurementId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_MEASUREMENT_ID) || "G-P29J9QMYK6"
 };
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
