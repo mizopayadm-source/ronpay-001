@@ -274,13 +274,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       const isRec = dir === 'received';
       const base = Number(t.amount) || 0;
       const fee = Number(t.platformFee) || 0;
-      if (isRec && t.feeOption === 'DEDUCT') {
-        return sum + (Number(t.campaignNetReceived) || Math.max(0, base - fee));
+      if (isRec) {
+        // Bawm received: in DEDUCT mode, net after fee; in ADD_ON mode, full base
+        return sum + (t.feeOption === 'DEDUCT' ? (Number(t.campaignNetReceived) || Math.max(0, base - fee)) : base);
+      } else {
+        // Donor paid: in ADD_ON mode, base + fee; in DEDUCT mode, base
+        return sum + (Number(t.totalAmount) || (t.feeOption === 'ADD_ON' ? (base + fee) : base));
       }
-      if (!isRec && t.feeOption === 'ADD_ON') {
-        return sum + (Number(t.totalAmount) || (base + fee));
-      }
-      return sum + (Number(t.totalAmount) || base);
     }, 0);
   }, [confirmedFiltered, ownedCampaignIds, ownedCampaignTitles, creatorProfile, safeUserPaidIds]);
 
@@ -1112,16 +1112,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                 effectiveDisplayAmount = tx.feeOption === 'DEDUCT' ? netAmt : baseAmt;
                 if (fee > 0) {
                   splitBadge = tx.feeOption === 'DEDUCT'
-                    ? `Pek zat: ₹${totalAmt} (₹${fee} fee paih)`
-                    : `Donor pek belh: ₹${fee} fee`;
+                    ? `Donor pek zat: ₹${totalAmt} (₹${fee} fee paih)`
+                    : `Donor pek zat: ₹${totalAmt} (₹${fee} fee telin)`;
                 }
               } else {
                 // Donor (Thawhtu) view: what donor actually paid
                 effectiveDisplayAmount = totalAmt;
                 if (fee > 0) {
                   splitBadge = tx.feeOption === 'ADD_ON'
-                    ? `₹${baseAmt} Bawm + ₹${fee} Fee (Pek belh)`
-                    : `₹${netAmt} Bawm + ₹${fee} Fee (Paih)`;
+                    ? `Bawm dawn zat: ₹${baseAmt} (+₹${fee} fee pek belh)`
+                    : `Bawm dawn zat: ₹${netAmt} (₹${fee} fee paih)`;
                 }
               }
 
@@ -1167,8 +1167,18 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <div className={`font-black text-sm ${!isVerified ? 'text-amber-800' : isReceived ? 'text-emerald-800' : 'text-slate-900'}`}>
-                        {isReceived && isVerified ? '+' : ''}₹{effectiveDisplayAmount.toLocaleString('en-IN')}
+                      <div className={`font-black text-sm flex items-center justify-end gap-1 ${!isVerified ? 'text-amber-800' : isReceived ? 'text-emerald-800' : 'text-slate-900'}`}>
+                        <span>{isReceived && isVerified ? '+' : ''}₹{effectiveDisplayAmount.toLocaleString('en-IN')}</span>
+                        {fee > 0 && isReceived && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/90 px-1.5 py-0.2 rounded">
+                            Bawm Dawng
+                          </span>
+                        )}
+                        {fee > 0 && !isReceived && (
+                          <span className="text-[9px] font-bold text-indigo-700 bg-indigo-100/90 px-1.5 py-0.2 rounded">
+                            Pek Zat
+                          </span>
+                        )}
                       </div>
                       {!isVerified ? (
                         <div className="text-[8.5px] font-extrabold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 mt-0.5 inline-block">
