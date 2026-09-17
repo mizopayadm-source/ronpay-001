@@ -26,8 +26,7 @@ import {
   CheckCircle2,
   CreditCard,
   Landmark,
-  Clock,
-  Video
+  Clock
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
@@ -337,60 +336,6 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     }
   };
 
-  const [copiedEmailReply, setCopiedEmailReply] = useState<boolean>(false);
-  const [recordingGuideOpen, setRecordingGuideOpen] = useState<boolean>(true);
-
-  const phonePeReplyTemplate = `Subject: Re: PhonePe PG UAT Integration - Screen Recording & Validation Details - TSPMIZOPAYUAT
-
-Dear PhonePe Integration Team,
-
-Thank you for your response.
-
-As requested, we have recorded the screen demonstration showing the step-by-step transaction initiation flow on our website and application:
-Video Recording URL / Attachment: [PASTE YOUR RECORDED VIDEO LINK OR ATTACH HERE]
-
-Summary of Demonstrated Steps:
-1. Navigated to our live RonPay website & community portal.
-2. Selected a campaign cause (e.g. Ralna Bawm) and initiated checkout with amount ₹100.
-3. Redirected seamlessly to PhonePe PG Sandbox checkout (mercury-uat.phonepe.com/transact/uat_v3).
-4. Completed the payment simulation.
-5. Handled PhonePe return URL and payment confirmation, displaying the verified transaction receipt with UTR and status.
-
-Summary of 5 Validations:
-1. Initiate Test Payments: Operational via standard checkout pay API (/apis/pg-sandbox/checkout/v2/pay) and website launch flow.
-2. End-to-End Payment Flow: Fully connected from donor checkout -> PhonePe sandbox -> S2S callback & client return -> Receipt generation.
-3. TSP Header Implementation: All mandatory headers actively injected:
-   - Authorization: O-Bearer <token> (OAuth 2.0 Client Credentials)
-   - Content-Type: application/json
-   - X-MERCHANT-ID: TSPMIZOPAYUAT
-   - X-SOURCE: WEB
-   - X-SOURCE-VERSION: 1.0
-   - X-CLIENT-ID: TSPMIZOPAYUAT_2608171706
-   - X-CLIENT-VERSION: 1
-4. Webhook Config: Registered webhook URL: https://ronpay.app/api/phonepe/webhook, verifies checksum, returns HTTP 200 within 5 seconds.
-5. Payment Confirmation Handling: Dual verification with S2S Webhook listener and authoritative status check API (/apis/pg-sandbox/checkout/v2/order/{orderId}/status).
-
-Kindly proceed with your internal validations and provide the UAT sign-off.
-
-Best regards,
-RonPay (MizoPay) Integration Team
-Bethel Computer Centre, Lunglei
-Merchant ID: TSPMIZOPAYUAT
-Client ID: TSPMIZOPAYUAT_2608171706`;
-
-  const handleCopyEmailReply = () => {
-    navigator.clipboard.writeText(phonePeReplyTemplate);
-    setCopiedEmailReply(true);
-    showNotification('✅ PhonePe reply email copied to clipboard!', 'success');
-    setTimeout(() => setCopiedEmailReply(false), 3000);
-  };
-
-  const handleOpenLaunchPayToRecord = () => {
-    const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
-    const launchUrl = `/api/phonepe/launch-pay?amt=100&origin=${encodeURIComponent(origin)}`;
-    window.open(launchUrl, '_blank');
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -487,104 +432,6 @@ Client ID: TSPMIZOPAYUAT_2608171706`;
           {/* TAB 0: EMAIL CHECKLIST & TECH AUDIT */}
           {activeTab === 'checklist' && (
             <div className="space-y-3 animate-fadeIn">
-              {/* PhonePe Mail Screen Recording & 5 Validations Card */}
-              <div className="bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white p-3.5 rounded-2xl shadow-lg border border-purple-400/40 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-purple-500/30 text-amber-300 flex items-center justify-center border border-purple-300/40 shrink-0">
-                      <Video className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-black text-xs text-white">PhonePe UAT Screen Recording Request</h4>
-                        <span className="text-[9px] font-extrabold bg-emerald-500 text-emerald-950 px-1.5 py-0.2 rounded-full">
-                          ACTION NEEDED
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-purple-200/90 font-medium">
-                        Demonstrate transaction initiation on website to trigger 5 UAT sign-off validations
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRecordingGuideOpen(!recordingGuideOpen)}
-                    className="text-[10px] text-purple-200 hover:text-white underline cursor-pointer shrink-0"
-                  >
-                    {recordingGuideOpen ? 'Hide Guide' : 'Show Guide'}
-                  </button>
-                </div>
-
-                {recordingGuideOpen && (
-                  <div className="space-y-2.5 pt-1 border-t border-purple-700/40">
-                    {/* 5 Validations Status Matrix */}
-                    <div className="bg-white/10 rounded-xl p-2.5 space-y-1.5 backdrop-blur-xs border border-white/10 text-[10px]">
-                      <p className="font-black text-amber-300 text-[10.5px] flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>PhonePe 5 Validations Checklist (Ready for Sign-Off):</span>
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-medium text-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>1. Initiate a few test payments</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>2. Complete end-to-end payment flow</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>3. Verify TSP header implementation</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>4. Verify Webhook config (S2S 200)</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 col-span-1 sm:col-span-2">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>5. Payment confirmation handling (Receipt + Status API)</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Step-by-Step Recording Guide */}
-                    <div className="bg-purple-950/70 rounded-xl p-2.5 border border-purple-500/30 text-[10px] space-y-1.5 text-purple-100">
-                      <p className="font-bold text-white flex items-center justify-between">
-                        <span>📹 Step-by-Step Video Recording Instructions:</span>
-                        <span className="text-[9px] text-purple-300 font-normal">Approx 30 - 60 seconds</span>
-                      </p>
-                      <ol className="list-decimal list-inside space-y-1 text-purple-200">
-                        <li><b>Open Website:</b> Go to RonPay Homepage or click the button below.</li>
-                        <li><b>Initiate Checkout:</b> Click on <b>"⚡ Test PhonePe Checkout"</b> or select any Campaign & click <b>"Bawm Thawh"</b>.</li>
-                        <li><b>Enter Details:</b> Enter Amount (₹100) and Donor Name, then click <b>"Pay via PhonePe"</b>.</li>
-                        <li><b>Show PhonePe Sandbox:</b> Show PhonePe UAT Sandbox (<code className="bg-purple-900/60 text-amber-200 px-1 rounded">mercury-uat.phonepe.com</code>) loading with ₹100.</li>
-                        <li><b>Show Success Receipt:</b> Complete the test payment and show the generated RonPay receipt with UTR.</li>
-                      </ol>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleOpenLaunchPayToRecord}
-                        className="flex-1 min-w-[160px] py-2 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-[11px] shadow-md hover:from-amber-300 hover:to-amber-400 transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-slate-950" />
-                        <span>Launch PhonePe Checkout to Record</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCopyEmailReply}
-                        className="py-2 px-3 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white font-bold text-[10px] transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                      >
-                        {copiedEmailReply ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-purple-200" />}
-                        <span>{copiedEmailReply ? 'Email Copied!' : 'Copy PhonePe Reply Email'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Checklist Items */}
               <div className="space-y-2.5">
 
