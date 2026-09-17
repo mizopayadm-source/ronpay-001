@@ -229,7 +229,11 @@ export default async function handler(req: any, res: any) {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `O-Bearer ${livePhonePeToken}`,
-            'X-MERCHANT-ID': 'TSPMIZOPAYUAT'
+            'X-MERCHANT-ID': 'TSPMIZOPAYUAT',
+            'X-SOURCE': 'WEB',
+            'X-SOURCE-VERSION': '1.0',
+            'X-CLIENT-ID': 'TSPMIZOPAYUAT_2608171706',
+            'X-CLIENT-VERSION': '1'
           },
           body: JSON.stringify({
             merchantOrderId: merchantTransactionId,
@@ -312,8 +316,13 @@ export default async function handler(req: any, res: any) {
           const liveToken = await getOrFetchPhonePeOAuthToken();
           const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(txnId)}/status`, {
             headers: {
+              'Content-Type': 'application/json',
               'Authorization': `O-Bearer ${liveToken}`,
-              'X-MERCHANT-ID': 'TSPMIZOPAYUAT'
+              'X-MERCHANT-ID': 'TSPMIZOPAYUAT',
+              'X-SOURCE': 'WEB',
+              'X-SOURCE-VERSION': '1.0',
+              'X-CLIENT-ID': 'TSPMIZOPAYUAT_2608171706',
+              'X-CLIENT-VERSION': '1'
             }
           });
           if (sResp.status === 200) {
@@ -787,7 +796,12 @@ export default async function handler(req: any, res: any) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `O-Bearer ${phonePeToken}`
+            'Authorization': `O-Bearer ${phonePeToken}`,
+            'X-MERCHANT-ID': 'TSPMIZOPAYUAT',
+            'X-SOURCE': 'WEB',
+            'X-SOURCE-VERSION': '1.0',
+            'X-CLIENT-ID': 'TSPMIZOPAYUAT_2608171706',
+            'X-CLIENT-VERSION': '1'
           },
           body: JSON.stringify({
             merchantOrderId: merchantTxnId,
@@ -934,7 +948,15 @@ export default async function handler(req: any, res: any) {
       try {
         const phonePeToken = await getOrFetchPhonePeOAuthToken();
         const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(targetId)}/status`, {
-          headers: { 'Authorization': `O-Bearer ${phonePeToken}` }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `O-Bearer ${phonePeToken}`,
+            'X-MERCHANT-ID': 'TSPMIZOPAYUAT',
+            'X-SOURCE': 'WEB',
+            'X-SOURCE-VERSION': '1.0',
+            'X-CLIENT-ID': 'TSPMIZOPAYUAT_2608171706',
+            'X-CLIENT-VERSION': '1'
+          }
         });
         if (sResp.ok) {
           const sData: any = await sResp.json();

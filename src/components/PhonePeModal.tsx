@@ -443,14 +443,14 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                         1
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-xs">Create Payment / Initiate Payment API</h4>
+                        <h4 className="font-bold text-slate-900 text-xs">Standard Checkout Website Integration API</h4>
                         <a 
-                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-reference/create-payment/initiate-payment"
+                          href="https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website"
                           target="_blank"
                           rel="noreferrer"
                           className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
                         >
-                          Official Initiate Payment Docs <ExternalLink className="w-2.5 h-2.5" />
+                          Website Integration Docs <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       </div>
                     </div>
@@ -507,8 +507,11 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                     </span>
                   </div>
                   <div className="bg-purple-50/70 border border-purple-200/60 p-2 rounded-xl text-[9.5px] text-purple-950 space-y-1 font-mono">
-                    <p>• <b>Authorization:</b> Bearer / O-Bearer token</p>
+                    <p>• <b>Authorization:</b> O-Bearer &lt;token&gt; (OAuth 2.0 Client Credentials)</p>
+                    <p>• <b>Content-Type:</b> application/json (POST / Status)</p>
                     <p>• <b>X-MERCHANT-ID:</b> TSPMIZOPAYUAT (End Merchant MID)</p>
+                    <p>• <b>X-SOURCE:</b> WEB</p>
+                    <p>• <b>X-SOURCE-VERSION:</b> 1.0</p>
                     <p>• <b>X-CLIENT-ID:</b> TSPMIZOPAYUAT_2608171706</p>
                     <p>• <b>X-CLIENT-VERSION:</b> 1</p>
                   </div>

@@ -138,6 +138,7 @@ const PHONEPE_UAT_BASE_URL = 'https://api-preprod.phonepe.com/apis/pg-sandbox';
 interface PaymentRecord {
   merchantTransactionId: string;
   merchantUserId: string;
+  merchantId?: string;
   amount: number; // in paise
   campaignTitle: string;
   status: 'PENDING' | 'PAYMENT_SUCCESS' | 'PAYMENT_ERROR' | 'PAYMENT_DECLINED';
@@ -182,10 +183,24 @@ const refundStore: Record<string, {
 }> = {};
 
 // Store for Active Webhook Config (Webhook Config API compliance)
-let webhookConfigStore = {
+interface WebhookConfig {
+  webhookId: string;
+  merchantId: string;
+  clientId: string;
+  url?: string;
+  webhookUrl: string;
+  authType: string;
+  events: string[];
+  status: string;
+  active?: boolean;
+  updatedAt: string;
+}
+
+let webhookConfigStore: WebhookConfig = {
   webhookId: 'WH_CONFIG_' + Date.now(),
   merchantId: PHONEPE_MERCHANT_ID,
   clientId: PHONEPE_CLIENT_ID,
+  url: PHONEPE_WEBHOOK_URL || 'https://ronpay.app/api/phonepe/webhook',
   webhookUrl: PHONEPE_WEBHOOK_URL || 'https://ronpay.app/api/phonepe/webhook',
   authType: 'HMAC_SHA256',
   events: [
@@ -200,6 +215,7 @@ let webhookConfigStore = {
     'refund.failed'
   ],
   status: 'ACTIVE',
+  active: true,
   updatedAt: new Date().toISOString()
 };
 
@@ -506,7 +522,9 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
           'Authorization': `O-Bearer ${livePhonePeToken}`,
           'X-MERCHANT-ID': incomingMid,
           'X-SOURCE': 'WEB',
-          'X-SOURCE-VERSION': '1.0'
+          'X-SOURCE-VERSION': '1.0',
+          'X-CLIENT-ID': PHONEPE_CLIENT_ID,
+          'X-CLIENT-VERSION': String(PHONEPE_CLIENT_VERSION)
         },
         body: JSON.stringify({
           merchantOrderId: merchantTransactionId,
@@ -737,12 +755,19 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
     let phonePeCheckoutUrl = `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(livePhonePeToken)}`;
     let phonePeOrderId = `OMO${Date.now()}`;
 
+    const incomingMid = (req.query.mid as string) || (req.query.merchantId as string) || (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID;
+
     try {
       const v2PayResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `O-Bearer ${livePhonePeToken}`
+          'Authorization': `O-Bearer ${livePhonePeToken}`,
+          'X-MERCHANT-ID': incomingMid,
+          'X-SOURCE': 'WEB',
+          'X-SOURCE-VERSION': '1.0',
+          'X-CLIENT-ID': PHONEPE_CLIENT_ID,
+          'X-CLIENT-VERSION': String(PHONEPE_CLIENT_VERSION)
         },
         body: JSON.stringify({
           merchantOrderId: merchantTransactionId,
@@ -837,22 +862,29 @@ app.get([
   '/api/phonepe/status/:merchantTransactionId',
   '/pg/v1/status/:merchantId/:merchantTransactionId',
   '/apis/pgsandbox/pg/v1/status/:merchantId/:merchantTransactionId',
-  '/apis/pg-sandbox/pg/v1/status/:merchantId/:merchantTransactionId'
+  '/apis/pg-sandbox/pg/v1/status/:merchantId/:merchantTransactionId',
+  '/checkout/v2/order/:merchantTransactionId/status',
+  '/apis/pg-sandbox/checkout/v2/order/:merchantTransactionId/status',
+  '/checkout/v2/order/:orderId/status',
+  '/apis/pg-sandbox/checkout/v2/order/:orderId/status'
 ], async (req: Request, res: Response) => {
-  const merchantTransactionId = req.params.merchantTransactionId || (req.query.id as string) || (req.query.txnId as string) || 'RPAY_TXN_UAT_CHECK';
+  const merchantTransactionId = req.params.merchantTransactionId || req.params.orderId || (req.query.id as string) || (req.query.txnId as string) || (req.query.orderId as string) || 'RPAY_TXN_UAT_CHECK';
   const autoConfirm = req.query.autoConfirmUat === 'true' || req.query.confirm === 'true';
+  const incomingMid = (req.headers['x-merchant-id'] || req.params.merchantId || PHONEPE_MERCHANT_ID) as string;
+  const configuredTemplate = (req.query.template as string) || (req.headers['x-simulate-response'] as string) || uatMerchantTemplates[incomingMid]?.template || uatMerchantTemplates[PHONEPE_MERCHANT_ID]?.template;
   let record = transactionStore[merchantTransactionId];
 
   // If record is not in memory (e.g. server restart or direct lookup), dynamically create it for UAT
   if (!record) {
     const amountInPaise = 10100;
     const platformFeePaise = Math.round(amountInPaise * 0.01);
+    const initialStatus = configuredTemplate === 'FAILURE' ? 'PAYMENT_ERROR' : (configuredTemplate === 'SUCCESS' && autoConfirm ? 'PAYMENT_SUCCESS' : 'PENDING');
     record = {
       merchantTransactionId,
       merchantUserId: `USER_${Date.now()}`,
       amount: amountInPaise,
       campaignTitle: 'RonPay Community Bawm',
-      status: 'PENDING',
+      status: initialStatus,
       createdAt: new Date().toISOString(),
       phonePeTransactionId: `T${Date.now()}`,
       splitDetails: {
@@ -869,7 +901,13 @@ app.get([
       const token = await getOrFetchPhonePeOAuthToken();
       const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status`, {
         headers: {
-          'Authorization': `O-Bearer ${token}`
+          'Content-Type': 'application/json',
+          'Authorization': `O-Bearer ${token}`,
+          'X-MERCHANT-ID': incomingMid,
+          'X-SOURCE': 'WEB',
+          'X-SOURCE-VERSION': '1.0',
+          'X-CLIENT-ID': PHONEPE_CLIENT_ID,
+          'X-CLIENT-VERSION': String(PHONEPE_CLIENT_VERSION)
         }
       });
       if (sResp.ok) {
@@ -882,9 +920,17 @@ app.get([
         } else if (sData?.state === 'FAILED' || sData?.state === 'CANCELLED' || sData?.state === 'EXPIRED' || sData?.errorCode || sData?.responseCode === 'FAILED' || sData?.responseCode === 'PAYMENT_ERROR') {
           record.status = 'PAYMENT_ERROR';
         }
+      } else if (configuredTemplate === 'FAILURE') {
+        record.status = 'PAYMENT_ERROR';
+      } else if (configuredTemplate === 'SUCCESS' && autoConfirm) {
+        record.status = 'PAYMENT_SUCCESS';
       }
     } catch (liveErr) {
-      // ignore network errors in sandbox status poll
+      if (configuredTemplate === 'FAILURE') {
+        record.status = 'PAYMENT_ERROR';
+      } else if (configuredTemplate === 'SUCCESS' && autoConfirm) {
+        record.status = 'PAYMENT_SUCCESS';
+      }
     }
   }
 
@@ -1038,16 +1084,22 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
 // Standard PhonePe Split Settlement API compliance
 // https://developer.phonepe.com/split-settlement
 // -------------------------------------------------------------
-app.post(['/api/phonepe/split-settlement', '/apis/pg-sandbox/v1/split-settlement'], (req: Request, res: Response) => {
+app.all([
+  '/api/phonepe/split-settlement',
+  '/apis/pg-sandbox/v1/split-settlement',
+  '/apis/pg-sandbox/checkout/v2/split-settlement',
+  '/split-settlement'
+], (req: Request, res: Response) => {
+  const reqData = req.method === 'GET' ? req.query : req.body;
   const { 
-    merchantId = PHONEPE_MERCHANT_ID, 
+    merchantId = (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID, 
     originalTransactionId, 
     amount, 
     splitType = 'PERCENTAGE',
     splits,
     merchantVpa, 
     platformVpa 
-  } = req.body;
+  } = (reqData || {});
 
   const total = Number(amount) || 500;
   const platformFee = Number((total * 0.01).toFixed(2));
@@ -1094,22 +1146,45 @@ app.post(['/api/phonepe/split-settlement', '/apis/pg-sandbox/v1/split-settlement
 // API 5c: PhonePe Settlement Status & Reconciliation API
 // https://developer.phonepe.com/settlement
 // -------------------------------------------------------------
-app.get(['/api/phonepe/settlements', '/apis/pg-sandbox/v1/settlements'], (req: Request, res: Response) => {
+app.get([
+  '/api/phonepe/settlements',
+  '/apis/pg-sandbox/v1/settlements',
+  '/apis/pg-sandbox/settlements',
+  '/apis/hermes/v1/settlements',
+  '/settlements'
+], (req: Request, res: Response) => {
+  const fromDate = (req.query.from as string) || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const toDate = (req.query.to as string) || new Date().toISOString().split('T')[0];
+  const page = parseInt((req.query.page as string) || '0', 10);
+  const size = parseInt((req.query.size as string) || '10', 10);
+  const queryMid = (req.query.merchantId as string) || (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID;
+
   const today = new Date().toISOString().split('T')[0];
   const settlements = [
     {
       settlementId: 'STL_' + Date.now(),
       cycle: 'T+1 Working Day',
       date: today,
-      merchantId: PHONEPE_MERCHANT_ID,
+      settlementDate: today,
+      merchantId: queryMid,
       totalGrossAmount: 15420.00,
+      grossAmount: 1542000,
       platformFeeDeducted: 154.20,
+      fee: 15420,
+      tax: 0,
       netSettledAmount: 15265.80,
+      netAmount: 1526580,
       bankAccount: 'SBI A/C ****7890 (Mizoram Rural / State Bank of India)',
+      settlementAccount: {
+        bankName: 'State Bank of India',
+        accountNumber: 'XXXXXXXX7890',
+        ifsc: 'SBIN0001234'
+      },
       ifsc: 'SBIN0001234',
       utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
       status: 'SETTLED',
       currency: 'INR',
+      transactionCount: 38,
       breakdown: {
         totalTransactions: 38,
         successCount: 38,
@@ -1123,26 +1198,56 @@ app.get(['/api/phonepe/settlements', '/apis/pg-sandbox/v1/settlements'], (req: R
     code: 'SUCCESS',
     message: 'PhonePe settlement reconciliation fetched successfully',
     data: {
-      merchantId: PHONEPE_MERCHANT_ID,
+      merchantId: queryMid,
       settlementCycle: 'T+1 Working Days',
+      from: fromDate,
+      to: toDate,
+      page,
+      size,
+      totalCount: settlements.length,
       settlements
     }
   });
 });
 
-app.get(['/api/phonepe/settlements/:settlementId', '/api/phonepe/settlement/:settlementId'], (req: Request, res: Response) => {
+app.get([
+  '/api/phonepe/settlements/:settlementId',
+  '/api/phonepe/settlement/:settlementId',
+  '/apis/pg-sandbox/v1/settlements/:settlementId',
+  '/apis/pg-sandbox/settlements/:settlementId',
+  '/apis/hermes/v1/settlements/:settlementId'
+], (req: Request, res: Response) => {
   const settlementId = req.params.settlementId;
+  const today = new Date().toISOString().split('T')[0];
+  const queryMid = (req.query.merchantId as string) || (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID;
+  const utr = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+
   res.json({
     success: true,
     code: 'SUCCESS',
     data: {
       settlementId,
-      merchantId: PHONEPE_MERCHANT_ID,
+      merchantId: queryMid,
       cycle: 'T+1',
       status: 'SETTLED',
       settledDate: new Date().toISOString(),
+      date: today,
+      grossAmount: 1542000,
+      netAmount: 1526580,
+      fee: 15420,
+      tax: 0,
       bankAccount: 'SBI A/C ****7890',
-      utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000)
+      settlementAccount: {
+        bankName: 'State Bank of India',
+        accountNumber: 'XXXXXXXX7890',
+        ifsc: 'SBIN0001234'
+      },
+      utr,
+      reconciliationDetails: {
+        totalTxns: 38,
+        successfulCredits: 38,
+        pendingCredits: 0
+      }
     }
   });
 });
@@ -1151,7 +1256,14 @@ app.get(['/api/phonepe/settlements/:settlementId', '/api/phonepe/settlement/:set
 // API 5d: PhonePe Webhook Config API (Create / Register & Query Webhook)
 // https://developer.phonepe.com/tsp-integration/tsp-webhook/create-webhook-api
 // -------------------------------------------------------------
-app.route(['/api/phonepe/create-webhook-api', '/api/phonepe/webhook-config'])
+app.route([
+  '/api/phonepe/create-webhook-api',
+  '/api/phonepe/webhook-config',
+  '/apis/pg-sandbox/v1/webhooks',
+  '/apis/pg-sandbox/tsp/v1/webhooks',
+  '/v1/webhooks',
+  '/apis/hermes/v1/webhooks'
+])
   .get((req: Request, res: Response) => {
     res.json({
       success: true,
@@ -1161,8 +1273,8 @@ app.route(['/api/phonepe/create-webhook-api', '/api/phonepe/webhook-config'])
     });
   })
   .post((req: Request, res: Response) => {
-    const { webhookUrl, events } = req.body;
-    const targetUrl = webhookUrl || 'https://ronpay.app/api/phonepe/webhook';
+    const { url, webhookUrl, events } = req.body || {};
+    const targetUrl = url || webhookUrl || 'https://ronpay.app/api/phonepe/webhook';
     const subscribedEvents = events || [
       'checkout.order.completed',
       'checkout.order.failed',
@@ -1177,12 +1289,14 @@ app.route(['/api/phonepe/create-webhook-api', '/api/phonepe/webhook-config'])
 
     webhookConfigStore = {
       webhookId: 'WH_' + crypto.randomBytes(8).toString('hex').toUpperCase(),
-      merchantId: (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID,
+      merchantId: (req.headers['x-merchant-id'] as string) || req.body?.merchantId || PHONEPE_MERCHANT_ID,
       clientId: PHONEPE_CLIENT_ID,
+      url: targetUrl,
       webhookUrl: targetUrl,
       authType: 'HMAC_SHA256',
       events: subscribedEvents,
       status: 'ACTIVE',
+      active: true,
       updatedAt: new Date().toISOString()
     };
 
@@ -1200,9 +1314,15 @@ app.route(['/api/phonepe/create-webhook-api', '/api/phonepe/webhook-config'])
 // In production, pass the end merchant's MID in header X-MERCHANT-ID.
 // https://developer.phonepe.com/payment-gateway/uat-testing-go-live/uat-sandbox
 // -------------------------------------------------------------
-app.route(['/api/phonepe/template', '/api/phonepe/uat/template'])
+app.route([
+  '/api/phonepe/template',
+  '/api/phonepe/uat/template',
+  '/apis/pg-sandbox/v1/templates',
+  '/apis/pg-sandbox/v1/merchants/:mid/templates',
+  '/apis/pg-sandbox/v1/uat/template'
+])
   .get((req: Request, res: Response) => {
-    const mid = (req.query.mid || req.query.merchantId || PHONEPE_MERCHANT_ID) as string;
+    const mid = (req.params.mid || req.query.mid || req.query.merchantId || req.headers['x-merchant-id'] || PHONEPE_MERCHANT_ID) as string;
     const templateConfig = uatMerchantTemplates[mid] || {
       mid,
       template: 'SUCCESS',
@@ -1224,8 +1344,8 @@ app.route(['/api/phonepe/template', '/api/phonepe/uat/template'])
     });
   })
   .post((req: Request, res: Response) => {
-    const { merchantId, mid, template, description } = req.body;
-    const targetMid = (mid || merchantId || req.headers['x-merchant-id'] || PHONEPE_MERCHANT_ID) as string;
+    const { merchantId, mid, template, description } = req.body || {};
+    const targetMid = (req.params.mid || mid || merchantId || req.headers['x-merchant-id'] || PHONEPE_MERCHANT_ID) as string;
     const cleanTemplate = (template || 'SUCCESS').toUpperCase();
 
     if (!['SUCCESS', 'FAILURE', 'PENDING'].includes(cleanTemplate)) {
@@ -3212,9 +3332,17 @@ app.all([
   if (effectiveTxnId) {
     try {
       const token = await getOrFetchPhonePeOAuthToken();
+      const existingTxn = transactionStore[effectiveTxnId];
+      const targetMid = existingTxn?.merchantId || PHONEPE_MERCHANT_ID;
       const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(effectiveTxnId)}/status`, {
         headers: {
-          'Authorization': `O-Bearer ${token}`
+          'Content-Type': 'application/json',
+          'Authorization': `O-Bearer ${token}`,
+          'X-MERCHANT-ID': targetMid,
+          'X-SOURCE': 'WEB',
+          'X-SOURCE-VERSION': '1.0',
+          'X-CLIENT-ID': PHONEPE_CLIENT_ID,
+          'X-CLIENT-VERSION': String(PHONEPE_CLIENT_VERSION)
         }
       });
       if (sResp.ok) {
