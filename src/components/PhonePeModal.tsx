@@ -245,27 +245,40 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     try {
       let res: any;
       if (key === 'token') {
-        res = await fetch('/v1/oauth/token', { method: 'POST' });
+        let tokenResp = await fetch('/api/phonepe/token', { method: 'POST' });
+        if (!tokenResp.ok || tokenResp.status === 405) {
+          tokenResp = await fetch('/api/v1/oauth/token', { method: 'POST' });
+        }
+        res = tokenResp;
       } else if (key === 'pay' || key === 'pay_v2') {
-        res = await fetch('/checkout/v2/pay', {
+        const payPayload = {
+          merchantOrderId: `OMO_TEST_${Date.now()}`,
+          amount: 10000,
+          expireAfter: 1200,
+          donorName: 'RonPay Website Tester',
+          paymentFlow: {
+            type: 'PG_CHECKOUT',
+            merchantUrls: {
+              redirectUrl: `${window.location.origin}/api/phonepe/callback`
+            }
+          }
+        };
+        let payResp = await fetch('/api/checkout/v2/pay', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            merchantOrderId: `OMO_TEST_${Date.now()}`,
-            amount: 10000,
-            expireAfter: 1200,
-            donorName: 'RonPay Website Tester',
-            paymentFlow: {
-              type: 'PG_CHECKOUT',
-              merchantUrls: {
-                redirectUrl: `${window.location.origin}/api/phonepe/callback`
-              }
-            }
-          })
+          body: JSON.stringify(payPayload)
         });
+        if (!payResp.ok && (payResp.status === 405 || payResp.status === 404)) {
+          payResp = await fetch('/api/phonepe/pay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payPayload)
+          });
+        }
+        res = payResp;
       } else if (key === 'iframe_test') {
         // Step 3 live invocation test
-        const initResp = await fetch('/checkout/v2/pay', {
+        let initResp = await fetch('/api/checkout/v2/pay', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -274,6 +287,17 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
             expireAfter: 1200
           })
         });
+        if (!initResp.ok && (initResp.status === 405 || initResp.status === 404)) {
+          initResp = await fetch('/api/phonepe/pay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              merchantOrderId: `OMO_IFRAME_${Date.now()}`,
+              amount: 10000,
+              expireAfter: 1200
+            })
+          });
+        }
         const initData = await initResp.json();
         const redUrl = initData.redirectUrl || initData.data?.redirectUrl;
         if (redUrl) {
@@ -296,7 +320,11 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         }
         res = initResp;
       } else if (key === 'status' || key === 'status_v2') {
-        res = await fetch('/checkout/v2/order/RPAY_TXN_UAT_CHECK/status');
+        let statusResp = await fetch('/api/checkout/v2/order/RPAY_TXN_UAT_CHECK/status');
+        if (!statusResp.ok && (statusResp.status === 405 || statusResp.status === 404)) {
+          statusResp = await fetch('/api/phonepe/status/RPAY_TXN_UAT_CHECK');
+        }
+        res = statusResp;
       } else if (key === 'webhook_config') {
         res = await fetch('/api/phonepe/create-webhook-api', {
           method: 'POST',

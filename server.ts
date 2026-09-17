@@ -486,8 +486,9 @@ app.get('/api/phonepe/tsp-headers', async (req: Request, res: Response) => {
 // Aligned with PhonePe Standard Checkout Website API docs:
 // https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
 // -------------------------------------------------------------
-app.post([
+app.all([
   '/api/phonepe/token',
+  '/api/v1/oauth/token',
   '/v1/oauth/token',
   '/apis/pg-sandbox/v1/oauth/token',
   '/apis/pg/v1/oauth/token'
@@ -609,9 +610,10 @@ app.post([
 // Aligned with official PhonePe Standard Checkout Website API docs:
 // https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
 // -------------------------------------------------------------
-app.post([
+app.all([
   '/api/phonepe/initiate-pay',
   '/api/phonepe/pay',
+  '/api/checkout/v2/pay',
   '/checkout/v2/pay',
   '/apis/pg-sandbox/checkout/v2/pay',
   '/apis/pg/checkout/v2/pay',
@@ -1075,10 +1077,12 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // API 4: Check Transaction Status (PG V2 & V1 Status API - Standard PhonePe Sandbox compliant)
 // -------------------------------------------------------------
-app.get([
+app.all([
   '/api/phonepe/status',
   '/api/phonepe/status/',
   '/api/phonepe/status/:merchantTransactionId',
+  '/api/checkout/v2/order/:merchantTransactionId/status',
+  '/api/checkout/v2/order/:orderId/status',
   '/pg/v1/status/:merchantId/:merchantTransactionId',
   '/apis/pgsandbox/pg/v1/status/:merchantId/:merchantTransactionId',
   '/apis/pg-sandbox/pg/v1/status/:merchantId/:merchantTransactionId',
