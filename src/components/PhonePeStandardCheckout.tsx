@@ -118,16 +118,13 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
     | 'final_processing'
     | 'failure_view';
 
-  const [stage, setStage] = useState<CheckoutStage>('initial_loading');
+  const [stage, setStage] = useState<CheckoutStage>('checkout');
   const [simulatedStatus, setSimulatedStatus] = useState<'SUCCESS' | 'FAILURE' | 'SUBMITTED'>('SUCCESS');
   const [pendingPaymentMethodName, setPendingPaymentMethodName] = useState<string>('PhonePe Gateway');
 
-  // Requirement 1: Show the white PhonePe processing screen briefly before revealing the checkout options
+  // Immediately display checkout options without artificial loading delay
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setStage('checkout');
-    }, 1800);
-    return () => clearTimeout(timer);
+    setStage('checkout');
   }, []);
 
   // Payment states - Requirement 2: Nothing pre-selected, pull-down collapsed by default for a clean page

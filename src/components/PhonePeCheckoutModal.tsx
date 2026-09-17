@@ -82,9 +82,14 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   periodLabel,
   onPaymentSuccess
 }) => {
-  const [stage, setStage] = useState<CheckoutStage>('initial_loading');
+  const [stage, setStage] = useState<CheckoutStage>('checkout');
   const [activeTab, setActiveTab] = useState<'upi' | 'cards' | 'netbanking'>('upi');
-  const [upiSubMode, setUpiSubMode] = useState<'qr' | 'apps' | 'vpa'>('qr');
+  const [upiSubMode, setUpiSubMode] = useState<'qr' | 'apps' | 'vpa'>(() => {
+    if (typeof window !== 'undefined' && (window.innerWidth < 768 || /Android|iPhone/i.test(navigator.userAgent || ''))) {
+      return 'apps';
+    }
+    return 'qr';
+  });
   const [selectedUpiApp, setSelectedUpiApp] = useState<string>('PhonePe');
   const [customVpa, setCustomVpa] = useState<string>('');
   const [vpaError, setVpaError] = useState<string>('');
@@ -144,9 +149,8 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     const urlTxn = urlParams?.get('txn') || urlParams?.get('txnId') || urlParams?.get('merchantTransactionId');
     const newTxnId = urlTxn || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
     setMerchantTxnId(newTxnId);
-    setStage('initial_loading');
+    setStage('checkout');
     setActiveTab('upi');
-    setUpiSubMode('qr');
     setIsBreakupOpen(false);
     setSimulatedStatus('SUCCESS');
     setTimeLeft(298);
@@ -184,13 +188,6 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
         }
       })
       .catch(() => {});
-
-    // Initial loading screen with PhonePe Logo
-    const timer = setTimeout(() => {
-      setStage('checkout');
-    }, 600);
-
-    return () => clearTimeout(timer);
   }, [isOpen, amount, campaignTitle]);
 
   // Countdown timer matching PhonePe PG V2 (04:58 mins)

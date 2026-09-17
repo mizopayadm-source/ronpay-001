@@ -1119,8 +1119,18 @@ export default function App() {
   const handleOpenPhonePeCheckout = (amount: number = 100) => {
     const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
     const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
+    
+    // In Android app or mobile browser, navigate directly so payment page opens immediately
+    if (isAndroidOrMobileApp()) {
+      window.location.href = launchUrl;
+      return;
+    }
+
     try {
-      window.open(launchUrl, '_blank');
+      const popup = window.open(launchUrl, '_blank');
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        window.location.href = launchUrl;
+      }
     } catch (e) {
       window.location.href = launchUrl;
     }

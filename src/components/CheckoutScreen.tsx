@@ -41,6 +41,7 @@ import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '.
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
 import { getMembers, addOrUpdateMember, saveTransaction } from '../utils/storage';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
+import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
 
@@ -804,16 +805,28 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
-      setIsWaitingPhonePePG(true);
-      setIsPhonePeCheckoutOpen(false);
       setIsProcessing(false);
 
-      // Open PhonePe official PG checkout in new tab (do not open modal in main window)
-      try {
-        window.open(fullLaunchUrl, '_blank');
-      } catch (e) {
-        console.warn('Window.open fallback:', e);
+      // In Android App or mobile browsers, immediately navigate current window so payment page opens directly without delay
+      if (isAndroidOrMobileApp()) {
+        window.location.href = fullLaunchUrl;
+        return;
       }
+
+      // On desktop Web, attempt opening PhonePe PG in new tab; if popup blocked by browser, redirect current window
+      try {
+        const popup = window.open(fullLaunchUrl, '_blank');
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+          window.location.href = fullLaunchUrl;
+          return;
+        }
+      } catch (e) {
+        window.location.href = fullLaunchUrl;
+        return;
+      }
+
+      setIsWaitingPhonePePG(true);
+      setIsPhonePeCheckoutOpen(false);
       return;
     }
 
@@ -2271,15 +2284,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 <span>Payment Ka Ti Zo Tawh E</span>
               </button>
 
-              <a
-                href={phonePeLaunchUrl || `/api/phonepe/launch-pay?txnId=${activePendingTxn.id}&amt=${totalPayable}`}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => {
+                  const url = phonePeLaunchUrl || `/api/phonepe/launch-pay?txnId=${activePendingTxn.id}&amt=${totalPayable}`;
+                  window.location.href = url;
+                }}
                 className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Tab Re-open Rawh</span>
-              </a>
+                <span>Payment Page-ah Kal Rawh</span>
+              </button>
             </div>
 
             {phonePeVerifyMsg && (

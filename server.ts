@@ -250,7 +250,8 @@ async function getOrFetchPhonePeOAuthToken(forceRefresh = false): Promise<string
     const resp = await fetch(targetOAuthUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formParams.toString()
+      body: formParams.toString(),
+      signal: AbortSignal.timeout(3000)
     });
     if (resp.ok) {
       const data: any = await resp.json();
@@ -267,6 +268,20 @@ async function getOrFetchPhonePeOAuthToken(forceRefresh = false): Promise<string
 
   return cachedPhonePeToken || '';
 }
+
+// Pre-warm PhonePe OAuth token immediately on server boot and refresh periodically
+getOrFetchPhonePeOAuthToken()
+  .then(token => {
+    if (token) {
+      console.log('⚡ PhonePe OAuth token pre-warmed successfully (len:', token.length, ')');
+    }
+  })
+  .catch(err => console.warn('PhonePe token initial warm-up failed:', err));
+
+setInterval(() => {
+  getOrFetchPhonePeOAuthToken(true)
+    .catch(err => console.warn('PhonePe token refresh failed:', err));
+}, 30 * 60 * 1000);
 
 // Helper: Calculate PhonePe Checksum / X-VERIFY
 function generateChecksum(base64Payload: string, endpoint: string, saltKey: string, saltIndex: string = '1') {
@@ -520,7 +535,8 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
               }
             ]
           }
-        })
+        }),
+        signal: AbortSignal.timeout(2000)
       });
 
       if (v2PayResp.ok) {
@@ -755,7 +771,8 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
               }
             ]
           }
-        })
+        }),
+        signal: AbortSignal.timeout(2000)
       });
 
       if (v2PayResp.ok) {

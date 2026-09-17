@@ -100,6 +100,10 @@ public class MainActivity extends AppCompatActivity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
 
+        // Support window.open and target="_blank" for Payment Gateways (PhonePe, etc.)
+        settings.setSupportMultipleWindows(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+
         // CRITICAL FOR CAMERA: Allow autoplay without requiring a prior touch event
         settings.setMediaPlaybackRequiresUserGesture(false);
 
@@ -173,6 +177,40 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return true;
             }
+
+            // =========================================================================
+            // 3. Handle window.open & target="_blank" for Payment Gateways (PhonePe, etc.)
+            // =========================================================================
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                WebView newWebView = new WebView(MainActivity.this);
+                newWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
+                        String targetUrl = request.getUrl().toString();
+                        if (handleExternalOrUpiScheme(view, targetUrl)) {
+                            return true;
+                        }
+                        view.loadUrl(targetUrl);
+                        return true;
+                    }
+
+                    @SuppressWarnings("deprecation")
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView v, String targetUrl) {
+                        if (handleExternalOrUpiScheme(view, targetUrl)) {
+                            return true;
+                        }
+                        view.loadUrl(targetUrl);
+                        return true;
+                    }
+                });
+
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                transport.setWebView(newWebView);
+                resultMsg.sendToTarget();
+                return true;
+            }
         });
     }
 
@@ -191,75 +229,75 @@ public class MainActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return handleExternalOrUpiScheme(view, url);
             }
+        });
+    }
 
-            private boolean handleExternalOrUpiScheme(WebView view, String url) {
-                if (url == null) return false;
+    private boolean handleExternalOrUpiScheme(WebView view, String url) {
+        if (url == null) return false;
 
-                // 1. Payment Gateway Intent schemes (PhonePe, GPay, Paytm intent://)
-                if (url.startsWith("intent:")) {
-                    try {
-                        Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
-                        if (intent != null) {
-                            PackageManager pm = getPackageManager();
-                            if (intent.resolveActivity(pm) != null) {
-                                startActivity(intent);
-                                return true;
-                            }
-
-                            // If targeted app is not installed, fallback to browser_fallback_url
-                            String fallbackUrl = intent.getStringExtra("browser_fallback_url");
-                            if (fallbackUrl != null && !fallbackUrl.isEmpty()) {
-                                view.loadUrl(fallbackUrl);
-                                return true;
-                            }
-
-                            // Fallback to generic upi:// if scheme is upi
-                            String dataUri = intent.getDataString();
-                            if (dataUri != null && dataUri.startsWith("upi:")) {
-                                Intent genericUpi = new Intent(Intent.ACTION_VIEW, Uri.parse(dataUri));
-                                genericUpi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                if (genericUpi.resolveActivity(pm) != null) {
-                                    startActivity(genericUpi);
-                                    return true;
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        Toast.makeText(MainActivity.this, "UPI app hawn theih a ni lo", Toast.LENGTH_SHORT).show();
-                    }
-                    return true;
-                }
-
-                // 2. Direct UPI & Communication app schemes
-                if (url.startsWith("upi:") ||
-                    url.startsWith("phonepe:") ||
-                    url.startsWith("paytmmp:") ||
-                    url.startsWith("gpay:") ||
-                    url.startsWith("tez:") ||
-                    url.startsWith("whatsapp:") ||
-                    url.startsWith("tel:") ||
-                    url.startsWith("mailto:")) {
-                    try {
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // 1. Payment Gateway Intent schemes (PhonePe, GPay, Paytm intent://)
+        if (url.startsWith("intent:")) {
+            try {
+                Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
+                if (intent != null) {
+                    PackageManager pm = getPackageManager();
+                    if (intent.resolveActivity(pm) != null) {
                         startActivity(intent);
                         return true;
-                    } catch (ActivityNotFoundException e) {
-                        if (url.startsWith("upi:") || url.startsWith("phonepe:") || url.startsWith("gpay:") || url.startsWith("tez:")) {
-                            Toast.makeText(MainActivity.this, "UPI app (PhonePe / Google Pay / Paytm) hmuh a ni lo", Toast.LENGTH_SHORT).show();
-                        } else if (url.startsWith("whatsapp:")) {
-                            Toast.makeText(MainActivity.this, "WhatsApp app hmuh a ni lo", Toast.LENGTH_SHORT).show();
-                        }
-                        return true;
-                    } catch (Exception ex) {
+                    }
+
+                    // If targeted app is not installed, fallback to browser_fallback_url
+                    String fallbackUrl = intent.getStringExtra("browser_fallback_url");
+                    if (fallbackUrl != null && !fallbackUrl.isEmpty()) {
+                        view.loadUrl(fallbackUrl);
                         return true;
                     }
-                }
 
-                // Normal HTTP / HTTPS links stay inside WebView
-                return false;
+                    // Fallback to generic upi:// if scheme is upi
+                    String dataUri = intent.getDataString();
+                    if (dataUri != null && dataUri.startsWith("upi:")) {
+                        Intent genericUpi = new Intent(Intent.ACTION_VIEW, Uri.parse(dataUri));
+                        genericUpi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        if (genericUpi.resolveActivity(pm) != null) {
+                            startActivity(genericUpi);
+                            return true;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "UPI app hawn theih a ni lo", Toast.LENGTH_SHORT).show();
             }
-        });
+            return true;
+        }
+
+        // 2. Direct UPI & Communication app schemes
+        if (url.startsWith("upi:") ||
+            url.startsWith("phonepe:") ||
+            url.startsWith("paytmmp:") ||
+            url.startsWith("gpay:") ||
+            url.startsWith("tez:") ||
+            url.startsWith("whatsapp:") ||
+            url.startsWith("tel:") ||
+            url.startsWith("mailto:")) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                return true;
+            } catch (ActivityNotFoundException e) {
+                if (url.startsWith("upi:") || url.startsWith("phonepe:") || url.startsWith("gpay:") || url.startsWith("tez:")) {
+                    Toast.makeText(MainActivity.this, "UPI app (PhonePe / Google Pay / Paytm) hmuh a ni lo", Toast.LENGTH_SHORT).show();
+                } else if (url.startsWith("whatsapp:")) {
+                    Toast.makeText(MainActivity.this, "WhatsApp app hmuh a ni lo", Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            } catch (Exception ex) {
+                return true;
+            }
+        }
+
+        // Normal HTTP / HTTPS links stay inside WebView
+        return false;
     }
 
     // Setup DownloadListener for direct HTTP / HTTPS report streams
