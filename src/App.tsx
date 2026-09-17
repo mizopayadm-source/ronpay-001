@@ -1382,7 +1382,6 @@ export default function App() {
               onOpenImagePreview={handlePreviewImage}
               onOpenMemberRoll={handleOpenMemberRoll}
               onRefreshCloud={handleRefreshCloudData}
-              onUpdateCreatorProfile={handleUpdateCreator}
             />
           )}
 
