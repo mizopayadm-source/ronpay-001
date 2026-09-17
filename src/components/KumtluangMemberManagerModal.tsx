@@ -215,6 +215,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Excel Import Modal State
   const [isExcelImportOpen, setIsExcelImportOpen] = useState<boolean>(false);
+  const [excelImportInitialMode, setExcelImportInitialMode] = useState<'file' | 'paste'>('file');
 
   // New Member Registration State
   const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
@@ -962,11 +963,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             <span>Member Roll ({filteredTableMembers.length})</span>
           </button>
 
-          <div className="ml-auto flex items-center py-1.5 shrink-0 pl-2">
+          <div className="ml-auto flex items-center py-1.5 shrink-0 pl-2 gap-1.5">
+            <button
+              type="button"
+              id="btn-open-quick-paste"
+              onClick={() => {
+                setExcelImportInitialMode('paste');
+                setIsExcelImportOpen(true);
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+              title="Paste member list directly from WhatsApp or Notes"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-200" />
+              <span>Quick Paste</span>
+            </button>
+
             <button
               type="button"
               id="btn-open-excel-import"
-              onClick={() => setIsExcelImportOpen(true)}
+              onClick={() => {
+                setExcelImportInitialMode('file');
+                setIsExcelImportOpen(true);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
               title="Upload Excel or CSV sheet to import members in bulk"
             >
@@ -1308,18 +1326,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
               )}
 
-              {/* Quick Excel Import Banner */}
-              <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+              {/* Quick Excel / WhatsApp Import Banner */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
                 <div className="flex items-start gap-2.5">
                   <div className="p-2 bg-emerald-600 text-white rounded-xl shrink-0 mt-0.5 shadow-2xs">
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-black text-emerald-950 block text-xs">Excel Sheet aṭangin Member List tam tham import i duh em?</span>
-                    <span className="text-[11px] text-emerald-700">Mimal te tea chhut luh ngai lovin Sample Format download la, excel sheet upload mai rawh le.</span>
+                    <span className="font-black text-emerald-950 block text-xs">Excel Sheet emaw WhatsApp Text aṭangin Member List import i duh em?</span>
+                    <span className="text-[11px] text-emerald-800">Excel upload bakah WhatsApp text copy &amp; paste mai theihna 'Quick Paste Box' fel fai takin a awm bawk e.</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -1332,7 +1350,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsExcelImportOpen(true)}
+                    onClick={() => {
+                      setExcelImportInitialMode('paste');
+                      setIsExcelImportOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+                    title="Paste directly from WhatsApp / Notes"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                    <span>📋 Quick Paste</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExcelImportInitialMode('file');
+                      setIsExcelImportOpen(true);
+                    }}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1918,7 +1951,23 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                     <button
                       type="button"
-                      onClick={() => setIsExcelImportOpen(true)}
+                      onClick={() => {
+                        setExcelImportInitialMode('paste');
+                        setIsExcelImportOpen(true);
+                      }}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                      title="Paste member list directly from WhatsApp / Notes"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                      <span>📋 Quick Paste</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExcelImportInitialMode('file');
+                        setIsExcelImportOpen(true);
+                      }}
                       className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
                       title="Import members from Excel / CSV"
                     >
@@ -2473,6 +2522,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         onClose={() => setIsExcelImportOpen(false)}
         campaigns={allowedCampaigns}
         selectedCampaignId={selectedCampaignId || activeScopedCampaign?.id}
+        initialMode={excelImportInitialMode}
         onImportComplete={(savedMembers) => {
           // Refresh member records list immediately
           const updated = getMembers(selectedCampaignId);

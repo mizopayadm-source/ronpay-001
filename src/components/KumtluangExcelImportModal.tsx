@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   FileSpreadsheet, 
   Download, 
@@ -33,6 +33,7 @@ interface KumtluangExcelImportModalProps {
   onClose: () => void;
   campaigns: Campaign[];
   selectedCampaignId?: string;
+  initialMode?: 'file' | 'paste';
   onImportComplete?: (savedMembers: MemberRecord[]) => void;
 }
 
@@ -41,6 +42,7 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
   onClose,
   campaigns,
   selectedCampaignId,
+  initialMode = 'file',
   onImportComplete
 }) => {
   // Target Bawm Selection
@@ -48,8 +50,15 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
   const initialCamp = kumtluangCamps.find(c => c.id === selectedCampaignId) || kumtluangCamps[0];
   
   const [targetCampId, setTargetCampId] = useState<string>(initialCamp?.id || '');
-  const [activeInputMode, setActiveInputMode] = useState<'file' | 'paste'>('file');
+  const [activeInputMode, setActiveInputMode] = useState<'file' | 'paste'>(initialMode);
   const [showSampleVisual, setShowSampleVisual] = useState<boolean>(false);
+
+  // Sync initialMode when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setActiveInputMode(initialMode);
+    }
+  }, [isOpen, initialMode]);
 
   // Parsing & File state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -391,26 +400,53 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
 
           {/* Mode 2: Quick Paste */}
           {activeInputMode === 'paste' && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 block">
-                WhatsApp emaw Notes aṭanga Member list copy rawn paste rawh:
-              </label>
+            <div className="space-y-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div>
+                  <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    <span>WhatsApp emaw Notes aṭanga Member list copy rawn paste rawh:</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Line khatah member pakhat zel: <code>Hming, Pa Hming, Phone (digit 10), Section</code> tiin comma (,), tab emaw pipe (|) hmangin i rawn paste thei e.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPastedText(
+                      `Lalrintluanga, C. Lalthanga, 9862300001, Bethel Section\n` +
+                      `Pi Zodingliani, R. Kapmawia, 9436100002, Hmar Bial\n` +
+                      `Pu C. Laldinpuia, Chhawnkima, 9862500003, Venglao\n` +
+                      `Vanlalrema, Lalremsanga, 9774200004, Vengthlang`
+                    );
+                  }}
+                  className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition self-start sm:self-auto cursor-pointer"
+                >
+                  📝 Fill Sample Text
+                </button>
+              </div>
+
               <textarea
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
-                placeholder={`Sample lines (Comma emaw Tab hmangin):\nLalrintluanga, C. Lalthanga, 9862300001, Bethel Section, Lalthanpuii (Nupui)\nPi Zodingliani, R. Kapmawia, 9436100002, Hmar Bial, Lalbiakdiki\nPu C. Laldinpuia, Chhawnkima, 9862500003, Venglao`}
-                rows={5}
-                className="w-full bg-white border border-slate-300 rounded-2xl p-3 font-mono text-xs text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                placeholder={`Hming, Pa Hming, Phone Number, Section\nLalrintluanga, C. Lalthanga, 9862300001, Bethel Section\nPi Zodingliani, R. Kapmawia, 9436100002, Hmar Bial\nPu C. Laldinpuia, Chhawnkima, 9862500003, Venglao`}
+                rows={6}
+                className="w-full bg-white border border-slate-300 rounded-xl p-3 font-mono text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 shadow-2xs leading-relaxed"
               />
-              <div className="flex justify-end">
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] text-slate-500">
+                <span className="text-[10.5px] text-emerald-800 font-medium">
+                  💡 Phone number aṭangin tawp digit 4 leh Pa Hming te a in-extract nghal vek ang.
+                </span>
                 <button
                   type="button"
                   onClick={handleParseText}
                   disabled={!pastedText.trim()}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95 shrink-0 self-end sm:self-auto"
                 >
                   <ArrowRight className="w-3.5 h-3.5" />
-                  <span>Parse Member List</span>
+                  <span>Parse Member List &rarr;</span>
                 </button>
               </div>
             </div>
