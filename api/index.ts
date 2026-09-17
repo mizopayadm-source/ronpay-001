@@ -813,7 +813,12 @@ export default async function handler(req: any, res: any) {
       try {
         const directReturnUrl = `${proto}://${rawHost}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTxnId)}&phonepe_txn_id=${encodeURIComponent(merchantTxnId)}&status=PAYMENT_SUCCESS&amt=${(amountInPaise / 100).toFixed(2)}&baseAmt=${baseAmountRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&donor=${encodeURIComponent(donorName)}&anon=${isAnonymous ? '1' : '0'}`;
         const isAndroidClient = req.headers['x-client-platform'] === 'android';
-        const v2Resp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
+        const isProdEnv = process.env.PHONEPE_ENV === 'PROD' || process.env.PHONEPE_ENV === 'PRODUCTION';
+        const v2PayEndpoint = isProdEnv 
+          ? 'https://api.phonepe.com/apis/pg/checkout/v2/pay' 
+          : 'https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay';
+
+        const v2Resp = await fetch(v2PayEndpoint, {
           method: 'POST',
           headers: buildPhonePeTspHeaders({
             token: phonePeToken,
@@ -962,16 +967,19 @@ export default async function handler(req: any, res: any) {
         }));
       }
 
-      // Check live PhonePe PG Sandbox Order status API with fresh dynamic OAuth token
+      // Check live PhonePe PG Order status API with fresh dynamic OAuth token
       try {
         const phonePeToken = await getOrFetchPhonePeOAuthToken();
-        const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(targetId)}/status`, {
+        const isProdEnv = process.env.PHONEPE_ENV === 'PROD' || process.env.PHONEPE_ENV === 'PRODUCTION';
+        const statusBaseUrl = isProdEnv ? 'https://api.phonepe.com/apis/pg' : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
+        const sResp = await fetch(`${statusBaseUrl}/checkout/v2/order/${encodeURIComponent(targetId)}/status`, {
           headers: buildPhonePeTspHeaders({
             token: phonePeToken,
             merchantId: PHONEPE_MERCHANT_ID,
             source: 'WEB',
             sourceVersion: '1.0'
-          })
+          }),
+          signal: AbortSignal.timeout(10000)
         });
         if (sResp.ok) {
           const sData: any = await sResp.json();

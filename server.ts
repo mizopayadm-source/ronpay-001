@@ -659,8 +659,13 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
     // Direct return URL straight to RonPay Success & Official Receipt Screen with exact transaction parameters
     const directReturnUrl = `${effectiveOrigin}/?view=app&screen=success&receipt=${encodeURIComponent(merchantTransactionId)}&phonepe_txn_id=${encodeURIComponent(merchantTransactionId)}&status=PAYMENT_SUCCESS&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId || '')}&ctitle=${encodeURIComponent(campaignTitle || '')}&cat=${encodeURIComponent(req.body?.category || '')}&donor=${encodeURIComponent(donorName || '')}&donorPhone=${encodeURIComponent(customerPhone || '')}&anon=${req.body?.isAnonymous ? '1' : '0'}`;
 
+    const isProd = PHONEPE_ENV === 'PROD' || PHONEPE_ENV === 'PRODUCTION';
+    const v2PayEndpoint = isProd 
+      ? 'https://api.phonepe.com/apis/pg/checkout/v2/pay' 
+      : 'https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay';
+
     try {
-      const v2PayResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
+      const v2PayResp = await fetch(v2PayEndpoint, {
         method: 'POST',
         headers: buildPhonePeTspHeaders({
           token: livePhonePeToken,
@@ -678,7 +683,7 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
             }
           },
           deviceContext: {
-            deviceOS: 'ANDROID'
+            deviceOS: isMobileApp ? 'ANDROID' : 'WEB'
           },
           paymentModeConfig: {
             version: 'V2',
@@ -696,7 +701,7 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
             ]
           }
         }),
-        signal: AbortSignal.timeout(2000)
+        signal: AbortSignal.timeout(10000)
       });
 
       if (v2PayResp.ok) {
@@ -776,6 +781,8 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
         merchantId: incomingMid,
         merchantTransactionId: merchantTransactionId,
         orderId: phonePeOrderId,
+        phonepeOrderId: phonePeOrderId,
+        redirectUrl: phonePeCheckoutUrl,
         token: livePhonePeToken,
         instrumentResponse: {
           type: 'PAY_PAGE',
@@ -895,9 +902,13 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
     );
 
     const incomingMid = (req.query.mid as string) || (req.query.merchantId as string) || (req.headers['x-merchant-id'] as string) || PHONEPE_MERCHANT_ID;
+    const isProd = PHONEPE_ENV === 'PROD' || PHONEPE_ENV === 'PRODUCTION';
+    const v2PayEndpoint = isProd 
+      ? 'https://api.phonepe.com/apis/pg/checkout/v2/pay' 
+      : 'https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay';
 
     try {
-      const v2PayResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay', {
+      const v2PayResp = await fetch(v2PayEndpoint, {
         method: 'POST',
         headers: buildPhonePeTspHeaders({
           token: livePhonePeToken,
@@ -915,7 +926,7 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
             }
           },
           deviceContext: {
-            deviceOS: 'ANDROID'
+            deviceOS: isMobileApp ? 'ANDROID' : 'WEB'
           },
           paymentModeConfig: {
             version: 'V2',
@@ -933,7 +944,7 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
             ]
           }
         }),
-        signal: AbortSignal.timeout(2000)
+        signal: AbortSignal.timeout(10000)
       });
 
       if (v2PayResp.ok) {
@@ -1035,13 +1046,16 @@ app.get([
   if (record.status === 'PENDING') {
     try {
       const token = await getOrFetchPhonePeOAuthToken();
-      const sResp = await fetch(`https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status`, {
+      const isProd = PHONEPE_ENV === 'PROD' || PHONEPE_ENV === 'PRODUCTION';
+      const statusBaseUrl = isProd ? 'https://api.phonepe.com/apis/pg' : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
+      const sResp = await fetch(`${statusBaseUrl}/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status`, {
         headers: buildPhonePeTspHeaders({
           token: token,
           merchantId: incomingMid,
           source: 'WEB',
           sourceVersion: '1.0'
-        })
+        }),
+        signal: AbortSignal.timeout(10000)
       });
       if (sResp.ok) {
         const sData: any = await sResp.json();
