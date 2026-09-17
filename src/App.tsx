@@ -475,8 +475,9 @@ export default function App() {
       })
       .catch(() => {});
 
-    // Periodic background sync every 12 seconds so all windows, tabs and Android phones stay in lock-step
+    // Periodic background sync every 25 seconds so all windows, tabs and Android phones stay in lock-step
     const syncInterval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       syncAllWithServer()
         .then(syncResult => {
           if (syncResult) {
@@ -484,10 +485,11 @@ export default function App() {
           }
         })
         .catch(() => {});
-    }, 12000);
+    }, 25000);
 
     // Sync immediately when window/tab is focused or becomes visible
     const handleFocusSync = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncAllWithServer()
           .then(syncResult => {

@@ -33,6 +33,21 @@ export const broadcastTabSync = (type: string) => {
   } catch (e) {}
 };
 
+/**
+ * Resilient, offline-aware fetch wrapper that prevents connection reset crashes when offline or reconnecting
+ */
+export const safeApiFetch = async (url: string, options?: RequestInit): Promise<Response | null> => {
+  if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && !navigator.onLine) {
+    return null;
+  }
+  try {
+    const res = await fetch(url, options);
+    return res;
+  } catch {
+    return null;
+  }
+};
+
 export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
   {
     id: 'ann-1',
@@ -332,21 +347,12 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       broadcastTabSync('campaigns');
     }
 
-    // Direct Sync to Firebase Firestore
-    for (const camp of sortedSanitized) {
-      if (camp && camp.id) {
-        syncCampaignToFirestore(camp).catch(() => {});
-      }
-    }
-
     // Asynchronously push to backend server for multi-device sync
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaigns: sortedSanitized })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaigns: sortedSanitized })
+    });
   } catch (e) {
     console.error('Failed to save campaigns', e);
   }
@@ -364,16 +370,12 @@ export const saveCampaign = (camp: Campaign): void => {
     updated = [camp, ...current];
   }
   saveStoredCampaigns(updated);
-  syncCampaignToFirestore(camp).catch((err) => {
-    console.error('Firebase Error:', err);
+  syncCampaignToFirestore(camp).catch(() => {});
+  safeApiFetch('/api/campaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(camp)
   });
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/campaigns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(camp)
-    }).catch(() => {});
-  }
 };
 
 export const deleteStoredCampaign = (campaignId: string, reason?: string, deletedBy?: string): void => {
@@ -419,11 +421,9 @@ export const deleteStoredCampaign = (campaignId: string, reason?: string, delete
     );
   }
 
-  if (typeof fetch !== 'undefined') {
-    fetch(`/api/campaigns/${campaignId}`, {
-      method: 'DELETE',
-    }).catch(() => {});
-  }
+  safeApiFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+    method: 'DELETE',
+  });
 };
 
 export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
@@ -463,13 +463,11 @@ export const markTransactionAsDeleted = (txId: string): void => {
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
 
     // Asynchronously push deletion to backend server and Firestore for cross-window & mobile sync
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deletedTransactionIds: [txId] })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedTransactionIds: [txId] })
+    });
     deleteTransactionFromFirestore(txId).catch(() => {});
   } catch (e) {}
 };
@@ -576,19 +574,12 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
     }
 
     if (!skipServerPush) {
-      // Direct Sync to Firebase Firestore
-      for (const tx of transactions) {
-        if (tx && tx.id) {
-          syncTransactionToFirestore(tx).catch(() => {});
-        }
-      }
-
       // Asynchronously debounced push to backend server for cross-window and mobile app sync
-      if (typeof fetch !== 'undefined') {
+      if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine) {
         if (_syncServerTxTimer) clearTimeout(_syncServerTxTimer);
         _syncServerTxTimer = setTimeout(() => {
           const deletedIds = Array.from(getDeletedTransactionIds());
-          fetch('/api/data/sync', {
+          safeApiFetch('/api/data/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -596,7 +587,7 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
               deletedTransactionIds: deletedIds
             })
           })
-          .then(res => res.json())
+          .then(res => res ? res.json() : null)
           .then(result => {
             if (result && result.success && result.data && Array.isArray(result.data.transactions)) {
               const serverTxs: Transaction[] = result.data.transactions;
@@ -727,13 +718,11 @@ export const loginCreator = (profile: CreatorProfile): void => {
     localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(updatedList));
 
     syncCreatorToFirestore(profile).catch(() => {});
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creators: updatedList })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creators: updatedList })
+    });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
@@ -764,13 +753,11 @@ export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
       syncCreatorToFirestore(profile).catch(() => {});
     }
 
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creators: updatedList })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creators: updatedList })
+    });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
@@ -828,19 +815,11 @@ export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
       }
     }
 
-    for (const c of creators) {
-      if (c && c.phone) {
-        syncCreatorToFirestore(c).catch(() => {});
-      }
-    }
-
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creators })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creators })
+    });
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: creators }));
@@ -1307,13 +1286,11 @@ export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
     if (ann) {
       syncAnnouncementToFirestore(ann).catch(() => {});
     }
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/announcement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ann)
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/announcement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ann)
+    });
   } catch (e) {
     console.error('Failed to save announcement banner', e);
   }
@@ -2076,18 +2053,11 @@ export const saveMembers = (members: MemberRecord[]): void => {
       window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: members }));
     }
 
-    for (const m of members) {
-      if (m && m.id) {
-        syncMemberToFirestore(m).catch(() => {});
-      }
-    }
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ members })
-      }).catch(() => {});
-    }
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ members })
+    });
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }
@@ -2138,13 +2108,11 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
   if (member && member.id) {
     syncMemberToFirestore(member).catch(() => {});
   }
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(member)
-    }).catch(() => {});
-  }
+  safeApiFetch('/api/members', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(member)
+  });
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
@@ -2159,11 +2127,9 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   if (memberId) {
     deleteMemberFromFirestore(memberId).catch(() => {});
   }
-  if (typeof fetch !== 'undefined') {
-    fetch(`/api/members/${encodeURIComponent(memberId)}`, {
-      method: 'DELETE'
-    }).catch(() => {});
-  }
+  safeApiFetch(`/api/members/${encodeURIComponent(memberId)}`, {
+    method: 'DELETE'
+  });
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
@@ -2218,13 +2184,11 @@ export const saveTransaction = (tx: Transaction): void => {
   saveStoredTransactions(updated);
   recordUserPaidTxId(tx.id);
   syncTransactionToFirestore(tx).catch(() => {});
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tx)
-    }).catch(() => {});
-  }
+  safeApiFetch('/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx)
+  });
 };
 
 const WALLET_KEY = 'ronpay_wallet_v1';
@@ -2398,13 +2362,11 @@ export const saveStaffAccount = (staff: StaffAccount): void => {
     updated = [staff, ...current];
   }
   saveStoredStaffAccounts(updated);
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/admin/staff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-role': 'SUPER_ADMIN' },
-      body: JSON.stringify(staff)
-    }).catch(() => {});
-  }
+  safeApiFetch('/api/admin/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-user-role': 'SUPER_ADMIN' },
+    body: JSON.stringify(staff)
+  });
 };
 
 export const deleteStaffAccount = (staffId: string): void => {
@@ -2433,14 +2395,12 @@ export const deleteStoredTransaction = (transactionId: string): void => {
   deleteTransactionFromFirestore(cleanId).catch(() => {});
 
   // Delete from Server immediately
-  if (typeof fetch !== 'undefined') {
-    fetch(`/api/transactions/${encodeURIComponent(cleanId)}`, { method: 'DELETE' }).catch(() => {});
-    fetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deletedTransactionIds: [cleanId] })
-    }).catch(() => {});
-  }
+  safeApiFetch(`/api/transactions/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deletedTransactionIds: [cleanId] })
+  });
 };
 
 export const deleteMultipleTransactions = (transactionIds: string[]): void => {
@@ -2466,19 +2426,17 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
     deleteTransactionFromFirestore(id).catch(() => {});
   }
 
-  if (typeof fetch !== 'undefined') {
-    fetch('/api/transactions/delete-batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: cleanIds })
-    }).catch(() => {});
+  safeApiFetch('/api/transactions/delete-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: cleanIds })
+  });
 
-    fetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deletedTransactionIds: cleanIds })
-    }).catch(() => {});
-  }
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deletedTransactionIds: cleanIds })
+  });
 };
 
 export const deleteMembersOfCampaign = (campaignId: string): void => {

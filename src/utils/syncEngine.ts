@@ -14,7 +14,8 @@ import {
   saveStoredAnnouncement, 
   getStoredAuditLogs, 
   saveStoredAuditLogs,
-  getDeletedTransactionIds
+  getDeletedTransactionIds,
+  safeApiFetch
 } from './storage';
 import {
   initFirestoreRealtimeSync,
@@ -27,7 +28,8 @@ import {
   syncCreatorToFirestore,
   syncAnnouncementToFirestore,
   syncPricingConfigToFirestore,
-  pushAllLocalDataToFirestore
+  pushAllLocalDataToFirestore,
+  isOnlineState
 } from '../services/firestoreSync';
 
 export interface SyncDataState {
@@ -44,112 +46,201 @@ export interface SyncDataState {
 // Custom event name for instant state updates across React components
 export const RONPAY_SYNC_EVENT = 'ronpay_data_synced';
 
+// Exponential backoff and network loop protection
+let syncFailureCount = 0;
+let nextAllowedSyncTime = 0;
+let inFlightSyncPromise: Promise<SyncDataState | null> | null = null;
+let lastSyncWarnTime = 0;
+
+/**
+ * Fast synchronous retrieval of current local state for immediate fallback
+ */
+export function getLocalFallbackState(): SyncDataState {
+  return {
+    campaigns: getStoredCampaigns(),
+    members: getMembers(),
+    transactions: getStoredTransactions(),
+    creators: getStoredCreatorsList(),
+    pricingConfig: getStoredPricingConfig(),
+    announcement: getStoredAnnouncement(),
+    auditLogs: getStoredAuditLogs(),
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+// Listen for network reconnect to immediately reset backoff and sync gently
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    syncFailureCount = 0;
+    nextAllowedSyncTime = 0;
+    setTimeout(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        syncAllWithServer().catch(() => {});
+      }
+    }, 2500);
+  });
+  window.addEventListener('offline', () => {
+    // When offline, halt server sync attempts for at least 1 minute
+    nextAllowedSyncTime = Date.now() + 60000;
+  });
+}
+
 /**
  * Trigger sync with server backend (/api/data/sync or /api/data/state)
+ * Includes exponential backoff, offline checking, and fallback local cache
  */
 export async function syncAllWithServer(): Promise<SyncDataState | null> {
-  try {
-    const localCampaigns = getStoredCampaigns();
-    const localMembers = getMembers();
-    const localTransactions = getStoredTransactions();
-    const localCreators = getStoredCreatorsList();
-    const localPricingConfig = getStoredPricingConfig();
-    const localAnnouncement = getStoredAnnouncement();
-    const localAuditLogs = getStoredAuditLogs();
-
-    const response = await fetch('/api/data/sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        campaigns: localCampaigns,
-        members: localMembers,
-        transactions: localTransactions,
-        deletedTransactionIds: Array.from(getDeletedTransactionIds()),
-        creators: localCreators,
-        pricingConfig: localPricingConfig,
-        announcement: localAnnouncement,
-        auditLogs: localAuditLogs,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Sync server responded with status ${response.status}`);
-    }
-
-    const result = await response.json();
-    if (result.success && result.data) {
-      const serverData = result.data;
-
-      // Update local storage with unified server data
-      if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
-        saveStoredCampaigns(serverData.campaigns);
-      }
-      if (Array.isArray(serverData.members) && serverData.members.length > 0) {
-        const localMembers = getMembers('all');
-        const memMap = new Map<string, any>();
-        for (const m of localMembers) {
-          if (m && m.id) memMap.set(m.id.toLowerCase(), m);
-        }
-        for (const m of serverData.members) {
-          if (m && m.id) {
-            const k = m.id.toLowerCase();
-            memMap.set(k, { ...(memMap.get(k) || {}), ...m });
-          }
-        }
-        saveMembers(Array.from(memMap.values()));
-      }
-      if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
-        const deletedIds = getDeletedTransactionIds();
-        const currentTxs = getStoredTransactions();
-        const txMap = new Map<string, any>();
-        for (const t of currentTxs) {
-          if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
-            txMap.set(String(t.id).toLowerCase().trim(), t);
-          }
-        }
-        for (const t of serverData.transactions) {
-          if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
-            const k = String(t.id).toLowerCase().trim();
-            txMap.set(k, { ...(txMap.get(k) || {}), ...t });
-          }
-        }
-        const cleanTxs = Array.from(txMap.values());
-        cleanTxs.sort((a, b) => {
-          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-          return timeB - timeA;
-        });
-        saveStoredTransactions(cleanTxs, true);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
-        }
-      }
-      if (Array.isArray(serverData.creators)) {
-        saveStoredCreatorsList(serverData.creators);
-      }
-      if (serverData.pricingConfig) {
-        saveStoredPricingConfig(serverData.pricingConfig);
-      }
-      if (serverData.announcement) {
-        saveStoredAnnouncement(serverData.announcement);
-      }
-      if (Array.isArray(serverData.auditLogs)) {
-        saveStoredAuditLogs(serverData.auditLogs);
-      }
-
-      // Dispatch event to re-render any listening UI
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
-      }
-
-      return serverData;
-    }
-  } catch (err) {
-    console.warn('Network sync offline or server unreachable (using local cache & Firestore):', err);
+  // 1. Check network connectivity: browser navigator + Firestore listener state
+  const isOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true) && isOnlineState();
+  if (!isOnline) {
+    // Return local cache immediately without making any network calls
+    return getLocalFallbackState();
   }
-  return null;
+
+  // 2. Check exponential backoff wait period
+  const now = Date.now();
+  if (now < nextAllowedSyncTime) {
+    // Connection recently dropped or reset; reuse local cached state
+    return getLocalFallbackState();
+  }
+
+  // 3. Deduplicate simultaneous sync requests
+  if (inFlightSyncPromise) {
+    return inFlightSyncPromise;
+  }
+
+  inFlightSyncPromise = (async () => {
+    try {
+      const localCampaigns = getStoredCampaigns();
+      const localMembers = getMembers();
+      const localTransactions = getStoredTransactions();
+      const localCreators = getStoredCreatorsList();
+      const localPricingConfig = getStoredPricingConfig();
+      const localAnnouncement = getStoredAnnouncement();
+      const localAuditLogs = getStoredAuditLogs();
+
+      // Set up 8-second request timeout to avoid hung connections
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
+
+      const response = await fetch('/api/data/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller ? controller.signal : undefined,
+        body: JSON.stringify({
+          campaigns: localCampaigns,
+          members: localMembers,
+          transactions: localTransactions,
+          deletedTransactionIds: Array.from(getDeletedTransactionIds()),
+          creators: localCreators,
+          pricingConfig: localPricingConfig,
+          announcement: localAnnouncement,
+          auditLogs: localAuditLogs,
+        }),
+      });
+
+      if (timeoutId) clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Sync server responded with status ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        // Successful sync: reset failure backoff
+        syncFailureCount = 0;
+        nextAllowedSyncTime = 0;
+
+        const serverData = result.data;
+
+        // Update local storage with unified server data
+        if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
+          saveStoredCampaigns(serverData.campaigns);
+        }
+        if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+          const localMembers = getMembers('all');
+          const memMap = new Map<string, any>();
+          for (const m of localMembers) {
+            if (m && m.id) memMap.set(m.id.toLowerCase(), m);
+          }
+          for (const m of serverData.members) {
+            if (m && m.id) {
+              const k = m.id.toLowerCase();
+              memMap.set(k, { ...(memMap.get(k) || {}), ...m });
+            }
+          }
+          saveMembers(Array.from(memMap.values()));
+        }
+        if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
+          const deletedIds = getDeletedTransactionIds();
+          const currentTxs = getStoredTransactions();
+          const txMap = new Map<string, any>();
+          for (const t of currentTxs) {
+            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+              txMap.set(String(t.id).toLowerCase().trim(), t);
+            }
+          }
+          for (const t of serverData.transactions) {
+            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+              const k = String(t.id).toLowerCase().trim();
+              txMap.set(k, { ...(txMap.get(k) || {}), ...t });
+            }
+          }
+          const cleanTxs = Array.from(txMap.values());
+          cleanTxs.sort((a, b) => {
+            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return timeB - timeA;
+          });
+          saveStoredTransactions(cleanTxs, true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+          }
+        }
+        if (Array.isArray(serverData.creators)) {
+          saveStoredCreatorsList(serverData.creators);
+        }
+        if (serverData.pricingConfig) {
+          saveStoredPricingConfig(serverData.pricingConfig);
+        }
+        if (serverData.announcement) {
+          saveStoredAnnouncement(serverData.announcement);
+        }
+        if (Array.isArray(serverData.auditLogs)) {
+          saveStoredAuditLogs(serverData.auditLogs);
+        }
+
+        // Dispatch event to re-render any listening UI
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
+        }
+
+        return serverData;
+      }
+    } catch (err: any) {
+      // Exponential backoff: 3s -> 4.5s -> 7s -> 10s -> max 30s
+      syncFailureCount++;
+      const baseDelay = Math.min(30000, 3000 * Math.pow(1.5, Math.min(syncFailureCount - 1, 5)));
+      const jitter = Math.floor(Math.random() * 500);
+      nextAllowedSyncTime = Date.now() + baseDelay + jitter;
+
+      // Throttle warning log to at most once per 20s so console error spam is completely stopped
+      const timeSinceLastWarn = Date.now() - lastSyncWarnTime;
+      if (timeSinceLastWarn > 20000) {
+        lastSyncWarnTime = Date.now();
+        console.info(`[RonPay Sync] Network standby mode active (backoff ${(baseDelay / 1000).toFixed(1)}s, using local fallback cache).`);
+      }
+
+      return getLocalFallbackState();
+    } finally {
+      inFlightSyncPromise = null;
+    }
+    return getLocalFallbackState();
+  })();
+
+  return inFlightSyncPromise;
 }
 
 /**
@@ -157,9 +248,10 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
  */
 export async function fetchCampaignById(campaignId: string): Promise<Campaign | null> {
   if (!campaignId) return null;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return null;
   try {
-    const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`);
-    if (res.ok) {
+    const res = await safeApiFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`);
+    if (res && res.ok) {
       const json = await res.json();
       if (json.success && json.campaign) {
         const current = getStoredCampaigns();
@@ -170,9 +262,7 @@ export async function fetchCampaignById(campaignId: string): Promise<Campaign | 
         return json.campaign;
       }
     }
-  } catch (e) {
-    console.warn('Failed to fetch campaign by id from server:', e);
-  }
+  } catch {}
   return null;
 }
 
@@ -184,15 +274,11 @@ export async function saveCampaignToServer(campaign: Campaign): Promise<void> {
   await syncCampaignToFirestore(campaign);
   
   // 2. Also post to local express server
-  try {
-    await fetch('/api/campaigns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(campaign),
-    });
-  } catch (e) {
-    console.warn('Could not post campaign to server:', e);
-  }
+  safeApiFetch('/api/campaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(campaign),
+  });
 }
 
 /**
@@ -203,15 +289,11 @@ export async function saveMemberToServer(member: MemberRecord): Promise<void> {
   await syncMemberToFirestore(member);
 
   // 2. Also post to local express server
-  try {
-    await fetch('/api/members', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(member),
-    });
-  } catch (e) {
-    console.warn('Could not post member to server:', e);
-  }
+  safeApiFetch('/api/members', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(member),
+  });
 }
 
 /**
@@ -222,13 +304,9 @@ export async function deleteMemberFromServer(memberId: string): Promise<void> {
   await deleteMemberFromFirestore(memberId);
 
   // 2. Also delete on server
-  try {
-    await fetch(`/api/members/${encodeURIComponent(memberId)}`, {
-      method: 'DELETE',
-    });
-  } catch (e) {
-    console.warn('Could not delete member on server:', e);
-  }
+  safeApiFetch(`/api/members/${encodeURIComponent(memberId)}`, {
+    method: 'DELETE',
+  });
 }
 
 /**
@@ -239,15 +317,11 @@ export async function saveTransactionToServer(tx: Transaction): Promise<void> {
   await syncTransactionToFirestore(tx);
 
   // 2. Also post to local server
-  try {
-    await fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tx),
-    });
-  } catch (e) {
-    console.warn('Could not post transaction to server:', e);
-  }
+  safeApiFetch('/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx),
+  });
 }
 
 /**
@@ -256,15 +330,11 @@ export async function saveTransactionToServer(tx: Transaction): Promise<void> {
 export async function saveAnnouncementToServer(ann: AnnouncementBanner): Promise<void> {
   await syncAnnouncementToFirestore(ann);
 
-  try {
-    await fetch('/api/announcement', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ann),
-    });
-  } catch (e) {
-    console.warn('Could not post announcement to server:', e);
-  }
+  safeApiFetch('/api/announcement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ann),
+  });
 }
 
 /**
@@ -390,21 +460,25 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   // 2. Initial sync with server
   syncAllWithServer().then(res => {
     if (res && onSyncUpdate) onSyncUpdate(res);
-  });
+  }).catch(() => {});
 
-  // 3. Periodic fallback sync every 15 seconds
+  // 3. Periodic fallback sync every 25 seconds (respects backoff & offline status)
   const intervalId = setInterval(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (Date.now() < nextAllowedSyncTime) return;
     syncAllWithServer().then(res => {
       if (res && onSyncUpdate) onSyncUpdate(res);
-    });
-  }, 15000);
+    }).catch(() => {});
+  }, 25000);
 
-  // Sync on tab visibility change
+  // Sync on tab visibility change (only if online and not in backoff)
   const handleVisibility = () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (Date.now() < nextAllowedSyncTime) return;
     if (document.visibilityState === 'visible') {
       syncAllWithServer().then(res => {
         if (res && onSyncUpdate) onSyncUpdate(res);
-      });
+      }).catch(() => {});
     }
   };
 

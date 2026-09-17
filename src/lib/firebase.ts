@@ -32,13 +32,13 @@ try {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager()
     }),
-    experimentalForceLongPolling: true
+    experimentalAutoDetectLongPolling: true
   });
 } catch {
   // If Firestore is already initialized or persistence fails in iframe/sandbox
   try {
     firestoreInstance = initializeFirestore(app, {
-      experimentalForceLongPolling: true
+      experimentalAutoDetectLongPolling: true
     });
   } catch {
     firestoreInstance = getFirestore(app);

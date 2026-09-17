@@ -45,6 +45,36 @@ export interface FirestoreSyncCallbacks {
 let connectionStatus: FirestoreConnectionStatus = 'connecting';
 let statusListeners: Array<(status: FirestoreConnectionStatus, message?: string) => void> = [];
 
+// Track browser network connectivity to immediately avoid unnecessary fetch requests while offline
+let isNetworkOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+export function isOnlineState(): boolean {
+  return isNetworkOnline;
+}
+
+let lastErrorLogTimestamp = 0;
+function logFirestoreNetworkNote(context: string, err?: any) {
+  // Silence error spam if offline or if logged recently (within 5 seconds)
+  if (!isNetworkOnline) return;
+  const now = Date.now();
+  if (now - lastErrorLogTimestamp < 5000) return;
+  lastErrorLogTimestamp = now;
+  console.info(`[RonPay Cloud Sync] ${context}: Network temporarily unavailable or connection reset. Seamlessly serving local cache.`);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    isNetworkOnline = true;
+    updateStatus('connecting');
+    console.info('[RonPay] Network connection restored. Cloud sync resuming...');
+  });
+  window.addEventListener('offline', () => {
+    isNetworkOnline = false;
+    updateStatus('offline', 'Network is offline. Local cache in use.');
+    console.info('[RonPay] Network offline. Operating in offline local-cache mode.');
+  });
+}
+
 export function getFirestoreConnectionStatus(): FirestoreConnectionStatus {
   return connectionStatus;
 }
@@ -133,6 +163,7 @@ export function smartMerge<T extends Record<string, any>>(localItems: T[], remot
  * Check and seed Firestore with initial default data if empty on cold start
  */
 export async function seedInitialCloudDataIfEmpty() {
+  if (!isNetworkOnline) return;
   try {
     // 1. Campaigns seed check
     const campaignsSnap = await getDocs(collection(db, 'campaigns'));
@@ -192,7 +223,7 @@ export async function seedInitialCloudDataIfEmpty() {
       await batch.commit();
     }
   } catch (err) {
-    console.warn('[Firestore] Initial cloud seed check note:', err);
+    logFirestoreNetworkNote('Seed cloud data check', err);
   }
 }
 
@@ -281,12 +312,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         } catch {}
       }
     }, (error) => {
-      console.warn('Firestore transactions listener note:', error);
-      updateStatus('offline', error.message);
+      updateStatus('offline', error?.message);
+      logFirestoreNetworkNote('Transactions listener', error);
     });
     unsubscribers.push(unsubTx);
   } catch (err) {
-    console.warn('Failed to attach transactions onSnapshot listener:', err);
+    logFirestoreNetworkNote('Attach transactions listener', err);
     updateStatus('offline');
   }
 
@@ -321,11 +352,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         } catch {}
       }
     }, (error) => {
-      console.warn('Firestore campaigns listener note:', error);
+      logFirestoreNetworkNote('Campaigns listener', error);
     });
     unsubscribers.push(unsubCamp);
   } catch (err) {
-    console.warn('Failed to attach campaigns onSnapshot listener:', err);
+    logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
   // 3. Members Listener (Kumtluang / YMA / Bawm member database)
@@ -352,11 +383,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         } catch {}
       }
     }, (error) => {
-      console.warn('Firestore members listener note:', error);
+      logFirestoreNetworkNote('Members listener', error);
     });
     unsubscribers.push(unsubMem);
   } catch (err) {
-    console.warn('Failed to attach members onSnapshot listener:', err);
+    logFirestoreNetworkNote('Attach members listener', err);
   }
 
   // 4. Creators Profile & List Listener
@@ -398,11 +429,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         } catch {}
       }
     }, (error) => {
-      console.warn('Firestore creators listener note:', error);
+      logFirestoreNetworkNote('Creators listener', error);
     });
     unsubscribers.push(unsubCreators);
   } catch (err) {
-    console.warn('Failed to attach creators onSnapshot listener:', err);
+    logFirestoreNetworkNote('Attach creators listener', err);
   }
 
   // 5. System Configuration / Announcements Listener
@@ -419,11 +450,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       }
     }, (error) => {
-      console.warn('Firestore announcement config listener note:', error);
+      logFirestoreNetworkNote('Announcement config listener', error);
     });
     unsubscribers.push(unsubConfig);
   } catch (err) {
-    console.warn('Failed to attach systemConfig announcement listener:', err);
+    logFirestoreNetworkNote('Attach systemConfig announcement listener', err);
   }
 
   // 6. Pricing Configuration Listener
@@ -440,11 +471,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       }
     }, (error) => {
-      console.warn('Firestore pricing config listener note:', error);
+      logFirestoreNetworkNote('Pricing config listener', error);
     });
     unsubscribers.push(unsubPricing);
   } catch (err) {
-    console.warn('Failed to attach pricing config listener:', err);
+    logFirestoreNetworkNote('Attach pricing config listener', err);
   }
 
   // 7. Audit Logs Listener
@@ -465,11 +496,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         }
       }
     }, (err) => {
-      console.warn('Firestore audit logs listener note:', err);
+      logFirestoreNetworkNote('Audit logs listener', err);
     });
     unsubscribers.push(unsubAudit);
   } catch (err) {
-    console.warn('Failed to attach audit logs listener:', err);
+    logFirestoreNetworkNote('Attach audit logs listener', err);
   }
 
   // Return unsubscribe all function
@@ -488,7 +519,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
  * Direct write: Save single transaction to Firebase Firestore (transactions collection)
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
-  if (!tx || !tx.id) return;
+  if (!isNetworkOnline || !tx || !tx.id) return;
   try {
     const cleanTx = sanitizeForFirestore({
       ...tx,
@@ -496,9 +527,8 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
     });
     const docRef = doc(db, 'transactions', tx.id);
     await setDoc(docRef, cleanTx, { merge: true });
-    console.log('[Firestore] Transaction successfully synced:', tx.id);
   } catch (err) {
-    console.error('Firebase Error:', err);
+    logFirestoreNetworkNote('Transaction sync', err);
   }
 }
 
@@ -506,7 +536,7 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
  * Direct write: Save single campaign / QR code to Firebase Firestore (campaigns collection)
  */
 export async function syncCampaignToFirestore(campaign: Campaign): Promise<void> {
-  if (!campaign || !campaign.id) return;
+  if (!isNetworkOnline || !campaign || !campaign.id) return;
   try {
     const cleanCampaign = sanitizeForFirestore({
       ...campaign,
@@ -514,9 +544,8 @@ export async function syncCampaignToFirestore(campaign: Campaign): Promise<void>
     });
     const docRef = doc(db, 'campaigns', campaign.id);
     await setDoc(docRef, cleanCampaign, { merge: true });
-    console.log('[Firestore] Campaign successfully synced:', campaign.id);
   } catch (err) {
-    console.error('Firebase Error:', err);
+    logFirestoreNetworkNote('Campaign sync', err);
   }
 }
 
@@ -524,7 +553,7 @@ export async function syncCampaignToFirestore(campaign: Campaign): Promise<void>
  * Direct write: Save single member to Firebase Firestore (members collection)
  */
 export async function syncMemberToFirestore(member: MemberRecord): Promise<void> {
-  if (!member || !member.id) return;
+  if (!isNetworkOnline || !member || !member.id) return;
   try {
     const cleanMember = sanitizeForFirestore({
       ...member,
@@ -532,9 +561,8 @@ export async function syncMemberToFirestore(member: MemberRecord): Promise<void>
     });
     const docRef = doc(db, 'members', member.id);
     await setDoc(docRef, cleanMember, { merge: true });
-    console.log('[Firestore] Member successfully synced:', member.id);
   } catch (err) {
-    console.error('[Firestore] Error saving member:', err);
+    logFirestoreNetworkNote('Member sync', err);
   }
 }
 
@@ -542,13 +570,12 @@ export async function syncMemberToFirestore(member: MemberRecord): Promise<void>
  * Direct delete: Delete member from Firestore
  */
 export async function deleteMemberFromFirestore(memberId: string): Promise<void> {
-  if (!memberId) return;
+  if (!isNetworkOnline || !memberId) return;
   try {
     const docRef = doc(db, 'members', memberId);
     await deleteDoc(docRef);
-    console.log('[Firestore] Member deleted:', memberId);
   } catch (err) {
-    console.error('[Firestore] Error deleting member:', err);
+    logFirestoreNetworkNote('Delete member', err);
   }
 }
 
@@ -556,13 +583,12 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
  * Direct delete: Delete campaign from Firestore
  */
 export async function deleteCampaignFromFirestore(campaignId: string): Promise<void> {
-  if (!campaignId) return;
+  if (!isNetworkOnline || !campaignId) return;
   try {
     const docRef = doc(db, 'campaigns', campaignId);
     await deleteDoc(docRef);
-    console.log('[Firestore] Campaign deleted:', campaignId);
   } catch (err) {
-    console.error('[Firestore] Error deleting campaign:', err);
+    logFirestoreNetworkNote('Delete campaign', err);
   }
 }
 
@@ -570,13 +596,12 @@ export async function deleteCampaignFromFirestore(campaignId: string): Promise<v
  * Direct delete: Delete transaction from Firestore
  */
 export async function deleteTransactionFromFirestore(transactionId: string): Promise<void> {
-  if (!transactionId) return;
+  if (!isNetworkOnline || !transactionId) return;
   try {
     const docRef = doc(db, 'transactions', transactionId);
     await deleteDoc(docRef);
-    console.log('[Firestore] Transaction deleted:', transactionId);
   } catch (err) {
-    console.error('[Firestore] Error deleting transaction:', err);
+    logFirestoreNetworkNote('Delete transaction', err);
   }
 }
 
@@ -584,7 +609,7 @@ export async function deleteTransactionFromFirestore(transactionId: string): Pro
  * Direct write: Save single creator profile to Firebase Firestore (creators collection)
  */
 export async function syncCreatorToFirestore(creator: CreatorProfile): Promise<void> {
-  if (!creator || !creator.phone) return;
+  if (!isNetworkOnline || !creator || !creator.phone) return;
   try {
     const cleanCreator = sanitizeForFirestore({
       ...creator,
@@ -592,9 +617,8 @@ export async function syncCreatorToFirestore(creator: CreatorProfile): Promise<v
     });
     const docRef = doc(db, 'creators', creator.phone);
     await setDoc(docRef, cleanCreator, { merge: true });
-    console.log('[Firestore] Creator successfully synced:', creator.phone);
   } catch (err) {
-    console.error('[Firestore] Error saving creator:', err);
+    logFirestoreNetworkNote('Creator sync', err);
   }
 }
 
@@ -602,7 +626,7 @@ export async function syncCreatorToFirestore(creator: CreatorProfile): Promise<v
  * Direct write: Save announcement banner to Firebase Firestore
  */
 export async function syncAnnouncementToFirestore(announcement: AnnouncementBanner): Promise<void> {
-  if (!announcement) return;
+  if (!isNetworkOnline || !announcement) return;
   try {
     const cleanAnnouncement = sanitizeForFirestore({
       ...announcement,
@@ -610,9 +634,8 @@ export async function syncAnnouncementToFirestore(announcement: AnnouncementBann
     });
     const docRef = doc(db, 'systemConfig', 'announcement');
     await setDoc(docRef, cleanAnnouncement, { merge: true });
-    console.log('[Firestore] Announcement config synced');
   } catch (err) {
-    console.error('[Firestore] Error saving announcement:', err);
+    logFirestoreNetworkNote('Announcement sync', err);
   }
 }
 
@@ -620,7 +643,7 @@ export async function syncAnnouncementToFirestore(announcement: AnnouncementBann
  * Direct write: Save pricing config to Firebase Firestore
  */
 export async function syncPricingConfigToFirestore(pricingConfig: SystemPricingConfig): Promise<void> {
-  if (!pricingConfig) return;
+  if (!isNetworkOnline || !pricingConfig) return;
   try {
     const cleanPricing = sanitizeForFirestore({
       ...pricingConfig,
@@ -628,9 +651,8 @@ export async function syncPricingConfigToFirestore(pricingConfig: SystemPricingC
     });
     const docRef = doc(db, 'systemConfig', 'pricing');
     await setDoc(docRef, cleanPricing, { merge: true });
-    console.log('[Firestore] Pricing config synced');
   } catch (err) {
-    console.error('[Firestore] Error saving pricing config:', err);
+    logFirestoreNetworkNote('Pricing config sync', err);
   }
 }
 
@@ -638,7 +660,7 @@ export async function syncPricingConfigToFirestore(pricingConfig: SystemPricingC
  * Direct write: Save audit log to Firebase Firestore
  */
 export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void> {
-  if (!auditLog || !auditLog.id) return;
+  if (!isNetworkOnline || !auditLog || !auditLog.id) return;
   try {
     const cleanLog = sanitizeForFirestore({
       ...auditLog,
@@ -647,7 +669,7 @@ export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void>
     const docRef = doc(db, 'auditLogs', auditLog.id);
     await setDoc(docRef, cleanLog, { merge: true });
   } catch (err) {
-    console.warn('[Firestore] Audit log save note:', err);
+    logFirestoreNetworkNote('Audit log sync', err);
   }
 }
 
@@ -655,6 +677,9 @@ export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void>
  * Push all local records to Firebase Firestore (manual bulk push & migration)
  */
 export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean; count: number }> {
+  if (!isNetworkOnline) {
+    return { success: false, count: 0 };
+  }
   try {
     const rawCampaigns = localStorage.getItem('ronpay_campaigns_v2');
     const localCampaigns: Campaign[] = rawCampaigns ? JSON.parse(rawCampaigns) : [];
@@ -731,7 +756,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
 
     return { success: true, count };
   } catch (err) {
-    console.error('Failed pushing local data to Firestore:', err);
+    logFirestoreNetworkNote('Push all local data', err);
     return { success: false, count: 0 };
   }
 }
@@ -740,6 +765,9 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
  * Force an immediate read of all transactions from Firestore and sync to local storage & state.
  */
 export async function forceRefreshFirestore(): Promise<Transaction[]> {
+  if (!isNetworkOnline) {
+    return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+  }
   try {
     const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
     const snapshot = await getDocs(txQuery);
@@ -784,7 +812,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
       return merged;
     }
   } catch (err) {
-    console.warn('forceRefreshFirestore error:', err);
+    logFirestoreNetworkNote('Force refresh Firestore', err);
   }
   return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
 }
