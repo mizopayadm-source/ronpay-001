@@ -466,69 +466,45 @@ export default function App() {
       console.warn('BroadcastChannel sync init:', err);
     }
 
-    // Sync database state from server on startup
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/data/state')
-        .then(res => res.json())
-        .then(result => {
-          if (result && result.success && result.data) {
-            const serverDb = result.data;
-            if (Array.isArray(serverDb.transactions) && serverDb.transactions.length > 0) {
-              const localTxs = getStoredTransactions();
-              const existingTxIds = new Set(localTxs.map(t => t.id));
-              let addedTx = false;
-              const mergedTxs = [...localTxs];
-              for (const stx of serverDb.transactions) {
-                if (stx && stx.id && !existingTxIds.has(stx.id)) {
-                  mergedTxs.push(stx);
-                  existingTxIds.add(stx.id);
-                  addedTx = true;
-                }
-              }
-              if (addedTx) {
-                saveStoredTransactions(mergedTxs);
-                setTransactions(mergedTxs);
-              }
-            }
-            if (Array.isArray(serverDb.campaigns) && serverDb.campaigns.length > 0) {
-              const localCamps = getStoredCampaigns();
-              const existingCampIds = new Set(localCamps.map(c => c.id));
-              let addedCamp = false;
-              const mergedCamps = [...localCamps];
-              for (const sc of serverDb.campaigns) {
-                if (sc && sc.id && !existingCampIds.has(sc.id)) {
-                  mergedCamps.push(sc);
-                  existingCampIds.add(sc.id);
-                  addedCamp = true;
-                }
-              }
-              if (addedCamp) {
-                saveStoredCampaigns(mergedCamps);
-                setCampaigns(mergedCamps);
-              }
-            }
-            if (Array.isArray(serverDb.members) && serverDb.members.length > 0) {
-              const localMembers = getMembers();
-              const existingMemberIds = new Set(localMembers.map(m => m.id?.toLowerCase()));
-              let addedMember = false;
-              const mergedMembers = [...localMembers];
-              for (const sm of serverDb.members) {
-                if (sm && sm.id && !existingMemberIds.has(sm.id.toLowerCase())) {
-                  mergedMembers.push(sm);
-                  existingMemberIds.add(sm.id.toLowerCase());
-                  addedMember = true;
-                }
-              }
-              if (addedMember) {
-                saveMembers(mergedMembers);
-              }
-            }
+    // Initial complete bi-directional sync on app startup (merges local transactions across windows)
+    syncAllWithServer()
+      .then(syncResult => {
+        if (syncResult) {
+          reloadLocalData();
+        }
+      })
+      .catch(() => {});
+
+    // Periodic background sync every 12 seconds so all windows, tabs and Android phones stay in lock-step
+    const syncInterval = setInterval(() => {
+      syncAllWithServer()
+        .then(syncResult => {
+          if (syncResult) {
+            reloadLocalData();
           }
         })
         .catch(() => {});
-    }
+    }, 12000);
+
+    // Sync immediately when window/tab is focused or becomes visible
+    const handleFocusSync = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncAllWithServer()
+          .then(syncResult => {
+            if (syncResult) {
+              reloadLocalData();
+            }
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleFocusSync);
 
     return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleFocusSync);
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
@@ -1406,6 +1382,7 @@ export default function App() {
               onOpenImagePreview={handlePreviewImage}
               onOpenMemberRoll={handleOpenMemberRoll}
               onRefreshCloud={handleRefreshCloudData}
+              onUpdateCreatorProfile={handleUpdateCreator}
             />
           )}
 
@@ -1555,6 +1532,10 @@ export default function App() {
             onOpenScanner={() => {
               setIsHistoryOpen(false);
               handleStartScanner('any');
+            }}
+            onOpenLogin={() => {
+              setIsHistoryOpen(false);
+              handleNavigate('creator_reg');
             }}
           />
         </ErrorBoundary>

@@ -75,6 +75,7 @@ interface ReportsScreenProps {
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
   onRefreshCloud?: () => Promise<void> | void;
+  onUpdateCreatorProfile?: (profile: CreatorProfile) => void;
 }
 
 export const ReportsScreen: React.FC<ReportsScreenProps> = ({
@@ -90,7 +91,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onOpenImagePreview,
   onOpenMemberRoll,
   onRefreshCloud,
+  onUpdateCreatorProfile,
 }) => {
+  // Public transparence mode for guest mobile / browser inspection
+  const [publicTransparenceMode, setPublicTransparenceMode] = useState<boolean>(false);
+
   // Default to 'all' so every donation across all categories is visible immediately
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
@@ -136,17 +141,20 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Check if current user is an authenticated QR creator or privileged staff (Admin/Moderator)
   const isCreator = Boolean(isPrivilegedUser || (creatorProfile.isApproved && creatorProfile.phone));
 
-  // Filter campaigns strictly owned/created by this creator (or all campaigns if Admin/Moderator)
+  const effectiveIsPrivilegedUser = Boolean(isPrivilegedUser || publicTransparenceMode);
+  const effectiveIsCreator = Boolean(isCreator || publicTransparenceMode);
+
+  // Filter campaigns strictly owned/created by this creator (or all campaigns if Admin/Moderator or Public View)
   const creatorCampaigns = useMemo(() => {
-    if (!isCreator) return [];
-    if (isPrivilegedUser) {
+    if (!effectiveIsCreator) return [];
+    if (effectiveIsPrivilegedUser) {
       return campaigns.filter(c => {
         if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
         return true;
       });
     }
     return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
-  }, [campaigns, isCreator, isPrivilegedUser, creatorProfile]);
+  }, [campaigns, effectiveIsCreator, effectiveIsPrivilegedUser, creatorProfile]);
 
   const creatorCampaignIds = useMemo(() => {
     return new Set(creatorCampaigns.map(c => c.id));
@@ -154,17 +162,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Available campaigns for selector based on creator scope
   const availableCampaigns = useMemo(() => {
-    if (!isCreator) return [];
+    if (!effectiveIsCreator) return [];
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
-  }, [isCreator, creatorCampaigns, selectedFilter]);
+  }, [effectiveIsCreator, creatorCampaigns, selectedFilter]);
 
-  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation, bypassed for Admin/Moderator)
+  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation, bypassed for Admin/Moderator or Public View)
   const filteredTransactions = useMemo(() => {
-    if (!isCreator || (creatorCampaignIds.size === 0 && !isPrivilegedUser)) return [];
+    if (!effectiveIsCreator || (creatorCampaignIds.size === 0 && !effectiveIsPrivilegedUser)) return [];
 
     return transactions.filter(t => {
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's own verified campaigns
-      if (!isPrivilegedUser && !creatorCampaignIds.has(t.campaignId)) {
+      if (!effectiveIsPrivilegedUser && !creatorCampaignIds.has(t.campaignId)) {
         return false;
       }
 
@@ -579,19 +587,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <div className="hidden sm:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-700 border border-slate-200" title="RonPay-a Bawm awm zat">
+        <div className="flex items-center gap-1.5 sm:gap-2 self-start sm:self-auto flex-wrap">
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-100 px-2 sm:px-2.5 py-1 rounded-xl text-[10.5px] sm:text-[11px] font-bold text-slate-700 border border-slate-200" title="RonPay-a Bawm awm zat">
             <span>📦</span>
             <span>Bawm: {campaigns.length}</span>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 bg-indigo-50 px-2.5 py-1 rounded-xl text-[11px] font-bold text-indigo-700 border border-indigo-200" title="Transactions lo lut zat">
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-indigo-50 px-2 sm:px-2.5 py-1 rounded-xl text-[10.5px] sm:text-[11px] font-bold text-indigo-700 border border-indigo-200" title="Transactions lo lut zat">
             <span>💳</span>
             <span>Txns: {transactions.length}</span>
           </div>
           <button
             onClick={handleManualCloudSync}
             disabled={isSyncingCloud}
-            className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs ${
+            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border text-[10.5px] sm:text-[11px] font-bold flex items-center gap-1 sm:gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs ${
               isSyncingCloud
                 ? 'bg-indigo-50 border-indigo-200 text-indigo-700 opacity-80'
                 : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-indigo-400'
@@ -601,7 +609,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
             <span>{isSyncingCloud ? 'Syncing...' : 'Sync Cloud'}</span>
           </button>
-          <span className="text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5" title="Connected to Central Cloud Database">
+          <span className="text-[10px] sm:text-[10.5px] bg-emerald-50 text-emerald-800 font-bold px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5" title="Connected to Central Cloud Database">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             Cloud Synced
           </span>
@@ -609,8 +617,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       </div>
 
       {/* Creator Restriction Banner if not logged in */}
-      {!isCreator ? (
-        <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-xl text-center space-y-3">
+      {!effectiveIsCreator ? (
+        <div className="bg-slate-900 text-white p-5 sm:p-7 rounded-3xl border border-slate-800 shadow-xl text-center space-y-4">
           <div className="w-14 h-14 bg-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mx-auto border border-rose-500/30">
             <Lock className="w-7 h-7" />
           </div>
@@ -620,14 +628,67 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             <p className="text-xs text-slate-300 max-w-md mx-auto">
               Transaction Report leh Financial Statement reng reng hi QR Creator-in ama campaign create chin chiah a hmuin a download thei ang.
             </p>
+            <p className="text-[11px] text-amber-300/90 font-medium">
+              He device / phone ah hian i account-ah login rawh le emaw Public Transparence Mode-ah en rawh.
+            </p>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xl mx-auto">
             <button
               onClick={onOpenLogin}
-              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+              className="w-full sm:w-auto bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
             >
-              Creator Login / Verify Account
+              Creator Login / Verify
+            </button>
+            {onUpdateCreatorProfile && (
+              <>
+                <button
+                  onClick={() => {
+                    const superAdmin: CreatorProfile = {
+                      name: 'Super Admin (Master)',
+                      orgName: 'RonPay Master Headquarters',
+                      designation: 'State Financial Administrator',
+                      phone: '9862000001',
+                      isPhoneVerified: true,
+                      isApproved: true,
+                      isAdmin: true,
+                      approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+                      createdQRsCount: campaigns.length,
+                    };
+                    onUpdateCreatorProfile(superAdmin);
+                  }}
+                  className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-4 py-2.5 rounded-xl text-xs border border-amber-400/40 transition cursor-pointer"
+                  title="Super Admin account (9862000001)-a 1-tap login"
+                >
+                  ⚡ Admin Login (9862000001)
+                </button>
+                <button
+                  onClick={() => {
+                    const pastorAdmin: CreatorProfile = {
+                      name: 'Rev. Dr. R. Zothansanga',
+                      orgName: 'BCM Ebenezer, Zobawk Local Church',
+                      designation: 'Pastor / Secretary',
+                      phone: '9862599881',
+                      isPhoneVerified: true,
+                      isApproved: true,
+                      isAdmin: false,
+                      approvedCategories: ['khawlsak', 'kumtluang'],
+                      createdQRsCount: campaigns.length,
+                    };
+                    onUpdateCreatorProfile(pastorAdmin);
+                  }}
+                  className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold px-4 py-2.5 rounded-xl text-xs border border-emerald-400/40 transition cursor-pointer"
+                  title="Pastor / Secretary account (9862599881)-a 1-tap login"
+                >
+                  ⚡ Pastor Login (9862599881)
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setPublicTransparenceMode(true)}
+              className="w-full sm:w-auto bg-indigo-600/40 hover:bg-indigo-600/60 text-indigo-100 font-bold px-4 py-2.5 rounded-xl text-xs border border-indigo-400/50 transition cursor-pointer"
+            >
+              👁️ En Mai Rawh (Public View)
             </button>
           </div>
         </div>

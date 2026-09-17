@@ -3929,7 +3929,12 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         ? new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())) 
         : new Set();
       const cleanTx = transactions.filter((t: any) => t && t.id && !delSet.has(String(t.id).toLowerCase().trim()));
-      db.transactions = mergeCollections(db.transactions, cleanTx, 'id');
+      db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id');
+      db.transactions.sort((a: any, b: any) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      });
     }
     if (Array.isArray(creators)) {
       db.creators = mergeCollections(db.creators, creators, 'phone');

@@ -461,6 +461,16 @@ export const markTransactionAsDeleted = (txId: string): void => {
     set.add(String(txId).toLowerCase().trim());
     const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
+
+    // Asynchronously push deletion to backend server and Firestore for cross-window & mobile sync
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deletedTransactionIds: [txId] })
+      }).catch(() => {});
+    }
+    deleteTransactionFromFirestore(txId).catch(() => {});
   } catch (e) {}
 };
 
@@ -553,7 +563,9 @@ export const getStoredTransactions = (): Transaction[] => {
   return INITIAL_TRANSACTIONS;
 };
 
-export const saveStoredTransactions = (transactions: Transaction[]) => {
+let _syncServerTxTimer: any = null;
+
+export const saveStoredTransactions = (transactions: Transaction[], skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 
@@ -561,6 +573,66 @@ export const saveStoredTransactions = (transactions: Transaction[]) => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: transactions }));
       broadcastTabSync('transactions');
+    }
+
+    if (!skipServerPush) {
+      // Direct Sync to Firebase Firestore
+      for (const tx of transactions) {
+        if (tx && tx.id) {
+          syncTransactionToFirestore(tx).catch(() => {});
+        }
+      }
+
+      // Asynchronously debounced push to backend server for cross-window and mobile app sync
+      if (typeof fetch !== 'undefined') {
+        if (_syncServerTxTimer) clearTimeout(_syncServerTxTimer);
+        _syncServerTxTimer = setTimeout(() => {
+          const deletedIds = Array.from(getDeletedTransactionIds());
+          fetch('/api/data/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transactions,
+              deletedTransactionIds: deletedIds
+            })
+          })
+          .then(res => res.json())
+          .then(result => {
+            if (result && result.success && result.data && Array.isArray(result.data.transactions)) {
+              const serverTxs: Transaction[] = result.data.transactions;
+              const currentLocal = getStoredTransactions();
+              const localMap = new Map<string, Transaction>();
+              for (const t of currentLocal) {
+                if (t && t.id) localMap.set(String(t.id).toLowerCase().trim(), t);
+              }
+              let hasNewFromOtherWindow = false;
+              for (const st of serverTxs) {
+                if (st && st.id) {
+                  const k = String(st.id).toLowerCase().trim();
+                  if (!localMap.has(k)) {
+                    localMap.set(k, st);
+                    hasNewFromOtherWindow = true;
+                  }
+                }
+              }
+              if (hasNewFromOtherWindow) {
+                const cleanMerged = Array.from(localMap.values());
+                cleanMerged.sort((a, b) => {
+                  const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                  const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                  return timeB - timeA;
+                });
+                localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(cleanMerged));
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanMerged }));
+                  broadcastTabSync('transactions');
+                }
+              }
+            }
+          })
+          .catch(() => {});
+        }, 250);
+      }
     }
   } catch (e) {
     console.error('Failed to save transactions', e);
@@ -1134,7 +1206,8 @@ export const getUserOrCreatorVisibleTransactions = (
   const hasSpecificAccount = Boolean((creatorPhoneDigits && creatorPhoneDigits.length >= 8) || (!isGeneric && cleanCreatorName.length >= 3));
 
   if (matched.length === 0 && !hasSpecificAccount && safeUserPaidIds.length === 0) {
-    return transactions.filter(t => t && (t.id === 'TXN-9011' || t.id === 'TXN-BILL-8801' || t.id === 'TXN-ZONUN-001'));
+    // For guest users or fresh mobile app installs, show the full platform transactions so the screen is never blank
+    return transactions;
   }
 
   return matched;

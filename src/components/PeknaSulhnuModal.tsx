@@ -56,6 +56,7 @@ interface PeknaSulhnuModalProps {
   onNavigateToDonate?: () => void;
   onOpenScanner?: () => void;
   onRefreshData?: () => void;
+  onOpenLogin?: () => void;
 }
 
 export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
@@ -69,6 +70,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onNavigateToDonate,
   onOpenScanner,
   onRefreshData,
+  onOpenLogin,
 }) => {
   // Default to 'all' so users see their records immediately without hidden filter exclusion
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
@@ -654,11 +656,27 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className="font-bold text-slate-800 truncate">{currentUserName}</span>
             <span className="text-slate-400">•</span>
-            <span className="text-slate-500 truncate">{currentUserPhone || 'Active Account'}</span>
+            <span className="text-slate-500 truncate">{currentUserPhone || 'Guest Explorer'}</span>
           </div>
-          <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
-            SECURE & ISOLATED
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenLogin && !currentUserPhone && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                  onOpenLogin();
+                }}
+                className="text-[9.5px] font-black text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 transition cursor-pointer"
+              >
+                Creator Login
+              </button>
+            )}
+            <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
+              {currentUserPhone ? 'SECURE & ISOLATED' : 'COMMUNITY LIVE FEED'}
+            </span>
+          </div>
         </div>
 
         {/* Scope Switcher (A Vaiin / Ka Thawhte / Bawm Dawnte) */}

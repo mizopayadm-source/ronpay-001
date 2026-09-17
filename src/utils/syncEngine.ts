@@ -121,7 +121,10 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
           return timeB - timeA;
         });
-        saveStoredTransactions(cleanTxs);
+        saveStoredTransactions(cleanTxs, true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+        }
       }
       if (Array.isArray(serverData.creators)) {
         saveStoredCreatorsList(serverData.creators);
