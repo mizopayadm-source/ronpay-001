@@ -372,6 +372,7 @@ export interface MemberRecord {
   id: string; // e.g. EBE-1460
   campaignId: string;
   name: string;
+  fatherName?: string;
   orgCode?: string;
   phoneLast4?: string;
   fullPhone?: string;

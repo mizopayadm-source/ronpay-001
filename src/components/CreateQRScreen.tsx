@@ -40,7 +40,8 @@ import {
   Printer,
   RefreshCw,
   Globe,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -48,6 +49,7 @@ import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
 import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
+import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
 
@@ -1711,6 +1713,73 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                   <option value="user_paid">Users Paid Trxn Fee (Petu'n a tum ang)</option>
                   <option value="org_paid">Org Paid Trxn Fee (Pawl/Org-in an tum ang)</option>
                 </select>
+              </div>
+
+              {/* Excel / CSV Member List Template & Guide */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-3.5 rounded-2xl border border-emerald-300 space-y-2.5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-emerald-950 block">Excel / CSV Member List Template & Format</span>
+                      <span className="text-[10.5px] text-emerald-700 font-medium">Bawm i siam zawhah member tam tak vawi khatah i import thei ang.</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prefix = prefixCode.trim() || 'BET';
+                      downloadSampleExcelTemplate(prefix);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                    title="Download sample Excel (.xlsx) file with Pa Hming & Phone columns"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Sample Excel (.xlsx)</span>
+                  </button>
+                </div>
+
+                {/* Visual Format Guide */}
+                <div className="bg-white/95 p-3 rounded-xl border border-emerald-200 text-[11px] text-slate-700 space-y-2">
+                  <div className="font-black text-[11px] text-emerald-900 flex items-center justify-between">
+                    <span>📋 Excel Sheet Column Awm Dan Tur (Standard Format):</span>
+                    <span className="text-[9.5px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-bold">.xlsx / .xls / .csv</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[10px] border-collapse border border-slate-200 rounded-lg overflow-hidden">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                          <th className="p-1.5 border-r border-slate-200">Name *</th>
+                          <th className="p-1.5 border-r border-slate-200">Father Name (Pa Hming)</th>
+                          <th className="p-1.5 border-r border-slate-200">Phone Number (10 digit)</th>
+                          <th className="p-1.5 border-r border-slate-200">Section / Bial</th>
+                          <th className="p-1.5">Address</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+                        <tr className="bg-emerald-50/40">
+                          <td className="p-1.5 border-r border-slate-200 font-bold text-slate-900">Lalmuanpuia</td>
+                          <td className="p-1.5 border-r border-slate-200">C. Lalthanga</td>
+                          <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-indigo-700">9862123456</td>
+                          <td className="p-1.5 border-r border-slate-200">{kumtluangSections[0] || 'Bial 1 (Vengchhak)'}</td>
+                          <td className="p-1.5">Vengchhak</td>
+                        </tr>
+                        <tr>
+                          <td className="p-1.5 border-r border-slate-200 font-bold text-slate-900">Zothanmawia</td>
+                          <td className="p-1.5 border-r border-slate-200">Lalrinzuala</td>
+                          <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-indigo-700">9436123789</td>
+                          <td className="p-1.5 border-r border-slate-200">{kumtluangSections[1] || 'Bial 2 (Vengthlang)'}</td>
+                          <td className="p-1.5">Vengthlang</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[10px] text-emerald-800 leading-relaxed pt-0.5">
+                    💡 <strong>Tip:</strong> Phone number digit 10 i dah khan a tawp digit 4 hi Member ID-ah a in-generate nghal a, Pa Hming (Father Name) pawh duplicate hming awm theite hriat hran nan fel takin a vawng tel nghal bawk ang. Bawm i siam zawhah <strong>Member Manager</strong> aṭangin Excel sheet chu Drag &amp; Drop mai theih a ni.
+                  </p>
+                </div>
               </div>
             </div>
           )}

@@ -42,6 +42,8 @@ import {
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
+import { KumtluangExcelImportModal } from './KumtluangExcelImportModal';
+import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 
 // Helper to check if a campaign was strictly created by this creator (strict ownership, no cross-creator leakage)
 const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null): boolean => {
@@ -211,9 +213,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [entryRemark, setEntryRemark] = useState<string>('');
   const [entrySuccess, setEntrySuccess] = useState<string | null>(null);
 
+  // Excel Import Modal State
+  const [isExcelImportOpen, setIsExcelImportOpen] = useState<boolean>(false);
+
   // New Member Registration State
   const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
   const [newHming, setNewHming] = useState<string>('');
+  const [newFatherName, setNewFatherName] = useState<string>('');
   const [newOrgCode, setNewOrgCode] = useState<string>('BCM');
   const [newPhone4, setNewPhone4] = useState<string>('');
   const [newFullPhone, setNewFullPhone] = useState<string>('');
@@ -229,6 +235,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
   const [editCampaignId, setEditCampaignId] = useState<string>('');
   const [editName, setEditName] = useState<string>('');
+  const [editFatherName, setEditFatherName] = useState<string>('');
   const [editOrgCode, setEditOrgCode] = useState<string>('');
   const [editPhone4, setEditPhone4] = useState<string>('');
   const [editFullPhone, setEditFullPhone] = useState<string>('');
@@ -555,6 +562,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       id: generatedId,
       campaignId: targetCamp?.id || 'cmp-kumtluang-1',
       name: newHming.trim(),
+      fatherName: newFatherName.trim() || undefined,
       orgCode: org,
       phoneLast4: p4,
       fullPhone: newFullPhone.trim() || undefined,
@@ -581,6 +589,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     
     // Reset form so user can immediately register the next member
     setNewHming('');
+    setNewFatherName('');
     setNewPhone4('');
     setNewFullPhone('');
     setNewSection('');
@@ -600,6 +609,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     setEditingMember(m);
     setEditCampaignId(m.campaignId || campaigns[0]?.id || '');
     setEditName(m.name);
+    setEditFatherName(m.fatherName || '');
     setEditOrgCode(m.orgCode);
     setEditPhone4(m.phoneLast4);
     setEditFullPhone(m.fullPhone || '');
@@ -653,6 +663,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       id: newId,
       campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
       name: editName.trim() || editingMember.name,
+      fatherName: editFatherName.trim() || undefined,
       orgCode: org,
       phoneLast4: p4,
       fullPhone: editFullPhone.trim() || undefined,
@@ -950,6 +961,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             <Users className="w-3.5 h-3.5" />
             <span>Member Roll ({filteredTableMembers.length})</span>
           </button>
+
+          <div className="ml-auto flex items-center py-1.5 shrink-0 pl-2">
+            <button
+              type="button"
+              id="btn-open-excel-import"
+              onClick={() => setIsExcelImportOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+              title="Upload Excel or CSV sheet to import members in bulk"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Import Excel / CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
@@ -1284,6 +1308,39 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 </div>
               )}
 
+              {/* Quick Excel Import Banner */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 bg-emerald-600 text-white rounded-xl shrink-0 mt-0.5 shadow-2xs">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-black text-emerald-950 block text-xs">Excel Sheet aṭangin Member List tam tham import i duh em?</span>
+                    <span className="text-[11px] text-emerald-700">Mimal te tea chhut luh ngai lovin Sample Format download la, excel sheet upload mai rawh le.</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetCamp = allowedCampaigns.find(c => c.id === regTargetCampaignId) || activeScopedCampaign || allowedCampaigns[0];
+                      downloadSampleExcelTemplate(targetCamp?.orgCode || 'BET');
+                    }}
+                    className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
+                  >
+                    Template (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsExcelImportOpen(true)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Import Excel &rarr;</span>
+                  </button>
+                </div>
+              </div>
+
               <form onSubmit={handleRegisterMember} className="space-y-4 bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200">
                 <div>
                   <h4 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
@@ -1314,18 +1371,33 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Chhungkaw Hotu Hming (Family Head Full Name) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newHming}
-                    onChange={(e) => setNewHming(e.target.value)}
-                    placeholder="e.g. Rammuanpuia Ralte"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    required
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Chhungkaw Hotu Hming (Member Full Name) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newHming}
+                      onChange={(e) => setNewHming(e.target.value)}
+                      placeholder="e.g. Rammuanpuia Ralte"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Pa Hming (Father / Guardian Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={newFatherName}
+                      onChange={(e) => setNewFatherName(e.target.value)}
+                      placeholder="e.g. C. Lalthanga (Optional)"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -1839,15 +1911,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
                     <span className="text-[11px] font-bold text-indigo-900 bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200">
                       {filteredTableMembers.length} {filteredTableMembers.length === 1 ? 'Member' : 'Members'} Listed
                     </span>
 
                     <button
                       type="button"
+                      onClick={() => setIsExcelImportOpen(true)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                      title="Import members from Excel / CSV"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>📥 Import Excel</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => setActiveTab('register_member')}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
                       <span>+ Add Member</span>
@@ -1873,6 +1955,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           </div>
                           <div className="min-w-0">
                             <div className="font-bold text-slate-900 text-sm truncate">{m.name}</div>
+                            {m.fatherName && (
+                              <div className="text-[11px] text-slate-500 font-medium">Pa: {m.fatherName}</div>
+                            )}
                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                               <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
                                 {m.id}
@@ -1992,6 +2077,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                                 </div>
                                 <div>
                                   <div className="font-bold text-slate-900">{m.name}</div>
+                                  {m.fatherName && (
+                                    <div className="text-[10px] text-slate-500 font-medium">Pa: {m.fatherName}</div>
+                                  )}
                                   {m.dependents && m.dependents.length > 0 && (
                                     <div className="text-[10px] text-slate-500 mt-0.5 space-x-1 flex flex-wrap gap-1">
                                       {m.dependents.map(d => (
@@ -2155,13 +2243,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
               <div>
                 <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                  Chhungkaw Hotu Hming *
+                  Chhungkaw Hotu Hming (Member Name) *
                 </label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  Pa Hming (Father / Guardian Name)
+                </label>
+                <input
+                  type="text"
+                  value={editFatherName}
+                  onChange={(e) => setEditFatherName(e.target.value)}
+                  placeholder="e.g. C. Lalthanga (Optional)"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 />
               </div>
@@ -2365,6 +2466,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           </div>
         </div>
       )}
+
+      {/* Excel / CSV Bulk Importer Modal */}
+      <KumtluangExcelImportModal
+        isOpen={isExcelImportOpen}
+        onClose={() => setIsExcelImportOpen(false)}
+        campaigns={allowedCampaigns}
+        selectedCampaignId={selectedCampaignId || activeScopedCampaign?.id}
+        onImportComplete={(savedMembers) => {
+          // Refresh member records list immediately
+          const updated = getMembers(selectedCampaignId);
+          setMembers(updated);
+        }}
+      />
     </div>
   );
 };

@@ -2020,6 +2020,35 @@ export const saveMembers = (members: MemberRecord[]): void => {
   }
 };
 
+export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = true): { added: number; updated: number; total: number } => {
+  if (!newMembers || newMembers.length === 0) return { added: 0, updated: 0, total: 0 };
+  const allList = getMembers();
+  let added = 0;
+  let updated = 0;
+
+  for (const member of newMembers) {
+    if (!member || !member.id) continue;
+    const targetId = member.id.trim().toLowerCase();
+    const idx = allList.findIndex(m =>
+      (m.id || '').trim().toLowerCase() === targetId &&
+      (!member.campaignId || !m.campaignId || m.campaignId === member.campaignId)
+    );
+
+    if (idx >= 0) {
+      if (overwriteExisting) {
+        allList[idx] = { ...allList[idx], ...member };
+        updated++;
+      }
+    } else {
+      allList.unshift(member);
+      added++;
+    }
+  }
+
+  saveMembers(allList);
+  return { added, updated, total: allList.length };
+};
+
 export const addOrUpdateMember = (member: MemberRecord): void => {
   const allList = getMembers(); // Load all members across all Bawms
   const targetId = (member.id || '').trim().toLowerCase();
