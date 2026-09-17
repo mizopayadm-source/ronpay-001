@@ -256,7 +256,8 @@ async function getOrFetchPhonePeOAuthToken(forceRefresh = false): Promise<string
     return cachedPhonePeToken;
   }
 
-  const targetOAuthUrl = PHONEPE_ENV === 'PROD' ? PHONEPE_OAUTH_URL_PROD : PHONEPE_OAUTH_URL_SANDBOX;
+  const isProd = PHONEPE_ENV === 'PROD' || PHONEPE_ENV === 'PRODUCTION';
+  const targetOAuthUrl = isProd ? PHONEPE_OAUTH_URL_PROD : PHONEPE_OAUTH_URL_SANDBOX;
   try {
     const formParams = new URLSearchParams();
     formParams.append('client_id', PHONEPE_CLIENT_ID);
@@ -268,16 +269,20 @@ async function getOrFetchPhonePeOAuthToken(forceRefresh = false): Promise<string
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formParams.toString(),
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(10000)
     });
     if (resp.ok) {
       const data: any = await resp.json();
       const token = data?.access_token || data?.data?.access_token;
       if (token) {
         cachedPhonePeToken = token;
-        cachedPhonePeTokenExpiresAt = now + ((Number(data.expires_in) || 3600) * 1000);
+        const validSeconds = Math.max(300, (Number(data.expires_in) || 3600) - 300);
+        cachedPhonePeTokenExpiresAt = now + (validSeconds * 1000);
         return token;
       }
+    } else {
+      const errBody = await resp.text();
+      console.warn(`PhonePe OAuth endpoint (${targetOAuthUrl}) failed with status ${resp.status}:`, errBody);
     }
   } catch (err: any) {
     console.warn('Failed to fetch official PhonePe OAuth token:', err.message || err);
@@ -337,7 +342,8 @@ function buildPhonePeTspHeaders(options: PhonePeTspHeaderOptions = {}): Record<s
 // API 1: PhonePe TSP Configuration & Status Info
 // -------------------------------------------------------------
 app.get('/api/phonepe/config', (req: Request, res: Response) => {
-  const activeOAuthUrl = PHONEPE_ENV === 'PROD' ? PHONEPE_OAUTH_URL_PROD : PHONEPE_OAUTH_URL_SANDBOX;
+  const isProd = PHONEPE_ENV === 'PROD' || PHONEPE_ENV === 'PRODUCTION';
+  const activeOAuthUrl = isProd ? PHONEPE_OAUTH_URL_PROD : PHONEPE_OAUTH_URL_SANDBOX;
   res.json({
     status: 'SUCCESS',
     environment: PHONEPE_ENV,
