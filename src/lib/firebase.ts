@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 
 export const firebaseConfig = {
-  apiKey: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_API_KEY) || "AIzaSyDbLHlj2yEDQVxm2LRJjY8OMpuBab-TxEk",
+  apiKey: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_API_KEY) || "AIzaSyDummyKeyForDevelopmentOnly000",
   authDomain: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN) || "ronpay-7fc69.firebaseapp.com",
   projectId: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID) || "ronpay-7fc69",
   storageBucket: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET) || "ronpay-7fc69.firebasestorage.app",

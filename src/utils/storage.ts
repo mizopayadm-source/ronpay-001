@@ -317,7 +317,7 @@ export const suggestAlternativePrefixes = (baseTextOrPrefix: string, excludeCamp
   return available;
 };
 
-export const saveStoredCampaigns = (campaigns: Campaign[]) => {
+export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boolean = false) => {
   try {
     // Enforce unique prefix codes across all campaigns
     const seenPrefixes = new Set<string>();
@@ -347,12 +347,14 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
       broadcastTabSync('campaigns');
     }
 
-    // Asynchronously push to backend server for multi-device sync
-    safeApiFetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaigns: sortedSanitized })
-    });
+    if (!skipServerPush) {
+      // Asynchronously push to backend server for multi-device sync
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaigns: sortedSanitized })
+      });
+    }
   } catch (e) {
     console.error('Failed to save campaigns', e);
   }
@@ -360,21 +362,25 @@ export const saveStoredCampaigns = (campaigns: Campaign[]) => {
 
 export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
+  const stamped: Campaign = {
+    ...camp,
+    updatedAt: camp.updatedAt || new Date().toISOString()
+  };
   const current = getStoredCampaigns();
-  const idx = current.findIndex(c => c.id === camp.id);
+  const idx = current.findIndex(c => c.id === stamped.id);
   let updated: Campaign[];
   if (idx >= 0) {
     updated = [...current];
-    updated[idx] = camp;
+    updated[idx] = stamped;
   } else {
-    updated = [camp, ...current];
+    updated = [stamped, ...current];
   }
   saveStoredCampaigns(updated);
-  syncCampaignToFirestore(camp).catch(() => {});
+  syncCampaignToFirestore(stamped).catch(() => {});
   safeApiFetch('/api/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(camp)
+    body: JSON.stringify(stamped)
   });
 };
 

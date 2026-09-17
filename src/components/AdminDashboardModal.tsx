@@ -855,9 +855,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       migratedCount = migrateCampaignMembersPrefix(editingCampaign.id, oldPrefix, finalPrefix);
     }
 
+    let finalStatus = editingCampaign.status;
+    const isDateInFuture = editingCampaign.validityDate && new Date(editingCampaign.validityDate).getTime() > Date.now();
+    if (isDateInFuture && finalStatus === 'expired') {
+      finalStatus = 'active';
+    }
+
     const campaignToSave: Campaign = {
       ...editingCampaign,
-      orgCode: finalPrefix
+      orgCode: finalPrefix,
+      status: finalStatus,
+      updatedAt: new Date().toISOString()
     };
 
     onUpdateCampaign(campaignToSave);
@@ -1496,8 +1504,10 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                     const updated: Campaign = {
                                       ...camp,
                                       status: 'active',
+                                      isApproved: true,
                                       validityDate: now.toISOString(),
-                                      approvalRemarks: 'Reactivated and approved by Admin (+30 Days)'
+                                      approvalRemarks: 'Reactivated and approved by Admin (+30 Days)',
+                                      updatedAt: new Date().toISOString()
                                     };
                                     if (onUpdateCampaign) onUpdateCampaign(updated);
                                     recordAuditLog('Campaign Reactivated', `Admin reactivated expired campaign '${camp.title}' (${camp.id}) with +30 days validity.`, 'campaign', camp.id);
@@ -1516,7 +1526,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                     const updated: Campaign = {
                                       ...camp,
                                       status: 'expired',
-                                      approvalRemarks: 'Marked as expired by Admin'
+                                      approvalRemarks: 'Marked as expired by Admin',
+                                      updatedAt: new Date().toISOString()
                                     };
                                     if (onUpdateCampaign) onUpdateCampaign(updated);
                                     recordAuditLog('Campaign Expired', `Admin marked campaign '${camp.title}' as expired.`, 'campaign', camp.id);
@@ -3748,33 +3759,47 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         <span className="text-[9px] font-extrabold text-slate-400 uppercase mr-1">Quick:</span>
                         <button
                           type="button"
-                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 0) })}
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 0), status: 'active' })}
                           className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
                         >
                           Today
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 7) })}
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 7), status: 'active' })}
                           className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
                         >
                           +7 Days
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 30) })}
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 30), status: 'active' })}
                           className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[9.5px] cursor-pointer border border-indigo-200"
                         >
                           +30 Days
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 365) })}
+                          onClick={() => setEditingCampaign({ ...editingCampaign, validityDate: getTodayDateTimeLocal(23, 59, 365), status: 'active' })}
                           className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9.5px] cursor-pointer"
                         >
                           +1 Year
                         </button>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-600 uppercase">Campaign Status</label>
+                      <select
+                        value={editingCampaign.status || 'active'}
+                        onChange={(e) => setEditingCampaign({ ...editingCampaign, status: e.target.value as any })}
+                        className="w-full mt-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none"
+                      >
+                        <option value="active">🟢 Active (Live & Accepting Donations)</option>
+                        <option value="expired">⏸️ Expired (Closed)</option>
+                        <option value="pending_approval">⏳ Pending Approval</option>
+                        <option value="rejected">❌ Rejected</option>
+                      </select>
                     </div>
                   </div>
 

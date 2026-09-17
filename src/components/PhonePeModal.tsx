@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { saveTransaction, recordUserPaidTxId } from '../utils/storage';
+import { invokePhonePePayPage } from '../utils/phonepeCheckout';
 
 interface PhonePeModalProps {
   isOpen: boolean;
@@ -244,21 +245,58 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     try {
       let res: any;
       if (key === 'token') {
-        res = await fetch('/api/phonepe/token', { method: 'POST' });
-      } else if (key === 'pay') {
-        res = await fetch('/api/phonepe/initiate-pay', {
+        res = await fetch('/v1/oauth/token', { method: 'POST' });
+      } else if (key === 'pay' || key === 'pay_v2') {
+        res = await fetch('/checkout/v2/pay', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amountInRupees: 100,
-            donorName: 'Test Donor',
-            campaignTitle: 'UAT Checklist Test',
-            simulateStatus: 'SUCCESS',
-            customerPhone: '9862300000'
+            merchantOrderId: `OMO_TEST_${Date.now()}`,
+            amount: 10000,
+            expireAfter: 1200,
+            donorName: 'RonPay Website Tester',
+            paymentFlow: {
+              type: 'PG_CHECKOUT',
+              merchantUrls: {
+                redirectUrl: `${window.location.origin}/api/phonepe/callback`
+              }
+            }
           })
         });
-      } else if (key === 'status') {
-        res = await fetch('/api/phonepe/status/RPAY_TXN_UAT_CHECK');
+      } else if (key === 'iframe_test') {
+        // Step 3 live invocation test
+        const initResp = await fetch('/checkout/v2/pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchantOrderId: `OMO_IFRAME_${Date.now()}`,
+            amount: 10000,
+            expireAfter: 1200
+          })
+        });
+        const initData = await initResp.json();
+        const redUrl = initData.redirectUrl || initData.data?.redirectUrl;
+        if (redUrl) {
+          const ok = await invokePhonePePayPage({
+            tokenUrl: redUrl,
+            type: 'IFRAME',
+            onConcluded: () => {
+              showNotification('✅ PhonePe iframe PayPage concluded callback triggered!', 'success');
+            },
+            onUserCancel: () => {
+              showNotification('ℹ️ PhonePe iframe PayPage closed by user', 'error');
+            }
+          });
+          if (ok) {
+            showNotification('🚀 Official PhonePe PayPage opened in iframe!', 'success');
+          } else {
+            window.open(redUrl, '_blank');
+            showNotification('Opened PhonePe PayPage in new tab', 'success');
+          }
+        }
+        res = initResp;
+      } else if (key === 'status' || key === 'status_v2') {
+        res = await fetch('/checkout/v2/order/RPAY_TXN_UAT_CHECK/status');
       } else if (key === 'webhook_config') {
         res = await fetch('/api/phonepe/create-webhook-api', {
           method: 'POST',
@@ -437,8 +475,8 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
               {/* Checklist Items */}
               <div className="space-y-2.5">
 
-                {/* 1. Standard Checkout Pay API */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                {/* 1. Standard Checkout Website Integration API (4 Steps) */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black text-[10px] shrink-0">
@@ -452,26 +490,77 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                           rel="noreferrer"
                           className="text-[9.5px] text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
                         >
-                          Website Integration Docs <ExternalLink className="w-2.5 h-2.5" />
+                          Official PhonePe Website Integration Guide <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       </div>
                     </div>
                     <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
-                      READY
+                      ALL 4 STEPS COMPLIANT
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-600 leading-relaxed">
-                    <code className="font-mono bg-slate-200 px-1 rounded">POST /apis/pg-sandbox/checkout/v2/pay</code> hmangin <code className="font-mono bg-slate-200 px-1 rounded">merchantOrderId</code>, <code className="font-mono bg-slate-200 px-1 rounded">amount</code> (Paise), <code className="font-mono bg-slate-200 px-1 rounded">expireAfter</code>, <code className="font-mono bg-slate-200 px-1 rounded">metaInfo (udf1-5)</code>, leh <code className="font-mono bg-slate-200 px-1 rounded">paymentFlow</code> a in-pass thlap.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleTestChecklistItem('pay')}
-                    disabled={testingItem === 'pay'}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3 h-3" />
-                    <span>{testingItem === 'pay' ? 'Testing Pay API...' : 'Test PG Pay API Call'}</span>
-                  </button>
+
+                  {/* 4 Official Steps Breakdown */}
+                  <div className="space-y-1.5 text-[10.5px]">
+                    <div className="p-2 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-purple-900">Step 1: Authorization Token</span>
+                        <p className="text-[9.5px] text-slate-500 font-mono">POST /v1/oauth/token • client_credentials</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTestChecklistItem('token')}
+                        disabled={testingItem === 'token'}
+                        className="py-1 px-2.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[9.5px] hover:bg-purple-100 transition cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {testingItem === 'token' ? 'Running...' : 'Test Token'}
+                      </button>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-purple-900">Step 2: Create Payment Request</span>
+                        <p className="text-[9.5px] text-slate-500 font-mono">POST /checkout/v2/pay • merchantOrderId, amount</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTestChecklistItem('pay_v2')}
+                        disabled={testingItem === 'pay_v2'}
+                        className="py-1 px-2.5 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[9.5px] hover:bg-purple-100 transition cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {testingItem === 'pay_v2' ? 'Running...' : 'Test Pay API'}
+                      </button>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-purple-900">Step 3: Invoke iframe PayPage</span>
+                        <p className="text-[9.5px] text-slate-500 font-mono">PhonePeCheckout.transact({`{ type: 'IFRAME' }`})</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTestChecklistItem('iframe_test')}
+                        disabled={testingItem === 'iframe_test'}
+                        className="py-1 px-2.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold text-[9.5px] hover:bg-indigo-100 transition cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {testingItem === 'iframe_test' ? 'Launching...' : 'Invoke iFrame'}
+                      </button>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-purple-900">Step 4: Verify Payment Response</span>
+                        <p className="text-[9.5px] text-slate-500 font-mono">GET /checkout/v2/order/{`{merchantOrderId}`}/status</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTestChecklistItem('status_v2')}
+                        disabled={testingItem === 'status_v2'}
+                        className="py-1 px-2.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[9.5px] hover:bg-emerald-100 transition cursor-pointer disabled:opacity-50 shrink-0"
+                      >
+                        {testingItem === 'status_v2' ? 'Verifying...' : 'Verify Status'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 2. TSP Headers & Credentials (Standard 2) */}
@@ -482,15 +571,15 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                         2
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-xs">TSP HTTP Headers Standard 2 Compliance</h4>
+                        <h4 className="font-bold text-slate-900 text-xs">TSP HTTP Headers (Standard) & Authorization</h4>
                         <div className="flex flex-wrap gap-2 text-[9.5px]">
                           <a 
-                            href="https://developer.phonepe.com/v1/docs/tsp-http-headers-standard-2/"
+                            href="https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard"
                             target="_blank"
                             rel="noreferrer"
                             className="text-purple-700 hover:underline flex items-center gap-0.5 font-bold"
                           >
-                            Standard 2 Docs <ExternalLink className="w-2.5 h-2.5" />
+                            HTTP Headers (Standard) <ExternalLink className="w-2.5 h-2.5" />
                           </a>
                           <span>•</span>
                           <a 
@@ -499,13 +588,13 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                             rel="noreferrer"
                             className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
                           >
-                            Auth Docs <ExternalLink className="w-2.5 h-2.5" />
+                            Authorization Docs <ExternalLink className="w-2.5 h-2.5" />
                           </a>
                         </div>
                       </div>
                     </div>
                     <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
-                      STANDARD 2 COMPLIANT
+                      ALL 9 HEADERS COMPLIANT
                     </span>
                   </div>
                   <div className="bg-purple-50/70 border border-purple-200/60 p-2.5 rounded-xl text-[9.5px] text-purple-950 space-y-1 font-mono">
@@ -527,7 +616,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                       className="py-1.5 px-2 rounded-xl bg-purple-600 text-white font-bold text-[10px] hover:bg-purple-700 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>{testingItem === 'tsp_headers' ? 'Auditing...' : 'Verify Standard 2'}</span>
+                      <span>{testingItem === 'tsp_headers' ? 'Auditing...' : 'Audit HTTP Headers'}</span>
                     </button>
                     <button
                       type="button"

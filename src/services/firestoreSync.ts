@@ -147,12 +147,31 @@ export function smartMerge<T extends Record<string, any>>(localItems: T[], remot
     }
   }
   
-  // 2. Merge with remote items
+  // 2. Merge with remote items using timestamp and validity comparison
   for (const remote of (remoteItems || [])) {
     if (remote && remote[key]) {
       const k = String(remote[key]).toLowerCase();
       const existing = map.get(k);
-      map.set(k, { ...(existing || {}), ...remote });
+      if (!existing) {
+        map.set(k, remote);
+      } else {
+        const remoteTime = new Date(remote.updatedAt || remote.approvedAt || remote.timestamp || remote.createdAt || 0).getTime();
+        const localTime = new Date(existing.updatedAt || existing.approvedAt || existing.timestamp || existing.createdAt || 0).getTime();
+        const remoteValidity = remote.validityDate ? new Date(remote.validityDate).getTime() : 0;
+        const localValidity = existing.validityDate ? new Date(existing.validityDate).getTime() : 0;
+
+        if (remoteTime > localTime) {
+          map.set(k, { ...existing, ...remote });
+        } else if (localTime > remoteTime) {
+          map.set(k, { ...remote, ...existing });
+        } else if (remoteValidity > localValidity) {
+          map.set(k, { ...existing, ...remote });
+        } else if (localValidity > remoteValidity) {
+          map.set(k, { ...remote, ...existing });
+        } else {
+          map.set(k, { ...(existing || {}), ...remote });
+        }
+      }
     }
   }
   

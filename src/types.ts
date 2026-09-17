@@ -128,6 +128,7 @@ export interface Transaction {
   timestamp: string;
   createdAt?: string;
   txHash?: string;
+  transactionId?: string;
   referenceNo?: string;
   utrRef?: string;
   utr?: string;

@@ -955,15 +955,19 @@ export default function App() {
   };
 
   const handleUpdateCampaign = (campaign: Campaign) => {
-    saveCampaign(campaign);
+    const stamped: Campaign = {
+      ...campaign,
+      updatedAt: campaign.updatedAt || new Date().toISOString()
+    };
+    saveCampaign(stamped);
     setCampaigns(prev => {
-      const idx = prev.findIndex(c => c.id === campaign.id);
+      const idx = prev.findIndex(c => c.id === stamped.id);
       if (idx >= 0) {
         const copy = [...prev];
-        copy[idx] = campaign;
+        copy[idx] = stamped;
         return copy;
       }
-      return [campaign, ...prev];
+      return [stamped, ...prev];
     });
   };
 
@@ -978,13 +982,19 @@ export default function App() {
   };
 
   const handleApproveCampaign = (campaign: Campaign) => {
-    const approvedCamp: Campaign = { ...campaign, status: 'active', isApproved: true };
+    const approvedCamp: Campaign = {
+      ...campaign,
+      status: 'active',
+      isApproved: true,
+      updatedAt: new Date().toISOString()
+    };
     handleUpdateCampaign(approvedCamp);
     recordAuditLog('Campaign Approved', `Campaign "${campaign.title}" approved by Admin`, 'campaign', campaign.id);
   };
 
   const handleRejectCampaign = (campaignId: string, remarks?: string) => {
-    const updated = campaigns.map(c => (c.id === campaignId ? { ...c, status: 'rejected', approvalRemarks: remarks } : c));
+    const now = new Date().toISOString();
+    const updated = campaigns.map(c => (c.id === campaignId ? { ...c, status: 'rejected', approvalRemarks: remarks, updatedAt: now } : c));
     setCampaigns(updated);
     saveStoredCampaigns(updated);
     recordAuditLog('Campaign Rejected', `Campaign ${campaignId} rejected with remark: ${remarks || 'None'}`, 'campaign', campaignId);

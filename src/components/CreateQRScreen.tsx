@@ -350,7 +350,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     
     if (!isCurrentlyExpired && camp.status === 'active') {
       // 1. Creator marking active campaign as Expired (Allowed directly)
-      const updated: Campaign = { ...camp, status: 'expired' };
+      const updated: Campaign = { ...camp, status: 'expired', updatedAt: new Date().toISOString() };
       onUpdateCampaign(updated);
       alert(`⏸️ "${camp.title}" chu Expired (Closed) a dah a ni ta e.\nSum chhunluh theih a ni tawh rih lo ang.`);
     } else {
@@ -361,7 +361,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
         ...camp,
         status: 'pending_approval',
         validityDate: now.toISOString(),
-        approvalRemarks: 'Reactivation requested by creator'
+        approvalRemarks: 'Reactivation requested by creator',
+        updatedAt: new Date().toISOString()
       };
       onUpdateCampaign(updated);
       alert(`📩 Reactivation Request Admin hnenah thawn a ni e!\n\nPost hi Admin-in an approve hnuah chauh Active a ni leh ang.`);
@@ -2531,6 +2532,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       gpsCoords: gpsCoords.trim(),
       imageUrl: imageUrl || undefined,
       orgCode: finalPrefix,
+      updatedAt: new Date().toISOString(),
       
       mitthiHming: campaign.category === 'ralna' ? mitthiHming.trim() : undefined,
       age: campaign.category === 'ralna' && age ? parseInt(age) : undefined,

@@ -157,7 +157,11 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
 
         // Update local storage with unified server data
         if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
-          saveStoredCampaigns(serverData.campaigns);
+          saveStoredCampaigns(serverData.campaigns, true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: serverData.campaigns }));
+            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: serverData.campaigns }));
+          }
         }
         if (Array.isArray(serverData.members) && serverData.members.length > 0) {
           const localMembers = getMembers('all');

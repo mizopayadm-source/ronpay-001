@@ -42,6 +42,7 @@ import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, t
 import { getMembers, addOrUpdateMember, saveTransaction } from '../utils/storage';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
+import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
 
@@ -859,14 +860,67 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           })
         });
         const data = await resp.json();
-        const mercuryUrl = data?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || data?.data?.instrumentResponse?.redirectInfo?.url;
+        const mercuryUrl = data?.redirectUrl || data?.data?.redirectUrl || data?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || data?.data?.instrumentResponse?.redirectInfo?.url;
 
         if (mercuryUrl) {
           setPhonePeLaunchUrl(mercuryUrl);
-          if (paymentTab && !paymentTab.closed) {
-            paymentTab.location.href = mercuryUrl;
+
+          // Standard Checkout Step 3: Invoke iframe PayPage per PhonePe API docs:
+          // https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
+          const launchedInIframe = await invokePhonePePayPage({
+            tokenUrl: mercuryUrl,
+            type: 'IFRAME',
+            onConcluded: async () => {
+              // Standard Checkout Step 4: Verify Payment Response
+              try {
+                const statusRes = await checkPhonePePaymentStatus(pendingTx.id);
+                if (
+                  statusRes.state === 'COMPLETED' || 
+                  statusRes.code === 'PAYMENT_SUCCESS' || 
+                  statusRes.data?.state === 'COMPLETED' || 
+                  statusRes.data?.status === 'SUCCESS' || 
+                  statusRes.data?.status === 'PAYMENT_SUCCESS'
+                ) {
+                  const finalTx: Transaction = {
+                    ...pendingTx,
+                    status: 'completed',
+                    transactionId: statusRes.data?.transactionId || statusRes.orderId || pendingTx.id,
+                    utr: statusRes.paymentDetails?.[0]?.utr || statusRes.data?.utr || ('UTR' + Date.now()),
+                    verifiedAt: new Date().toISOString()
+                  };
+                  saveTransaction(finalTx);
+                  setIsWaitingPhonePePG(false);
+                  setIsProcessing(false);
+                  onPaymentSuccess(finalTx);
+                } else {
+                  setIsVerifyingInMainTab(true);
+                }
+              } catch (e) {
+                setIsVerifyingInMainTab(true);
+              }
+            },
+            onUserCancel: () => {
+              setIsWaitingPhonePePG(false);
+              setIsProcessing(false);
+              setPhonePeVerifyMsg({ type: 'error', text: 'PhonePe payment was cancelled by customer.' });
+            },
+            onError: (err) => {
+              console.warn('PhonePe iframe invocation error:', err);
+            }
+          });
+
+          if (launchedInIframe) {
+            // PayPage displayed directly inside website iframe! Close auxiliary tab if open
+            if (paymentTab && !paymentTab.closed) {
+              paymentTab.close();
+            }
           } else {
-            window.open(mercuryUrl, '_blank');
+            // Graceful fallback to new tab or direct redirect
+            if (paymentTab && !paymentTab.closed) {
+              paymentTab.location.href = mercuryUrl;
+            } else {
+              window.open(mercuryUrl, '_blank');
+            }
           }
         } else if (paymentTab && !paymentTab.closed) {
           paymentTab.location.href = fullLaunchUrl;

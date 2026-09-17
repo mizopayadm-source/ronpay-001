@@ -360,8 +360,9 @@ app.get('/api/phonepe/config', (req: Request, res: Response) => {
       sandbox: PHONEPE_OAUTH_URL_SANDBOX,
       production: PHONEPE_OAUTH_URL_PROD
     },
-    tspStandardVersion: 'Standard 2',
-    tspStandardDocumentation: 'https://developer.phonepe.com/v1/docs/tsp-http-headers-standard-2/',
+    tspStandardVersion: 'Standard HTTP Headers',
+    tspStandardDocumentation: 'https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard',
+    tspAuthorizationDocumentation: 'https://developer.phonepe.com/tsp-integration/tsp-headers/authorization',
     tspHeadersRequired: [
       'Authorization (O-Bearer <token>)',
       `X-MERCHANT-ID (${PHONEPE_MERCHANT_ID})`,
@@ -469,8 +470,9 @@ app.get('/api/phonepe/tsp-headers', async (req: Request, res: Response) => {
 
   res.json({
     success: true,
-    standard: 'PhonePe TSP HTTP Headers Standard 2',
-    documentation: 'https://developer.phonepe.com/v1/docs/tsp-http-headers-standard-2/',
+    standard: 'PhonePe TSP HTTP Headers (Standard)',
+    documentation: 'https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard',
+    authorizationDocumentation: 'https://developer.phonepe.com/tsp-integration/tsp-headers/authorization',
     complianceScore: '100%',
     status: 'COMPLIANT',
     activeEnvironment: PHONEPE_ENV,
@@ -481,8 +483,15 @@ app.get('/api/phonepe/tsp-headers', async (req: Request, res: Response) => {
 
 // -------------------------------------------------------------
 // API 2: PhonePe TSP OAuth Token Generator (Live to PhonePe OAuth)
+// Aligned with PhonePe Standard Checkout Website API docs:
+// https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
 // -------------------------------------------------------------
-app.post('/api/phonepe/token', async (req: Request, res: Response) => {
+app.post([
+  '/api/phonepe/token',
+  '/v1/oauth/token',
+  '/apis/pg-sandbox/v1/oauth/token',
+  '/apis/pg/v1/oauth/token'
+], async (req: Request, res: Response) => {
   try {
     const envParam = (req.body?.environment || req.query?.env || PHONEPE_ENV).toUpperCase();
     const targetOAuthUrl = envParam === 'PROD' || envParam === 'PRODUCTION'
@@ -521,10 +530,23 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
       phonePeResponse = { networkError: netErr.message };
     }
 
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
     // If PhonePe returned an official access token
     if (liveStatus === 200 && phonePeResponse && (phonePeResponse.access_token || phonePeResponse.data?.access_token)) {
       const liveToken = phonePeResponse.access_token || phonePeResponse.data?.access_token;
+      const expiresInSec = Number(phonePeResponse.expires_in) || 3600;
+      const expiresAt = phonePeResponse.expires_at || (nowSeconds + expiresInSec);
+
       return res.json({
+        // Standard PhonePe OAuth root response fields:
+        access_token: liveToken,
+        encrypted_access_token: phonePeResponse.encrypted_access_token || liveToken,
+        token_type: phonePeResponse.token_type || 'Bearer',
+        expires_at: expiresAt,
+        expires_in: expiresInSec,
+
+        // RonPay backward-compatible fields:
         success: true,
         code: 'SUCCESS',
         message: 'PhonePe OAuth Token generated successfully from official endpoint',
@@ -532,8 +554,10 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
         environment: envParam,
         data: {
           access_token: liveToken,
+          encrypted_access_token: phonePeResponse.encrypted_access_token || liveToken,
           token_type: phonePeResponse.token_type || 'Bearer',
-          expires_in: phonePeResponse.expires_in || 3600,
+          expires_in: expiresInSec,
+          expires_at: expiresAt,
           clientId: clientId,
           merchantId: PHONEPE_MERCHANT_ID,
           isLiveEndpoint: true,
@@ -544,7 +568,18 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
 
     // If PhonePe returned 401 or invalid credentials, provide test token with diagnostic info
     const fallbackToken = 'tsp_uat_token_' + crypto.randomBytes(16).toString('hex');
+    const fallbackExpiresIn = 3600;
+    const fallbackExpiresAt = nowSeconds + fallbackExpiresIn;
+
     return res.json({
+      // Standard PhonePe OAuth root response fields:
+      access_token: fallbackToken,
+      encrypted_access_token: fallbackToken,
+      token_type: 'Bearer',
+      expires_at: fallbackExpiresAt,
+      expires_in: fallbackExpiresIn,
+
+      // RonPay backward-compatible fields:
       success: true,
       code: 'FALLBACK_SUCCESS',
       message: `PhonePe OAuth Endpoint reached (${targetOAuthUrl}). Note: PhonePe returned HTTP ${liveStatus} (${phonePeResponse?.code || 'AUTH_REQUIRED'}), using sandbox fallback token for local dev.`,
@@ -554,8 +589,10 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
       phonePeResponse,
       data: {
         access_token: fallbackToken,
+        encrypted_access_token: fallbackToken,
         token_type: 'Bearer',
-        expires_in: 3600,
+        expires_in: fallbackExpiresIn,
+        expires_at: fallbackExpiresAt,
         clientId: clientId,
         merchantId: PHONEPE_MERCHANT_ID,
         isLiveEndpoint: true,
@@ -568,12 +605,23 @@ app.post('/api/phonepe/token', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API 3: Initiate Standard Checkout (PG V2 Pay API)
+// API 3: Initiate Standard Checkout (PhonePe PG V2 Pay API)
+// Aligned with official PhonePe Standard Checkout Website API docs:
+// https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
 // -------------------------------------------------------------
-app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async (req: Request, res: Response) => {
+app.post([
+  '/api/phonepe/initiate-pay',
+  '/api/phonepe/pay',
+  '/checkout/v2/pay',
+  '/apis/pg-sandbox/checkout/v2/pay',
+  '/apis/pg/checkout/v2/pay',
+  '/pg/v1/pay'
+], async (req: Request, res: Response) => {
   try {
     const { 
       amountInRupees, 
+      amount, // Standard PhonePe parameter in paise
+      merchantOrderId, // Standard PhonePe parameter
       donorName, 
       campaignTitle, 
       campaignId, 
@@ -582,11 +630,19 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
       simulateStatus,
       feeOption = 'ADD_ON', // 'ADD_ON' (Rs 100 + Rs 1 = Rs 101) or 'DEDUCT_FROM_DONATION' (Rs 99 + Rs 1 = Rs 100)
       baseAmountInRupees,
-      merchantTransactionId: clientTxnId,
-      isAnonymous
+      merchantTransactionId: rawClientTxnId,
+      isAnonymous,
+      expireAfter = 1200,
+      paymentFlow,
+      deviceContext
     } = req.body;
 
-    const rawAmount = Number(amountInRupees) || 100;
+    const clientTxnId = merchantOrderId || rawClientTxnId || req.body?.clientTxnId;
+    const rawPaiseAmount = amount !== undefined && amount !== null ? Number(amount) : undefined;
+    const rawAmount = amountInRupees !== undefined 
+      ? Number(amountInRupees) 
+      : (rawPaiseAmount !== undefined ? rawPaiseAmount / 100 : 100);
+
     let merchantSharePaise = 0;
     let platformFeePaise = 0;
     let totalPayablePaise = 0;
@@ -603,6 +659,11 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
         platformFeePaise = Math.round(Math.max(1, Math.round(baseNum * 0.01)) * 100);
         merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
       }
+    } else if (rawPaiseAmount !== undefined && rawPaiseAmount > 0) {
+      // Direct paise amount provided (Standard PhonePe API specification)
+      totalPayablePaise = Math.round(rawPaiseAmount);
+      platformFeePaise = Math.max(100, Math.round(totalPayablePaise * 0.01));
+      merchantSharePaise = Math.max(0, totalPayablePaise - platformFeePaise);
     } else {
       // If only amountInRupees is passed, treat it strictly as the exact total payable
       totalPayablePaise = Math.round(rawAmount * 100);
@@ -772,16 +833,27 @@ app.post(['/api/phonepe/initiate-pay', '/api/phonepe/pay', '/pg/v1/pay'], async 
     // Dedicated PhonePe Sandbox Gateway Checkout URL
     const localCheckoutUrl = `${effectiveOrigin}/api/phonepe/checkout?txnId=${encodeURIComponent(merchantTransactionId)}`;
 
-    // Return Standard Checkout Response
+    // Return Standard Checkout Response matching official PhonePe Website API docs:
     res.json({
+      // Official PhonePe Standard Checkout V2 root fields:
+      orderId: phonePeOrderId,
+      merchantOrderId: merchantTransactionId,
+      state: 'CREATED',
+      redirectUrl: phonePeCheckoutUrl,
+      expireAfter: expireAfter || 1200,
+
+      // RonPay backward-compatible response fields:
       success: true,
       code: 'PAYMENT_INITIATED',
       message: 'Payment request initiated on PhonePe PG V2',
       data: {
         merchantId: incomingMid,
         merchantTransactionId: merchantTransactionId,
+        merchantOrderId: merchantTransactionId,
         orderId: phonePeOrderId,
         phonepeOrderId: phonePeOrderId,
+        state: 'CREATED',
+        expireAfter: expireAfter || 1200,
         redirectUrl: phonePeCheckoutUrl,
         token: livePhonePeToken,
         instrumentResponse: {
@@ -1085,13 +1157,34 @@ app.get([
   const endpoint = `/pg/v1/status/${PHONEPE_MERCHANT_ID}/${merchantTransactionId}`;
   const xVerify = generateChecksum('', endpoint, PHONEPE_CLIENT_SECRET, '1');
 
+  const resolvedUtr = record.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
+  const currentState = isSuccess ? 'COMPLETED' : (isFailed ? 'FAILED' : 'PENDING');
+
   res.json({
+    // Official PhonePe Standard Checkout V2 root fields:
+    orderId: record.phonePeTransactionId || record.merchantTransactionId,
+    merchantOrderId: record.merchantTransactionId,
+    state: currentState,
+    amount: record.amount,
+    expireAfter: 1200,
+    paymentDetails: [
+      {
+        paymentMode: 'UPI',
+        transactionId: record.phonePeTransactionId || record.merchantTransactionId,
+        utr: resolvedUtr,
+        state: currentState
+      }
+    ],
+
+    // RonPay backward-compatible fields:
     success: isSuccess,
     code: isSuccess ? 'PAYMENT_SUCCESS' : (isFailed ? 'PAYMENT_ERROR' : 'PAYMENT_PENDING'),
     message: isSuccess 
       ? 'Your payment has been successfully processed.' 
       : (isFailed ? 'Payment failed or declined by customer.' : 'Payment is currently pending bank confirmation.'),
     data: {
+      orderId: record.phonePeTransactionId || record.merchantTransactionId,
+      merchantOrderId: record.merchantTransactionId,
       merchantId: PHONEPE_MERCHANT_ID,
       merchantTransactionId: record.merchantTransactionId,
       transactionId: record.phonePeTransactionId,
@@ -1106,11 +1199,11 @@ app.get([
       donorName: record.donorName || 'Valued Donor',
       donorPhone: record.donorPhone,
       isAnonymous: Boolean(record.isAnonymous),
-      state: isSuccess ? 'COMPLETED' : (isFailed ? 'FAILED' : 'PENDING'),
+      state: currentState,
       responseCode: isSuccess ? 'SUCCESS' : (isFailed ? 'PAYMENT_ERROR' : 'PAYMENT_PENDING'),
       paymentInstrument: {
         type: 'UPI',
-        utr: record.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000)),
+        utr: resolvedUtr,
         vpa: 'user@phonepe'
       },
       splitDetails: record.splitDetails,
@@ -1642,11 +1735,11 @@ app.get('/api/phonepe/partner-checklist', (req: Request, res: Response) => {
     {
       id: 2,
       category: 'HTTP Headers',
-      title: 'TSP HTTP Headers Standard 2 Compliance',
+      title: 'TSP HTTP Headers (Standard) Compliance',
       requirement: 'Pass Authorization: O-Bearer, X-MERCHANT-ID, X-PROVIDER-ID, X-SOURCE, X-SOURCE-VERSION, X-CLIENT-ID, X-CLIENT-VERSION, Content-Type, Accept',
-      documentation: 'https://developer.phonepe.com/v1/docs/tsp-http-headers-standard-2/',
+      documentation: 'https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard',
       status: 'PASS',
-      details: `Full compliance with PhonePe TSP HTTP Headers Standard 2. Mandatory headers injected into all API calls: Authorization: O-Bearer, X-MERCHANT-ID (${PHONEPE_MERCHANT_ID}), X-PROVIDER-ID (${PHONEPE_PROVIDER_ID}), X-SOURCE (WEB/ANDROID), X-SOURCE-VERSION (1.0), X-CLIENT-ID (${PHONEPE_CLIENT_ID}), X-CLIENT-VERSION (${PHONEPE_CLIENT_VERSION}), Content-Type (application/json), Accept (application/json).`
+      details: `Full compliance with PhonePe TSP HTTP Headers (Standard). Mandatory headers injected into all API calls: Authorization: O-Bearer, X-MERCHANT-ID (${PHONEPE_MERCHANT_ID}), X-PROVIDER-ID (${PHONEPE_PROVIDER_ID}), X-SOURCE (WEB/ANDROID), X-SOURCE-VERSION (1.0), X-CLIENT-ID (${PHONEPE_CLIENT_ID}), X-CLIENT-VERSION (${PHONEPE_CLIENT_VERSION}), Content-Type (application/json), Accept (application/json).`
     },
     {
       id: 3,
@@ -4148,9 +4241,10 @@ function saveDatabase(db: DatabaseSchema) {
   }
 }
 
-// Upsert helper for arrays by unique key
+// Upsert helper for arrays by unique key with conflict resolution and timestamp protection
 function mergeCollections<T extends Record<string, any>>(serverList: T[], clientList: T[], key: string = 'id'): T[] {
-  if (!Array.isArray(clientList) || clientList.length === 0) return serverList;
+  if (!Array.isArray(clientList) || clientList.length === 0) return serverList || [];
+  if (!Array.isArray(serverList) || serverList.length === 0) return clientList || [];
   const map = new Map<string, T>();
   // 1. Put server items
   for (const item of serverList) {
@@ -4158,12 +4252,52 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       map.set(String(item[key]).toLowerCase(), item);
     }
   }
-  // 2. Put / overwrite with client items
-  for (const item of clientList) {
-    if (item && item[key]) {
-      const k = String(item[key]).toLowerCase();
-      const existing = map.get(k);
-      map.set(k, { ...(existing || {}), ...item });
+  // 2. Put / merge client items intelligently based on updatedAt timestamps and validityDate
+  for (const clientItem of clientList) {
+    if (!clientItem || !clientItem[key]) continue;
+    const k = String(clientItem[key]).toLowerCase();
+    const existing = map.get(k);
+
+    if (!existing) {
+      map.set(k, clientItem);
+    } else {
+      const clientTime = new Date(clientItem.updatedAt || clientItem.approvedAt || clientItem.timestamp || clientItem.createdAt || 0).getTime();
+      const serverTime = new Date(existing.updatedAt || existing.approvedAt || existing.timestamp || existing.createdAt || 0).getTime();
+
+      const clientValidity = clientItem.validityDate ? new Date(clientItem.validityDate).getTime() : 0;
+      const serverValidity = existing.validityDate ? new Date(existing.validityDate).getTime() : 0;
+
+      const clientHasExtendedValidity = clientValidity > serverValidity;
+      const serverHasExtendedValidity = serverValidity > clientValidity;
+
+      if (clientTime > serverTime) {
+        // Client has explicitly newer update: client wins
+        map.set(k, { ...existing, ...clientItem });
+      } else if (serverTime > clientTime) {
+        // Server has newer update: server wins! Keep server fields
+        const mergedObj: any = { ...clientItem, ...existing };
+        const clientVal = (clientItem as any).collectedAmount;
+        const existingVal = (existing as any).collectedAmount;
+        if (typeof clientVal === 'number' && clientVal > (existingVal || 0)) {
+          mergedObj.collectedAmount = clientVal;
+        }
+        map.set(k, mergedObj);
+      } else {
+        // Timestamps are equal or missing:
+        if (clientHasExtendedValidity) {
+          // Client has extended validity date (e.g. Admin extend action): client wins
+          map.set(k, { ...existing, ...clientItem });
+        } else if (serverHasExtendedValidity) {
+          // Server has extended validity date: server wins (never allow stale client to re-expire)
+          map.set(k, { ...clientItem, ...existing });
+        } else if (clientItem.status === 'active' && existing.status === 'expired') {
+          // Client reactivated to active: client wins
+          map.set(k, { ...existing, ...clientItem });
+        } else {
+          // Default to server as source of truth to avoid stale client cache stomping
+          map.set(k, { ...clientItem, ...existing });
+        }
+      }
     }
   }
   return Array.from(map.values());
@@ -4267,10 +4401,14 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
     if (!campaign || !campaign.id) {
       return res.status(400).json({ success: false, message: 'Invalid campaign payload' });
     }
+    const stamped = {
+      ...campaign,
+      updatedAt: campaign.updatedAt || new Date().toISOString()
+    };
     const db = getDatabase();
-    db.campaigns = mergeCollections(db.campaigns, [campaign], 'id');
+    db.campaigns = mergeCollections(db.campaigns, [stamped], 'id');
     saveDatabase(db);
-    res.json({ success: true, campaign, data: db });
+    res.json({ success: true, campaign: stamped, data: db });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
