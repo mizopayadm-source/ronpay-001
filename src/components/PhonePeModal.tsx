@@ -291,6 +291,8 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         res = await fetch('/api/phonepe/partner-checklist');
       } else if (key === 'template') {
         res = await fetch('/api/phonepe/template?mid=' + credentials.merchantId);
+      } else if (key === 'tsp_headers' || key === 'headers') {
+        res = await fetch('/api/phonepe/tsp-headers?mid=' + encodeURIComponent(credentials.merchantId || 'TSPMIZOPAYUAT'));
       }
       if (!res) throw new Error('No response from endpoint');
       const text = await res.text();
@@ -472,7 +474,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                   </button>
                 </div>
 
-                {/* 2. TSP Headers & Credentials */}
+                {/* 2. TSP Headers & Credentials (Standard 2) */}
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -480,8 +482,17 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                         2
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-xs">TSP Headers (Mandatory Authorization)</h4>
-                        <div className="flex gap-2 text-[9.5px]">
+                        <h4 className="font-bold text-slate-900 text-xs">TSP HTTP Headers Standard 2 Compliance</h4>
+                        <div className="flex flex-wrap gap-2 text-[9.5px]">
+                          <a 
+                            href="https://developer.phonepe.com/v1/docs/tsp-http-headers-standard-2/"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-purple-700 hover:underline flex items-center gap-0.5 font-bold"
+                          >
+                            Standard 2 Docs <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          <span>•</span>
                           <a 
                             href="https://developer.phonepe.com/tsp-integration/tsp-headers/authorization"
                             target="_blank"
@@ -490,40 +501,44 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
                           >
                             Auth Docs <ExternalLink className="w-2.5 h-2.5" />
                           </a>
-                          <span>•</span>
-                          <a 
-                            href="https://developer.phonepe.com/tsp-integration/tsp-headers/http-headers-standard"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-indigo-600 hover:underline flex items-center gap-0.5 font-medium"
-                          >
-                            HTTP Headers <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
                         </div>
                       </div>
                     </div>
                     <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0">
-                      MANDATORY INCLUDED
+                      STANDARD 2 COMPLIANT
                     </span>
                   </div>
-                  <div className="bg-purple-50/70 border border-purple-200/60 p-2 rounded-xl text-[9.5px] text-purple-950 space-y-1 font-mono">
+                  <div className="bg-purple-50/70 border border-purple-200/60 p-2.5 rounded-xl text-[9.5px] text-purple-950 space-y-1 font-mono">
                     <p>• <b>Authorization:</b> O-Bearer &lt;token&gt; (OAuth 2.0 Client Credentials)</p>
-                    <p>• <b>Content-Type:</b> application/json (POST / Status)</p>
-                    <p>• <b>X-MERCHANT-ID:</b> TSPMIZOPAYUAT (End Merchant MID)</p>
-                    <p>• <b>X-SOURCE:</b> WEB</p>
+                    <p>• <b>X-MERCHANT-ID:</b> {credentials.merchantId || 'TSPMIZOPAYUAT'} (End Merchant MID)</p>
+                    <p>• <b>X-PROVIDER-ID:</b> TSPMIZOPAYUAT (TSP Aggregator ID)</p>
+                    <p>• <b>X-SOURCE:</b> WEB / ANDROID</p>
                     <p>• <b>X-SOURCE-VERSION:</b> 1.0</p>
-                    <p>• <b>X-CLIENT-ID:</b> TSPMIZOPAYUAT_2608171706</p>
-                    <p>• <b>X-CLIENT-VERSION:</b> 1</p>
+                    <p>• <b>X-CLIENT-ID:</b> {credentials.clientId || 'TSPMIZOPAYUAT_2608171706'}</p>
+                    <p>• <b>X-CLIENT-VERSION:</b> {credentials.clientVersion || '1'}</p>
+                    <p>• <b>Content-Type:</b> application/json</p>
+                    <p>• <b>Accept:</b> application/json</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleTestChecklistItem('token')}
-                    disabled={testingItem === 'token'}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Key className="w-3 h-3" />
-                    <span>{testingItem === 'token' ? 'Generating Token...' : 'Test TSP OAuth Token API'}</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('tsp_headers')}
+                      disabled={testingItem === 'tsp_headers'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-600 text-white font-bold text-[10px] hover:bg-purple-700 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{testingItem === 'tsp_headers' ? 'Auditing...' : 'Verify Standard 2'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestChecklistItem('token')}
+                      disabled={testingItem === 'token'}
+                      className="py-1.5 px-2 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 font-bold text-[10px] hover:bg-purple-100 transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Key className="w-3 h-3" />
+                      <span>{testingItem === 'token' ? 'Fetching...' : 'Test OAuth Token'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3. Webhook Config API */}

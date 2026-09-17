@@ -688,7 +688,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
-  const handleProcessPayment = (e: React.FormEvent) => {
+  const handleProcessPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isPendingApproval) {
       alert('⚠️ He Bawm / QR Code hi Admin-in a la approve loh avangin sum thawh theih a la ni rih lo. Admin approve a nih veleh a active nghal ang.');
@@ -805,28 +805,78 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
-      setIsProcessing(false);
-
-      // In Android App or mobile browsers, immediately navigate current window so payment page opens directly without delay
-      if (isAndroidOrMobileApp()) {
-        window.location.href = fullLaunchUrl;
-        return;
-      }
-
-      // On desktop Web, attempt opening PhonePe PG in new tab; if popup blocked by browser, redirect current window
-      try {
-        const popup = window.open(fullLaunchUrl, '_blank');
-        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-          window.location.href = fullLaunchUrl;
-          return;
-        }
-      } catch (e) {
-        window.location.href = fullLaunchUrl;
-        return;
-      }
-
       setIsWaitingPhonePePG(true);
       setIsPhonePeCheckoutOpen(false);
+      setIsProcessing(false);
+
+      // Open new tab synchronously to bypass browser popup blockers
+      let paymentTab: Window | null = null;
+      try {
+        paymentTab = window.open('about:blank', '_blank');
+        if (paymentTab && paymentTab.document) {
+          paymentTab.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PhonePe | India's Payments App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; }
+    .loader { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #5f259f; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div style="text-align:center; padding: 24px;">
+    <div class="loader"></div>
+    <h3 style="margin:0 0 8px;color:#5f259f;font-weight:700;font-size:18px;">PhonePe Gateway</h3>
+    <p style="margin:0;font-size:14px;color:#475569;">Official PhonePe payment page-ah kan connect mek e...</p>
+    <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;">Khawngaihin lo nghak lawk rawh le.</p>
+  </div>
+</body>
+</html>`);
+        }
+      } catch (e) {
+        console.warn('Popup window.open warning:', e);
+      }
+
+      // Fetch official PhonePe Mercury URL directly from PG backend
+      try {
+        const resp = await fetch('/api/phonepe/initiate-pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchantTransactionId: pendingTx.id,
+            amountInRupees: totalPayable,
+            baseAmountInRupees: subtotal,
+            feeOption: feeBearerOption,
+            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+            donorPhone: resolvedDonorPhone || '9862000000',
+            campaignId: campaign?.id || `cmp-${category}-custom`,
+            campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
+            category: category,
+            origin: window.location.origin
+          })
+        });
+        const data = await resp.json();
+        const mercuryUrl = data?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || data?.data?.instrumentResponse?.redirectInfo?.url;
+
+        if (mercuryUrl) {
+          setPhonePeLaunchUrl(mercuryUrl);
+          if (paymentTab && !paymentTab.closed) {
+            paymentTab.location.href = mercuryUrl;
+          } else {
+            window.open(mercuryUrl, '_blank');
+          }
+        } else if (paymentTab && !paymentTab.closed) {
+          paymentTab.location.href = fullLaunchUrl;
+        }
+      } catch (err) {
+        console.error('Failed to initiate PhonePe PG payment:', err);
+        if (paymentTab && !paymentTab.closed) {
+          paymentTab.location.href = fullLaunchUrl;
+        }
+      }
       return;
     }
 
@@ -2211,38 +2261,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       d?.data?.responseCode === 'PAYMENT_ERROR' ||
                       d?.data?.responseCode === 'FAILED';
 
-                    // If still pending in sandbox, confirm payment immediately so user is never stuck
-                    if (!isSuccess && !isFailed) {
-                      try {
-                        await fetch('/api/phonepe/confirm-paid', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            merchantTransactionId: activePendingTxn.id,
-                            status: 'PAYMENT_SUCCESS',
-                            amountInRupees: activePendingTxn.totalAmount || activePendingTxn.amount,
-                            baseAmountInRupees: activePendingTxn.amount,
-                            platformFeeRupees: activePendingTxn.platformFee,
-                            campaignTitle: activePendingTxn.campaignTitle,
-                            campaignId: activePendingTxn.campaignId,
-                            category: activePendingTxn.category,
-                            donorName: activePendingTxn.donorName,
-                            donorPhone: activePendingTxn.donorPhone,
-                            feeOption: activePendingTxn.feeOption
-                          })
-                        });
-
-                        const confirmCheck = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}?confirm=true`);
-                        const confirmData = await confirmCheck.json();
-                        if (confirmData?.code === 'PAYMENT_SUCCESS' || confirmData?.data?.state === 'COMPLETED') {
-                          d = confirmData;
-                          isSuccess = true;
-                        }
-                      } catch (confErr) {
-                        console.warn('Auto confirm fallback error:', confErr);
-                      }
-                    }
-
+                    // Real status verification: Only mark success if PhonePe PG actually returned SUCCESS or COMPLETED
                     if (isSuccess) {
                       const finalTx: Transaction = {
                         ...activePendingTxn,
@@ -2261,7 +2280,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     } else {
                       setPhonePeVerifyMsg({
                         type: 'pending',
-                        text: 'PhonePe status: A la pending mek. PhonePe portal-ah khan payment i zo tawh em?'
+                        text: '⚠️ PhonePe status: A la pending mek. PhonePe-ah khan payment i la zo lo a nih hmel e. Khawngaihin payment ti zo la, i tih zawh veleh check nawn leh rawh le.'
                       });
                     }
                   } catch (e) {
@@ -2281,19 +2300,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 ) : (
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 )}
-                <span>Payment Ka Ti Zo Tawh E</span>
+                <span>Payment Status Check Rawh</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
-                  const url = phonePeLaunchUrl || `/api/phonepe/launch-pay?txnId=${activePendingTxn.id}&amt=${totalPayable}`;
-                  window.location.href = url;
+                  if (phonePeLaunchUrl) {
+                    window.open(phonePeLaunchUrl, '_blank');
+                  } else if (activePendingTxn) {
+                    window.open(`/api/phonepe/checkout?txnId=${encodeURIComponent(activePendingTxn.id)}`, '_blank');
+                  }
                 }}
-                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center cursor-pointer"
+                className="py-2.5 px-3 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition text-center cursor-pointer shadow-lg shadow-purple-950/30"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Payment Page-ah Kal Rawh</span>
+                <span>PhonePe Tab Hawng Nawn Rawh</span>
+              </button>
+            </div>
+
+            <div className="text-center pt-0.5">
+              <button
+                type="button"
+                onClick={() => setIsPhonePeCheckoutOpen(true)}
+                className="text-[11px] text-purple-300 hover:text-white underline font-medium cursor-pointer transition"
+              >
+                In-App Modal hmanga hawng duh zawk tan: Heta hi hmet rawh
               </button>
             </div>
 
