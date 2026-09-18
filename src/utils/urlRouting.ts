@@ -414,6 +414,74 @@ export function updateBrowserView(view: 'website' | 'app', screen?: ScreenId) {
 }
 
 
+export const PAYMENT_ROUTING_PARAMS = [
+  'campaign', 'cmp', 'c', 'id', 'bawm', 'post', 'p',
+  'screen', 'page', 'cat', 'category', 'title', 'upi', 'pa', 'loc', 'location',
+  'receipt', 'receiptId', 'phonepe_txn_id', 'tx', 'txn', 'txnId', 'merchantTransactionId', 'orderId',
+  'status', 'code', 'responseCode', 'state', 'failed', 'reason', 'msg', 'error',
+  'phonepe', 'pg', 'phonepe_checkout', 'pay', 'simulate', 'gateway', 'mock', 'mode', 'fallback',
+  'amt', 'amount', 'baseAmt', 'fee', 'feeOpt', 'cid', 'ctitle',
+  'donor', 'donorPhone', 'payer', 'name', 'section', 'veng', 'anon', 'utr',
+  'roll', 'member_roll', 'memberRoll', 'sulhnu', 'history', 'admin', 'wallet'
+];
+
+const consumedReceiptIds = new Set<string>();
+
+export function markReceiptAsConsumed(receiptId?: string | null) {
+  if (!receiptId || typeof receiptId !== 'string') return;
+  const cleanId = receiptId.trim();
+  if (!cleanId) return;
+  consumedReceiptIds.add(cleanId);
+  try {
+    const stored = sessionStorage.getItem('RONPAY_CONSUMED_RECEIPTS');
+    const list: string[] = stored ? JSON.parse(stored) : [];
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
+      sessionStorage.setItem('RONPAY_CONSUMED_RECEIPTS', JSON.stringify(list));
+    }
+  } catch {}
+}
+
+export function isReceiptConsumed(receiptId?: string | null): boolean {
+  if (!receiptId || typeof receiptId !== 'string') return false;
+  const cleanId = receiptId.trim();
+  if (!cleanId) return false;
+  if (consumedReceiptIds.has(cleanId)) return true;
+  try {
+    const stored = sessionStorage.getItem('RONPAY_CONSUMED_RECEIPTS');
+    if (stored) {
+      const list: string[] = JSON.parse(stored);
+      if (Array.isArray(list) && list.includes(cleanId)) {
+        consumedReceiptIds.add(cleanId);
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+export function cleanPaymentUrlParams() {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    PAYMENT_ROUTING_PARAMS.forEach(p => url.searchParams.delete(p));
+    if (window.location.hash && (
+      window.location.hash.includes('receipt') || 
+      window.location.hash.includes('phonepe') || 
+      window.location.hash.includes('screen') || 
+      window.location.hash.includes('status') ||
+      window.location.hash.includes('txn')
+    )) {
+      window.location.hash = '';
+    }
+    const queryStr = url.searchParams.toString();
+    const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
+    window.history.replaceState({ screen: 'home' }, '', newUrl);
+  } catch (e) {
+    // Ignore history state errors
+  }
+}
+
 /**
  * Updates the browser URL without reloading page, enabling shareable URLs
  */
@@ -428,24 +496,20 @@ export function updateBrowserUrl(
   try {
     const url = new URL(window.location.href);
     
-    // Clear old routing params
-    url.searchParams.delete('campaign');
-    url.searchParams.delete('cmp');
-    url.searchParams.delete('c');
-    url.searchParams.delete('id');
-    url.searchParams.delete('bawm');
-    url.searchParams.delete('post');
-    url.searchParams.delete('p');
-    url.searchParams.delete('screen');
-    url.searchParams.delete('cat');
-    url.searchParams.delete('title');
-    url.searchParams.delete('upi');
-    url.searchParams.delete('loc');
-    url.searchParams.delete('receipt');
-    url.searchParams.delete('roll');
-    url.searchParams.delete('sulhnu');
-    url.searchParams.delete('admin');
-    url.searchParams.delete('wallet');
+    // Completely wipe all past routing, payment, transaction, and simulator params
+    PAYMENT_ROUTING_PARAMS.forEach(param => {
+      url.searchParams.delete(param);
+    });
+
+    // Also clear hash if it contained receipt/status/phonepe remnants
+    if (window.location.hash && (
+      window.location.hash.includes('receipt') || 
+      window.location.hash.includes('phonepe') || 
+      window.location.hash.includes('status') ||
+      window.location.hash.includes('screen')
+    )) {
+      window.location.hash = '';
+    }
 
     if (screen === 'checkout' && campaign) {
       url.searchParams.set('campaign', campaign.id);

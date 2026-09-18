@@ -100,7 +100,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
-import { getUrlRoute, updateBrowserUrl, updateBrowserView, isAndroidOrMobileApp } from './utils/urlRouting';
+import { getUrlRoute, updateBrowserUrl, updateBrowserView, isAndroidOrMobileApp, cleanPaymentUrlParams, markReceiptAsConsumed, isReceiptConsumed } from './utils/urlRouting';
 
 export default function App() {
   // Splash screen state for smooth UX
@@ -468,7 +468,7 @@ export default function App() {
     if (route.category && !route.campaign) {
       setSelectedCategory(route.category);
     }
-    if (route.isPhonePeOpen && route.campaign?.customAmount) {
+    if (route.isPhonePeOpen && route.campaign?.customAmount && currentScreenRef.current === 'checkout') {
       setAutoOpenPhonePeCheckout(true);
       setPhonePeCheckoutAmount(route.campaign.customAmount);
     } else {
@@ -490,13 +490,10 @@ export default function App() {
     if (route.isWalletOpen) {
       setIsWalletOpen(true);
     }
-    if (route.isPhonePeOpen) {
-      const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
-      try {
-        window.open(`/api/phonepe/launch-pay?amt=100&origin=${encodeURIComponent(origin)}`, '_blank');
-      } catch (e) {}
+    if (route.isPhonePeOpen && !route.receiptId) {
+      // Direct payment link or /phonepe route: select campaign and show checkout (without popup auto-spawning)
       const stored = getStoredCampaigns();
-      const targetCamp = campaigns[0] || stored[0];
+      const targetCamp = route.campaign || campaigns[0] || stored[0];
       if (targetCamp) {
         setSelectedCampaign(targetCamp);
         setSelectedCategory(targetCamp.category);
@@ -515,8 +512,17 @@ export default function App() {
     }
 
     // Receipt verification flow:
-    // IMPORTANT: Wait for the authoritative backend status check BEFORE updating UI state (screen, completedTransaction, etc.)
+    // IMPORTANT: Check if receipt was already consumed/acknowledged in this session
     const receiptId = route.receiptId;
+    if (isReceiptConsumed(receiptId)) {
+      // User has already viewed and navigated away from this receipt.
+      // Clean payment parameters and do not reopen the receipt modal.
+      if (currentScreenRef.current !== 'success') {
+        cleanPaymentUrlParams();
+        return;
+      }
+    }
+
     const txs = getStoredTransactions();
     const found = txs.find(t => t.id.toLowerCase() === receiptId.toLowerCase());
 
@@ -753,13 +759,49 @@ export default function App() {
   // Deep linking: Listen for popstate and hashchange to keep browser history synchronized
   useEffect(() => {
     const handlePopState = () => {
-      // If user was on success or failed screen, popping back from mobile/browser should navigate to home cleanly
+      // 1. If user was on success or failed screen, popping back from mobile/browser should navigate to home cleanly
       if (currentScreenRef.current === 'success' || currentScreenRef.current === 'failed') {
-        setCurrentScreen('home');
+        if (completedTransaction?.id) {
+          markReceiptAsConsumed(completedTransaction.id);
+        }
+        setCompletedTransaction(null);
+        setFailedTransaction(null);
         setSelectedCampaign(null);
+        setAutoOpenPhonePeCheckout(false);
+        cleanPaymentUrlParams();
+        setCurrentScreen('home');
         updateBrowserUrl('home', null, null, { replace: true });
         return;
       }
+
+      // 2. Check the route the browser is popping into
+      const poppedRoute = getUrlRoute();
+      if (!poppedRoute) {
+        setCurrentScreen('home');
+        setSelectedCampaign(null);
+        setAutoOpenPhonePeCheckout(false);
+        return;
+      }
+
+      // If the popped route points to an already consumed/completed receipt, prevent re-opening the receipt
+      if (poppedRoute.receiptId && isReceiptConsumed(poppedRoute.receiptId)) {
+        setCurrentScreen('home');
+        setSelectedCampaign(null);
+        setAutoOpenPhonePeCheckout(false);
+        cleanPaymentUrlParams();
+        updateBrowserUrl('home', null, null, { replace: true });
+        return;
+      }
+
+      // If popped route was a payment checkout or simulator URL and user is navigating back, stay on home cleanly
+      if (poppedRoute.isPhonePeOpen && currentScreenRef.current !== 'checkout') {
+        setAutoOpenPhonePeCheckout(false);
+        cleanPaymentUrlParams();
+        setCurrentScreen('home');
+        updateBrowserUrl('home', null, null, { replace: true });
+        return;
+      }
+
       applyRouteFromUrl();
     };
 
@@ -773,7 +815,7 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
     };
-  }, [applyRouteFromUrl]);
+  }, [applyRouteFromUrl, completedTransaction?.id]);
 
   // Keep selectedCampaign synchronized if campaign record updates via Firestore or local merge
   useEffect(() => {
@@ -809,15 +851,44 @@ export default function App() {
       }
     }
 
-    setCurrentScreen(screen);
+    // Leaving checkout or receipt: always disarm auto checkout simulator
+    if (screen !== 'checkout' && screen !== 'phonepe_checkout') {
+      setAutoOpenPhonePeCheckout(false);
+    }
+
     if (screen === 'home') {
+      if (completedTransaction?.id) {
+        markReceiptAsConsumed(completedTransaction.id);
+      }
       setSelectedCampaign(null);
-      updateBrowserUrl('home', null, null, options);
+      setCompletedTransaction(null);
+      setFailedTransaction(null);
+      setAutoOpenPhonePeCheckout(false);
+      cleanPaymentUrlParams();
+      setCurrentScreen('home');
+      updateBrowserUrl('home', null, null, { replace: true });
     } else if (screen === 'explorer') {
+      if (completedTransaction?.id) {
+        markReceiptAsConsumed(completedTransaction.id);
+      }
+      setCompletedTransaction(null);
+      setFailedTransaction(null);
+      setAutoOpenPhonePeCheckout(false);
+      setCurrentScreen('explorer');
       updateBrowserUrl('explorer', null, selectedCategory, options);
     } else if (screen === 'checkout' && selectedCampaign) {
+      setCurrentScreen('checkout');
       updateBrowserUrl('checkout', selectedCampaign, selectedCampaign.category, options);
     } else {
+      if (screen !== 'success') {
+        if (completedTransaction?.id) {
+          markReceiptAsConsumed(completedTransaction.id);
+        }
+        setCompletedTransaction(null);
+        setFailedTransaction(null);
+        setAutoOpenPhonePeCheckout(false);
+      }
+      setCurrentScreen(screen);
       updateBrowserUrl(screen, null, null, options);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1396,8 +1467,25 @@ export default function App() {
           {currentScreen === 'success' && (
             <SuccessScreen
               transaction={completedTransaction}
-              onGoHome={() => handleNavigate('home', { replace: true })}
-              onExploreMore={() => handleNavigate('explorer', { replace: true })}
+              onGoHome={() => {
+                if (completedTransaction?.id) {
+                  markReceiptAsConsumed(completedTransaction.id);
+                }
+                setCompletedTransaction(null);
+                setAutoOpenPhonePeCheckout(false);
+                setSelectedCampaign(null);
+                cleanPaymentUrlParams();
+                handleNavigate('home', { replace: true });
+              }}
+              onExploreMore={() => {
+                if (completedTransaction?.id) {
+                  markReceiptAsConsumed(completedTransaction.id);
+                }
+                setCompletedTransaction(null);
+                setAutoOpenPhonePeCheckout(false);
+                cleanPaymentUrlParams();
+                handleNavigate('explorer', { replace: true });
+              }}
             />
           )}
 
@@ -1412,8 +1500,18 @@ export default function App() {
                 }
                 handleNavigate('checkout', { replace: true });
               }}
-              onGoHome={() => handleNavigate('home', { replace: true })}
-              onExploreMore={() => handleNavigate('explorer', { replace: true })}
+              onGoHome={() => {
+                setFailedTransaction(null);
+                setAutoOpenPhonePeCheckout(false);
+                cleanPaymentUrlParams();
+                handleNavigate('home', { replace: true });
+              }}
+              onExploreMore={() => {
+                setFailedTransaction(null);
+                setAutoOpenPhonePeCheckout(false);
+                cleanPaymentUrlParams();
+                handleNavigate('explorer', { replace: true });
+              }}
             />
           )}
 

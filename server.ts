@@ -3523,7 +3523,7 @@ app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'],
       }, 500);
 
       setTimeout(() => {
-        window.location.href = "${receiptUrl}";
+        window.location.replace("${receiptUrl}");
       }, 1100);
     }
   </script>
@@ -3796,9 +3796,9 @@ app.all([
       }
     } catch(e) {}
 
-    // Auto redirect to receipt
+    // Auto redirect to receipt replacing history so back button cannot re-enter callback
     setTimeout(function() {
-      window.location.href = "${receiptUrl}";
+      window.location.replace("${receiptUrl}");
     }, 1100);
   </script>
 </body>
@@ -3932,7 +3932,7 @@ app.all([
     // If opened directly or in standalone window without opener, redirect to failure result screen
     if (!window.opener) {
       setTimeout(function() {
-        window.location.href = "${failedResultUrl}";
+        window.location.replace("${failedResultUrl}");
       }, 1500);
     }
   </script>
