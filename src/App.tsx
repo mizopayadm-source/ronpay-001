@@ -200,6 +200,7 @@ export default function App() {
     isOpen: boolean;
     html?: string;
     docTitle?: string;
+    fileName?: string;
   }>({ isOpen: false });
 
   // Biometric toggle state
@@ -1854,6 +1855,7 @@ export default function App() {
           isOpen={printPreviewData.isOpen}
           html={printPreviewData.html}
           docTitle={printPreviewData.docTitle}
+          fileName={printPreviewData.fileName}
           onClose={() => setPrintPreviewData({ isOpen: false })}
         />
 

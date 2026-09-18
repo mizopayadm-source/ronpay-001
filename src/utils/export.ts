@@ -54,11 +54,15 @@ export interface PDFExportOptions {
  * Universal safe print trigger that opens the high-resolution Print Preview screen.
  * Dispatches the event so users can inspect, review, zoom, and decide when to trigger printing.
  */
-export const printHtmlSafely = (html: string, docTitle: string = 'Print Document') => {
+export const printHtmlSafely = (
+  html: string, 
+  docTitle: string = 'Print Document',
+  fileName?: string
+) => {
   if (typeof window !== 'undefined') {
     try {
       window.dispatchEvent(new CustomEvent('ronpay-open-print-modal', {
-        detail: { html, docTitle }
+        detail: { html, docTitle, fileName }
       }));
     } catch (e) {
       console.warn('Print modal event dispatch failed', e);

@@ -444,7 +444,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         <!DOCTYPE html>
         <html>
           <head>
-            <title>${isVerified ? 'RonPay Official Receipt' : 'RonPay Transaction Slip (Pending)'} - ${tx.id || 'TXN'}</title>
+            <title>${isVerified ? 'RonPay Official Receipt' : 'RonPay Transaction Slip'} - ${resolveTxCampaignTitle(tx) || categoryLabel || 'Receipt'}</title>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <style>
@@ -577,7 +577,12 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         </html>
       `;
 
-      printHtmlSafely(html, `RonPay-${isVerified ? 'Receipt' : 'Slip'}-${tx.id || 'TXN'}`);
+      const campaignTitle = resolveTxCampaignTitle(tx) || formatCategoryBawmLabel(effectiveCat) || 'Pawisa_Thawh';
+      const cleanBawm = campaignTitle.replace(/[/\\?%*:|"<>]/g, '').trim();
+      const docTitle = `RonPay - ${cleanBawm}`;
+      const fileName = `RonPay-${cleanBawm.replace(/\s+/g, '_')}.pdf`;
+
+      printHtmlSafely(html, docTitle, fileName);
     } catch (err) {
       console.error('Error printing single receipt:', err);
     }

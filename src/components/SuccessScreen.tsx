@@ -392,7 +392,10 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
         </body>
       </html>
     `;
-    printHtmlSafely(html, `RonPay Receipt - ${transaction.id}`);
+    const bawmName = (transaction.campaignTitle || 'Receipt').replace(/[/\\?%*:|"<>]/g, '').trim();
+    const docTitle = `RonPay - ${bawmName}`;
+    const fileName = `RonPay-${bawmName.replace(/\s+/g, '_')}.pdf`;
+    printHtmlSafely(html, docTitle, fileName);
   };
 
   return (

@@ -29,6 +29,7 @@ import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../util
 export interface PrintModalData {
   html: string;
   docTitle: string;
+  fileName?: string;
 }
 
 interface PrintPreviewModalProps {
@@ -36,6 +37,7 @@ interface PrintPreviewModalProps {
   onClose?: () => void;
   html?: string;
   docTitle?: string;
+  fileName?: string;
 }
 
 export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
@@ -43,6 +45,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   onClose: propOnClose,
   html: propHtml,
   docTitle: propDocTitle,
+  fileName: propFileName,
 }) => {
   const [modalData, setModalData] = useState<PrintModalData | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
@@ -65,23 +68,28 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   const contentContainerRef = useRef<HTMLDivElement>(null);
   const printableRootRef = useRef<HTMLDivElement>(null);
   const touchStateRef = useRef<{ initialDist: number; initialScale: number } | null>(null);
+  const wasOpenedViaProps = useRef(false);
 
   // Sync prop changes
   useEffect(() => {
     if (propIsOpen && propHtml) {
+      wasOpenedViaProps.current = true;
       setModalData({
         html: propHtml,
-        docTitle: propDocTitle || 'Financial Statement',
+        docTitle: propDocTitle || 'RonPay Statement',
+        fileName: propFileName,
       });
       // Default to phone-flow on smaller screens, a4-sheet on desktop
       setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
       setFitMode('fit-width');
       setZoomLevel(100);
       setPdfSuccessResult(null);
-    } else if (propIsOpen === false) {
+    } else if (propIsOpen === false && wasOpenedViaProps.current) {
+      wasOpenedViaProps.current = false;
       setModalData(null);
+      setPdfSuccessResult(null);
     }
-  }, [propIsOpen, propHtml, propDocTitle]);
+  }, [propIsOpen, propHtml, propDocTitle, propFileName]);
 
   // Listen to global window event 'ronpay-open-print-modal'
   useEffect(() => {
@@ -90,7 +98,8 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       if (customEvent.detail && customEvent.detail.html) {
         setModalData({
           html: customEvent.detail.html,
-          docTitle: customEvent.detail.docTitle || 'RonPay Financial Statement',
+          docTitle: customEvent.detail.docTitle || 'RonPay Statement',
+          fileName: customEvent.detail.fileName,
         });
         setViewMode(window.innerWidth < 768 ? 'phone-flow' : 'a4-sheet');
         setFitMode('fit-width');
@@ -169,10 +178,37 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   const isVisible = Boolean(modalData && modalData.html);
 
-  const handleClose = () => {
+  // Android Phone Hardware Back Button & Popstate support
+  useEffect(() => {
+    if (!isVisible) return;
+
+    try {
+      window.history.pushState({ modal: 'ronpay-print-preview' }, '');
+    } catch {}
+
+    const handlePopState = () => {
+      setModalData(null);
+      setPdfSuccessResult(null);
+      if (propOnClose) propOnClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isVisible]);
+
+  const handleClose = (popHistory: boolean = true) => {
     setModalData(null);
     setPdfSuccessResult(null);
     if (propOnClose) propOnClose();
+    if (popHistory !== false) {
+      try {
+        if (window.history.state?.modal === 'ronpay-print-preview') {
+          window.history.back();
+        }
+      } catch {}
+    }
   };
 
   // Extract Summary Details from Document HTML for WhatsApp / Sharing
@@ -201,11 +237,29 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     if (!rootElement || !modalData) return;
 
     setIsGeneratingPdf(true);
+    setPdfStatusText('Document buatsaih mek a ni...');
     setPdfSuccessResult(null);
 
-    const cleanTitle = (modalData.docTitle || 'RonPay_Statement')
-      .replace(/[^a-zA-Z0-9_-]/g, '_');
-    const fileName = `${cleanTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    // Requirement: PDF filename must be 'RonPay-Bawm/Pawisa Thawhchhan' rather than transaction ID
+    const fileName = (() => {
+      if (modalData.fileName) {
+        const raw = modalData.fileName.replace(/\.pdf$/i, '');
+        return `${raw}.pdf`;
+      }
+      let rawName = (modalData.docTitle || '')
+        .replace(/^RonPay\s*[-–—:]*\s*/i, '')
+        .replace(/^(Official\s+)?Receipt\s*[-–—:]*\s*/i, '')
+        .replace(/^(Transaction\s+)?Slip\s*[-–—:]*\s*/i, '')
+        .replace(/[/\\?%*:|"<>]/g, '')
+        .trim();
+
+      if (!rawName || rawName.startsWith('RPAY_TXN_') || rawName.startsWith('TXN_') || rawName.toLowerCase() === 'receipt' || rawName.toLowerCase() === 'slip') {
+        rawName = 'Pawisa_Thawhchhan';
+      }
+
+      const cleanBawmName = rawName.replace(/\s+/g, '_');
+      return `RonPay-${cleanBawmName}.pdf`;
+    })();
 
     try {
       const result = await exportElementToPDF(
@@ -217,7 +271,6 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       if (result.success) {
         setPdfSuccessResult(result);
       } else {
-        // Fallback to HTML document download
         handleDownloadHTML();
       }
     } catch (err) {
@@ -229,15 +282,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     }
   };
 
-  // Open generated PDF or re-download on mobile using HTTPS link
+  // Open generated PDF or re-download on mobile
   const handleOpenPdfBlob = () => {
     const targetUrl = pdfSuccessResult?.downloadUrl || pdfSuccessResult?.blobUrl;
     if (targetUrl) {
       const a = document.createElement('a');
       a.href = targetUrl;
       a.download = pdfSuccessResult.fileName;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -246,6 +298,26 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         } catch {}
       }, 1000);
     }
+  };
+
+  // Android Phone Share / Save File option
+  const handleShareToPhone = async () => {
+    if (!pdfSuccessResult?.blob) return;
+    try {
+      const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: pdfSuccessResult.fileName,
+          text: `RonPay Receipt PDF: ${pdfSuccessResult.fileName}`,
+          files: [file],
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      console.warn('Share error, downloading instead', err);
+    }
+    handleOpenPdfBlob();
   };
 
   // Open in external browser or system viewer (works especially well with RonPayBridge)
@@ -501,11 +573,15 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <button
             id="print-preview-back-btn"
-            onClick={handleClose}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs rounded-xl border border-slate-600 shadow-xs cursor-pointer transition active:scale-95 shrink-0"
+            onClick={() => handleClose()}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleClose();
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-black text-xs sm:text-sm rounded-xl border border-slate-600 shadow-xs cursor-pointer transition active:scale-95 shrink-0 touch-manipulation min-h-[38px]"
             title="Kirleh / Hnunglam"
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
+            <ArrowLeft className="w-4 h-4 text-indigo-400 shrink-0" />
             <span className="font-extrabold">Kirleh</span>
           </button>
 
@@ -633,8 +709,12 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
           {/* Close X */}
           <button
-            onClick={handleClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            onClick={() => handleClose()}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleClose();
+            }}
+            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer touch-manipulation"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -768,6 +848,18 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               </>
             )}
 
+            {/* Android / Mobile Native Share & Save */}
+            {pdfSuccessResult.blob && typeof navigator !== 'undefined' && 'share' in navigator && (
+              <button
+                onClick={handleShareToPhone}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+                title="Phone-ah save / share rawh"
+              >
+                <Share2 className="w-3.5 h-3.5 text-white" />
+                <span>Phone-ah Save</span>
+              </button>
+            )}
+
             <button
               onClick={handleShareToWhatsApp}
               className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-emerald-900/50 transition cursor-pointer"
@@ -789,13 +881,18 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       )}
 
       {/* 5. BOTTOM ACTION BAR (NO-PRINT) */}
-      <footer className="no-print w-full bg-slate-900/95 border-t border-slate-800 px-3 py-2 sm:py-2.5 flex items-center justify-between text-xs text-slate-400 shrink-0">
+      <footer className="no-print w-full bg-slate-900/95 border-t border-slate-800 px-3 py-2 sm:py-2.5 pb-[max(0.65rem,env(safe-area-inset-bottom))] flex items-center justify-between text-xs text-slate-400 shrink-0">
         <div className="flex items-center gap-1.5">
           <button
-            onClick={handleClose}
-            className="flex items-center gap-1.5 text-slate-200 hover:text-white font-extrabold cursor-pointer py-1.5 px-2.5 sm:px-3 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl transition active:scale-95 text-xs"
+            id="print-preview-footer-back-btn"
+            onClick={() => handleClose()}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleClose();
+            }}
+            className="flex items-center gap-1.5 text-white font-black cursor-pointer py-2 px-3 sm:px-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-600 rounded-xl transition active:scale-95 text-xs sm:text-sm min-h-[38px] touch-manipulation shadow-xs"
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-indigo-400" />
+            <ArrowLeft className="w-4 h-4 text-indigo-400 shrink-0" />
             <span>Kirleh</span>
           </button>
         </div>
