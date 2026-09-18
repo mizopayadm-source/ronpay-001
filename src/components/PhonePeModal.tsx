@@ -244,6 +244,7 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
     setTestingItem(key);
     try {
       let res: any;
+      let alreadyParsedData: any = null;
       if (key === 'token') {
         let tokenResp = await fetch('/api/phonepe/token', { method: 'POST' });
         if (!tokenResp.ok || tokenResp.status === 405) {
@@ -298,7 +299,13 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
             })
           });
         }
-        const initData = await initResp.json();
+        const initText = await initResp.text();
+        try {
+          alreadyParsedData = JSON.parse(initText);
+        } catch {
+          alreadyParsedData = {};
+        }
+        const initData = alreadyParsedData;
         const redUrl = initData.redirectUrl || initData.data?.redirectUrl;
         if (redUrl) {
           const ok = await invokePhonePePayPage({
@@ -361,12 +368,14 @@ export const PhonePeModal: React.FC<PhonePeModalProps> = ({
         res = await fetch('/api/phonepe/tsp-headers?mid=' + encodeURIComponent(credentials.merchantId || 'TSPMIZOPAYUAT'));
       }
       if (!res) throw new Error('No response from endpoint');
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.substring(0, 60)}`);
+      let data: any = alreadyParsedData;
+      if (!data) {
+        const text = await res.text();
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(`Server returned non-JSON (HTTP ${res.status}): ${text.substring(0, 60)}`);
+        }
       }
       if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
       setChecklistTestResult({ key, data });

@@ -169,10 +169,16 @@ export function getFCMStatus(): { permission: NotificationPermission | 'unsuppor
   return { permission: Notification.permission, token };
 }
 
+const playedReceiptChimes = new Set<string>();
+
 /**
  * Triggers a real-time digital payment receipt notification (FCM foreground / local chime)
  */
-export function triggerReceiptNotification(tx: Transaction, campaignTitle?: string) {
+export function triggerReceiptNotification(
+  tx: Transaction,
+  campaignTitle?: string,
+  options: { playSound?: boolean } = { playSound: false }
+) {
   if (typeof window === 'undefined') return;
 
   const titleName = campaignTitle || tx.campaignTitle || 'RonPay Bawm';
@@ -188,25 +194,36 @@ export function triggerReceiptNotification(tx: Transaction, campaignTitle?: stri
     timestamp: new Date().toISOString()
   };
 
-  // 1. Play receipt notification chime
-  try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (AudioCtx) {
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.15); // E6
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+  // 1. Play receipt notification chime only if explicitly requested and not already played
+  const alreadyPlayed = tx.id && (playedReceiptChimes.has(tx.id) || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(`ronpay_fcm_chime_${tx.id}`) === 'true'));
+  if (options.playSound && !alreadyPlayed) {
+    if (tx.id) {
+      playedReceiptChimes.add(tx.id);
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(`ronpay_fcm_chime_${tx.id}`, 'true');
+        }
+      } catch {}
     }
-  } catch (e) {
-    // Audio policy fallback
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+        osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.15); // E6
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      }
+    } catch (e) {
+      // Audio policy fallback
+    }
   }
 
   // 2. Dispatch to in-app listeners

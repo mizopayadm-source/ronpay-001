@@ -40,6 +40,31 @@ interface SuccessScreenProps {
   onExploreMore?: () => void;
 }
 
+// Global in-memory and session tracking to strictly prevent repeated chimes / alerts
+const playedCelebrationTxIds = new Set<string>();
+
+const hasPlayedCelebration = (txId: string): boolean => {
+  if (!txId) return false;
+  if (playedCelebrationTxIds.has(txId)) return true;
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(`ronpay_success_chime_${txId}`) === 'true') {
+      playedCelebrationTxIds.add(txId);
+      return true;
+    }
+  } catch {}
+  return false;
+};
+
+const markCelebrationPlayed = (txId: string) => {
+  if (!txId) return;
+  playedCelebrationTxIds.add(txId);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(`ronpay_success_chime_${txId}`, 'true');
+    }
+  } catch {}
+};
+
 export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   transaction,
   onGoHome,
@@ -52,19 +77,30 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [fcmEnabled, setFcmEnabled] = useState<boolean>(false);
 
+  // Intercept mobile hardware back button on receipt screen so it returns to home cleanly without looping
+  useEffect(() => {
+    const handlePopState = () => {
+      onGoHome();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onGoHome]);
+
   useEffect(() => {
     if (transaction) {
       // 1. Generate Receipt QR Data URL
       generateReceiptQRDataUrl(transaction.id).then(url => setReceiptQrUrl(url)).catch(() => {});
       
-      // 2. Trigger instant FCM receipt notification
-      triggerReceiptNotification(transaction);
+      // 2. Trigger instant FCM receipt notification (playSound: false to avoid double-chime)
+      triggerReceiptNotification(transaction, undefined, { playSound: false });
 
       // 3. Check FCM status
       const status = getFCMStatus();
       setFcmEnabled(status.permission === 'granted');
     }
-  }, [transaction]);
+  }, [transaction?.id]);
 
   const webReceiptLink = transaction ? generateReceiptWebLink(transaction.id) : '';
 
@@ -111,6 +147,11 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   // Synthesize a joyful celebratory chime using Web Audio API
   const playCelebrationChime = () => {
     if (isSoundMuted) return;
+    const txId = transaction?.id || 'tx_default';
+    if (hasPlayedCelebration(txId)) {
+      return;
+    }
+    markCelebrationPlayed(txId);
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
@@ -199,8 +240,11 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   };
 
   useEffect(() => {
-    triggerCelebration();
-  }, []);
+    const txId = transaction?.id || 'tx_default';
+    if (!hasPlayedCelebration(txId)) {
+      triggerCelebration();
+    }
+  }, [transaction?.id]);
 
   const handleShareReceipt = async () => {
     const receiptLink = webReceiptLink || `${window.location.origin}/?receipt=${transaction?.id || ''}`;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ScreenId,
   BawmCategory,
@@ -653,6 +653,7 @@ export default function App() {
             setFailedTransaction(failedTx);
             setCurrentScreen('failed');
             setAppView('app');
+            updateBrowserUrl('failed', null, null, { replace: true });
             try {
               if (typeof BroadcastChannel !== 'undefined') {
                 const bc = new BroadcastChannel('ronpay_payment_channel');
@@ -729,6 +730,7 @@ export default function App() {
             recordUserPaidTxId(verifiedTx.id);
             setCurrentScreen('success');
             setAppView('app');
+            updateBrowserUrl('success', null, null, { replace: true });
           }
         })
         .catch(() => {
@@ -738,6 +740,7 @@ export default function App() {
             recordUserPaidTxId(found.id);
             setCurrentScreen('success');
             setAppView('app');
+            updateBrowserUrl('success', null, null, { replace: true });
           }
         });
     }
@@ -771,9 +774,21 @@ export default function App() {
     }
   }, []);
 
+  const currentScreenRef = useRef<ScreenId>(currentScreen);
+  useEffect(() => {
+    currentScreenRef.current = currentScreen;
+  }, [currentScreen]);
+
   // Deep linking: Listen for popstate and hashchange to keep browser history synchronized
   useEffect(() => {
     const handlePopState = () => {
+      // If user was on success or failed screen, popping back from mobile/browser should navigate to home cleanly
+      if (currentScreenRef.current === 'success' || currentScreenRef.current === 'failed') {
+        setCurrentScreen('home');
+        setSelectedCampaign(null);
+        updateBrowserUrl('home', null, null, { replace: true });
+        return;
+      }
       applyRouteFromUrl();
     };
 
@@ -800,11 +815,11 @@ export default function App() {
   }, [campaigns, selectedCampaign?.id]);
 
   // Handlers for Navigation
-  const handleNavigate = (screen: ScreenId) => {
+  const handleNavigate = (screen: ScreenId, options: { replace?: boolean } = { replace: false }) => {
     // Biometric Security Gate for Creator Studio
     if (screen === 'create_qr') {
       if (!creatorProfile.isApproved || !creatorProfile.phone) {
-        handleNavigate('creator_reg');
+        handleNavigate('creator_reg', options);
         return;
       }
 
@@ -815,7 +830,7 @@ export default function App() {
         setBiometricCallback(() => () => {
           setIsCreatorStudioUnlocked(true);
           setCurrentScreen('create_qr');
-          updateBrowserUrl('create_qr');
+          updateBrowserUrl('create_qr', null, null, options);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         });
         setIsBiometricModalOpen(true);
@@ -826,13 +841,13 @@ export default function App() {
     setCurrentScreen(screen);
     if (screen === 'home') {
       setSelectedCampaign(null);
-      updateBrowserUrl('home', null, null);
+      updateBrowserUrl('home', null, null, options);
     } else if (screen === 'explorer') {
-      updateBrowserUrl('explorer', null, selectedCategory);
+      updateBrowserUrl('explorer', null, selectedCategory, options);
     } else if (screen === 'checkout' && selectedCampaign) {
-      updateBrowserUrl('checkout', selectedCampaign, selectedCampaign.category);
+      updateBrowserUrl('checkout', selectedCampaign, selectedCampaign.category, options);
     } else {
-      updateBrowserUrl(screen);
+      updateBrowserUrl(screen, null, null, options);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1410,8 +1425,8 @@ export default function App() {
           {currentScreen === 'success' && (
             <SuccessScreen
               transaction={completedTransaction}
-              onGoHome={() => handleNavigate('home')}
-              onExploreMore={() => handleNavigate('explorer')}
+              onGoHome={() => handleNavigate('home', { replace: true })}
+              onExploreMore={() => handleNavigate('explorer', { replace: true })}
             />
           )}
 
@@ -1424,10 +1439,10 @@ export default function App() {
                   const camp = campaigns.find(c => c.id === failedTransaction.campaignId) || selectedCampaign;
                   if (camp) setSelectedCampaign(camp);
                 }
-                handleNavigate('checkout');
+                handleNavigate('checkout', { replace: true });
               }}
-              onGoHome={() => handleNavigate('home')}
-              onExploreMore={() => handleNavigate('explorer')}
+              onGoHome={() => handleNavigate('home', { replace: true })}
+              onExploreMore={() => handleNavigate('explorer', { replace: true })}
             />
           )}
 
