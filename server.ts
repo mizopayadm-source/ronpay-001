@@ -1194,7 +1194,11 @@ app.all([
       transactionId: record.phonePeTransactionId,
       amount: record.amount,
       amountRupees: record.amountRupees || (record.amount ? record.amount / 100 : 100),
-      baseAmountRupees: record.baseAmountRupees || (record.splitDetails?.merchantShare ? record.splitDetails.merchantShare / 100 : (record.amountRupees || 100)),
+      baseAmountRupees: (record.baseAmountRupees && record.baseAmountRupees !== record.amountRupees) 
+        ? record.baseAmountRupees 
+        : (record.splitDetails?.merchantShare 
+          ? record.splitDetails.merchantShare / 100 
+          : Math.max(1, (record.amountRupees || (record.amount / 100)) - (record.platformFeeRupees !== undefined ? record.platformFeeRupees : 1))),
       platformFeeRupees: record.platformFeeRupees !== undefined ? record.platformFeeRupees : (record.splitDetails?.platformShare ? record.splitDetails.platformShare / 100 : 1),
       feeOption: record.feeOption || 'ADD_ON',
       campaignId: record.campaignId || '',
