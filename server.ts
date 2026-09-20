@@ -1837,9 +1837,10 @@ app.get(['/api/phonepe/scan-pay', '/api/phonepe/scan-pay/'], (req: Request, res:
   let effectiveCategory = categoryParam;
   if (!effectiveCategory || effectiveCategory === 'others') {
     const titleL = causeTitle.toLowerCase();
-    if (titleL.includes('ralna') || campId === 'cmp-1788526889943') effectiveCategory = 'ralna';
+    if (campId === 'cmp-1788107291420' || titleL.includes('bmp') || titleL.includes('shillong')) effectiveCategory = 'kumtluang';
+    else if (titleL.includes('ralna') || campId === 'cmp-1788526889943') effectiveCategory = 'ralna';
     else if (titleL.includes('rikrum') || campId === 'cmp-1788528889947') effectiveCategory = 'rikrum';
-    else if (titleL.includes('kumtluang') || campId === 'cmp-1788529889949') effectiveCategory = 'kumtluang';
+    else if (titleL.includes('kumtluang') || campId === 'cmp-1788529889949' || campId === 'cmp-1787829303143') effectiveCategory = 'kumtluang';
     else effectiveCategory = 'khawlsak';
   }
   const categoryLabel = `${effectiveCategory.toUpperCase()} BAWM`;
@@ -4222,6 +4223,41 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     changed = true;
   }
 
+  // 3. Normalize transaction categories, campaign titles, and subcategory breakdowns
+  for (const t of (db.transactions || [])) {
+    if (!t) continue;
+    const titleL = String(t.campaignTitle || '').toLowerCase();
+    const cleanTitle = titleL.replace(/,+$/, '').trim();
+    const isBmp = t.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (t.memberId && String(t.memberId).startsWith('BMPSHL'));
+
+    if (isBmp) {
+      if (t.category !== 'kumtluang') {
+        t.category = 'kumtluang';
+        changed = true;
+      }
+      if (t.campaignId !== 'cmp-1788107291420') {
+        t.campaignId = 'cmp-1788107291420';
+        changed = true;
+      }
+      if (t.campaignTitle !== 'BMP Shillong') {
+        t.campaignTitle = 'BMP Shillong';
+        changed = true;
+      }
+      if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
+        const sub = t.subCategory || 'BMP Fund';
+        t.subCategory = sub;
+        t.subCategoryBreakdown = { [sub]: t.amount };
+        changed = true;
+      }
+    } else if (t.campaignId && campMap.has(t.campaignId)) {
+      const camp = campMap.get(t.campaignId);
+      if (camp?.category && t.category !== camp.category && t.category !== 'others') {
+        t.category = camp.category;
+        changed = true;
+      }
+    }
+  }
+
   return changed;
 }
 
@@ -4687,6 +4723,21 @@ app.post('/api/transactions', (req: Request, res: Response) => {
     // If this transaction was previously deleted, resurrect or clean it from tombstone
     const cleanId = String(tx.id).toLowerCase().trim();
     db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
+
+    const titleL = String(tx.campaignTitle || '').toLowerCase();
+    const cleanTitle = titleL.replace(/,+$/, '').trim();
+    const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && String(tx.memberId).startsWith('BMPSHL'));
+    if (isBmp) {
+      tx.category = 'kumtluang';
+      tx.campaignId = 'cmp-1788107291420';
+      tx.campaignTitle = 'BMP Shillong';
+      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+        const sub = tx.subCategory || 'BMP Fund';
+        tx.subCategory = sub;
+        tx.subCategoryBreakdown = { [sub]: tx.amount };
+      }
+    }
+
     db.transactions = mergeCollections(db.transactions, [tx], 'id');
     saveDatabase(db);
     res.json({ success: true, transaction: tx, data: db });

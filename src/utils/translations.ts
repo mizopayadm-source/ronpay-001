@@ -65,13 +65,12 @@ export function getEffectiveCategory(
     return 'others';
   }
 
-  // 2. If already set to a valid specific Bawm category, return it
-  const cat = t.category;
-  if (cat === 'ralna' || cat === 'khawlsak' || cat === 'rikrum' || cat === 'kumtluang') {
-    return cat;
+  // 2. High-priority known campaign check by ID
+  if (t.campaignId === 'cmp-1788107291420') {
+    return 'kumtluang';
   }
 
-  // 3. Search campaigns by ID or Title
+  // 3. Search campaigns by ID or Title from available list or storage
   let allCamps: Campaign[] = campaignsList || [];
   if (allCamps.length === 0 && typeof window !== 'undefined') {
     try {
@@ -90,19 +89,39 @@ export function getEffectiveCategory(
     }
   }
 
-  const titleLower = String(t.campaignTitle || '').toLowerCase().trim();
-  if (titleLower && allCamps.length > 0) {
-    const matched = allCamps.find(c => 
-      c.title?.toLowerCase().trim() === titleLower ||
-      c.titleMizo?.toLowerCase().trim() === titleLower ||
-      c.cause?.toLowerCase().trim() === titleLower
-    );
+  const rawTitleLower = String(t.campaignTitle || '').toLowerCase().trim();
+  const titleClean = rawTitleLower.replace(/,+$/, '').trim();
+
+  // Explicit check for BMP Shillong titles (e.g. 'BMP Shillong,', 'BMP Shillong, Shillong')
+  if (titleClean.includes('bmp shillong') || titleClean.startsWith('bmp') || (t.memberId && t.memberId.startsWith('BMPSHL'))) {
+    return 'kumtluang';
+  }
+
+  if (titleClean && allCamps.length > 0) {
+    const matched = allCamps.find(c => {
+      const ct = c.title?.toLowerCase().trim();
+      const ctm = c.titleMizo?.toLowerCase().trim();
+      const cc = c.cause?.toLowerCase().trim();
+      return (
+        ct === titleClean ||
+        ctm === titleClean ||
+        cc === titleClean ||
+        (ct && titleClean.startsWith(ct))
+      );
+    });
     if (matched?.category && matched.category !== 'others') {
       return matched.category;
     }
   }
 
-  // 4. Keyword heuristics for Mizo community causes
+  // 4. If already set to a valid specific Bawm category and matches no conflicting campaign, return it
+  const cat = t.category;
+  if (cat === 'ralna' || cat === 'khawlsak' || cat === 'rikrum' || cat === 'kumtluang') {
+    return cat;
+  }
+
+  // 5. Keyword heuristics for Mizo community causes
+  const titleLower = titleClean;
   if (titleLower.includes('ralna') || titleLower.includes('mitthi') || titleLower.includes('sunna')) {
     return 'ralna';
   }
@@ -135,12 +154,14 @@ export function getEffectiveCategory(
     titleLower.includes('thlatin') || 
     titleLower.includes('lawmman') || 
     titleLower.includes('inkhawmpui') || 
-    titleLower.includes('khualthang')
+    titleLower.includes('khualthang') ||
+    titleLower.includes('bmp') ||
+    titleLower.includes('kohhran')
   ) {
     return 'kumtluang';
   }
 
-  // 5. If category was marked 'others' or missing but it's not a bill, correct it to 'khawlsak'
+  // 6. If category was marked 'others' or missing but it's not a bill, correct it to 'khawlsak'
   return 'khawlsak';
 }
 

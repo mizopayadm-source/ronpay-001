@@ -742,15 +742,37 @@ export const getStoredTransactions = (): Transaction[] => {
             String(t.id || '').startsWith('TXN-BILL-') || 
             String(t.campaignId || '').startsWith('bill-');
           if (!isBill) {
-            if (!t.category || t.category === 'others') {
-              const titleL = String(t.campaignTitle || '').toLowerCase();
+            const titleL = String(t.campaignTitle || '').toLowerCase();
+            const cleanTitle = titleL.replace(/,+$/, '').trim();
+            const isBmp = t.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (t.memberId && t.memberId.startsWith('BMPSHL'));
+            
+            if (isBmp) {
+              if (t.category !== 'kumtluang') {
+                t.category = 'kumtluang';
+                hasFixed = true;
+              }
+              if (t.campaignId !== 'cmp-1788107291420') {
+                t.campaignId = 'cmp-1788107291420';
+                hasFixed = true;
+              }
+              if (t.campaignTitle !== 'BMP Shillong') {
+                t.campaignTitle = 'BMP Shillong';
+                hasFixed = true;
+              }
+              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
+                const sub = t.subCategory || 'BMP Fund';
+                t.subCategory = sub;
+                t.subCategoryBreakdown = { [sub]: t.amount };
+                hasFixed = true;
+              }
+            } else if (!t.category || t.category === 'others') {
               if (titleL.includes('ralna') || t.campaignId === 'cmp-1788526889943') {
                 t.category = 'ralna';
                 hasFixed = true;
               } else if (titleL.includes('rikrum') || t.campaignId === 'cmp-1788528889947') {
                 t.category = 'rikrum';
                 hasFixed = true;
-              } else if (titleL.includes('kumtluang') || t.campaignId === 'cmp-1788529889949') {
+              } else if (titleL.includes('kumtluang') || t.campaignId === 'cmp-1788529889949' || t.campaignId === 'cmp-1787829303143') {
                 t.category = 'kumtluang';
                 hasFixed = true;
               } else {
@@ -2393,16 +2415,30 @@ export const saveTransaction = (tx: Transaction): void => {
     String(tx.id || '').startsWith('BILL-') || 
     String(tx.id || '').startsWith('TXN-BILL-') || 
     String(tx.campaignId || '').startsWith('bill-');
-  if (!isBill && (!tx.category || tx.category === 'others')) {
+  if (!isBill) {
     const titleL = String(tx.campaignTitle || '').toLowerCase();
-    if (titleL.includes('ralna') || tx.campaignId === 'cmp-1788526889943') {
-      tx.category = 'ralna';
-    } else if (titleL.includes('rikrum') || tx.campaignId === 'cmp-1788528889947') {
-      tx.category = 'rikrum';
-    } else if (titleL.includes('kumtluang') || tx.campaignId === 'cmp-1788529889949') {
+    const cleanTitle = titleL.replace(/,+$/, '').trim();
+    const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && tx.memberId.startsWith('BMPSHL'));
+    
+    if (isBmp) {
       tx.category = 'kumtluang';
-    } else {
-      tx.category = 'khawlsak';
+      tx.campaignId = 'cmp-1788107291420';
+      tx.campaignTitle = 'BMP Shillong';
+      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+        const sub = tx.subCategory || 'BMP Fund';
+        tx.subCategory = sub;
+        tx.subCategoryBreakdown = { [sub]: tx.amount };
+      }
+    } else if (!tx.category || tx.category === 'others') {
+      if (titleL.includes('ralna') || tx.campaignId === 'cmp-1788526889943') {
+        tx.category = 'ralna';
+      } else if (titleL.includes('rikrum') || tx.campaignId === 'cmp-1788528889947') {
+        tx.category = 'rikrum';
+      } else if (titleL.includes('kumtluang') || tx.campaignId === 'cmp-1788529889949' || tx.campaignId === 'cmp-1787829303143') {
+        tx.category = 'kumtluang';
+      } else {
+        tx.category = 'khawlsak';
+      }
     }
   }
   const current = getStoredTransactions();

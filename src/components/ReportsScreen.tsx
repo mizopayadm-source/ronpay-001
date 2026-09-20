@@ -58,6 +58,7 @@ import {
   ALL_MONTH_NAMES_SHORT,
   TargetExportInfo
 } from '../utils/export';
+import { getEffectiveCategory } from '../utils/translations';
 import { getMembers, isCampaignCreator } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
@@ -196,7 +197,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       // 2. Category filter
       if (selectedFilter !== 'all') {
-        if (t.category !== selectedFilter) return false;
+        const effCat = getEffectiveCategory(t, creatorCampaigns);
+        if (effCat !== selectedFilter) return false;
       }
 
       // 3. Specific Campaign sub-filter
@@ -256,22 +258,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
   const grandTotal = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
-  const isKumtluang = selectedFilter === 'kumtluang';
-  const kumtluangMatrix = useMemo(() => {
-    return buildKumtluangMatrix(filteredTransactions, sortOrder);
-  }, [filteredTransactions, sortOrder]);
-
-  // Scoped members for the current selected campaign
-  const scopedMembers = useMemo(() => {
-    return getMembers(selectedCampaignId);
-  }, [selectedCampaignId]);
-
   // Selected campaign display name
   const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
   const currentCampaignDisplayName = selectedCampaignObj 
     ? selectedCampaignObj.title 
     : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
+
+  // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
+  const isKumtluang = selectedFilter === 'kumtluang';
+  const kumtluangMatrix = useMemo(() => {
+    return buildKumtluangMatrix(filteredTransactions, sortOrder, selectedCampaignObj);
+  }, [filteredTransactions, sortOrder, selectedCampaignObj]);
+
+  // Scoped members for the current selected campaign
+  const scopedMembers = useMemo(() => {
+    return getMembers(selectedCampaignId);
+  }, [selectedCampaignId]);
 
   // 1. Text chung ber atan: NGO / Church / Hming / Title (Creator-in a Text Box a a chhut luh ang)
   const headerTitle = useMemo(() => {
@@ -1647,12 +1649,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             {tx.isAnonymous ? 'Anonymous Donor' : tx.donorName}
                           </span>
                           <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                            tx.category === 'ralna' ? 'bg-slate-900 text-white' :
-                            tx.category === 'khawlsak' ? 'bg-emerald-100 text-emerald-800' :
-                            tx.category === 'rikrum' ? 'bg-rose-100 text-rose-800' :
+                            getEffectiveCategory(tx, creatorCampaigns) === 'ralna' ? 'bg-slate-900 text-white' :
+                            getEffectiveCategory(tx, creatorCampaigns) === 'khawlsak' ? 'bg-emerald-100 text-emerald-800' :
+                            getEffectiveCategory(tx, creatorCampaigns) === 'rikrum' ? 'bg-rose-100 text-rose-800' :
                             'bg-blue-100 text-blue-800'
                           }`}>
-                            {tx.category}
+                            {getEffectiveCategory(tx, creatorCampaigns)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">

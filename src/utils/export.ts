@@ -1,4 +1,4 @@
-import { Transaction, MemberRecord } from '../types';
+import { Transaction, MemberRecord, Campaign } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
 
 export interface MatrixRow {
@@ -221,7 +221,8 @@ export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
  */
 export const buildKumtluangMatrix = (
   transactions: Transaction[],
-  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc'
+  sortOrder?: 'date-desc' | 'name-asc' | 'name-desc' | 'amount-desc',
+  campaign?: Campaign | null
 ): KumtluangMatrixData => {
   const categorySet = new Set<string>();
   const donorMap = new Map<string, { [cat: string]: number }>();
@@ -261,6 +262,7 @@ export const buildKumtluangMatrix = (
     }
     const donorCats = donorMap.get(donor)!;
 
+    let hasBreakdown = false;
     if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
       Object.entries(t.subCategoryBreakdown).forEach(([cat, amt]) => {
         const cleanCat = cat.trim();
@@ -268,16 +270,61 @@ export const buildKumtluangMatrix = (
         if (numAmt > 0) {
           categorySet.add(cleanCat);
           donorCats[cleanCat] = (donorCats[cleanCat] || 0) + numAmt;
+          hasBreakdown = true;
         }
       });
-    } else {
-      const fallbackCat = t.campaignTitle || 'General Collection';
-      categorySet.add(fallbackCat);
-      donorCats[fallbackCat] = (donorCats[fallbackCat] || 0) + t.amount;
+    }
+
+    if (!hasBreakdown) {
+      // 1. Direct subCategory field on transaction
+      let resolvedSubCat = t.subCategory?.trim();
+
+      // 2. Check remark for [SubCategoryName] e.g. "March 2026 [BMP Fund]"
+      if (!resolvedSubCat && t.remark) {
+        const bracketMatch = t.remark.match(/\[(.*?)\]/);
+        if (bracketMatch && bracketMatch[1]?.trim()) {
+          resolvedSubCat = bracketMatch[1].trim();
+        }
+      }
+
+      // 3. Look for BMP Shillong or specific campaign subcategories
+      const titleLower = String(t.campaignTitle || '').toLowerCase();
+      if (!resolvedSubCat) {
+        if (t.campaignId === 'cmp-1788107291420' || titleLower.includes('bmp') || titleLower.includes('shillong')) {
+          resolvedSubCat = 'BMP Fund';
+        } else if (campaign?.subCategories && campaign.subCategories.length > 0) {
+          resolvedSubCat = campaign.subCategories[0];
+        }
+      }
+
+      // 4. Fallback: NEVER use campaign title (like "BMP Shillong, Shillong") as a category column!
+      if (!resolvedSubCat) {
+        resolvedSubCat = 'BMP Fund';
+      }
+
+      categorySet.add(resolvedSubCat);
+      donorCats[resolvedSubCat] = (donorCats[resolvedSubCat] || 0) + t.amount;
     }
   });
 
-  const categories = Array.from(categorySet);
+  // Ensure predefined subcategories appear in proper order if available
+  const predefined = campaign?.subCategories || (
+    transactions.some(t => t.campaignId === 'cmp-1788107291420' || String(t.campaignTitle).toLowerCase().includes('bmp'))
+      ? ['BMP Fund', 'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']
+      : []
+  );
+
+  const categories: string[] = [];
+  predefined.forEach(c => {
+    if (categorySet.has(c) && !categories.includes(c)) {
+      categories.push(c);
+    }
+  });
+  categorySet.forEach(c => {
+    if (!categories.includes(c)) {
+      categories.push(c);
+    }
+  });
   const rows: MatrixRow[] = [];
   const columnTotals: { [category: string]: number } = {};
   categories.forEach(c => { columnTotals[c] = 0; });

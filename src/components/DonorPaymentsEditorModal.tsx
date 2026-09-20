@@ -17,7 +17,7 @@ import {
   Layers,
   ChevronDown
 } from 'lucide-react';
-import { Transaction, Campaign, MemberRecord } from '../types';
+import { Transaction, Campaign, MemberRecord, BawmCategory } from '../types';
 import { ALL_MONTH_NAMES_FULL, ALL_MONTH_NAMES_SHORT, getTransactionMonthInfo, getMonthIndex } from '../utils/monthHelper';
 import { formatDateDDMMYYYY } from '../utils/date';
 
@@ -139,7 +139,11 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         periodType: (t.periodType as any) || 'monthly',
         periodLabel: t.periodLabel || `${mInfo.fullMonth} ${mInfo.year || defaultYear}`,
         paymentMethod: t.paymentMethod === 'cash' ? 'cash' : 'online',
-        subCategoryBreakdown: t.subCategoryBreakdown ? { ...t.subCategoryBreakdown } : {},
+        subCategoryBreakdown: (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0)
+          ? { ...t.subCategoryBreakdown }
+          : (t.subCategory 
+              ? { [t.subCategory]: t.amount }
+              : { [subCategoriesList[0] || 'BMP Fund']: t.amount }),
         remark: t.remark || '',
         txHash: t.txHash,
         campaignId: t.campaignId || activeCampaignId,
@@ -308,6 +312,17 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         } catch {}
       }
 
+      const resolvedCampaign = campaigns.find(c => c.id === (e.campaignId || activeCampaignId)) || currentCampaign;
+      const resolvedCategory = (resolvedCampaign?.category || (activeCampaignId === 'cmp-1788107291420' ? 'kumtluang' : 'kumtluang')) as BawmCategory;
+      
+      const primarySubCat = subCategoriesList[0] || 'BMP Fund';
+      let effectiveBreakdown: { [category: string]: number } | undefined = undefined;
+      if (e.subCategoryBreakdown && Object.keys(e.subCategoryBreakdown).length > 0) {
+        effectiveBreakdown = { ...e.subCategoryBreakdown };
+      } else {
+        effectiveBreakdown = { [primarySubCat]: Number(e.amount) || 0 };
+      }
+
       return {
         id: e.originalId || `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
         donorName: currentDonorName.trim(),
@@ -322,8 +337,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         periodYear: e.periodYear,
         periodLabel: e.periodLabel || `${e.periodMonth} ${e.periodYear}`,
         campaignId: e.campaignId || activeCampaignId,
-        campaignTitle: e.campaignTitle || currentCampaign?.title || 'Collection',
-        subCategoryBreakdown: Object.keys(e.subCategoryBreakdown).length > 0 ? e.subCategoryBreakdown : undefined,
+        campaignTitle: resolvedCampaign?.title || e.campaignTitle || 'BMP Shillong',
+        category: resolvedCategory,
+        subCategory: primarySubCat,
+        subCategoryBreakdown: effectiveBreakdown,
         remark: e.remark.trim() || undefined,
         txHash: e.txHash || `RON-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
         status: 'SUCCESS',

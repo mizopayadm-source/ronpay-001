@@ -459,12 +459,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
 
     const targetCampaign = campaigns.find(c => c.id === quickEntryCampaignId) || activeScopedCampaign;
+    const cleanCampTitle = (targetCampaign?.title || 'Kumtluang Bawm').replace(/,+$/, '').trim();
     const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
 
     const newTx: Transaction = {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      campaignId: targetCampaign?.id || 'manual',
-      campaignTitle: targetCampaign?.title || 'Kumtluang Bawm',
+      campaignId: targetCampaign?.id || 'cmp-1788107291420',
+      campaignTitle: cleanCampTitle,
       category: 'kumtluang',
       donorName: payerName,
       donorPhone: selectedMember.fullPhone || `****${selectedMember.phoneLast4}`,
@@ -482,6 +483,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       isSynced: true,
       createdAt: new Date().toISOString(),
       subCategory: selectedCategory,
+      subCategoryBreakdown: { [selectedCategory]: amt },
       periodMonth: selectedMonth,
       periodYear: selectedYear,
       platformFeeBearer: 'org_paid'
