@@ -4210,7 +4210,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       gpsCoords: '25.5788, 91.8933',
       upiId: 'bmpshillong@sbi',
       imageUrl: 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80',
-      subCategories: ['BMP Fund', 'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'],
+      subCategories: ['BMP Fund'],
       trxnFeeBearer: 'user_paid',
       sectionLabel: 'Section / Bial',
       definedSections: ['Section A', 'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'General'],
@@ -4221,6 +4221,12 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
     db.campaigns = Array.from(campMap.values());
     changed = true;
+  } else {
+    const bmpCamp = campMap.get('cmp-1788107291420');
+    if (bmpCamp && (!Array.isArray(bmpCamp.subCategories) || bmpCamp.subCategories.length !== 1 || bmpCamp.subCategories[0] !== 'BMP Fund')) {
+      bmpCamp.subCategories = ['BMP Fund'];
+      changed = true;
+    }
   }
 
   // 3. Normalize transaction categories, campaign titles, and subcategory breakdowns
@@ -4243,10 +4249,16 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         t.campaignTitle = 'BMP Shillong';
         changed = true;
       }
-      if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
-        const sub = t.subCategory || 'BMP Fund';
-        t.subCategory = sub;
-        t.subCategoryBreakdown = { [sub]: t.amount };
+      if (t.subCategory !== 'BMP Fund') {
+        t.subCategory = 'BMP Fund';
+        changed = true;
+      }
+      if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length !== 1 || !t.subCategoryBreakdown['BMP Fund']) {
+        t.subCategoryBreakdown = { 'BMP Fund': t.amount };
+        changed = true;
+      }
+      if (t.remark && t.remark.includes('[Pathian Ram Zauna]')) {
+        t.remark = t.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
         changed = true;
       }
     } else if (t.campaignId && campMap.has(t.campaignId)) {
