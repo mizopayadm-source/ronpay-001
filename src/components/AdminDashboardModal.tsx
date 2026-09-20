@@ -39,6 +39,8 @@ import {
   Calendar,
   Layers,
   Eye,
+  EyeOff,
+  ArrowLeft,
   Sliders,
   Save,
   RotateCcw,
@@ -184,17 +186,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onRestoreDatabase,
   onResetData,
 }) => {
+  // Mandatory Login Gate: Check if current user profile has the `isAdmin: true` flag.
+  // If not, redirect them or prompt for an admin password before allowing access.
+  const isProfileAdmin = Boolean(currentProfile?.isAdmin === true);
+
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    // If current profile has isAdmin: true, grant direct access
+    if (isProfileAdmin) return true;
+
+    // If profile lacks isAdmin: true, check if this session was explicitly authorized with admin password
     try {
-      const sessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
-      if (!sessionAuth) return false;
-      // If currentProfile is explicitly a non-admin guest or standard member, require re-auth
-      if (currentProfile && !currentProfile.isAdmin && currentProfile.role === 'MEMBER') {
-        sessionStorage.removeItem('ronpay_admin_auth');
-        return false;
-      }
-      return true;
+      const sessionPasswordVerified = sessionStorage.getItem('ronpay_admin_password_verified') === 'true';
+      return sessionPasswordVerified;
     } catch (e) {
       return false;
     }
@@ -203,6 +207,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [staffList, setStaffList] = useState<StaffAccount[]>(() => getStoredStaffAccounts());
   const [adminUserId, setAdminUserId] = useState<string>('');
   const [adminPassword, setAdminPassword] = useState<string>('');
+  const [showAdminPassword, setShowAdminPassword] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<string>('');
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
@@ -366,15 +371,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      try {
-        if (sessionStorage.getItem('ronpay_admin_auth') === 'true') {
-          setIsAuthenticated(true);
+      setLoginError('');
+      if (currentProfile?.isAdmin === true) {
+        setIsAuthenticated(true);
+      } else {
+        // Enforce mandatory login gate: current profile lacks `isAdmin: true`
+        const sessionPasswordVerified = sessionStorage.getItem('ronpay_admin_password_verified') === 'true';
+        if (!sessionPasswordVerified) {
+          setIsAuthenticated(false);
         }
-      } catch (e) {
-        // ignore
       }
     }
-  }, [isOpen]);
+  }, [isOpen, currentProfile?.isAdmin]);
 
   // Biometric Login handler for Admin
   // Biometric Login handler for Admin - Restricted to enrolled administrators
@@ -393,13 +401,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         setCurrentRole(targetRole);
         try {
           sessionStorage.setItem('ronpay_admin_auth', 'true');
+          sessionStorage.setItem('ronpay_admin_password_verified', 'true');
         } catch (e) {
           // ignore
         }
         recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics.', 'system');
         setLogsList(getStoredAuditLogs());
       } else {
-        setLoginError('Biometric admin verification is not enrolled on this device. Khawngaihin Master Credentials hmangin lut rawh.');
+        setLoginError('Biometric admin verification is not enrolled on this device. Khawngaihin Master Admin Password chhuah rawh.');
       }
     }, 650);
   };
@@ -407,22 +416,24 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const uid = adminUserId.trim().toLowerCase();
+    const pwd = adminPassword.trim();
     
     // Check master superadmin credentials
     if (
-      (uid === 'admin' || uid === 'superadmin' || uid === 'admin@ronpay.com' || uid === 'superadmin@ronpay.com' || uid === 'admin@ronpay.mizoram.gov.in') &&
-      (adminPassword === 'admin' || adminPassword === 'ronpay2026' || adminPassword === 'ronpay@admin2026')
+      (uid === 'admin' || uid === 'superadmin' || uid === 'admin@ronpay.com' || uid === 'superadmin@ronpay.com' || uid === 'admin@ronpay.mizoram.gov.in' || !uid || uid === currentProfile?.phone || uid === currentProfile?.name?.toLowerCase()) &&
+      (pwd === 'admin' || pwd === 'ronpay2026' || pwd === 'ronpay@admin2026')
     ) {
       setCurrentRole('SUPER_ADMIN');
       setIsAuthenticated(true);
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
+        sessionStorage.setItem('ronpay_admin_password_verified', 'true');
         localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
       } catch (e) {
         // ignore
       }
-      recordAuditLog('Super Admin Login', 'Super Administrator authenticated via Master Credentials.', 'system');
+      recordAuditLog('Admin Password Verified', `Admin password verified for user ${currentProfile?.name || 'Guest'} (${currentProfile?.phone || 'Unknown'}).`, 'system');
       setLogsList(getStoredAuditLogs());
       return;
     }
@@ -433,28 +444,30 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       st => (st.name.toLowerCase() === uid || st.email.toLowerCase() === uid || st.phone === uid) && st.isActive
     );
 
-    if (matchedStaff && (adminPassword === 'ronpay2026' || adminPassword === 'admin' || adminPassword === matchedStaff.phone)) {
+    if (matchedStaff && (pwd === 'ronpay2026' || pwd === 'admin' || pwd === matchedStaff.phone)) {
       setCurrentRole(matchedStaff.role);
       setIsAuthenticated(true);
       setLoginError('');
       try {
         sessionStorage.setItem('ronpay_admin_auth', 'true');
+        sessionStorage.setItem('ronpay_admin_password_verified', 'true');
         localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
       } catch (e) {
         // ignore
       }
-      recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" (${matchedStaff.role}) authenticated.`, 'system');
+      recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" (${matchedStaff.role}) authenticated via Password.`, 'system');
       setLogsList(getStoredAuditLogs());
       return;
     }
 
-    setLoginError('User ID emaw Password a dik lo. Khawngaihin enfiah nawn rawh.');
+    setLoginError('Admin Password a dik lo. Khawngaihin password dik tak chhuah rawh le.');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     try {
       sessionStorage.removeItem('ronpay_admin_auth');
+      sessionStorage.removeItem('ronpay_admin_password_verified');
     } catch (e) {
       // ignore
     }
@@ -1043,91 +1056,143 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           </div>
         </div>
 
-        {/* Auth Guard Screen */}
+        {/* Auth Guard Screen - Mandatory Login Gate */}
         {!isAuthenticated ? (
-          <div className="p-6 sm:p-10 flex-1 overflow-y-auto flex flex-col items-center justify-center text-center space-y-5">
-            <div className="w-16 h-16 rounded-3xl bg-indigo-50 border-2 border-indigo-200 text-indigo-600 flex items-center justify-center shadow-lg">
-              <KeyRound className="w-8 h-8" />
+          <div className="p-6 sm:p-10 flex-1 overflow-y-auto flex flex-col items-center justify-center text-center space-y-4">
+            <div className={`w-16 h-16 rounded-3xl ${!isProfileAdmin ? 'bg-rose-50 border-2 border-rose-200 text-rose-600 shadow-rose-100' : 'bg-indigo-50 border-2 border-indigo-200 text-indigo-600 shadow-indigo-100'} flex items-center justify-center shadow-lg`}>
+              {!isProfileAdmin ? <ShieldAlert className="w-8 h-8" /> : <KeyRound className="w-8 h-8" />}
             </div>
 
-            <div className="space-y-1 max-w-sm">
-              <h3 className="text-lg font-black text-slate-900">Admin Authentication Required</h3>
+            <div className="space-y-1 max-w-md">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[10.5px] font-black uppercase tracking-wider mb-1">
+                <Lock className="w-3 h-3" />
+                <span>Mandatory Login Gate</span>
+              </div>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                {!isProfileAdmin ? 'Admin Clearance Required' : 'Administrator Session Locked'}
+              </h3>
               <p className="text-xs text-slate-500">
-                Log in using Biometrics (Fingerprint / Face ID) or Master Credentials.
+                {!isProfileAdmin
+                  ? 'Access restricted. Current user profile does not have administrator privileges.'
+                  : `Welcome back, ${currentProfile?.name || 'Admin'}. Enter password to resume access.`}
               </p>
             </div>
 
-            {/* Quick Biometric Admin Unlock */}
-            <div className="w-full max-w-xs space-y-3">
+            {/* Non-Admin Account Warning & Status Card */}
+            {!isProfileAdmin && (
+              <div className="w-full max-w-sm bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3.5 text-left space-y-2 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Non-Admin Account Detected</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-mono text-[10px] font-black border border-rose-200">
+                    isAdmin: false
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-700 space-y-0.5 pt-0.5 border-t border-amber-200/60">
+                  <div><b>Profile:</b> {currentProfile?.name || 'Guest User'} {currentProfile?.phone ? `(${currentProfile.phone})` : ''}</div>
+                  <div><b>Status:</b> Regular Account • No Direct Clearance</div>
+                </div>
+                <p className="text-[11px] text-amber-950/90 leading-relaxed font-medium">
+                  RonPay Admin Console luh nan hian Administrator nihna (<code>isAdmin: true</code>) neih a ngai. Admin Master Password chhuah la, a nih loh chuan App-ah kir leh rawh le.
+                </p>
+              </div>
+            )}
+
+            <div className="w-full max-w-sm space-y-3">
+              {/* Option 1: Immediate Redirect Back to User App */}
               <button
                 type="button"
-                onClick={handleAdminBiometricLogin}
-                disabled={isBiometricScanning}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                onClick={onClose}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                title="Return to user app view"
               >
-                <Fingerprint className={`w-5 h-5 ${isBiometricScanning ? 'animate-pulse text-amber-300' : ''}`} />
-                {isBiometricScanning ? 'Scanning Admin Biometrics...' : 'Admin Biometric Login (Enrolled Device)'}
+                <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>App-ah Kir Leh Rawh (Redirect to App)</span>
               </button>
 
-              <div className="flex items-center gap-2 text-slate-300 my-2">
+              <div className="flex items-center gap-2 text-slate-300 my-1">
                 <div className="h-px bg-slate-200 flex-1" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Or Master Password</span>
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  {!isProfileAdmin ? 'A Nih Loh Chuan Admin Password' : 'Or Verify Credentials'}
+                </span>
                 <div className="h-px bg-slate-200 flex-1" />
               </div>
 
-              {/* Password Form */}
+              {/* Option 2: Admin Password Verification Form */}
               <form onSubmit={handleLogin} className="space-y-3 text-left">
                 <div>
-                  <label className="text-[10.5px] font-extrabold text-slate-600 uppercase">Admin Username</label>
+                  <label className="text-[10.5px] font-extrabold text-slate-600 uppercase flex items-center justify-between">
+                    <span>Admin Username / Staff ID</span>
+                    <span className="text-[9.5px] text-slate-400 font-normal">Optional</span>
+                  </label>
                   <input
                     type="text"
                     value={adminUserId}
                     onChange={(e) => setAdminUserId(e.target.value)}
                     className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="admin / admin@ronpay.com"
+                    placeholder="admin / superadmin / staff ID"
                   />
                 </div>
                 <div>
-                  <label className="text-[10.5px] font-extrabold text-slate-600 uppercase">Master Password</label>
-                  <input
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    className="w-full mt-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
-                    placeholder="admin / ronpay2026 / ronpay@admin2026"
-                  />
+                  <label className="text-[10.5px] font-extrabold text-slate-600 uppercase flex items-center justify-between">
+                    <span>Admin Master Password</span>
+                    <span className="text-[9.5px] text-indigo-600 font-black">Mandatory</span>
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full p-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-600 focus:outline-none"
+                      placeholder="admin / ronpay2026 / ronpay@admin2026"
+                      autoFocus={!isProfileAdmin}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer p-1"
+                      title={showAdminPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showAdminPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="bg-amber-50/80 border border-amber-200/70 p-2 rounded-xl text-[10px] text-amber-900 leading-tight flex items-start gap-1.5">
-                  <span className="font-bold">🔑 Info:</span>
-                  <span>Username: <b>admin</b> (or <b>admin@ronpay.com</b>) • Password: <b>admin</b>, <b>ronpay2026</b>, or <b>ronpay@admin2026</b></span>
+                <div className="bg-indigo-50/80 border border-indigo-100 p-2.5 rounded-xl text-[10.5px] text-indigo-900 leading-tight flex items-start gap-2">
+                  <KeyRound className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">🔑 Master Passwords:</span> <b>admin</b>, <b>ronpay2026</b>, or <b>ronpay@admin2026</b> (Username: <b>admin</b>).
+                  </div>
                 </div>
 
                 {loginError && (
-                  <p className="text-xs text-rose-600 font-bold bg-rose-50 p-2 rounded-xl border border-rose-200 text-center">
-                    {loginError}
-                  </p>
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-600 text-center flex items-center justify-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
                 )}
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs transition cursor-pointer shadow-xs"
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs transition cursor-pointer shadow-md shadow-indigo-200 active:scale-98 flex items-center justify-center gap-2"
                 >
-                  Verify Master Password
+                  <ShieldCheck className="w-4 h-4 text-amber-300" />
+                  <span>Verify Admin Password & Unlock</span>
                 </button>
               </form>
 
-              {/* Back to User App Button */}
-              <div className="pt-2 border-t border-slate-200/80 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>App-ah Kir Leh Rawh (Return to App)</span>
-                </button>
-              </div>
+              {/* Quick Biometric Admin Unlock */}
+              <button
+                type="button"
+                onClick={handleAdminBiometricLogin}
+                disabled={isBiometricScanning}
+                className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              >
+                <Fingerprint className={`w-4 h-4 text-indigo-600 ${isBiometricScanning ? 'animate-pulse text-amber-500' : ''}`} />
+                <span>{isBiometricScanning ? 'Scanning Admin Biometrics...' : 'Admin Biometric Login (Enrolled Device)'}</span>
+              </button>
             </div>
           </div>
         ) : (
