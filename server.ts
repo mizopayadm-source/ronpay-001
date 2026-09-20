@@ -4108,6 +4108,7 @@ const DB_FILE_PATH = path.join(process.cwd(), 'data', 'ronpay_db.json');
 
 interface DatabaseSchema {
   campaigns: any[];
+  deletedCampaignIds?: string[];
   members: any[];
   transactions: any[];
   creators: any[];
@@ -4120,6 +4121,7 @@ interface DatabaseSchema {
 function getDefaultDatabase(): DatabaseSchema {
   return {
     campaigns: [],
+    deletedCampaignIds: [],
     members: [],
     transactions: [],
     creators: [],
@@ -4213,6 +4215,7 @@ function getDatabase(): DatabaseSchema {
       const parsed = JSON.parse(data);
       const currentDb: DatabaseSchema = {
         campaigns: Array.isArray(parsed?.campaigns) ? parsed.campaigns : [],
+        deletedCampaignIds: Array.isArray(parsed?.deletedCampaignIds) ? parsed.deletedCampaignIds : [],
         members: Array.isArray(parsed?.members) ? parsed.members : [],
         transactions: Array.isArray(parsed?.transactions) ? parsed.transactions : [],
         creators: Array.isArray(parsed?.creators) ? parsed.creators : [],
@@ -4250,18 +4253,26 @@ function saveDatabase(db: DatabaseSchema) {
 }
 
 // Upsert helper for arrays by unique key with conflict resolution and timestamp protection
-function mergeCollections<T extends Record<string, any>>(serverList: T[], clientList: T[], key: string = 'id'): T[] {
-  if (!Array.isArray(clientList) || clientList.length === 0) return serverList || [];
-  if (!Array.isArray(serverList) || serverList.length === 0) return clientList || [];
+function mergeCollections<T extends Record<string, any>>(serverList: T[], clientList: T[], key: string = 'id', excludedKeys?: Set<string>): T[] {
+  const filteredServer = (excludedKeys && excludedKeys.size > 0)
+    ? (serverList || []).filter(item => item && item[key] && !excludedKeys.has(String(item[key]).toLowerCase().trim()))
+    : (serverList || []);
+
+  const filteredClient = (excludedKeys && excludedKeys.size > 0)
+    ? (clientList || []).filter(item => item && item[key] && !excludedKeys.has(String(item[key]).toLowerCase().trim()))
+    : (clientList || []);
+
+  if (!Array.isArray(filteredClient) || filteredClient.length === 0) return filteredServer;
+  if (!Array.isArray(filteredServer) || filteredServer.length === 0) return filteredClient;
   const map = new Map<string, T>();
   // 1. Put server items
-  for (const item of serverList) {
+  for (const item of filteredServer) {
     if (item && item[key]) {
       map.set(String(item[key]).toLowerCase(), item);
     }
   }
   // 2. Put / merge client items intelligently based on updatedAt timestamps and validityDate
-  for (const clientItem of clientList) {
+  for (const clientItem of filteredClient) {
     if (!clientItem || !clientItem[key]) continue;
     const k = String(clientItem[key]).toLowerCase();
     const existing = map.get(k);
@@ -4326,6 +4337,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
   try {
     const {
       campaigns,
+      deletedCampaignIds,
       members,
       transactions,
       deletedTransactionIds,
@@ -4343,9 +4355,21 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.transactions = (db.transactions || []).filter((t: any) => !delSet.has(String(t.id).toLowerCase().trim()));
     }
 
+    const delCampSet = (Array.isArray(deletedCampaignIds) && deletedCampaignIds.length > 0)
+      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()))
+      : undefined;
+
+    if (delCampSet && delCampSet.size > 0) {
+      db.campaigns = (db.campaigns || []).filter((c: any) => !delCampSet.has(String(c.id).toLowerCase().trim()));
+      db.deletedCampaignIds = Array.from(new Set([
+        ...(db.deletedCampaignIds || []),
+        ...Array.from(delCampSet)
+      ]));
+    }
+
     // Merge collections intelligently
     if (Array.isArray(campaigns)) {
-      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id');
+      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', delCampSet);
     }
     if (Array.isArray(members)) {
       db.members = mergeCollections(db.members, members, 'id');
@@ -4422,45 +4446,50 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
   }
 });
 
-// Delete Campaign endpoint with Zero-Balance Safety Net Check
+// Delete Campaign endpoint with Zero-Balance Safety Net Check & Admin Force Override
 app.delete('/api/campaigns/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { reason, performedBy } = req.body || {};
+    const { reason, performedBy, force } = req.body || {};
     const db = getDatabase();
-    const campIndex = db.campaigns.findIndex(c => String(c.id).toLowerCase() === String(id).toLowerCase());
+    const cleanId = String(id).toLowerCase().trim();
+    const campIndex = db.campaigns.findIndex(c => String(c.id).toLowerCase().trim() === cleanId);
     
     if (campIndex === -1) {
-      return res.status(404).json({ success: false, message: `Campaign ${id} not found` });
+      return res.json({ success: true, message: `Campaign ${id} already deleted or not found` });
     }
 
     const campaign = db.campaigns[campIndex];
 
     // Check transactions
     const matchingTxns = db.transactions.filter(t => 
-      String(t.campaignId).toLowerCase() === String(id).toLowerCase() ||
-      (campaign.title && String(t.campaignTitle).toLowerCase() === String(campaign.title).toLowerCase())
+      String(t.campaignId).toLowerCase().trim() === cleanId ||
+      (campaign.title && String(t.campaignTitle).toLowerCase().trim() === String(campaign.title).toLowerCase().trim())
     );
 
     const totalCollected = matchingTxns
       .filter(t => t.status !== 'failed' && t.status !== 'rejected')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-    if (matchingTxns.length > 0 || totalCollected > 0) {
+    if (!force && totalCollected > 0) {
       return res.status(403).json({
         success: false,
-        message: `Financial Safety Lock: Cannot hard delete campaign with ₹${totalCollected} collected (${matchingTxns.length} transactions). Use /void endpoint instead.`
+        message: `Financial Safety Lock: Cannot hard delete campaign with ₹${totalCollected} collected (${matchingTxns.length} transactions). Use force=true to override or use /void endpoint.`
       });
     }
 
-    // Hard delete zero-balance campaign
+    // Hard delete zero-balance campaign or admin forced
     db.campaigns.splice(campIndex, 1);
+    db.deletedCampaignIds = Array.from(new Set([
+      ...(db.deletedCampaignIds || []),
+      cleanId
+    ]));
 
     // Audit log
     const auditLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      action: 'CAMPAIGN_DELETED_ZERO_BALANCE',
-      details: `Zero-balance campaign '${campaign.title}' (${id}) deleted. Reason: ${reason || 'Mistake entry'}. Performed by: ${performedBy || 'Admin'}.`,
+      action: totalCollected > 0 ? 'CAMPAIGN_FORCE_DELETED' : 'CAMPAIGN_DELETED_ZERO_BALANCE',
+      details: `Campaign '${campaign.title}' (${id}) deleted. Reason: ${reason || 'Admin action'}. Performed by: ${performedBy || 'Admin'}. (Collected: ₹${totalCollected})`,
       targetType: 'campaign',
       targetId: id,
       performedBy: performedBy || 'Admin',

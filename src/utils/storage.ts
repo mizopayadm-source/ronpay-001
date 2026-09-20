@@ -22,6 +22,42 @@ const PRICING_CONFIG_KEY = 'ronpay_pricing_config_v1';
 const CAMPAIGNS_LAST_SYNC_KEY = 'ronpay_campaigns_last_sync_v1';
 const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
 const ANNOUNCEMENT_KEY = 'ronpay_announcement_v1';
+const DELETED_CAMPAIGN_IDS_KEY = 'ronpay_deleted_campaign_ids_v1';
+
+export const getDeletedCampaignIds = (): Set<string> => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_CAMPAIGN_IDS_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+    }
+  } catch (e) {}
+  return new Set<string>();
+};
+
+export const recordDeletedCampaignId = (campaignId: string): void => {
+  if (!campaignId) return;
+  try {
+    const set = getDeletedCampaignIds();
+    set.add(String(campaignId).toLowerCase().trim());
+    const arr = Array.from(set).slice(-500);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch (e) {}
+};
+
+export const clearDeletedCampaignId = (campaignId: string): void => {
+  if (!campaignId) return;
+  try {
+    const set = getDeletedCampaignIds();
+    set.delete(String(campaignId).toLowerCase().trim());
+    const arr = Array.from(set);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch (e) {}
+};
 
 export const broadcastTabSync = (type: string) => {
   try {
@@ -166,12 +202,19 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 
 export const getStoredCampaigns = (): Campaign[] => {
   try {
+    const deletedCampIds = getDeletedCampaignIds();
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const mapped = parsed
-          .filter((camp: Campaign) => camp.id !== 'cmp-kumtluang-ymavt')
+          .filter((camp: Campaign) => {
+            if (!camp || !camp.id) return false;
+            const cleanId = String(camp.id).toLowerCase().trim();
+            if (cleanId === 'cmp-kumtluang-ymavt') return false;
+            if (deletedCampIds.has(cleanId)) return false;
+            return true;
+          })
           .map((camp: Campaign) => {
             if (!camp.orgCode) {
               const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
@@ -181,12 +224,13 @@ export const getStoredCampaigns = (): Campaign[] => {
             return camp;
           });
 
-        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns
-        const existingIds = new Set(mapped.map(c => c.id));
+        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns unless deleted
+        const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...mapped];
         for (const initCamp of INITIAL_CAMPAIGNS) {
-          if (!existingIds.has(initCamp.id)) {
+          const initCleanId = String(initCamp.id).toLowerCase().trim();
+          if (!existingIds.has(initCleanId) && !deletedCampIds.has(initCleanId)) {
             merged.push(initCamp);
             hasNew = true;
           }
@@ -206,7 +250,10 @@ export const getStoredCampaigns = (): Campaign[] => {
       }
     }
     // Initialize if never stored before
-    const initialSorted = [...INITIAL_CAMPAIGNS].sort((a, b) => {
+    const initialFiltered = INITIAL_CAMPAIGNS.filter(
+      c => !deletedCampIds.has(String(c.id).toLowerCase().trim())
+    );
+    const initialSorted = [...initialFiltered].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
@@ -384,20 +431,50 @@ export const saveCampaign = (camp: Campaign): void => {
   });
 };
 
-export const deleteStoredCampaign = (campaignId: string, reason?: string, deletedBy?: string): void => {
+export const deleteStoredCampaign = (
+  campaignId: string,
+  reason?: string,
+  deletedBy?: string,
+  forceHardDelete: boolean = false
+): void => {
   if (!campaignId) return;
+  const cleanId = String(campaignId).toLowerCase().trim();
   const current = getStoredCampaigns();
-  const target = current.find(c => c.id === campaignId);
-  if (!target) return;
+  const target = current.find(c => String(c.id).toLowerCase().trim() === cleanId);
+  if (!target) {
+    // Even if not in local memory, record as deleted to prevent resurrection
+    recordDeletedCampaignId(cleanId);
+    safeApiFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'Admin deleted', performedBy: deletedBy || 'Admin', force: true })
+    });
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedCampaignIds: [cleanId] })
+    });
+    return;
+  }
 
   const allTxns = getStoredTransactions();
-  const campTxns = allTxns.filter(t => t.campaignId === campaignId || t.campaignTitle === target.title);
-  const hasPayments = campTxns.length > 0;
+  const campTxns = allTxns.filter(t => 
+    String(t.campaignId).toLowerCase().trim() === cleanId || 
+    (target.title && String(t.campaignTitle).toLowerCase().trim() === String(target.title).toLowerCase().trim())
+  );
+  const totalCollected = campTxns
+    .filter(t => isConfirmedTransaction(t))
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-  if (hasPayments) {
+  const hasPayments = campTxns.length > 0 && totalCollected > 0;
+
+  // Always mark in deletedCampaignIds so sync cannot resurrect it
+  recordDeletedCampaignId(cleanId);
+
+  if (hasPayments && !forceHardDelete) {
     // Financial Safety Rule: Retain financial ledger & sulhnu history. Soft delete / Archive only!
     const updated = current.map(c => {
-      if (c.id === campaignId) {
+      if (String(c.id).toLowerCase().trim() === cleanId) {
         return {
           ...c,
           status: 'cancelled' as const,
@@ -410,18 +487,18 @@ export const deleteStoredCampaign = (campaignId: string, reason?: string, delete
     saveStoredCampaigns(updated);
     recordAuditLog(
       'Campaign Cancelled & Archived',
-      `Campaign "${target.title}" (${target.id}) with ${campTxns.length} transactions was cancelled and safely archived. Reason: ${reason || 'Siam sual / Creator cancelled'} (Ledger Retained)`,
+      `Campaign "${target.title}" (${target.id}) with ₹${totalCollected} collected was cancelled and safely archived. Reason: ${reason || 'Admin cancelled'} (Ledger Retained)`,
       'campaign',
       campaignId
     );
   } else {
-    // Zero collections: Safe for hard delete
-    const updated = current.filter(c => c.id !== campaignId);
+    // Zero collections or Admin force hard delete
+    const updated = current.filter(c => String(c.id).toLowerCase().trim() !== cleanId);
     saveStoredCampaigns(updated);
     deleteCampaignFromFirestore(campaignId).catch(() => {});
     recordAuditLog(
       'Campaign Deleted',
-      `Fresh campaign "${target.title}" (${target.id}) with ₹0 collections was deleted permanently. Reason: ${reason || 'Siam sual palh'}`,
+      `Campaign "${target.title}" (${target.id}) was deleted permanently. Reason: ${reason || 'Admin deleted'}. Performed by: ${deletedBy || 'Admin'}`,
       'campaign',
       campaignId
     );
@@ -429,6 +506,18 @@ export const deleteStoredCampaign = (campaignId: string, reason?: string, delete
 
   safeApiFetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reason: reason || 'Admin deleted',
+      performedBy: deletedBy || 'Admin',
+      force: forceHardDelete || !hasPayments
+    })
+  });
+
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deletedCampaignIds: [cleanId] })
   });
 };
 

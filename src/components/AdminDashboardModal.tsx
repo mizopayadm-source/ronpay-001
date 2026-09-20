@@ -104,7 +104,8 @@ import {
   getStoredCreatorsList,
   getStoredStaffAccounts,
   saveStaffAccount,
-  deleteStaffAccount
+  deleteStaffAccount,
+  isConfirmedTransaction
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -145,7 +146,7 @@ interface AdminDashboardModalProps {
   userRole?: UserRole;
   onUpdatePricingConfig: (config: SystemPricingConfig) => void;
   onUpdateCampaign: (campaign: Campaign) => void;
-  onDeleteCampaign?: (campaignId: string, reason?: string) => void;
+  onDeleteCampaign?: (campaignId: string, reason?: string, force?: boolean) => void;
   onApproveCampaign: (campaign: Campaign) => void;
   onRejectCampaign?: (campaignId: string, remarks?: string) => void;
   onUpdateCreator: (creator: CreatorProfile) => void;
@@ -221,6 +222,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Campaigns sub-filter
   const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected'>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [deleteConfirmCamp, setDeleteConfirmCamp] = useState<{
+    camp: Campaign;
+    reason: string;
+    force: boolean;
+    collected: number;
+    hasTxns: boolean;
+  } | null>(null);
+  const [campaignActionToast, setCampaignActionToast] = useState<string | null>(null);
 
   // Rates / Pricing state
   const [localPricing, setLocalPricing] = useState<SystemPricingConfig>(pricingConfig || DEFAULT_PRICING_CONFIG);
@@ -1382,6 +1391,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {/* ========================================================= */}
               {activeTab === 'campaigns' && (
                 <div className="space-y-4">
+                  {/* Toast Notification for Campaign Delete / Actions */}
+                  {campaignActionToast && (
+                    <div className="p-3 bg-emerald-600 text-white font-bold text-xs rounded-2xl shadow-md flex items-center justify-between animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
+                        <span>{campaignActionToast}</span>
+                      </div>
+                      <button onClick={() => setCampaignActionToast(null)} className="text-white/80 hover:text-white cursor-pointer ml-2">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Top Filter and Search Bar */}
                   <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -1618,16 +1640,28 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                {onDeleteCampaign && (
                                 <button
                                   onClick={() => {
-                                    const reason = window.prompt(`Campaign '${camp.title}' hi delete/cancel i duh tak tak em? Tihtawp chhan (Reason) ziak rawh:`, 'Admin action');
-                                    if (reason !== null) {
-                                      onDeleteCampaign(camp.id, reason.trim() || 'Admin deleted/cancelled');
-                                      setLogsList(getStoredAuditLogs());
-                                    }
+                                    const cleanId = String(camp.id).toLowerCase().trim();
+                                    const campTxns = (transactions || []).filter(t => 
+                                      String(t.campaignId).toLowerCase().trim() === cleanId ||
+                                      (camp.title && String(t.campaignTitle).toLowerCase().trim() === String(camp.title).toLowerCase().trim())
+                                    );
+                                    const totalCollected = campTxns
+                                      .filter(t => isConfirmedTransaction(t))
+                                      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+                                    setDeleteConfirmCamp({
+                                      camp,
+                                      reason: 'Admin action / Delete bawm',
+                                      force: totalCollected === 0,
+                                      collected: totalCollected,
+                                      hasTxns: campTxns.length > 0
+                                    });
                                   }}
-                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto"
-                                  title="Delete Campaign"
+                                  className="px-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-bold py-1.5 rounded-xl text-xs transition cursor-pointer ml-auto flex items-center gap-1.5"
+                                  title="Delete Campaign / Bawm Tihboral"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
                                 </button>
                               )}
                             </div>
@@ -5297,6 +5331,123 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl text-xs transition shadow-md shadow-indigo-200 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" /> Save New Credentials
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Campaign Delete Confirmation Dialog */}
+        {deleteConfirmCamp && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-rose-600">
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900">Campaign Tihboral / Delete Rawh</h3>
+                    <p className="text-[11px] text-slate-500 font-mono">ID: {deleteConfirmCamp.camp.id}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDeleteConfirmCamp(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Target Details */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                <div className="flex justify-between items-start">
+                  <h4 className="text-xs font-black text-slate-900 line-clamp-2">{deleteConfirmCamp.camp.title}</h4>
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 shrink-0 ml-2">
+                    {deleteConfirmCamp.camp.category || 'Bawm'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Creator: <strong>{deleteConfirmCamp.camp.orgName || deleteConfirmCamp.camp.createdBy || 'Admin'}</strong>
+                </p>
+              </div>
+
+              {/* Financial Status Info */}
+              {deleteConfirmCamp.collected > 0 || deleteConfirmCamp.hasTxns ? (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-amber-900">
+                        Sum chhun luh: ₹{deleteConfirmCamp.collected.toLocaleString('en-IN')} awm tawh
+                      </p>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        He campaign hian transactions a neih tawh avangin financial audit trail him nan <strong>Archived / Cancelled</strong>-ah dah a ni ang a, ledger a him ang.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deleteConfirmCamp.force}
+                      onChange={(e) => setDeleteConfirmCamp({ ...deleteConfirmCamp, force: e.target.checked })}
+                      className="w-4 h-4 rounded text-rose-600 border-amber-300 focus:ring-rose-500"
+                    />
+                    <span className="text-[11px] font-bold text-rose-800">
+                      Admin Force Hard Delete (Database atangin paih hlen rawh)
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <p className="text-[11px]">
+                    Pawisa chhun luh a la awm lo (₹0 collected). Database atangin hlum zui lovin <strong>a bo hlen nghal ang</strong>.
+                  </p>
+                </div>
+              )}
+
+              {/* Reason Input */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                  Tihtawp / Delete chhan (Reason)
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmCamp.reason}
+                  onChange={(e) => setDeleteConfirmCamp({ ...deleteConfirmCamp, reason: e.target.value })}
+                  placeholder="Entirnan: Siam sual palh / Creator ngenna / Test campaign..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-rose-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmCamp(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Thulh Leh Rawh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onDeleteCampaign) {
+                      const reason = deleteConfirmCamp.reason.trim() || 'Admin action';
+                      const force = deleteConfirmCamp.force || deleteConfirmCamp.collected === 0;
+                      onDeleteCampaign(deleteConfirmCamp.camp.id, reason, force);
+                      setCampaignActionToast(`Campaign "${deleteConfirmCamp.camp.title}" chu hlawhtling takin delete a ni e.`);
+                      setDeleteConfirmCamp(null);
+                      setLogsList(getStoredAuditLogs());
+                      setTimeout(() => setCampaignActionToast(null), 4000);
+                    }
+                  }}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl text-xs transition shadow-md shadow-rose-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Rawh</span>
                 </button>
               </div>
             </div>

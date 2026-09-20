@@ -15,6 +15,8 @@ import {
   getStoredAuditLogs, 
   saveStoredAuditLogs,
   getDeletedTransactionIds,
+  getDeletedCampaignIds,
+  recordDeletedCampaignId,
   safeApiFetch
 } from './storage';
 import {
@@ -131,6 +133,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         signal: controller ? controller.signal : undefined,
         body: JSON.stringify({
           campaigns: localCampaigns,
+          deletedCampaignIds: Array.from(getDeletedCampaignIds()),
           members: localMembers,
           transactions: localTransactions,
           deletedTransactionIds: Array.from(getDeletedTransactionIds()),
@@ -156,11 +159,21 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         const serverData = result.data;
 
         // Update local storage with unified server data
-        if (Array.isArray(serverData.campaigns) && serverData.campaigns.length > 0) {
-          saveStoredCampaigns(serverData.campaigns, true);
+        if (Array.isArray(serverData.deletedCampaignIds)) {
+          for (const dId of serverData.deletedCampaignIds) {
+            recordDeletedCampaignId(dId);
+          }
+        }
+
+        if (Array.isArray(serverData.campaigns)) {
+          const deletedCampIds = getDeletedCampaignIds();
+          const cleanServerCampaigns = serverData.campaigns.filter(
+            (c: any) => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim())
+          );
+          saveStoredCampaigns(cleanServerCampaigns, true);
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: serverData.campaigns }));
-            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: serverData.campaigns }));
+            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: cleanServerCampaigns }));
+            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: cleanServerCampaigns }));
           }
         }
         if (Array.isArray(serverData.members) && serverData.members.length > 0) {

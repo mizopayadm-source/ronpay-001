@@ -27,7 +27,7 @@ import {
   DEFAULT_PRICING_CONFIG, 
   INITIAL_REGISTERED_CREATORS 
 } from '../data/initialData';
-import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT } from '../utils/storage';
+import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT, getDeletedCampaignIds } from '../utils/storage';
 
 export type FirestoreConnectionStatus = 'connecting' | 'connected' | 'offline' | 'error';
 
@@ -354,8 +354,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
 
       if (remoteCampaigns.length > 0) {
-        const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS);
-        const merged = smartMerge(localCamps, remoteCampaigns, 'id');
+        const deletedCampIds = getDeletedCampaignIds();
+        const filteredRemote = remoteCampaigns.filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
+        const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS)
+          .filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
+        const merged = smartMerge(localCamps, filteredRemote, 'id')
+          .filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
         // Always sort newest first so all devices (Android, web, preview) display the exact same deterministic list
         const sorted = [...merged].sort((a, b) => {
           const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;

@@ -1029,9 +1029,9 @@ export default function App() {
     });
   };
 
-  const handleDeleteCampaign = (campaignId: string) => {
+  const handleDeleteCampaign = (campaignId: string, reason?: string, force?: boolean) => {
     const cleanId = String(campaignId).toLowerCase().trim();
-    deleteStoredCampaign(campaignId);
+    deleteStoredCampaign(campaignId, reason, 'Admin', force);
     setCampaigns(prev => prev.filter(c => String(c.id).toLowerCase().trim() !== cleanId));
     setTransactions(getStoredTransactions());
     if (selectedCampaign && String(selectedCampaign.id).toLowerCase().trim() === cleanId) {
