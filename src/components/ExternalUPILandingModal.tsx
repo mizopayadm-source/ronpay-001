@@ -225,7 +225,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
     : `RonPay ${campaign.category.toUpperCase()} - ${campaign.title}`;
 
   const upiPayUrl = createUPIPaymentString(
-    campaign.upiId || 'ronpay@axl',
+    campaign.upiId || 'direct@upi',
     campaign.title,
     totalAmount > 0 ? totalAmount : undefined,
     upiNote

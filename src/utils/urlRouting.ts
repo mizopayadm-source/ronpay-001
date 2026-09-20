@@ -248,7 +248,7 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         title: title ? decodeURIComponent(title) : (mitthi ? `Ralna: ${decodeURIComponent(mitthi)}` : 'RonPay Bawm'),
         location: loc ? decodeURIComponent(loc) : 'Mizoram',
         gpsCoords: '23.7271, 92.7176',
-        upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
+        upiId: upi ? decodeURIComponent(upi) : (searchParams.get('pa') ? decodeURIComponent(searchParams.get('pa')!) : 'direct@upi'),
         orgName: org ? decodeURIComponent(org) : undefined,
         targetAmount: target ? Number(target) : undefined,
         cause: cause ? decodeURIComponent(cause) : undefined,

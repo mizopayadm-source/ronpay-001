@@ -178,7 +178,7 @@ export const generateBawmQRDataUrl = async (campaign: Campaign, mode: 'auto' | '
   }
 
   const upiPayload = generateUPILink({
-    upiId: campaign.targetUpiId || campaign.upiId || 'ronpay@axl',
+    upiId: campaign.targetUpiId || campaign.upiId || 'bawm@ronpay',
     name: campaign.title || 'RonPay Bawm',
     note: `RonPay:${campaign.id}`
   });

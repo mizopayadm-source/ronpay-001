@@ -810,7 +810,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setIsPhonePeCheckoutOpen(false);
       setIsProcessing(false);
 
-      // Open new tab synchronously to bypass browser popup blockers
+      // On Android apps and mobile browsers, immediately navigate to eliminate popup delays or blank tab lag
+      if (isAndroidOrMobileApp()) {
+        window.location.href = fullLaunchUrl;
+        return;
+      }
+
+      // Open new tab synchronously to bypass browser popup blockers (Desktop)
       let paymentTab: Window | null = null;
       try {
         paymentTab = window.open('about:blank', '_blank');

@@ -764,7 +764,7 @@ app.all([
             ]
           }
         }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(3500)
       });
 
       if (v2PayResp.ok) {
@@ -1018,7 +1018,7 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
             ]
           }
         }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(3500)
       });
 
       if (v2PayResp.ok) {

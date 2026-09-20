@@ -51,6 +51,7 @@ import {
 import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
 import { PGComplianceModal } from './PGComplianceModal';
+import { isAndroidOrMobileApp } from '../utils/urlRouting';
 
 interface RonPayWebsiteProps {
   onLaunchApp: (targetScreen?: string, targetCategory?: BawmCategory) => void;
@@ -91,8 +92,15 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const openPhonePeUatPortal = (amount: number = 100) => {
     const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
     const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
+    if (isAndroidOrMobileApp()) {
+      window.location.href = launchUrl;
+      return;
+    }
     try {
-      window.open(launchUrl, '_blank');
+      const paymentWindow = window.open(launchUrl, '_blank');
+      if (!paymentWindow || paymentWindow.closed || typeof paymentWindow.closed === 'undefined') {
+        window.location.href = launchUrl;
+      }
     } catch (e) {
       window.location.href = launchUrl;
     }

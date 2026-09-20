@@ -23,8 +23,34 @@ export interface ScannedQRResult {
   rawText?: string;
 }
 
+// Helper: Case-insensitive query parameter lookup
+function getParamCI(searchParams: URLSearchParams, ...keys: string[]): string | null {
+  for (const [k, v] of searchParams.entries()) {
+    for (const key of keys) {
+      if (k.toLowerCase() === key.toLowerCase() && v && v.trim()) {
+        return v.trim();
+      }
+    }
+  }
+  return null;
+}
+
+// Helper: Extract valid Indian UPI VPA from any text or encoded URI string
+function extractUPIVpa(text: string): string | null {
+  if (!text) return null;
+  const match = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+/i);
+  if (match) {
+    const vpa = match[0].trim();
+    // Exclude basic web image/assets extensions
+    if (!vpa.endsWith('.png') && !vpa.endsWith('.jpg') && !vpa.endsWith('.svg') && !vpa.endsWith('.jpeg')) {
+      return vpa;
+    }
+  }
+  return null;
+}
+
 /**
- * Robust parser for all RonPay QR formats (UPI URLs, Web portal links, JSON strings, Plain IDs, VPAs)
+ * Robust parser for all RonPay QR formats (UPI URLs, Web portal links, JSON strings, Plain IDs, VPAs, BharatQR)
  */
 export function parseScannedPayload(rawText: string, campaigns: Campaign[]): ScannedQRResult {
   const cleanText = (rawText || '').trim();
@@ -42,6 +68,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         ? parseFloat(String(jsonAmt))
         : undefined;
 
+      const extractedUpi = parsed.upi || parsed.upiId || parsed.pa || parsed.vpa || parsed.targetUpiId || extractUPIVpa(cleanText);
+
       if (campId) {
         const found = campaigns.find(c => c.id.toLowerCase() === String(campId).toLowerCase());
         if (found) {
@@ -51,19 +79,27 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
             rawText: cleanText
           };
         }
-        // If not found in current memory, construct new dynamic campaign object
+        // If not found in current memory, construct new dynamic campaign object with all provided fields
         const dynamicCamp: Campaign = {
           id: String(campId),
           category: parsed.category || 'ralna',
-          title: parsed.title || 'Scanned Community Bawm',
+          title: parsed.title || parsed.mitthiHming ? `Ralna: ${parsed.mitthiHming}` : 'Scanned Community Bawm',
           location: parsed.location || 'Mizoram',
           gpsCoords: parsed.gps || '23.7271, 92.7176',
-          upiId: parsed.upi || parsed.upiId || 'ronpay@axl',
-          validityDate: parsed.validity || '2027-12-31',
+          upiId: extractedUpi || 'direct@upi',
+          validityDate: parsed.validity || parsed.validityDate || '2027-12-31',
           status: parsed.status || 'active',
           createdAt: new Date().toISOString(),
           targetAmount: numJsonAmt,
           customAmount: numJsonAmt,
+          cause: parsed.cause,
+          creatorName: parsed.creatorName || parsed.creator,
+          mitthiHming: parsed.mitthiHming || parsed.mitthi,
+          vuiHun: parsed.vuiHun,
+          vuitu: parsed.vuitu,
+          thihni: parsed.thihni,
+          urgencyDeadline: parsed.urgencyDeadline,
+          imageUrl: parsed.imageUrl || parsed.img
         };
         return {
           type: dynamicCamp.status === 'pending_approval' ? 'pending' : dynamicCamp.category,
@@ -77,27 +113,31 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
   }
 
   // 2. Web Portal URL parsing (e.g. PhonePe PG, merchant-simulator, or https://...?campaign=cmp-123)
-  if (cleanText.startsWith('http://') || cleanText.startsWith('https://') || cleanText.includes('/?') || cleanText.includes('campaign=')) {
+  if (cleanText.startsWith('http://') || cleanText.startsWith('https://') || cleanText.includes('/?') || cleanText.includes('campaign=') || cleanText.includes('cmp=')) {
     try {
       const urlString = (cleanText.startsWith('http://') || cleanText.startsWith('https://')) 
         ? cleanText 
         : `https://dummy-portal.com/${cleanText.startsWith('?') ? cleanText : '?' + cleanText}`;
       const url = new URL(urlString);
-      const campId = url.searchParams.get('campaign') || 
-                     url.searchParams.get('cmp') || 
-                     url.searchParams.get('c') || 
-                     url.searchParams.get('id') || 
-                     url.searchParams.get('bawm');
-      const cat = url.searchParams.get('cat') as BawmCategory;
-      const title = url.searchParams.get('title') || url.searchParams.get('pn') || url.searchParams.get('merchantName');
-      const upi = url.searchParams.get('upi') || url.searchParams.get('pa') || url.searchParams.get('vpa');
-      const loc = url.searchParams.get('loc');
-      const org = url.searchParams.get('org');
-      const targetStr = url.searchParams.get('target');
-      const amtStr = url.searchParams.get('amt') || 
-                     url.searchParams.get('amount') || 
-                     url.searchParams.get('am') ||
-                     url.searchParams.get('payAmt');
+      const searchParams = url.searchParams;
+
+      const campId = getParamCI(searchParams, 'campaign', 'cmp', 'c', 'id', 'bawm');
+      const cat = getParamCI(searchParams, 'cat', 'category') as BawmCategory | null;
+      const title = getParamCI(searchParams, 'title', 'pn', 'merchantName', 'name');
+      const upi = getParamCI(searchParams, 'upi', 'pa', 'vpa', 'upiId', 'targetUpiId') || extractUPIVpa(urlString);
+      const loc = getParamCI(searchParams, 'loc', 'location', 'veng');
+      const org = getParamCI(searchParams, 'org', 'orgName', 'orgCode');
+      const targetStr = getParamCI(searchParams, 'target', 'targetAmount', 'goal');
+      const amtStr = getParamCI(searchParams, 'amt', 'amount', 'am', 'payAmt');
+      const cause = getParamCI(searchParams, 'cause', 'purpose', 'desc', 'description');
+      const creator = getParamCI(searchParams, 'creator', 'creatorName');
+      const mitthi = getParamCI(searchParams, 'mitthi', 'mitthiHming');
+      const vuiHun = getParamCI(searchParams, 'vuiHun');
+      const vuitu = getParamCI(searchParams, 'vuitu');
+      const thihni = getParamCI(searchParams, 'thihni');
+      const urgencyDeadline = getParamCI(searchParams, 'urgencyDeadline', 'deadline');
+      const validityDateParam = getParamCI(searchParams, 'validityDate', 'validity');
+      const img = getParamCI(searchParams, 'img', 'imageUrl');
 
       const numTargetGoal = (targetStr !== null && !isNaN(parseFloat(targetStr)) && parseFloat(targetStr) > 0)
         ? parseFloat(targetStr)
@@ -109,13 +149,13 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
 
       let merchantTitle = title ? decodeURIComponent(title) : '';
       let sessionExpiresAt: string | undefined = undefined;
-      const merchantIdParam = url.searchParams.get('merchantId') || url.searchParams.get('mid') || url.searchParams.get('chantId');
+      const merchantIdParam = getParamCI(searchParams, 'merchantId', 'mid', 'chantId');
       if (merchantIdParam && !merchantTitle) {
         merchantTitle = decodeURIComponent(merchantIdParam);
       }
 
       // Check for JWT token in query params (e.g. PhonePe UAT mercury-uat.phonepe.com token=eyJ...)
-      const token = url.searchParams.get('token');
+      const token = searchParams.get('token');
       if (token && token.includes('.')) {
         try {
           const parts = token.split('.');
@@ -165,18 +205,28 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           };
         }
 
-        // Reconstruct from URL parameters if available
+        // Reconstruct from URL parameters if available, retaining all detailed campaign fields
+        const deducedCat = (cat || (campId.startsWith('cmp-k') ? 'kumtluang' : campId.startsWith('cmp-r') ? 'ralna' : campId.startsWith('cmp-kh') ? 'khawlsak' : campId.startsWith('cmp-rk') ? 'rikrum' : 'others')) as BawmCategory;
         const reconstructedCamp: Campaign = {
           id: campId,
-          category: (cat || (campId.startsWith('cmp-k') ? 'kumtluang' : campId.startsWith('cmp-r') ? 'ralna' : 'others')) as BawmCategory,
-          title: merchantTitle || 'Scanned Bawm Portal',
+          category: deducedCat,
+          title: merchantTitle || (mitthi ? `Ralna: ${decodeURIComponent(mitthi)}` : 'Scanned Bawm Portal'),
           location: loc ? decodeURIComponent(loc) : 'Mizoram',
           gpsCoords: '23.7271, 92.7176',
-          upiId: upi ? decodeURIComponent(upi) : 'ronpay@axl',
+          upiId: upi ? decodeURIComponent(upi) : (extractUPIVpa(urlString) || 'direct@upi'),
           orgCode: org ? decodeURIComponent(org) : undefined,
+          orgName: org ? decodeURIComponent(org) : undefined,
           targetAmount: numTargetGoal,
           customAmount: numCustomAmt,
-          validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
+          cause: cause ? decodeURIComponent(cause) : undefined,
+          creatorName: creator ? decodeURIComponent(creator) : undefined,
+          mitthiHming: mitthi ? decodeURIComponent(mitthi) : undefined,
+          vuiHun: vuiHun ? decodeURIComponent(vuiHun) : undefined,
+          vuitu: vuitu ? decodeURIComponent(vuitu) : undefined,
+          thihni: thihni ? decodeURIComponent(thihni) : undefined,
+          urgencyDeadline: urgencyDeadline ? decodeURIComponent(urgencyDeadline) : undefined,
+          imageUrl: img ? decodeURIComponent(img) : undefined,
+          validityDate: validityDateParam ? decodeURIComponent(validityDateParam) : (sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31'),
           gatewaySessionExpiresAt: sessionExpiresAt,
           status: 'active',
           createdAt: new Date().toISOString()
@@ -189,25 +239,28 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
         };
       }
 
-      // External Payment Gateway URL (PhonePe, Merchant Simulator, Razorpay, etc.)
+      // External Payment Gateway URL or URL containing UPI VPA
       const isPaymentGateway = 
         url.hostname.includes('phonepe') || 
         url.hostname.includes('merchant-simulator') || 
         url.hostname.includes('mercury') ||
         url.hostname.includes('razorpay') ||
         url.hostname.includes('paytm') ||
+        url.hostname.includes('phon.pe') ||
+        url.hostname.includes('upiqr') ||
         Boolean(token) ||
-        Boolean(merchantIdParam);
+        Boolean(merchantIdParam) ||
+        Boolean(upi);
 
-      if (isPaymentGateway) {
-        const displayMerchant = merchantTitle || (url.hostname.includes('phonepe') ? 'PhonePe PG Merchant' : 'Payment Gateway Merchant');
+      if (isPaymentGateway || upi) {
+        const displayMerchant = merchantTitle || (upi ? upi.split('@')[0] : (url.hostname.includes('phonepe') ? 'PhonePe PG Merchant' : 'Payment Gateway Merchant'));
         const dynamicPGCamp: Campaign = {
           id: `pg-${Date.now()}`,
           category: 'others',
           title: `${displayMerchant}`,
           location: url.hostname.includes('uat') || url.hostname.includes('simulator') ? 'PhonePe UAT Sandbox (Single-use)' : 'Payment Gateway (Single-use)',
           gpsCoords: '23.7271, 92.7176',
-          upiId: upi ? decodeURIComponent(upi) : (url.hostname.includes('phonepe') ? 'pg-gateway@phonepe' : 'gateway@upi'),
+          upiId: upi ? decodeURIComponent(upi) : (extractUPIVpa(urlString) || 'direct@upi'),
           targetAmount: numTargetGoal,
           customAmount: numCustomAmt,
           validityDate: sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31',
@@ -229,15 +282,20 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     }
   }
 
-  // 3. UPI Payment URI parsing (e.g. upi://pay?pa=...&pn=...&tn=RonPay:cmp-123&am=500)
-  if (cleanText.toLowerCase().startsWith('upi://pay')) {
+  // 3. UPI Payment URI parsing (case-insensitive scheme: upi://pay or UPI://PAY)
+  if (cleanText.toLowerCase().startsWith('upi://pay') || cleanText.toLowerCase().includes('upi://pay')) {
     try {
-      const queryString = cleanText.includes('?') ? cleanText.split('?')[1] : cleanText.replace(/upi:\/\/pay\??/i, '');
+      const queryString = cleanText.includes('?') 
+        ? cleanText.substring(cleanText.indexOf('?') + 1) 
+        : cleanText.replace(/^[a-zA-Z0-9_\-:]*upi:\/\/pay\??/i, '');
       const params = new URLSearchParams(queryString);
-      const pa = (params.get('pa') || '').trim();
-      const pn = (params.get('pn') || '').trim();
-      const tn = (params.get('tn') || '').trim();
-      const am = params.get('am') || params.get('amount');
+
+      // Case-insensitive retrieval of parameters
+      const pa = (getParamCI(params, 'pa', 'vpa', 'upi', 'upiId') || extractUPIVpa(cleanText) || '').trim();
+      const pn = (getParamCI(params, 'pn', 'name', 'merchantName', 'title') || '').trim();
+      const tn = (getParamCI(params, 'tn', 'note', 'desc') || '').trim();
+      const am = getParamCI(params, 'am', 'amount', 'amt');
+
       const numUpiAmt = (am !== null && !isNaN(parseFloat(am)) && parseFloat(am) > 0)
         ? parseFloat(am)
         : undefined;
@@ -279,13 +337,14 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       }
 
       // Standard / Generic External UPI QR (Google Pay, PhonePe, Paytm, BharatPe, Merchant QR)
+      const resolvedPayeeTitle = pn ? decodeURIComponent(pn) : (pa ? pa.split('@')[0] : 'External UPI Merchant');
       const externalCamp: Campaign = {
         id: `ext-${Date.now()}`,
         category: 'others',
-        title: pn ? decodeURIComponent(pn) : (pa ? pa.split('@')[0] : 'External UPI Merchant'),
+        title: resolvedPayeeTitle,
         location: 'Standard Direct UPI',
         gpsCoords: '23.7271, 92.7176',
-        upiId: pa || 'direct@upi',
+        upiId: pa || (extractUPIVpa(cleanText) || 'direct@upi'),
         validityDate: '2027-12-31',
         status: 'active',
         createdAt: new Date().toISOString(),
@@ -304,7 +363,30 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     }
   }
 
-  // 4. Exact Campaign ID match (e.g. cmp-174065321)
+  // 4. EMVCo / BharatQR format (starts with 000201)
+  if (cleanText.startsWith('000201')) {
+    const extractedVpa = extractUPIVpa(cleanText);
+    if (extractedVpa) {
+      const emvCamp: Campaign = {
+        id: `emv-${Date.now()}`,
+        category: 'others',
+        title: extractedVpa.split('@')[0] || 'BharatQR Merchant',
+        location: 'BharatQR / POS Terminal',
+        gpsCoords: '23.7271, 92.7176',
+        upiId: extractedVpa,
+        validityDate: '2027-12-31',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+      return {
+        type: 'general-upi',
+        campaign: emvCamp,
+        rawText: cleanText
+      };
+    }
+  }
+
+  // 5. Exact Campaign ID match (e.g. cmp-174065321)
   const foundById = campaigns.find(c => c.id.toLowerCase() === cleanText.toLowerCase());
   if (foundById) {
     return {
@@ -314,7 +396,7 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     };
   }
 
-  // 5. Match by Campaign Title
+  // 6. Match by Campaign Title
   const foundByTitle = campaigns.find(c => 
     c.id.toLowerCase() === cleanText.toLowerCase() ||
     (cleanText.length > 3 && c.title.toLowerCase().trim() === cleanText.toLowerCase().trim())
@@ -327,15 +409,16 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     };
   }
 
-  // 6. Direct UPI address format (e.g. name@okhdfcbank or merchant@axl)
-  if (cleanText.includes('@') && !cleanText.includes(' ')) {
+  // 7. Direct UPI address format or any text containing a UPI VPA (e.g. name@okhdfcbank or merchant@axl)
+  const directVpa = extractUPIVpa(cleanText);
+  if (directVpa) {
     const directUpiCamp: Campaign = {
       id: `upi-${Date.now()}`,
       category: 'others',
-      title: cleanText.split('@')[0],
+      title: directVpa.split('@')[0],
       location: 'Standard Direct UPI VPA',
       gpsCoords: '23.7271, 92.7176',
-      upiId: cleanText,
+      upiId: directVpa,
       validityDate: '2027-12-31',
       status: 'active',
       createdAt: new Date().toISOString()
@@ -347,14 +430,14 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
     };
   }
 
-  // 7. General fallback
+  // 8. General fallback (Never hardcode ronpay@axl!)
   const fallbackCamp: Campaign = {
     id: `scan-${Date.now()}`,
     category: 'others',
     title: cleanText.length > 25 ? `${cleanText.substring(0, 25)}...` : cleanText,
     location: 'Scanned Payment Target',
     gpsCoords: '23.7271, 92.7176',
-    upiId: 'ronpay@axl',
+    upiId: 'direct@upi',
     validityDate: '2027-12-31',
     status: 'active',
     createdAt: new Date().toISOString()
@@ -462,11 +545,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         onSelectCampaign(result.campaign, false);
       }
     } else if (result.type === 'general-upi' && result.campaign) {
-      // Route to campaign checkout screen
-      if (onSelectCampaign) {
-        onSelectCampaign(result.campaign, false);
-      } else if (onOpenExternalLanding) {
+      // Route external general UPI QRs to ExternalUPILandingModal so the exact payee name, UPI ID, and direct UPI options are displayed
+      if (onOpenExternalLanding) {
         onOpenExternalLanding(result.campaign);
+      } else if (onSelectCampaign) {
+        onSelectCampaign(result.campaign, false);
       }
     } else if (result.campaign) {
       const activeFilter = targetCategory || categoryFilter || 'any';
