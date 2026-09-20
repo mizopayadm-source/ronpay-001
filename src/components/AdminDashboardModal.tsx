@@ -105,7 +105,10 @@ import {
   getStoredStaffAccounts,
   saveStaffAccount,
   deleteStaffAccount,
-  isConfirmedTransaction
+  isConfirmedTransaction,
+  isStoredAdminAuthorized,
+  saveAdminAuthState,
+  clearAdminAuthState
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -193,16 +196,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    // If current profile has isAdmin: true, grant direct access
+    // If current profile has isAdmin: true or was authorized across tabs/windows, grant access
     if (isProfileAdmin) return true;
-
-    // If profile lacks isAdmin: true, check if this session was explicitly authorized with admin password
-    try {
-      const sessionPasswordVerified = sessionStorage.getItem('ronpay_admin_password_verified') === 'true';
-      return sessionPasswordVerified;
-    } catch (e) {
-      return false;
-    }
+    return isStoredAdminAuthorized();
   });
   const [currentRole, setCurrentRole] = useState<UserRole>(userRole || 'SUPER_ADMIN');
   const [staffList, setStaffList] = useState<StaffAccount[]>(() => getStoredStaffAccounts());
@@ -381,19 +377,37 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setLoginError('');
-      if (currentProfile?.isAdmin === true) {
+      if (currentProfile?.isAdmin === true || isStoredAdminAuthorized()) {
         setIsAuthenticated(true);
       } else {
-        // Enforce mandatory login gate: current profile lacks `isAdmin: true`
-        const sessionPasswordVerified = sessionStorage.getItem('ronpay_admin_password_verified') === 'true';
-        if (!sessionPasswordVerified) {
-          setIsAuthenticated(false);
-        }
+        setIsAuthenticated(false);
       }
     }
   }, [isOpen, currentProfile?.isAdmin]);
 
-  // Biometric Login handler for Admin
+  // Real-time synchronization across windows, tabs, and devices
+  useEffect(() => {
+    const handleRealtimeSync = () => {
+      setStaffList(getStoredStaffAccounts());
+      setLogsList(getStoredAuditLogs());
+      if (!isProfileAdmin) {
+        if (isStoredAdminAuthorized()) {
+          setIsAuthenticated(true);
+        }
+      }
+    };
+    window.addEventListener('ronpay_staff_updated', handleRealtimeSync);
+    window.addEventListener('ronpay_realtime_sync_event', handleRealtimeSync);
+    window.addEventListener('ronpay_data_synced', handleRealtimeSync);
+    window.addEventListener('storage', handleRealtimeSync);
+    return () => {
+      window.removeEventListener('ronpay_staff_updated', handleRealtimeSync);
+      window.removeEventListener('ronpay_realtime_sync_event', handleRealtimeSync);
+      window.removeEventListener('ronpay_data_synced', handleRealtimeSync);
+      window.removeEventListener('storage', handleRealtimeSync);
+    };
+  }, [isProfileAdmin]);
+
   // Biometric Login handler for Admin - Restricted to enrolled administrators
   const handleAdminBiometricLogin = () => {
     setIsBiometricScanning(true);
@@ -408,12 +422,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         setIsAuthenticated(true);
         const targetRole: UserRole = currentProfile?.role === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
         setCurrentRole(targetRole);
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-          sessionStorage.setItem('ronpay_admin_password_verified', 'true');
-        } catch (e) {
-          // ignore
-        }
+        saveAdminAuthState(targetRole, currentProfile);
         recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics.', 'system');
         setLogsList(getStoredAuditLogs());
       } else {
@@ -435,13 +444,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setCurrentRole('SUPER_ADMIN');
       setIsAuthenticated(true);
       setLoginError('');
-      try {
-        sessionStorage.setItem('ronpay_admin_auth', 'true');
-        sessionStorage.setItem('ronpay_admin_password_verified', 'true');
-        localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
-      } catch (e) {
-        // ignore
-      }
+      saveAdminAuthState('SUPER_ADMIN', currentProfile);
       recordAuditLog('Admin Password Verified', `Admin password verified for user ${currentProfile?.name || 'Guest'} (${currentProfile?.phone || 'Unknown'}).`, 'system');
       setLogsList(getStoredAuditLogs());
       return;
@@ -457,13 +460,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setCurrentRole(matchedStaff.role);
       setIsAuthenticated(true);
       setLoginError('');
-      try {
-        sessionStorage.setItem('ronpay_admin_auth', 'true');
-        sessionStorage.setItem('ronpay_admin_password_verified', 'true');
-        localStorage.setItem('ronpay_admin_biometric_enrolled', 'true');
-      } catch (e) {
-        // ignore
-      }
+      saveAdminAuthState(matchedStaff.role, currentProfile);
       recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" (${matchedStaff.role}) authenticated via Password.`, 'system');
       setLogsList(getStoredAuditLogs());
       return;
@@ -474,12 +471,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    try {
-      sessionStorage.removeItem('ronpay_admin_auth');
-      sessionStorage.removeItem('ronpay_admin_password_verified');
-    } catch (e) {
-      // ignore
-    }
+    clearAdminAuthState();
     setAdminUserId('');
     setAdminPassword('');
   };

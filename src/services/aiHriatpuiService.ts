@@ -5,6 +5,7 @@ import {
   Campaign, 
   CreatorProfile 
 } from '../types';
+import { formatDateDDMMYYYY } from '../utils/date';
 
 export interface AIHriatpuiGeneratedDoc {
   id: string;
@@ -416,7 +417,7 @@ export async function verifyDocumentWithAI(
     detectedOrg: 'Pawl / Branch Recognized Structure',
     detectedName: applicantName || 'Verified Applicant',
     detectedSignatory: 'Branch Official / Secretary',
-    detectedDate: new Date().toLocaleDateString('en-GB'),
+    detectedDate: formatDateDDMMYYYY(new Date()),
     keyPoints: [
       'Document structure a fel thlap (Format conforms with Mizoram NGO/Church standard)',
       'Creator Category leh Hriatpuina chhan a inmil e',

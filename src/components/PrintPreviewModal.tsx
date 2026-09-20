@@ -24,6 +24,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { downloadFileUniversal } from '../utils/export';
+import { formatDateDDMMYYYY } from '../utils/date';
 import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
 
 export interface PrintModalData {
@@ -336,7 +337,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   // Universal WhatsApp Share Trigger (Always available)
   const handleShareToWhatsApp = async () => {
     const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement PDF';
-    const cleanDate = new Date().toLocaleDateString('en-GB');
+    const cleanDate = formatDateDDMMYYYY(new Date());
     const totalText = documentSummary.total ? `\n💰 Total: *${documentSummary.total}*` : '';
     
     const summaryText = `*RonPay Financial Report*\n📄 Document: *${title}*${totalText}\n📅 Ni thla: ${cleanDate}\n\n_RonPay Community & Church Portal atanga generate a ni e._`;
@@ -390,7 +391,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
   // Native Android / Mobile Apps Share
   const handleShareNative = async () => {
     const title = documentSummary.title || modalData?.docTitle || 'RonPay Statement';
-    const cleanDate = new Date().toLocaleDateString('en-GB');
+    const cleanDate = formatDateDDMMYYYY(new Date());
     const summaryText = `*${title}*\n📅 Date: ${cleanDate}\n${documentSummary.total ? `💰 Total: ${documentSummary.total}` : ''}`;
 
     if (pdfSuccessResult?.blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {

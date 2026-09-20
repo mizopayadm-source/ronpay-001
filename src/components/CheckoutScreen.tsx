@@ -372,7 +372,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Derive human-readable period label
   const periodLabel = periodType === 'monthly'
-    ? `${selectedMonth} ${selectedYear}${useCustomDate && selectedCustomDate ? ` (${selectedCustomDate})` : ''}`
+    ? `${selectedMonth} ${selectedYear}${useCustomDate && selectedCustomDate ? ` (${formatDateDDMMYYYY(selectedCustomDate)})` : ''}`
     : periodType === 'quarterly'
     ? `${selectedQuarter} ${selectedYear}`
     : `${selectedYear} (Kumtluan)`;
@@ -1242,7 +1242,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             )}
             <div className="flex justify-between bg-rose-50 p-2 rounded-xl text-rose-900 font-bold border border-rose-200/60">
               <span>{language === 'english' ? 'Emergency Deadline:' : 'Emergency Deadline:'}</span>
-              <span className="font-black text-rose-600">{campaign?.urgencyDeadline ? new Date(campaign.urgencyDeadline).toLocaleDateString() : '25 Aug 2026'}</span>
+              <span className="font-black text-rose-600">{campaign?.urgencyDeadline ? formatDateDDMMYYYY(campaign.urgencyDeadline) : '25/08/2026'}</span>
             </div>
           </div>
         </div>
@@ -2003,13 +2003,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
 
                 {useCustomDate && (
-                  <div className="mt-2 animate-in fade-in duration-200">
+                  <div className="mt-2 animate-in fade-in duration-200 space-y-1">
                     <input
                       type="date"
                       value={selectedCustomDate}
                       onChange={(e) => handleCustomDateChange(e.target.value)}
                       className="w-full bg-white border border-indigo-200 rounded-xl p-2 text-xs font-bold text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
                     />
+                    {selectedCustomDate && (
+                      <div className="text-[10px] text-indigo-700 font-semibold flex items-center justify-between px-1">
+                        <span>Ni thlan: <b className="font-bold text-indigo-950">{formatDateDDMMYYYY(selectedCustomDate)}</b></span>
+                        <span className="text-[9px] text-slate-400 font-mono">(DD/MM/YYYY)</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

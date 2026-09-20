@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Campaign, MemberRecord, MemberDependent } from '../types';
 import { createUPIPaymentString } from '../utils/qr';
-import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { getMembers } from '../utils/storage';
 import { Language, translateCampaignCause } from '../utils/translations';
 import { getCurrentMonthYearString, getRollingMonthYearList } from '../utils/monthHelper';
@@ -647,7 +647,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
                 {campaign.age ? ` (${campaign.age} yrs)` : ''}
                 {campaign.vuiHun && (
                   <p className="text-[11px] text-slate-500 font-normal mt-0.5">
-                    Vui hun: {formatDateDDMMYYYY(campaign.vuiHun)}
+                    Vui hun: {formatDateTimeDDMMYYYY(campaign.vuiHun)}
                   </p>
                 )}
               </div>

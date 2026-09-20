@@ -1,4 +1,4 @@
-import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog } from '../types';
+import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount } from '../types';
 import { 
   getStoredCampaigns, 
   saveStoredCampaigns, 
@@ -14,9 +14,16 @@ import {
   saveStoredAnnouncement, 
   getStoredAuditLogs, 
   saveStoredAuditLogs,
+  getStoredStaffAccounts,
+  saveStoredStaffAccounts,
   getDeletedTransactionIds,
   getDeletedCampaignIds,
   recordDeletedCampaignId,
+  getDeletedMemberIds,
+  markMemberAsDeleted,
+  getDeletedStaffIds,
+  markStaffAsDeleted,
+  broadcastTabSync,
   safeApiFetch
 } from './storage';
 import {
@@ -42,6 +49,7 @@ export interface SyncDataState {
   pricingConfig: SystemPricingConfig;
   announcement: AnnouncementBanner;
   auditLogs: AuditLog[];
+  staffAccounts?: StaffAccount[];
   lastUpdated?: string;
 }
 
@@ -66,6 +74,7 @@ export function getLocalFallbackState(): SyncDataState {
     pricingConfig: getStoredPricingConfig(),
     announcement: getStoredAnnouncement(),
     auditLogs: getStoredAuditLogs(),
+    staffAccounts: getStoredStaffAccounts(),
     lastUpdated: new Date().toISOString()
   };
 }
@@ -120,6 +129,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
       const localPricingConfig = getStoredPricingConfig();
       const localAnnouncement = getStoredAnnouncement();
       const localAuditLogs = getStoredAuditLogs();
+      const localStaff = getStoredStaffAccounts();
 
       // Set up 8-second request timeout to avoid hung connections
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -135,12 +145,15 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           campaigns: localCampaigns,
           deletedCampaignIds: Array.from(getDeletedCampaignIds()),
           members: localMembers,
+          deletedMemberIds: Array.from(getDeletedMemberIds()),
           transactions: localTransactions,
           deletedTransactionIds: Array.from(getDeletedTransactionIds()),
           creators: localCreators,
           pricingConfig: localPricingConfig,
           announcement: localAnnouncement,
           auditLogs: localAuditLogs,
+          staffAccounts: localStaff,
+          deletedStaffIds: Array.from(getDeletedStaffIds())
         }),
       });
 
@@ -158,13 +171,27 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
 
         const serverData = result.data;
 
-        // Update local storage with unified server data
+        // 1. Process server tombstone records first to purge any deleted records
         if (Array.isArray(serverData.deletedCampaignIds)) {
           for (const dId of serverData.deletedCampaignIds) {
             recordDeletedCampaignId(dId);
           }
         }
+        if (Array.isArray(serverData.deletedMemberIds)) {
+          for (const mId of serverData.deletedMemberIds) {
+            markMemberAsDeleted(mId);
+          }
+        }
+        if (Array.isArray(serverData.deletedTransactionIds)) {
+          // Transaction tombstones are preserved
+        }
+        if (Array.isArray(serverData.deletedStaffIds)) {
+          for (const sId of serverData.deletedStaffIds) {
+            markStaffAsDeleted(sId);
+          }
+        }
 
+        // 2. Update campaigns
         if (Array.isArray(serverData.campaigns)) {
           const deletedCampIds = getDeletedCampaignIds();
           const cleanServerCampaigns = serverData.campaigns.filter(
@@ -176,20 +203,27 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: cleanServerCampaigns }));
           }
         }
+
+        // 3. Update members
         if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+          const deletedMemIds = getDeletedMemberIds();
           const localMembers = getMembers('all');
           const memMap = new Map<string, any>();
           for (const m of localMembers) {
-            if (m && m.id) memMap.set(m.id.toLowerCase(), m);
+            if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+              memMap.set(m.id.toLowerCase().trim(), m);
+            }
           }
           for (const m of serverData.members) {
-            if (m && m.id) {
-              const k = m.id.toLowerCase();
+            if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+              const k = m.id.toLowerCase().trim();
               memMap.set(k, { ...(memMap.get(k) || {}), ...m });
             }
           }
           saveMembers(Array.from(memMap.values()));
         }
+
+        // 4. Update transactions
         if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
           const deletedIds = getDeletedTransactionIds();
           const currentTxs = getStoredTransactions();
@@ -216,15 +250,30 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
           }
         }
+
+        // 5. Update creators
         if (Array.isArray(serverData.creators)) {
           saveStoredCreatorsList(serverData.creators);
         }
+
+        // 6. Update staff accounts
+        if (Array.isArray(serverData.staffAccounts)) {
+          const deletedStaff = getDeletedStaffIds();
+          const cleanStaff = serverData.staffAccounts.filter((s: any) => s && s.id && !deletedStaff.has(String(s.id).trim()));
+          saveStoredStaffAccounts(cleanStaff);
+        }
+
+        // 7. Update pricing config
         if (serverData.pricingConfig) {
           saveStoredPricingConfig(serverData.pricingConfig);
         }
+
+        // 8. Update announcement
         if (serverData.announcement) {
           saveStoredAnnouncement(serverData.announcement);
         }
+
+        // 9. Update audit logs
         if (Array.isArray(serverData.auditLogs)) {
           saveStoredAuditLogs(serverData.auditLogs);
         }
@@ -479,7 +528,76 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     if (res && onSyncUpdate) onSyncUpdate(res);
   }).catch(() => {});
 
-  // 3. Periodic fallback sync every 25 seconds (respects backoff & offline status)
+  // 3. Real-time Server-Sent Events (SSE) stream for instantaneous cross-device / Android / multi-window sync
+  let eventSource: EventSource | null = null;
+  let sseReconnectTimer: any = null;
+
+  const connectSSE = () => {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
+    try {
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = new EventSource('/api/data/events');
+
+      eventSource.onmessage = (event) => {
+        try {
+          if (!event.data) return;
+          const payload = JSON.parse(event.data);
+          if (payload && payload.type === 'data_changed') {
+            syncAllWithServer().then(res => {
+              if (res && onSyncUpdate) onSyncUpdate(res);
+            }).catch(() => {});
+          }
+        } catch (e) {}
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = setTimeout(() => {
+          if (typeof navigator === 'undefined' || navigator.onLine) {
+            connectSSE();
+          }
+        }, 4000);
+      };
+    } catch (e) {}
+  };
+
+  connectSSE();
+
+  // 4. Instant same-browser cross-tab & cross-window synchronization via BroadcastChannel
+  let broadcastChannel: BroadcastChannel | null = null;
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      broadcastChannel = new BroadcastChannel('ronpay_realtime_sync');
+      broadcastChannel.onmessage = (ev) => {
+        if (ev && ev.data) {
+          syncAllWithServer().then(res => {
+            if (res && onSyncUpdate) onSyncUpdate(res);
+          }).catch(() => {});
+        }
+      };
+    } catch (e) {}
+  }
+
+  // 5. Cross-window storage listener for local key changes across browser windows
+  const handleStorageChange = (e: StorageEvent) => {
+    if (!e.key) return;
+    if (e.key.startsWith('ronpay_')) {
+      if (onSyncUpdate) {
+        onSyncUpdate(getLocalFallbackState());
+      }
+    }
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorageChange);
+  }
+
+  // 6. Periodic fallback sync every 25 seconds (respects backoff & offline status)
   const intervalId = setInterval(() => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     if (Date.now() < nextAllowedSyncTime) return;
@@ -505,7 +623,19 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   return () => {
     stopFirestore();
     clearInterval(intervalId);
+    if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (broadcastChannel) {
+      broadcastChannel.close();
+      broadcastChannel = null;
+    }
     document.removeEventListener('visibilitychange', handleVisibility);
     window.removeEventListener('focus', handleVisibility);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorageChange);
+    }
   };
 }

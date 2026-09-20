@@ -224,7 +224,7 @@ export const RonPayWalletModal: React.FC<RonPayWalletModalProps> = ({
         <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 12px;">
           <h1 style="margin: 0; font-size: 20px; text-transform: uppercase;">RonPay Digital Wallet Statement</h1>
           <p style="margin: 4px 0 0 0; font-size: 12px; color: #475569;">Mizoram Community Digital Pay • Wallet ID: ${wallet.walletId}</p>
-          <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Generated on: ${new Date().toLocaleString()}</p>
+          <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Generated on: ${formatDateTimeDDMMYYYY(new Date())}</p>
         </div>
 
         <div style="display: flex; justify-content: space-between; background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px;">

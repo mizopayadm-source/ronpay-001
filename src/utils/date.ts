@@ -5,6 +5,30 @@
 export const formatDateDDMMYYYY = (dateInput?: string | Date | number | null): string => {
   if (!dateInput) return '—';
   try {
+    // If it's a string, handle various common formats cleanly without timezone offset drift
+    if (typeof dateInput === 'string') {
+      const trimmed = dateInput.trim();
+      if (!trimmed) return '—';
+
+      // If already in DD/MM/YYYY or DD-MM-YYYY format
+      const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+      if (ddmmyyyyMatch) {
+        const d = ddmmyyyyMatch[1].padStart(2, '0');
+        const m = ddmmyyyyMatch[2].padStart(2, '0');
+        const y = ddmmyyyyMatch[3];
+        return `${d}/${m}/${y}`;
+      }
+
+      // If in YYYY-MM-DD or YYYY-MM-DDTHH:mm format
+      const yyyymmddMatch = trimmed.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+      if (yyyymmddMatch) {
+        const y = yyyymmddMatch[1];
+        const m = yyyymmddMatch[2].padStart(2, '0');
+        const d = yyyymmddMatch[3].padStart(2, '0');
+        return `${d}/${m}/${y}`;
+      }
+    }
+
     const d = typeof dateInput === 'object' && dateInput instanceof Date 
       ? dateInput 
       : new Date(dateInput);
@@ -22,6 +46,35 @@ export const formatDateDDMMYYYY = (dateInput?: string | Date | number | null): s
 export const formatDateTimeDDMMYYYY = (dateInput?: string | Date | number | null): string => {
   if (!dateInput) return '—';
   try {
+    // If string in YYYY-MM-DDTHH:mm or YYYY-MM-DD HH:mm format, parse components safely
+    if (typeof dateInput === 'string') {
+      const match = dateInput.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (match) {
+        const y = match[1];
+        const m = match[2].padStart(2, '0');
+        const d = match[3].padStart(2, '0');
+        let hours = parseInt(match[4], 10);
+        const minutes = match[5].padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const strHours = String(hours).padStart(2, '0');
+        return `${d}/${m}/${y}, ${strHours}:${minutes} ${ampm}`;
+      }
+
+      // If string already starts with DD/MM/YYYY
+      const ddmmyyyyMatch = dateInput.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?:\s*(AM|PM))?)?/i);
+      if (ddmmyyyyMatch && ddmmyyyyMatch[4]) {
+        const d = ddmmyyyyMatch[1].padStart(2, '0');
+        const m = ddmmyyyyMatch[2].padStart(2, '0');
+        const y = ddmmyyyyMatch[3];
+        const hr = ddmmyyyyMatch[4].padStart(2, '0');
+        const min = ddmmyyyyMatch[5].padStart(2, '0');
+        const ampm = ddmmyyyyMatch[6] ? ddmmyyyyMatch[6].toUpperCase() : '';
+        return `${d}/${m}/${y}, ${hr}:${min}${ampm ? ` ${ampm}` : ''}`;
+      }
+    }
+
     const d = typeof dateInput === 'object' && dateInput instanceof Date 
       ? dateInput 
       : new Date(dateInput);

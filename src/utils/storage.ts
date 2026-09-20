@@ -59,12 +59,132 @@ export const clearDeletedCampaignId = (campaignId: string): void => {
   } catch (e) {}
 };
 
-export const broadcastTabSync = (type: string) => {
+// -----------------------------------------------------------------
+// TOMBSTONES: Members & Staff Deletion Protection Across Windows/Apps
+// -----------------------------------------------------------------
+const DELETED_MEMBER_IDS_KEY = 'ronpay_deleted_member_ids_v1';
+
+export const getDeletedMemberIds = (): Set<string> => {
   try {
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      const bc = new BroadcastChannel('ronpay_realtime_sync');
-      bc.postMessage({ type, timestamp: Date.now() });
-      bc.close();
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_MEMBER_IDS_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+    }
+  } catch (e) {}
+  return new Set<string>();
+};
+
+export const markMemberAsDeleted = (memberId: string): void => {
+  if (!memberId) return;
+  try {
+    const set = getDeletedMemberIds();
+    set.add(String(memberId).toLowerCase().trim());
+    const arr = Array.from(set).slice(-1000);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_MEMBER_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch (e) {}
+};
+
+export const clearDeletedMemberId = (memberId: string): void => {
+  if (!memberId) return;
+  try {
+    const set = getDeletedMemberIds();
+    set.delete(String(memberId).toLowerCase().trim());
+    const arr = Array.from(set);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_MEMBER_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch (e) {}
+};
+
+const DELETED_STAFF_IDS_KEY = 'ronpay_deleted_staff_ids_v1';
+
+export const getDeletedStaffIds = (): Set<string> => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_STAFF_IDS_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).trim()));
+    }
+  } catch (e) {}
+  return new Set<string>();
+};
+
+export const markStaffAsDeleted = (staffId: string): void => {
+  if (!staffId) return;
+  try {
+    const set = getDeletedStaffIds();
+    set.add(String(staffId).trim());
+    const arr = Array.from(set).slice(-500);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_STAFF_IDS_KEY, JSON.stringify(arr));
+    }
+  } catch (e) {}
+};
+
+// -----------------------------------------------------------------
+// ADMIN AUTHENTICATION SYNC ACROSS WINDOWS, TABS & SESSIONS
+// -----------------------------------------------------------------
+export const ADMIN_AUTH_LOCAL_KEY = 'ronpay_admin_auth_v2';
+export const ADMIN_PASSWORD_VERIFIED_KEY = 'ronpay_admin_password_verified';
+
+export const isStoredAdminAuthorized = (): boolean => {
+  try {
+    if (typeof window !== 'undefined') {
+      const localAuth = localStorage.getItem(ADMIN_AUTH_LOCAL_KEY) === 'true';
+      const localPwd = localStorage.getItem(ADMIN_PASSWORD_VERIFIED_KEY) === 'true';
+      const sessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
+      const sessionPwd = sessionStorage.getItem(ADMIN_PASSWORD_VERIFIED_KEY) === 'true';
+      return (localAuth && localPwd) || (sessionAuth && sessionPwd) || localAuth || sessionAuth;
+    }
+  } catch (e) {}
+  return false;
+};
+
+export const saveAdminAuthState = (role: string = 'SUPER_ADMIN', profile?: CreatorProfile | null): void => {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ADMIN_AUTH_LOCAL_KEY, 'true');
+      localStorage.setItem(ADMIN_PASSWORD_VERIFIED_KEY, 'true');
+      localStorage.setItem('ronpay_admin_role', role);
+      sessionStorage.setItem('ronpay_admin_auth', 'true');
+      sessionStorage.setItem(ADMIN_PASSWORD_VERIFIED_KEY, 'true');
+      sessionStorage.setItem('ronpay_admin_role', role);
+      if (profile) {
+        saveStoredCreatorProfile({ ...profile, isAdmin: true });
+      }
+      broadcastTabSync('admin_login', { role, profile });
+    }
+  } catch (e) {}
+};
+
+export const clearAdminAuthState = (): void => {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(ADMIN_AUTH_LOCAL_KEY);
+      localStorage.removeItem(ADMIN_PASSWORD_VERIFIED_KEY);
+      localStorage.removeItem('ronpay_admin_role');
+      sessionStorage.removeItem('ronpay_admin_auth');
+      sessionStorage.removeItem(ADMIN_PASSWORD_VERIFIED_KEY);
+      sessionStorage.removeItem('ronpay_admin_role');
+      broadcastTabSync('admin_logout');
+    }
+  } catch (e) {}
+};
+
+export const broadcastTabSync = (type: string, data?: any) => {
+  try {
+    if (typeof window !== 'undefined') {
+      // 1. Dispatch custom event locally so current window/components react immediately
+      window.dispatchEvent(new CustomEvent('ronpay_realtime_sync_event', { detail: { type, data, timestamp: Date.now() } }));
+      // 2. BroadcastChannel to notify all other tabs & windows of this browser
+      if ('BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('ronpay_realtime_sync');
+        bc.postMessage({ type, data, timestamp: Date.now() });
+        bc.close();
+      }
     }
   } catch (e) {}
 };
@@ -2023,30 +2143,33 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
 
 export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
+    const deletedMemIds = getDeletedMemberIds();
     let storedMembers: MemberRecord[] = [];
     const raw = localStorage.getItem(MEMBERS_LIST_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        storedMembers = parsed;
+        storedMembers = parsed.filter(m => m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
       }
     }
 
-    // Merge default initial members with stored members
+    // Merge default initial members with stored members (excluding deleted)
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id) map.set(m.id.toLowerCase(), m);
+      if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+        map.set(m.id.toLowerCase().trim(), m);
+      }
     }
     for (const m of storedMembers) {
-      if (m && m.id) {
-        const k = m.id.toLowerCase();
+      if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+        const k = m.id.toLowerCase().trim();
         const existing = map.get(k);
         const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
         map.set(k, { ...(existing || {}), ...m, campaignId: resolvedCampaignId });
       }
     }
 
-    // Self-healing from transactions: If any transactions exist for members not yet in map, automatically recover them!
+    // Self-healing from transactions: If any transactions exist for members not yet in map, automatically recover them (unless explicitly deleted)!
     try {
       const txs = getStoredTransactions();
       let hasRecovered = false;
@@ -2054,7 +2177,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
         if (t && t.memberId && String(t.memberId).trim()) {
           const mid = String(t.memberId).trim();
           const k = mid.toLowerCase();
-          if (!map.has(k)) {
+          if (!deletedMemIds.has(k) && !map.has(k)) {
             const orgCode = mid.split('-')[0] || '';
             const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
             map.set(k, {
@@ -2081,7 +2204,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       console.warn('Storage transaction self-healing check:', recoverErr);
     }
 
-    const allMembers = Array.from(map.values());
+    const allMembers = Array.from(map.values()).filter(m => !deletedMemIds.has(String(m.id).toLowerCase().trim()));
 
     if (!campaignId || campaignId === 'all') {
       return allMembers;
@@ -2146,6 +2269,7 @@ export const saveMembers = (members: MemberRecord[]): void => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: members }));
       window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: members }));
+      broadcastTabSync('members', members);
     }
 
     safeApiFetch('/api/data/sync', {
@@ -2211,20 +2335,27 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {
+  if (!memberId) return;
+  const cleanMid = (memberId || '').trim();
+  markMemberAsDeleted(cleanMid);
   const allList = getMembers();
-  const targetId = (memberId || '').trim().toLowerCase();
+  const targetId = cleanMid.toLowerCase();
   const filtered = allList.filter(m => {
     if ((m.id || '').trim().toLowerCase() !== targetId) return true;
     if (campaignId && m.campaignId && m.campaignId !== campaignId) return true;
     return false;
   });
   saveMembers(filtered);
-  if (memberId) {
-    deleteMemberFromFirestore(memberId).catch(() => {});
-  }
-  safeApiFetch(`/api/members/${encodeURIComponent(memberId)}`, {
+  deleteMemberFromFirestore(cleanMid).catch(() => {});
+  safeApiFetch(`/api/members/${encodeURIComponent(cleanMid)}`, {
     method: 'DELETE'
   });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deletedMemberIds: [cleanMid] })
+  });
+  broadcastTabSync('members', { deletedId: cleanMid });
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
@@ -2381,18 +2512,19 @@ export const saveStoredWallet = (wallet: RonPayWallet) => {
 const STAFF_ACCOUNTS_KEY = 'ronpay_staff_accounts_v1';
 
 export const getStoredStaffAccounts = (): StaffAccount[] => {
+  const deletedStaffIds = getDeletedStaffIds();
   try {
     const raw = localStorage.getItem(STAFF_ACCOUNTS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.filter(s => s && s.id && !deletedStaffIds.has(String(s.id).trim()));
       }
     }
   } catch (e) {
     console.error('Failed to read staff accounts from storage', e);
   }
-  return [
+  const defaultStaff: StaffAccount[] = [
     {
       id: 'staff-super-1',
       name: 'Super Admin (Master)',
@@ -2436,11 +2568,16 @@ export const getStoredStaffAccounts = (): StaffAccount[] => {
       createdAt: '2026-03-01T00:00:00.000Z'
     }
   ];
+  return defaultStaff.filter(s => !deletedStaffIds.has(String(s.id).trim()));
 };
 
 export const saveStoredStaffAccounts = (staffList: StaffAccount[]): void => {
   try {
     localStorage.setItem(STAFF_ACCOUNTS_KEY, JSON.stringify(staffList));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_staff_updated', { detail: staffList }));
+      broadcastTabSync('staff', staffList);
+    }
   } catch (e) {
     console.error('Failed to save staff accounts to storage', e);
   }
@@ -2462,12 +2599,27 @@ export const saveStaffAccount = (staff: StaffAccount): void => {
     headers: { 'Content-Type': 'application/json', 'x-user-role': 'SUPER_ADMIN' },
     body: JSON.stringify(staff)
   });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ staffAccounts: updated })
+  });
 };
 
 export const deleteStaffAccount = (staffId: string): void => {
+  if (!staffId) return;
+  const cleanId = String(staffId).trim();
+  markStaffAsDeleted(cleanId);
   const current = getStoredStaffAccounts();
-  const updated = current.filter(s => s.id !== staffId);
+  const updated = current.filter(s => s.id !== cleanId);
   saveStoredStaffAccounts(updated);
+  safeApiFetch(`/api/admin/staff/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deletedStaffIds: [cleanId] })
+  });
+  broadcastTabSync('staff', { deletedId: cleanId });
 };
 
 export const deleteStoredTransaction = (transactionId: string): void => {
@@ -2496,6 +2648,7 @@ export const deleteStoredTransaction = (transactionId: string): void => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deletedTransactionIds: [cleanId] })
   });
+  broadcastTabSync('transactions', updated);
 };
 
 export const deleteMultipleTransactions = (transactionIds: string[]): void => {
@@ -2532,13 +2685,32 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deletedTransactionIds: cleanIds })
   });
+  broadcastTabSync('transactions', updated);
 };
 
 export const deleteMembersOfCampaign = (campaignId: string): void => {
   if (!campaignId) return;
   const allMembers = getMembers();
-  const filtered = allMembers.filter(m => m.campaignId !== campaignId);
+  const deletedMemberIds: string[] = [];
+  const filtered = allMembers.filter(m => {
+    if (m.campaignId === campaignId) {
+      if (m.id) {
+        markMemberAsDeleted(m.id);
+        deletedMemberIds.push(m.id);
+      }
+      return false;
+    }
+    return true;
+  });
   saveMembers(filtered);
+  if (deletedMemberIds.length > 0) {
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletedMemberIds })
+    });
+    broadcastTabSync('members', { deletedIds: deletedMemberIds });
+  }
 };
 
 export const canApproveCashPayment = (

@@ -232,6 +232,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const vuiHun = searchParams.get('vuiHun');
       const vuitu = searchParams.get('vuitu');
       const thihni = searchParams.get('thihni');
+      const urgencyDeadline = searchParams.get('urgencyDeadline') || searchParams.get('deadline');
+      const validityDate = searchParams.get('validityDate') || searchParams.get('validity');
       const img = searchParams.get('img') || searchParams.get('imageUrl');
 
       const deducedCategory = (catParam as BawmCategory) || 
@@ -255,8 +257,9 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         vuiHun: vuiHun ? decodeURIComponent(vuiHun) : undefined,
         vuitu: vuitu ? decodeURIComponent(vuitu) : undefined,
         thihni: thihni ? decodeURIComponent(thihni) : undefined,
+        urgencyDeadline: urgencyDeadline ? decodeURIComponent(urgencyDeadline) : undefined,
         imageUrl: img ? decodeURIComponent(img) : undefined,
-        validityDate: '2027-12-31',
+        validityDate: validityDate ? decodeURIComponent(validityDate) : '2027-12-31',
         status: 'active',
         createdAt: new Date().toISOString()
       };

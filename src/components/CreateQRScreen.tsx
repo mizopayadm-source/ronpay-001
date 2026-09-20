@@ -1253,6 +1253,12 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                   }}
                   className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs focus:outline-none focus:border-rose-600"
                 />
+                {rikrumValidity && (
+                  <div className="flex items-center justify-between text-[9.5px] text-rose-700 font-semibold px-0.5 mt-0.5">
+                    <span>Ni thlan: <b className="font-bold text-rose-950">{formatDateTimeDDMMYYYY(rikrumValidity)}</b></span>
+                    <span className="text-[9px] text-slate-400 font-mono">(DD/MM/YYYY)</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                   <span className="text-[9px] text-slate-400 font-bold">Quick Set:</span>
                   <button
@@ -2725,6 +2731,11 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     onChange={(e) => setVuiHun(e.target.value)}
                     className="w-full bg-white border border-purple-300 rounded-xl p-2 font-bold text-slate-900 text-[10px] focus:border-purple-600"
                   />
+                  {vuiHun && (
+                    <p className="text-[9px] text-purple-700 font-semibold mt-0.5">
+                      Format: {formatDateTimeDDMMYYYY(vuiHun)}
+                    </p>
+                  )}
                   <div className="flex items-center gap-1 mt-1 flex-wrap">
                     <button
                       type="button"
@@ -2840,6 +2851,11 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     onChange={(e) => setUrgencyDeadline(e.target.value)}
                     className="w-full bg-white border border-rose-300 rounded-xl p-2 font-bold text-slate-900 text-[10px]"
                   />
+                  {urgencyDeadline && (
+                    <p className="text-[9px] text-rose-700 font-semibold mt-0.5">
+                      Format: {formatDateTimeDDMMYYYY(urgencyDeadline)}
+                    </p>
+                  )}
                 </div>
               </div>
 

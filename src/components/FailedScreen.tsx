@@ -13,7 +13,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Transaction } from '../types';
-import { formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { getStoredCampaigns } from '../utils/storage';
 import { 
   getCampaignCauseTitle, 
@@ -208,8 +208,12 @@ export const FailedScreen: React.FC<FailedScreenProps> = ({
             </div>
           </div>
           <div className="flex justify-between items-center">
+            <span>DATE:</span>
+            <span>{formatDateDDMMYYYY(transaction?.timestamp || Date.now())}</span>
+          </div>
+          <div className="flex justify-between items-center">
             <span>TIME:</span>
-            <span>{transaction?.timestamp ? formatDateTimeDDMMYYYY(transaction.timestamp) : new Date().toLocaleTimeString()}</span>
+            <span>{transaction?.timestamp ? formatDateTimeDDMMYYYY(transaction.timestamp) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
           </div>
         </div>
       </div>

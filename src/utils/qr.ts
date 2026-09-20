@@ -98,6 +98,8 @@ export const generateCampaignWebLink = (campaignOrId: string | Campaign, customD
   if (camp.vuiHun) params.set('vuiHun', camp.vuiHun);
   if (camp.vuitu) params.set('vuitu', camp.vuitu);
   if (camp.thihni) params.set('thihni', camp.thihni);
+  if (camp.urgencyDeadline) params.set('urgencyDeadline', camp.urgencyDeadline);
+  if (camp.validityDate) params.set('validityDate', camp.validityDate);
   if (camp.imageUrl && camp.imageUrl.startsWith('http')) params.set('img', camp.imageUrl);
 
   return `${baseDomain}/?${params.toString()}`;

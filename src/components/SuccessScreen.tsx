@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
-import { formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
 import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
 import { getStoredCampaigns } from '../utils/storage';
@@ -255,7 +255,7 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
       `💳 *Platform Fee:* ₹${transaction?.platformFee.toFixed(2) || '0.00'}\n` +
       `✅ *Total Settled:* ₹${transaction?.totalAmount.toFixed(2) || '0.00'}\n` +
       `🔖 *TXN ID:* ${transaction?.id || 'RPAY2026'}\n` +
-      `🕒 *Time:* ${new Date(transaction?.timestamp || Date.now()).toLocaleString()}\n\n` +
+      `🕒 *Date & Time:* ${formatDateTimeDDMMYYYY(transaction?.timestamp || Date.now())}\n\n` +
       `🌐 *View Verified Digital Receipt Online:*\n${receiptLink}\n\n` +
       `Verified by RonPay Smart Payment Infrastructure.`;
 
@@ -547,8 +547,12 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
             <span className="font-bold text-slate-700">{transaction?.id || 'RPAY-2026-OK'}</span>
           </div>
           <div className="flex justify-between items-center">
+            <span>DATE:</span>
+            <span className="font-bold text-slate-700">{formatDateDDMMYYYY(transaction?.timestamp || Date.now())}</span>
+          </div>
+          <div className="flex justify-between items-center">
             <span>TIME:</span>
-            <span>{new Date(transaction?.timestamp || Date.now()).toLocaleTimeString()}</span>
+            <span>{new Date(transaction?.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
           </div>
           {transaction?.txHash && (
             <div className="flex justify-between items-center truncate">

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { StaffAccount, UserRole } from '../types';
 import { ROLE_DEFINITIONS, getRoleBadgeInfo } from '../utils/rbac';
+import { formatDateDDMMYYYY } from '../utils/date';
 
 interface StaffManagementTabProps {
   currentRole: UserRole;
@@ -235,7 +236,7 @@ export const StaffManagementTab: React.FC<StaffManagementTabProps> = ({
               <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3 text-slate-500" />
-                  {staff.lastLogin ? new Date(staff.lastLogin).toLocaleDateString() : 'Never logged in'}
+                  {staff.lastLogin ? formatDateDDMMYYYY(staff.lastLogin) : 'Never logged in'}
                 </span>
 
                 <div className="flex items-center gap-1">

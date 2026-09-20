@@ -4110,12 +4110,30 @@ interface DatabaseSchema {
   campaigns: any[];
   deletedCampaignIds?: string[];
   members: any[];
+  deletedMemberIds?: string[];
   transactions: any[];
+  deletedTransactionIds?: string[];
   creators: any[];
   pricingConfig: any;
   announcement: any;
   auditLogs: any[];
+  staffAccounts?: any[];
+  deletedStaffIds?: string[];
   lastUpdated: string;
+}
+
+// Active Server-Sent Events (SSE) connections for sub-second live cross-device sync
+const activeSSEClients = new Set<Response>();
+
+export function broadcastServerEvent(type: string, data?: any) {
+  const payload = JSON.stringify({ type, data, timestamp: new Date().toISOString() });
+  for (const client of activeSSEClients) {
+    try {
+      client.write(`event: message\ndata: ${payload}\n\n`);
+    } catch {
+      activeSSEClients.delete(client);
+    }
+  }
 }
 
 function getDefaultDatabase(): DatabaseSchema {
@@ -4123,11 +4141,15 @@ function getDefaultDatabase(): DatabaseSchema {
     campaigns: [],
     deletedCampaignIds: [],
     members: [],
+    deletedMemberIds: [],
     transactions: [],
+    deletedTransactionIds: [],
     creators: [],
     pricingConfig: null,
     announcement: null,
     auditLogs: [],
+    staffAccounts: [],
+    deletedStaffIds: [],
     lastUpdated: new Date().toISOString()
   };
 }
@@ -4217,11 +4239,15 @@ function getDatabase(): DatabaseSchema {
         campaigns: Array.isArray(parsed?.campaigns) ? parsed.campaigns : [],
         deletedCampaignIds: Array.isArray(parsed?.deletedCampaignIds) ? parsed.deletedCampaignIds : [],
         members: Array.isArray(parsed?.members) ? parsed.members : [],
+        deletedMemberIds: Array.isArray(parsed?.deletedMemberIds) ? parsed.deletedMemberIds : [],
         transactions: Array.isArray(parsed?.transactions) ? parsed.transactions : [],
+        deletedTransactionIds: Array.isArray(parsed?.deletedTransactionIds) ? parsed.deletedTransactionIds : [],
         creators: Array.isArray(parsed?.creators) ? parsed.creators : [],
         pricingConfig: parsed?.pricingConfig || null,
         announcement: parsed?.announcement || null,
         auditLogs: Array.isArray(parsed?.auditLogs) ? parsed.auditLogs : [],
+        staffAccounts: Array.isArray(parsed?.staffAccounts) ? parsed.staffAccounts : [],
+        deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
       if (autoHealDatabase(currentDb)) {
@@ -4247,6 +4273,8 @@ function saveDatabase(db: DatabaseSchema) {
     const tempFilePath = `${DB_FILE_PATH}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
     fs.writeFileSync(tempFilePath, JSON.stringify(db, null, 2), 'utf-8');
     fs.renameSync(tempFilePath, DB_FILE_PATH);
+    // Broadcast live event to all connected web/mobile apps in real-time
+    broadcastServerEvent('data_changed', { timestamp: db.lastUpdated });
   } catch (err) {
     console.error('Failed saving DB file:', err);
   }
@@ -4322,6 +4350,34 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
   return Array.from(map.values());
 }
 
+// GET /api/data/events - Real-time Server-Sent Events (SSE) stream for instant multi-window & cross-device sync
+app.get('/api/data/events', (req: Request, res: Response) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', timestamp: Date.now() })}\n\n`);
+  activeSSEClients.add(res);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`event: ping\ndata: ${Date.now()}\n\n`);
+    } catch {
+      clearInterval(heartbeat);
+      activeSSEClients.delete(res);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    activeSSEClients.delete(res);
+  });
+});
+
 // GET /api/data/state - Fetch current central database state
 app.get('/api/data/state', (req: Request, res: Response) => {
   const db = getDatabase();
@@ -4339,20 +4395,45 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       campaigns,
       deletedCampaignIds,
       members,
+      deletedMemberIds,
       transactions,
       deletedTransactionIds,
       creators,
       pricingConfig,
       announcement,
-      auditLogs
+      auditLogs,
+      staffAccounts,
+      deletedStaffIds
     } = req.body || {};
 
     const db = getDatabase();
 
-    // 0. Process any deletions first so they are never re-merged
+    // 0. Process any deletions first so they are permanently registered and never resurrected
     if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
       const delSet = new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
       db.transactions = (db.transactions || []).filter((t: any) => !delSet.has(String(t.id).toLowerCase().trim()));
+      db.deletedTransactionIds = Array.from(new Set([
+        ...(db.deletedTransactionIds || []),
+        ...Array.from(delSet)
+      ]));
+    }
+
+    if (Array.isArray(deletedMemberIds) && deletedMemberIds.length > 0) {
+      const delSet = new Set(deletedMemberIds.map((id: any) => String(id).toLowerCase().trim()));
+      db.members = (db.members || []).filter((m: any) => !delSet.has(String(m.id).toLowerCase().trim()));
+      db.deletedMemberIds = Array.from(new Set([
+        ...(db.deletedMemberIds || []),
+        ...Array.from(delSet)
+      ]));
+    }
+
+    if (Array.isArray(deletedStaffIds) && deletedStaffIds.length > 0) {
+      const delSet = new Set(deletedStaffIds.map((id: any) => String(id).trim()));
+      db.staffAccounts = (db.staffAccounts || []).filter((s: any) => !delSet.has(String(s.id).trim()));
+      db.deletedStaffIds = Array.from(new Set([
+        ...(db.deletedStaffIds || []),
+        ...Array.from(delSet)
+      ]));
     }
 
     const delCampSet = (Array.isArray(deletedCampaignIds) && deletedCampaignIds.length > 0)
@@ -4367,25 +4448,28 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       ]));
     }
 
-    // Merge collections intelligently
+    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()));
+    const serverDelMemSet = new Set((db.deletedMemberIds || []).map((id: any) => String(id).toLowerCase().trim()));
+    const serverDelStaffSet = new Set((db.deletedStaffIds || []).map((id: any) => String(id).trim()));
+
+    // Merge collections intelligently with deletion protection
     if (Array.isArray(campaigns)) {
       db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', delCampSet);
     }
     if (Array.isArray(members)) {
-      db.members = mergeCollections(db.members, members, 'id');
+      db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);
     }
     if (Array.isArray(transactions)) {
-      // Filter out any known deleted IDs
-      const delSet = Array.isArray(deletedTransactionIds) 
-        ? new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())) 
-        : new Set();
-      const cleanTx = transactions.filter((t: any) => t && t.id && !delSet.has(String(t.id).toLowerCase().trim()));
-      db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id');
+      const cleanTx = transactions.filter((t: any) => t && t.id && !serverDelTxSet.has(String(t.id).toLowerCase().trim()));
+      db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);
       db.transactions.sort((a: any, b: any) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
       });
+    }
+    if (Array.isArray(staffAccounts)) {
+      db.staffAccounts = mergeCollections(db.staffAccounts || [], staffAccounts, 'id', serverDelStaffSet);
     }
     if (Array.isArray(creators)) {
       db.creators = mergeCollections(db.creators, creators, 'phone');
@@ -4577,7 +4661,9 @@ app.delete('/api/members/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const db = getDatabase();
-    db.members = db.members.filter(m => String(m.id).toLowerCase() !== String(id).toLowerCase());
+    const cleanId = String(id).toLowerCase().trim();
+    db.members = (db.members || []).filter(m => String(m.id).toLowerCase().trim() !== cleanId);
+    db.deletedMemberIds = Array.from(new Set([...(db.deletedMemberIds || []), cleanId]));
     saveDatabase(db);
     res.json({ success: true, message: `Member ${id} deleted` });
   } catch (err: any) {
@@ -4598,6 +4684,9 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid transaction payload' });
     }
     const db = getDatabase();
+    // If this transaction was previously deleted, resurrect or clean it from tombstone
+    const cleanId = String(tx.id).toLowerCase().trim();
+    db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
     db.transactions = mergeCollections(db.transactions, [tx], 'id');
     saveDatabase(db);
     res.json({ success: true, transaction: tx, data: db });
@@ -4612,6 +4701,7 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     const db = getDatabase();
     const cleanId = String(id).toLowerCase().trim();
     db.transactions = (db.transactions || []).filter((t: any) => String(t.id).toLowerCase().trim() !== cleanId);
+    db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), cleanId]));
     saveDatabase(db);
     res.json({ success: true, message: `Transaction ${id} deleted successfully` });
   } catch (err: any) {
@@ -4624,8 +4714,10 @@ app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
     const { ids } = req.body || {};
     if (Array.isArray(ids) && ids.length > 0) {
       const db = getDatabase();
-      const idSet = new Set(ids.map((i: any) => String(i).toLowerCase().trim()));
+      const cleanIds = ids.map((i: any) => String(i).toLowerCase().trim());
+      const idSet = new Set(cleanIds);
       db.transactions = (db.transactions || []).filter((t: any) => !idSet.has(String(t.id).toLowerCase().trim()));
+      db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...cleanIds]));
       saveDatabase(db);
       return res.json({ success: true, deletedCount: ids.length });
     }
@@ -4809,13 +4901,48 @@ app.post('/api/admin/users/roles', requireRole(['SUPER_ADMIN']), (req: Request, 
   }
 });
 
-// 4. Staff Accounts List (SUPER_ADMIN, ADMIN)
-app.get('/api/admin/staff/list', requireRole(['SUPER_ADMIN', 'ADMIN']), (req: Request, res: Response) => {
+// 4. Staff Accounts Endpoints (SUPER_ADMIN, ADMIN)
+app.get('/api/admin/staff/list', (req: Request, res: Response) => {
   try {
     const db = getDatabase();
-    const creators = Array.isArray(db.creators) ? db.creators : [];
-    const staff = creators.filter((c: any) => c.role === 'SUPER_ADMIN' || c.role === 'ADMIN' || c.role === 'MODERATOR' || c.isAdmin);
+    const staff = Array.isArray(db.staffAccounts) ? db.staffAccounts : [];
     res.json({ success: true, staff, total: staff.length });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/staff', (req: Request, res: Response) => {
+  try {
+    const staff = req.body;
+    if (!staff || !staff.id) {
+      return res.status(400).json({ success: false, message: 'Invalid staff payload' });
+    }
+    const db = getDatabase();
+    const current = Array.isArray(db.staffAccounts) ? db.staffAccounts : [];
+    const index = current.findIndex((s: any) => s.id === staff.id);
+    if (index >= 0) {
+      current[index] = { ...current[index], ...staff };
+    } else {
+      current.unshift(staff);
+    }
+    db.staffAccounts = current;
+    db.deletedStaffIds = (db.deletedStaffIds || []).filter((id: string) => id !== staff.id);
+    saveDatabase(db);
+    res.json({ success: true, staff, total: current.length });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/admin/staff/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    db.staffAccounts = (db.staffAccounts || []).filter((s: any) => s.id !== id);
+    db.deletedStaffIds = Array.from(new Set([...(db.deletedStaffIds || []), id]));
+    saveDatabase(db);
+    res.json({ success: true, message: `Staff ${id} deleted` });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
