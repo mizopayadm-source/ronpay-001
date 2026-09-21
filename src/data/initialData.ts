@@ -239,7 +239,7 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
     gpsCoords: '25.5788, 91.8933',
     upiId: 'bmpshillong@sbi',
     imageUrl: 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80',
-    subCategories: ['BMP Fund', 'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'],
+    subCategories: ['BMP Fund'],
     trxnFeeBearer: 'user_paid',
     sectionLabel: 'Section / Bial',
     definedSections: ['Section A', 'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'General'],

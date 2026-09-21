@@ -310,7 +310,7 @@ export const buildKumtluangMatrix = (
   // Ensure predefined subcategories appear in proper order if available
   const predefined = campaign?.subCategories || (
     transactions.some(t => t.campaignId === 'cmp-1788107291420' || String(t.campaignTitle).toLowerCase().includes('bmp'))
-      ? ['BMP Fund', 'Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung']
+      ? ['BMP Fund']
       : []
   );
 

@@ -205,7 +205,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
     if (activeCampaign?.subCategories && activeCampaign.subCategories.length > 0) {
       return activeCampaign.subCategories;
     }
-    return ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+    return ['BMP Fund'];
   }, [activeCampaign]);
 
   // Master Ledger Data calculations

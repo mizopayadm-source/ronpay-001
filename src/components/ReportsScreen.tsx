@@ -485,7 +485,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+        : ['BMP Fund'];
       if (m) {
         exportMemberCategoryMatrixPrint(
           m, 
@@ -509,7 +509,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
       const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
         ? selectedCampaignObj.subCategories
-        : ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+        : ['BMP Fund'];
       if (m) {
         exportMemberPassbookVerticalPrint(
           m, 

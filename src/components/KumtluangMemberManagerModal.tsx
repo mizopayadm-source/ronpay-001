@@ -206,7 +206,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Pathian Ram Zauna');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthName);
   const [selectedYear, setSelectedYear] = useState<string>(getCurrentYearString);
   const [entryAmount, setEntryAmount] = useState<string>('500');
@@ -267,7 +267,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const defaultCategories = ['Pathian Ram Zauna', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+  const defaultCategories = ['BMP Fund'];
 
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
@@ -391,6 +391,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
     ? activeScopedCampaign.subCategories
     : defaultCategories;
+
+  // Auto-sync selected category with campaign's available categories
+  useEffect(() => {
+    if (campaignCategories.length > 0) {
+      if (!selectedCategory || !campaignCategories.includes(selectedCategory)) {
+        setSelectedCategory(campaignCategories[0]);
+      }
+    }
+  }, [campaignCategories, selectedCategory]);
 
   const resolvedOrgTitle = activeScopedCampaign?.orgName || activeScopedCampaign?.title || creatorProfile.orgName || creatorProfile.name || 'Organization / Church';
   const resolvedLogoUrl = activeScopedCampaign?.imageUrl || creatorProfile.logoUrl;

@@ -336,12 +336,18 @@ export const getStoredCampaigns = (): Campaign[] => {
             return true;
           })
           .map((camp: Campaign) => {
-            if (!camp.orgCode) {
-              const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === camp.id);
-              const derived = initialMatch?.orgCode || derivePrefixFromText(camp.orgName || camp.title);
-              return { ...camp, orgCode: derived };
+            const updated = { ...camp };
+            if (!updated.orgCode) {
+              const initialMatch = INITIAL_CAMPAIGNS.find(ic => ic.id === updated.id);
+              const derived = initialMatch?.orgCode || derivePrefixFromText(updated.orgName || updated.title);
+              updated.orgCode = derived;
             }
-            return camp;
+            if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
+              if (!Array.isArray(updated.subCategories) || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
+                updated.subCategories = ['BMP Fund'];
+              }
+            }
+            return updated;
           });
 
         // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns unless deleted
@@ -759,10 +765,16 @@ export const getStoredTransactions = (): Transaction[] => {
                 t.campaignTitle = 'BMP Shillong';
                 hasFixed = true;
               }
-              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
-                const sub = t.subCategory || 'BMP Fund';
-                t.subCategory = sub;
-                t.subCategoryBreakdown = { [sub]: t.amount };
+              if (t.subCategory !== 'BMP Fund') {
+                t.subCategory = 'BMP Fund';
+                hasFixed = true;
+              }
+              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length !== 1 || !t.subCategoryBreakdown['BMP Fund']) {
+                t.subCategoryBreakdown = { 'BMP Fund': t.amount };
+                hasFixed = true;
+              }
+              if (t.remark && t.remark.includes('[Pathian Ram Zauna]')) {
+                t.remark = t.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
                 hasFixed = true;
               }
             } else if (!t.category || t.category === 'others') {
@@ -2424,10 +2436,10 @@ export const saveTransaction = (tx: Transaction): void => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
-        const sub = tx.subCategory || 'BMP Fund';
-        tx.subCategory = sub;
-        tx.subCategoryBreakdown = { [sub]: tx.amount };
+      tx.subCategory = 'BMP Fund';
+      tx.subCategoryBreakdown = { 'BMP Fund': tx.amount };
+      if (tx.remark && tx.remark.includes('[Pathian Ram Zauna]')) {
+        tx.remark = tx.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
       }
     } else if (!tx.category || tx.category === 'others') {
       if (titleL.includes('ralna') || tx.campaignId === 'cmp-1788526889943') {

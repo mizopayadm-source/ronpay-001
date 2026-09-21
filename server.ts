@@ -4743,10 +4743,10 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
-        const sub = tx.subCategory || 'BMP Fund';
-        tx.subCategory = sub;
-        tx.subCategoryBreakdown = { [sub]: tx.amount };
+      tx.subCategory = 'BMP Fund';
+      tx.subCategoryBreakdown = { 'BMP Fund': tx.amount };
+      if (tx.remark && tx.remark.includes('[Pathian Ram Zauna]')) {
+        tx.remark = tx.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
       }
     }
 
