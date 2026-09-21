@@ -147,6 +147,46 @@ export const getCurrentMonthEndString = (): string => {
 };
 
 /**
+ * Returns YYYY-MM-01 for last month's start.
+ */
+export const getLastMonthStartString = (): string => {
+  const d = new Date();
+  const year = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+  const month = d.getMonth() === 0 ? 12 : d.getMonth();
+  const strMonth = String(month).padStart(2, '0');
+  return `${year}-${strMonth}-01`;
+};
+
+/**
+ * Returns YYYY-MM-DD for last month's end.
+ */
+export const getLastMonthEndString = (): string => {
+  const d = new Date();
+  const year = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+  const month = d.getMonth() === 0 ? 12 : d.getMonth();
+  const lastDay = new Date(year, month, 0).getDate();
+  const strMonth = String(month).padStart(2, '0');
+  const strDay = String(lastDay).padStart(2, '0');
+  return `${year}-${strMonth}-${strDay}`;
+};
+
+/**
+ * Returns YYYY-01-01 for current year's start.
+ */
+export const getCurrentYearStartString = (): string => {
+  const year = new Date().getFullYear();
+  return `${year}-01-01`;
+};
+
+/**
+ * Returns YYYY-12-31 for current year's end.
+ */
+export const getCurrentYearEndString = (): string => {
+  const year = new Date().getFullYear();
+  return `${year}-12-31`;
+};
+
+/**
  * Returns a local ISO string formatted for input[type="datetime-local"] (YYYY-MM-DDTHH:mm).
  * Defaults to Today's date with end of day time (23:59).
  */

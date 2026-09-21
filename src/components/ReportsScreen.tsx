@@ -61,7 +61,16 @@ import {
 import { getEffectiveCategory } from '../utils/translations';
 import { getMembers, isCampaignCreator } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, getCurrentMonthStartString, getCurrentMonthEndString } from '../utils/date';
+import { 
+  formatDateDDMMYYYY, 
+  formatDateTimeDDMMYYYY, 
+  getCurrentMonthStartString, 
+  getCurrentMonthEndString,
+  getLastMonthStartString,
+  getLastMonthEndString,
+  getCurrentYearStartString,
+  getCurrentYearEndString
+} from '../utils/date';
 
 interface ReportsScreenProps {
   transactions: Transaction[];
@@ -96,7 +105,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Default to 'all' so every donation across all categories is visible immediately
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('all');
-  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
   // Date range defaults to empty ('All Time') so transactions from all months appear without artificial cutoff
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -206,19 +214,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (t.campaignId !== selectedCampaignId) return false;
       }
 
-      // 4. Period / Month filter
-      if (selectedPeriodFilter !== 'all') {
-        if (t.periodLabel && !t.periodLabel.toLowerCase().includes(selectedPeriodFilter.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // 5. Date range filter
+      // 4. Date range filter
       const txDate = t.timestamp.slice(0, 10);
       if (startDate && txDate < startDate) return false;
       if (endDate && txDate > endDate) return false;
 
-      // 6. Search query filter
+      // 5. Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = (t.campaignTitle || '').toLowerCase().includes(q);
@@ -230,7 +231,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, selectedPeriodFilter, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery]);
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -299,7 +300,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   const dateRangeText = startDate && endDate
     ? `${formatDateDDMMYYYY(startDate)} to ${formatDateDDMMYYYY(endDate)}`
-    : (selectedPeriodFilter !== 'all' ? selectedPeriodFilter : 'All Time');
+    : (startDate ? `From ${formatDateDDMMYYYY(startDate)}` : (endDate ? `Up to ${formatDateDDMMYYYY(endDate)}` : 'All Time'));
 
   const creatorMetadata = isCreator ? {
     name: creatorProfile.name || 'Authorized Official',
@@ -777,36 +778,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
             </div>
 
-            {/* Period / Month filter, Search & Sort */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Search & Sort controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                  📅 Month / Period Filter
-                </label>
-                <select
-                  value={selectedPeriodFilter}
-                  onChange={(e) => setSelectedPeriodFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
-                >
-                  <option value="all">All Months & Periods</option>
-                  <option value="August">August 2026</option>
-                  <option value="July">July 2026</option>
-                  <option value="June">June 2026</option>
-                  <option value="Q3">Q3 (Jul - Sep)</option>
-                  <option value="Q2">Q2 (Apr - Jun)</option>
-                  <option value="2026">2026 Full Year</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Search Donor / TxID</label>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">🔍 Search Donor / TxID / Remark</label>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter donor, TxID, period..."
+                    placeholder="Search by donor name, TxID, period..."
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-8 pr-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
@@ -836,23 +818,23 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   Date Range Filter: {!startDate && !endDate ? (
                     <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">All Time (Engkim a lang vek)</span>
                   ) : (
-                    <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{startDate || 'Any'} chanchin to {endDate || 'Now'}</span>
+                    <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{startDate ? formatDateDDMMYYYY(startDate) : 'Any'} — {endDate ? formatDateDDMMYYYY(endDate) : 'Now'}</span>
                   )}
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setStartDate('');
                       setEndDate('');
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
                       !startDate && !endDate
                         ? 'bg-indigo-600 text-white shadow-2xs'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    All Time (Lang Kim Vek)
+                    All Time
                   </button>
                   <button
                     type="button"
@@ -860,13 +842,41 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       setStartDate(getCurrentMonthStartString());
                       setEndDate(getCurrentMonthEndString());
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                      startDate === getCurrentMonthStartString()
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                      startDate === getCurrentMonthStartString() && endDate === getCurrentMonthEndString()
                         ? 'bg-indigo-600 text-white shadow-2xs'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
                     This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(getLastMonthStartString());
+                      setEndDate(getLastMonthEndString());
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                      startDate === getLastMonthStartString() && endDate === getLastMonthEndString()
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Last Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(getCurrentYearStartString());
+                      setEndDate(getCurrentYearEndString());
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                      startDate === getCurrentYearStartString() && endDate === getCurrentYearEndString()
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    This Year ({new Date().getFullYear()})
                   </button>
                   {(startDate || endDate) && (
                     <button
@@ -875,7 +885,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                         setStartDate('');
                         setEndDate('');
                       }}
-                      className="px-2 py-1 rounded-lg text-[10px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
+                      className="px-2 py-1 rounded-lg text-[10.5px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
                     >
                       Clear Date
                     </button>
