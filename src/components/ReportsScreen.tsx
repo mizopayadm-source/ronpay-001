@@ -44,7 +44,8 @@ import {
   Printer,
   RefreshCw
 } from 'lucide-react';
-import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
+import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
+import { DonorPaymentsEditorModal } from './DonorPaymentsEditorModal';
 import { 
   exportTransactionsToCSV, 
   exportFormattedExcel,
@@ -114,8 +115,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Cloud sync spinner state
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
 
-  // Transaction Editing State
+  // Transaction Editing State (Single Transaction)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Donor Group & Multi-payment History Editing State
+  const [editingDonorGroup, setEditingDonorGroup] = useState<{
+    donorName: string;
+    donorMemberId?: string;
+    donorPhone?: string;
+    donorSection?: string;
+    memberRecord?: MemberRecord | null;
+    donorTransactions: Transaction[];
+  } | null>(null);
   
   // CSV / Excel Export Feedback Toast State
   const [exportFeedback, setExportFeedback] = useState<{ message: string; count: number } | null>(null);
@@ -553,14 +564,46 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     setSortOrder(prev => prev === 'name-asc' ? 'name-desc' : 'name-asc');
   };
 
-  // Find a transaction by donor name for Kumtluang matrix row edit
+  // Find all transactions by donor name for Kumtluang matrix row edit (View & Edit all payments across months/dates)
   const handleEditDonorRow = (donorName: string) => {
-    const tx = filteredTransactions.find(t => t.donorName === donorName);
-    if (tx) {
-      setEditingTransaction(tx);
+    const matchedMember = scopedMembers.find(m => 
+      m.name.toLowerCase().trim() === donorName.toLowerCase().trim()
+    );
+
+    // Get all transactions belonging to this donor
+    const donorTxs = transactions.filter(t => {
+      // Creator security boundary: Must be authorized campaign
+      if (!isStaffFullAccess && !creatorCampaignIds.has(t.campaignId)) return false;
+      if (selectedCampaignId !== 'all' && t.campaignId !== selectedCampaignId) return false;
+      
+      const matchName = t.donorName && t.donorName.toLowerCase().trim() === donorName.toLowerCase().trim();
+      const matchMember = matchedMember && (t.memberId === matchedMember.id || (t.remark && t.remark.includes(matchedMember.id)));
+      return matchName || matchMember;
+    });
+
+    if (donorTxs.length > 0 || matchedMember) {
+      setEditingDonorGroup({
+        donorName: matchedMember?.name || donorName,
+        donorMemberId: matchedMember?.id || donorTxs[0]?.memberId,
+        donorPhone: matchedMember?.fullPhone || matchedMember?.phoneLast4 || donorTxs[0]?.donorPhone,
+        donorSection: matchedMember?.section || donorTxs[0]?.donorVeng,
+        memberRecord: matchedMember || null,
+        donorTransactions: donorTxs
+      });
     } else {
-      alert('Transaction record hmuh a ni lo.');
+      alert('He donor payment record hi hmuh a ni lo.');
     }
+  };
+
+  const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
+    if (onUpdateTransaction) {
+      updatedTxs.forEach(tx => onUpdateTransaction(tx));
+    }
+    if (onDeleteTransaction && deletedIds.length > 0) {
+      deletedIds.forEach(id => onDeleteTransaction(id));
+    }
+    setEditingDonorGroup(null);
+    showExportSuccessToast(`${updatedTxs.length} records update fel a ni e!`, updatedTxs.length);
   };
 
   const handleManualCloudSync = async () => {
@@ -1575,10 +1618,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                           <td className="py-2 px-2.5 text-center">
                             <button
                               onClick={() => handleEditDonorRow(row.donorName)}
-                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-extrabold transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200 shadow-2xs"
-                              title="Mimal Categories an pek dan siamtha rawh"
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200 shadow-2xs whitespace-nowrap"
+                              title="Pek ni, pek dan (Cash/Online), thla bi leh category breakdown ennawn leh siamtha rawh"
                             >
-                              <Edit3 className="w-3 h-3" /> Edit
+                              <Edit3 className="w-3 h-3" /> Ennawn / Edit
                             </button>
                           </td>
                         </tr>
@@ -1758,7 +1801,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         </>
       )}
 
-      {/* TRANSACTION & CATEGORY BREAKDOWN EDIT MODAL */}
+      {/* DONOR MULTI-PAYMENT & MONTH HISTORY EDITOR MODAL */}
+      {editingDonorGroup && (
+        <DonorPaymentsEditorModal
+          donorName={editingDonorGroup.donorName}
+          donorMemberId={editingDonorGroup.donorMemberId}
+          donorPhone={editingDonorGroup.donorPhone}
+          donorSection={editingDonorGroup.donorSection}
+          transactions={editingDonorGroup.donorTransactions}
+          campaigns={creatorCampaigns}
+          activeCampaignId={selectedCampaignId !== 'all' ? selectedCampaignId : editingDonorGroup.donorTransactions[0]?.campaignId}
+          isKumtluang={isKumtluang}
+          memberRecord={editingDonorGroup.memberRecord}
+          onClose={() => setEditingDonorGroup(null)}
+          onSaveAll={handleSaveDonorGroup}
+        />
+      )}
+
+      {/* TRANSACTION & CATEGORY BREAKDOWN EDIT MODAL (Single Transaction) */}
       {editingTransaction && (
         <EditTransactionModal
           transaction={editingTransaction}
@@ -1805,6 +1865,17 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
   const [status, setStatus] = useState<'completed' | 'pending_verification'>((transaction.status as any) || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
+  
+  // Date & Period state for auditing and correcting records
+  const [paymentDate, setPaymentDate] = useState<string>(() => {
+    try {
+      if (transaction.timestamp) {
+        return transaction.timestamp.slice(0, 10);
+      }
+    } catch {}
+    return new Date().toISOString().slice(0, 10);
+  });
+  const [periodLabel, setPeriodLabel] = useState<string>(transaction.periodLabel || '');
   
   // Breakdown state
   const campaign = campaigns.find(c => c.id === transaction.campaignId);
@@ -1867,6 +1938,14 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       return;
     }
 
+    let updatedTimestamp = transaction.timestamp;
+    if (paymentDate) {
+      const origTime = transaction.timestamp && transaction.timestamp.includes('T')
+        ? transaction.timestamp.split('T')[1]
+        : '12:00:00.000Z';
+      updatedTimestamp = `${paymentDate}T${origTime}`;
+    }
+
     const updated: Transaction = {
       ...transaction,
       donorName: donorName.trim(),
@@ -1876,6 +1955,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       totalAmount: totalAmount,
       paymentMethod: paymentMethod,
       status: status,
+      timestamp: updatedTimestamp,
+      periodLabel: periodLabel.trim() || undefined,
       remark: remark.trim() || undefined,
       subCategoryBreakdown: isKumtluang ? breakdown : undefined,
     };
@@ -1921,6 +2002,35 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               onChange={(e) => setDonorName(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
             />
+          </div>
+
+          {/* Payment Date & Month/Period */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <div>
+              <label className="text-[10.5px] font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-indigo-500" />
+                Pek Ni (Payment Date) *
+              </label>
+              <input
+                type="date"
+                required
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-600"
+              />
+            </div>
+            <div>
+              <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                🏷️ Pek Thla (Period/Month)
+              </label>
+              <input
+                type="text"
+                value={periodLabel}
+                onChange={(e) => setPeriodLabel(e.target.value)}
+                placeholder="e.g. August 2026"
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-600"
+              />
+            </div>
           </div>
 
           {/* Anonymous toggle */}
