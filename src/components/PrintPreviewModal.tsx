@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { downloadFileUniversal } from '../utils/export';
 import { formatDateDDMMYYYY } from '../utils/date';
-import { exportElementToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
+import { exportElementToPDF, exportHTMLToPDF, executePrintSafely, PDFExportResult } from '../utils/pdfGenerator';
 
 export interface PrintModalData {
   html: string;
@@ -263,25 +263,33 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     })();
 
     try {
-      const result = await exportElementToPDF(
-        rootElement,
+      // 1. Generate real PDF using isolated iframe from complete HTML template
+      let result = await exportHTMLToPDF(
+        modalData.html,
         fileName,
         (status) => setPdfStatusText(status)
       );
 
+      // 2. Fallback to direct element capture if needed
+      if (!result.success && rootElement) {
+        result = await exportElementToPDF(
+          rootElement,
+          fileName,
+          (status) => setPdfStatusText(status)
+        );
+      }
+
       if (result.success) {
         setPdfSuccessResult(result);
       } else {
-        console.warn('exportElementToPDF returned failure, falling back to system print / PDF save');
-        setWaToast('System print a in hawng e, "Save as PDF" thlang rawh le');
+        console.error('PDF export failed:', result.error);
+        setWaToast('PDF download theih rih lo: ' + (result.error || ''));
         setTimeout(() => setWaToast(''), 4000);
-        handlePrint();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('PDF export error', err);
-      setWaToast('System print a in hawng e, "Save as PDF" thlang rawh le');
+      setWaToast('PDF download theih rih lo: ' + (err?.message || ''));
       setTimeout(() => setWaToast(''), 4000);
-      handlePrint();
     } finally {
       setIsGeneratingPdf(false);
       setPdfStatusText('');
