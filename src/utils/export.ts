@@ -83,6 +83,46 @@ export const downloadFileUniversal = async (
   title: string = 'RonPay Report'
 ): Promise<boolean> => {
   try {
+    // Check for Native Android Bridge (MainActivity.java: RonPayBridge / AndroidBlobDownloader)
+    const bridge = typeof window !== 'undefined'
+      ? ((window as any).RonPayBridge || (window as any).AndroidBlobDownloader || (window as any).AndroidDownloader)
+      : null;
+
+    if (bridge?.getBase64FromBlobData) {
+      try {
+        let base64 = '';
+        if (typeof content === 'string') {
+          if (content.startsWith('data:')) {
+            base64 = content;
+          } else {
+            const bytes = new TextEncoder().encode(content);
+            let binary = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+            }
+            base64 = btoa(binary);
+          }
+        } else if (content instanceof Blob) {
+          const arrayBuf = await content.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuf);
+          let binary = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < uint8.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, Array.from(uint8.subarray(i, i + chunkSize)));
+          }
+          base64 = btoa(binary);
+        }
+
+        if (base64) {
+          bridge.getBase64FromBlobData(base64, mimeType, fileName);
+          return true;
+        }
+      } catch (bridgeErr) {
+        console.warn('RonPayBridge download error in downloadFileUniversal:', bridgeErr);
+      }
+    }
+
     const blob = content instanceof Blob 
       ? content 
       : new Blob([mimeType.includes('charset') ? '\uFEFF' + content : content], { type: mimeType });
@@ -141,9 +181,14 @@ export const downloadFileUniversal = async (
           const data = await resp.json();
           if (data?.downloadUrl) {
             const serverDownloadUrl = new URL(data.downloadUrl, window.location.origin).href;
+            if (bridge?.openInExternalBrowser) {
+              bridge.openInExternalBrowser(serverDownloadUrl);
+              return true;
+            }
             const a = document.createElement('a');
             a.href = serverDownloadUrl;
             a.download = fileName;
+            a.target = '_blank';
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {

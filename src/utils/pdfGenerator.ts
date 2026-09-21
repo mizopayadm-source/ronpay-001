@@ -249,36 +249,26 @@ async function paginateCanvasToPDF(
   const pdfBlob = pdf.output('blob');
   const blobUrl = URL.createObjectURL(pdfBlob);
   const dataUri = pdf.output('datauristring');
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
-  // Trigger instant direct download
-  let downloadTriggered = false;
-  try {
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = cleanFileName;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    downloadTriggered = true;
-    setTimeout(() => {
-      try {
-        document.body.removeChild(a);
-      } catch {}
-    }, 2000);
-  } catch (e) {
-    console.warn('Anchor download failed, trying pdf.save fallback:', e);
-  }
+  // 1. Android Native App Bridge (RonPayBridge / AndroidBlobDownloader)
+  // Calls native Java bridge in MainActivity.java to save directly into MediaStore/Downloads
+  // and trigger native toast notification and PDF viewer automatically!
+  let androidDownloaded = false;
+  const bridge = typeof window !== 'undefined'
+    ? ((window as any).RonPayBridge || (window as any).AndroidBlobDownloader || (window as any).AndroidDownloader)
+    : null;
 
-  if (!downloadTriggered) {
+  if (bridge?.getBase64FromBlobData) {
     try {
-      pdf.save(cleanFileName);
-      downloadTriggered = true;
-    } catch (saveErr) {
-      console.warn('pdf.save failed:', saveErr);
+      bridge.getBase64FromBlobData(dataUri, 'application/pdf', cleanFileName);
+      androidDownloaded = true;
+    } catch (bridgeErr) {
+      console.warn('RonPayBridge getBase64FromBlobData failed:', bridgeErr);
     }
   }
 
-  // Background relay for Android WebViews
+  // 2. Prepare server-side download URL relay (crucial for Android WebView and external browser launches)
   let serverDownloadUrl: string | undefined;
   try {
     const base64Data = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
@@ -301,6 +291,59 @@ async function paginateCanvasToPDF(
     }
   } catch (relayErr) {
     console.warn('Server download relay error, using blob URL:', relayErr);
+  }
+
+  // 3. Android fallback if native bridge was not available
+  if (isAndroid && !androidDownloaded && serverDownloadUrl) {
+    if (bridge?.openInExternalBrowser) {
+      bridge.openInExternalBrowser(serverDownloadUrl);
+      androidDownloaded = true;
+    } else {
+      // Trigger download via server URL which activates Android's WebView DownloadListener / DownloadManager
+      try {
+        const a = document.createElement('a');
+        a.href = serverDownloadUrl;
+        a.download = cleanFileName;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try { document.body.removeChild(a); } catch {}
+        }, 1500);
+        androidDownloaded = true;
+      } catch (err) {
+        console.warn('Android server url click failed:', err);
+      }
+    }
+  }
+
+  // 4. Standard Desktop / Non-Android browser direct download
+  if (!androidDownloaded) {
+    let downloadTriggered = false;
+    try {
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = cleanFileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      downloadTriggered = true;
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+        } catch {}
+      }, 2000);
+    } catch (e) {
+      console.warn('Anchor download failed, trying pdf.save fallback:', e);
+    }
+
+    if (!downloadTriggered) {
+      try {
+        pdf.save(cleanFileName);
+      } catch (saveErr) {
+        console.warn('pdf.save failed:', saveErr);
+      }
+    }
   }
 
   return {

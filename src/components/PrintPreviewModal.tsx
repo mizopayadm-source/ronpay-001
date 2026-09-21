@@ -281,6 +281,27 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
       if (result.success) {
         setPdfSuccessResult(result);
+
+        // Native Android Bridge Support (MainActivity.java)
+        const bridge = (window as any).RonPayBridge || (window as any).AndroidBlobDownloader || (window as any).AndroidDownloader;
+        if (bridge?.getBase64FromBlobData && result.dataUri) {
+          try {
+            bridge.getBase64FromBlobData(result.dataUri, 'application/pdf', result.fileName);
+            setWaToast('Phone Downloads folder-ah save fel a ni e!');
+            setTimeout(() => setWaToast(''), 4000);
+          } catch (bridgeErr) {
+            console.warn('RonPayBridge getBase64FromBlobData error:', bridgeErr);
+          }
+        } else if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+          if (bridge?.openInExternalBrowser && result.downloadUrl) {
+            bridge.openInExternalBrowser(result.downloadUrl);
+          } else if (result.downloadUrl) {
+            // Trigger Android WebView download listener
+            window.location.href = result.downloadUrl;
+          }
+          setWaToast('PDF download tan a ni e!');
+          setTimeout(() => setWaToast(''), 4000);
+        }
       } else {
         console.error('PDF export failed:', result.error);
         setWaToast('PDF download theih rih lo: ' + (result.error || ''));
@@ -298,6 +319,26 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
 
   // Open generated PDF or re-download on mobile / desktop
   const handleOpenPdfBlob = () => {
+    // 1. Android Native Bridge
+    const bridge = (window as any).RonPayBridge || (window as any).AndroidBlobDownloader || (window as any).AndroidDownloader;
+    if (bridge?.getBase64FromBlobData && pdfSuccessResult?.dataUri) {
+      bridge.getBase64FromBlobData(pdfSuccessResult.dataUri, 'application/pdf', pdfSuccessResult.fileName);
+      setWaToast('Phone Downloads folder-ah save a ni e!');
+      setTimeout(() => setWaToast(''), 3000);
+      return;
+    }
+
+    // 2. Android external browser / WebView download
+    if (pdfSuccessResult?.downloadUrl && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+      if (bridge?.openInExternalBrowser) {
+        bridge.openInExternalBrowser(pdfSuccessResult.downloadUrl);
+        return;
+      }
+      window.location.href = pdfSuccessResult.downloadUrl;
+      return;
+    }
+
+    // 3. Desktop / standard web anchor download
     const targetUrl = pdfSuccessResult?.downloadUrl || pdfSuccessResult?.blobUrl;
     if (targetUrl) {
       const a = document.createElement('a');
@@ -358,7 +399,25 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     
     const summaryText = `*RonPay Financial Report*\n📄 Document: *${title}*${totalText}\n📅 Ni thla: ${cleanDate}\n\n_RonPay Community & Church Portal atanga generate a ni e._`;
 
-    // 1. Copy summary text to clipboard
+    // 1. Android Native Bridge Direct WhatsApp File Share (MainActivity.java)
+    const bridge = (window as any).RonPayBridge || (window as any).AndroidBlobDownloader || (window as any).AndroidDownloader;
+    if (bridge?.shareFileToWhatsApp && pdfSuccessResult?.dataUri) {
+      try {
+        bridge.shareFileToWhatsApp(
+          pdfSuccessResult.dataUri,
+          'application/pdf',
+          pdfSuccessResult.fileName,
+          summaryText
+        );
+        setWaToast('WhatsApp a in hawng mek e...');
+        setTimeout(() => setWaToast(''), 3000);
+        return;
+      } catch (bridgeWaErr) {
+        console.warn('RonPayBridge shareFileToWhatsApp error:', bridgeWaErr);
+      }
+    }
+
+    // 2. Copy summary text to clipboard
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(summaryText);
@@ -367,7 +426,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       }
     } catch {}
 
-    // 2. Try Native Web Share with file if PDF is ready
+    // 3. Try Native Web Share with file if PDF is ready
     if (pdfSuccessResult?.blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
         const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
@@ -384,7 +443,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       }
     }
 
-    // 3. Direct WhatsApp URI (works across Android WhatsApp app, iOS, and WhatsApp Web)
+    // 4. Direct WhatsApp URI (works across Android WhatsApp app, iOS, and WhatsApp Web)
     try {
       const encoded = encodeURIComponent(summaryText);
       const waUrl = `https://wa.me/?text=${encoded}`;
@@ -837,21 +896,21 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               </p>
               <p className="text-[10px] text-emerald-200/90 flex items-center gap-1">
                 <FolderDown className="w-3 h-3 text-emerald-400 shrink-0" />
-                I device <b>Downloads</b> folder-ah a in-save e.
+                Phone <b>Downloads</b> folder-ah a in-save e.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            {(pdfSuccessResult.downloadUrl || pdfSuccessResult.blobUrl) && (
+            {(pdfSuccessResult.downloadUrl || pdfSuccessResult.blobUrl || pdfSuccessResult.dataUri) && (
               <>
                 <button
                   onClick={handleOpenPdfBlob}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-slate-900 font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
-                  title="Download another copy"
+                  title="Phone-ah save nawn / download nawn"
                 >
                   <FolderDown className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Download Nawn</span>
+                  <span>Phone-ah Save Nawn</span>
                 </button>
 
                 <button
