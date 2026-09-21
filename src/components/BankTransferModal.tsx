@@ -221,7 +221,10 @@ export const BankTransferModal: React.FC<BankTransferModalProps> = ({
         </body>
       </html>
     `;
-    printHtmlSafely(html, `RonPay Transfer Receipt - ${tx.id}`);
+    const bawmName = (tx.campaignTitle || 'Transfer_Receipt').replace(/[/\\?%*:|"<>]/g, '').trim();
+    const docTitle = `RonPay Transfer Receipt - ${bawmName}`;
+    const fileName = `RonPay-${bawmName.replace(/\s+/g, '_')}.pdf`;
+    printHtmlSafely(html, docTitle, fileName);
   };
 
   return (

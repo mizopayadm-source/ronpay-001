@@ -427,10 +427,18 @@ public class MainActivity extends AppCompatActivity {
 
                 byte[] fileBytes = Base64.decode(pureBase64, Base64.DEFAULT);
 
-                // Ensure clean filename
+                // Ensure clean, user-friendly Bawm filename (avoid purely numeric timestamps / IDs)
                 String cleanName = (fileName != null && !fileName.trim().isEmpty())
-                        ? fileName.trim()
-                        : "RonPay_Report_" + System.currentTimeMillis();
+                        ? fileName.trim().replaceAll("[/\\\\?%*:|\"<>]", "_")
+                        : "RonPay-Bawm-Report.pdf";
+                
+                // If cleanName is purely numeric or generic transaction ID, make it descriptive
+                if (cleanName.matches("^\\d+(\\.pdf)?$") || cleanName.matches("^(rpay|txn|bill)[\\w-]*(\\.pdf)?$")) {
+                    cleanName = "RonPay-Pawisa_Thawhchhan.pdf";
+                }
+                if (!cleanName.toLowerCase().endsWith(".pdf") && (mimeType != null && mimeType.contains("pdf"))) {
+                    cleanName += ".pdf";
+                }
 
                 Uri targetUri = null;
                 File targetFile = null;

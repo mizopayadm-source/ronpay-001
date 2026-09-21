@@ -241,24 +241,75 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     setPdfStatusText('Document buatsaih mek a ni...');
     setPdfSuccessResult(null);
 
-    // Requirement: PDF filename must be 'RonPay-Bawm/Pawisa Thawhchhan' rather than transaction ID
+    // Requirement: PDF filename must use Bawm/Campaign name rather than numbers or transaction IDs
     const fileName = (() => {
+      // 1. If explicit fileName provided, clean and sanitize it
+      let rawCandidate = '';
       if (modalData.fileName) {
-        const raw = modalData.fileName.replace(/\.pdf$/i, '');
-        return `${raw}.pdf`;
+        rawCandidate = modalData.fileName.replace(/\.pdf$/i, '').trim();
       }
-      let rawName = (modalData.docTitle || '')
-        .replace(/^RonPay\s*[-–—:]*\s*/i, '')
-        .replace(/^(Official\s+)?Receipt\s*[-–—:]*\s*/i, '')
-        .replace(/^(Transaction\s+)?Slip\s*[-–—:]*\s*/i, '')
-        .replace(/[/\\?%*:|"<>]/g, '')
+
+      // Check if candidate is purely numbers/IDs or generic receipt
+      const isCandidateGeneric = (str: string) => {
+        const s = str.trim();
+        if (!s) return true;
+        // Pure digits or timestamps like 177432123
+        if (/^\d+$/.test(s)) return true;
+        // Transaction IDs like RPAY_TXN_..., TXN_..., BILL-...
+        if (/^(rpay|txn|bill|order)[\w-]*$/i.test(s)) return true;
+        // Generic receipt/slip names
+        if (/^(receipt|slip|official_receipt|transaction_slip)$/i.test(s)) return true;
+        return false;
+      };
+
+      if (!rawCandidate || isCandidateGeneric(rawCandidate)) {
+        // Try extracting from docTitle
+        let docTitleCandidate = (modalData.docTitle || '')
+          .replace(/^RonPay\s*[-–—:]*\s*/i, '')
+          .replace(/^(Official\s+)?Receipt\s*[-–—:]*\s*/i, '')
+          .replace(/^(Transaction\s+)?Slip\s*[-–—:]*\s*/i, '')
+          .replace(/[/\\?%*:|"<>]/g, '')
+          .trim();
+
+        if (docTitleCandidate && !isCandidateGeneric(docTitleCandidate)) {
+          rawCandidate = docTitleCandidate;
+        }
+      }
+
+      // If still missing or numeric/ID, try parsing HTML for Bawm/Campaign name
+      if (!rawCandidate || isCandidateGeneric(rawCandidate)) {
+        if (modalData.html) {
+          // Look for campaign name, Bawm name, or receipt title in HTML
+          const campaignMatch = 
+            modalData.html.match(/(?:Campaign|Bawm|Thawhchhan|Purpose|Category)[\s:]*<[^>]*>([^<]+)</i) ||
+            modalData.html.match(/class=["'][^"']*(?:campaign|bawm|title)[^"']*["'][^>]*>([^<]+)</i) ||
+            modalData.html.match(/<h[1-3][^>]*>([^<]+)<\/h[1-3]>/i);
+          
+          if (campaignMatch && campaignMatch[1]) {
+            const extracted = campaignMatch[1].replace(/[/\\?%*:|"<>]/g, '').trim();
+            if (extracted && !isCandidateGeneric(extracted)) {
+              rawCandidate = extracted;
+            }
+          }
+        }
+      }
+
+      // Fallback if none found
+      if (!rawCandidate || isCandidateGeneric(rawCandidate)) {
+        rawCandidate = 'Pawisa_Thawhchhan';
+      }
+
+      // Ensure RonPay- prefix with Bawm name
+      let cleanBawmName = rawCandidate
+        .replace(/^RonPay[-_\s]*/i, '')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
         .trim();
 
-      if (!rawName || rawName.startsWith('RPAY_TXN_') || rawName.startsWith('TXN_') || rawName.toLowerCase() === 'receipt' || rawName.toLowerCase() === 'slip') {
-        rawName = 'Pawisa_Thawhchhan';
+      if (!cleanBawmName || cleanBawmName === '_') {
+        cleanBawmName = 'Pawisa_Thawhchhan';
       }
 
-      const cleanBawmName = rawName.replace(/\s+/g, '_');
       return `RonPay-${cleanBawmName}.pdf`;
     })();
 
