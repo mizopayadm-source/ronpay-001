@@ -272,18 +272,23 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
       if (result.success) {
         setPdfSuccessResult(result);
       } else {
-        handleDownloadHTML();
+        console.warn('exportElementToPDF returned failure, falling back to system print / PDF save');
+        setWaToast('System print a in hawng e, "Save as PDF" thlang rawh le');
+        setTimeout(() => setWaToast(''), 4000);
+        handlePrint();
       }
     } catch (err) {
       console.error('PDF export error', err);
-      handleDownloadHTML();
+      setWaToast('System print a in hawng e, "Save as PDF" thlang rawh le');
+      setTimeout(() => setWaToast(''), 4000);
+      handlePrint();
     } finally {
       setIsGeneratingPdf(false);
       setPdfStatusText('');
     }
   };
 
-  // Open generated PDF or re-download on mobile
+  // Open generated PDF or re-download on mobile / desktop
   const handleOpenPdfBlob = () => {
     const targetUrl = pdfSuccessResult?.downloadUrl || pdfSuccessResult?.blobUrl;
     if (targetUrl) {
@@ -301,22 +306,25 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     }
   };
 
-  // Android Phone Share / Save File option
+  // Mobile Phone Share / Save File option (Only for genuine mobile devices)
   const handleShareToPhone = async () => {
     if (!pdfSuccessResult?.blob) return;
-    try {
-      const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: pdfSuccessResult.fileName,
-          text: `RonPay Receipt PDF: ${pdfSuccessResult.fileName}`,
-          files: [file],
-        });
-        return;
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobileDevice && navigator.canShare) {
+      try {
+        const file = new File([pdfSuccessResult.blob], pdfSuccessResult.fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: pdfSuccessResult.fileName,
+            text: `RonPay Receipt PDF: ${pdfSuccessResult.fileName}`,
+            files: [file],
+          });
+          return;
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        console.warn('Share error, downloading instead', err);
       }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return;
-      console.warn('Share error, downloading instead', err);
     }
     handleOpenPdfBlob();
   };
@@ -821,7 +829,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               </p>
               <p className="text-[10px] text-emerald-200/90 flex items-center gap-1">
                 <FolderDown className="w-3 h-3 text-emerald-400 shrink-0" />
-                I phone <b>Downloads / Files</b> folder-ah a in-save e.
+                I device <b>Downloads</b> folder-ah a in-save e.
               </p>
             </div>
           </div>
@@ -849,15 +857,15 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
               </>
             )}
 
-            {/* Android / Mobile Native Share & Save */}
-            {pdfSuccessResult.blob && typeof navigator !== 'undefined' && 'share' in navigator && (
+            {/* Mobile Native Share (Restricted to mobile devices) */}
+            {pdfSuccessResult.blob && typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && 'share' in navigator && (
               <button
                 onClick={handleShareToPhone}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs shadow-md transition cursor-pointer"
                 title="Phone-ah save / share rawh"
               >
                 <Share2 className="w-3.5 h-3.5 text-white" />
-                <span>Phone-ah Save</span>
+                <span>Phone Share</span>
               </button>
             )}
 

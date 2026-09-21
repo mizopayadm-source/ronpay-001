@@ -5709,9 +5709,13 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-app.post('/api/prepare-download', (req: Request, res: Response) => {
+const handlePrepareDownload = (req: Request, res: Response) => {
   try {
-    const { fileName, mimeType, base64Data, textContent } = req.body;
+    const fileName = req.body.fileName;
+    const mimeType = req.body.mimeType || 'application/octet-stream';
+    const base64Data = req.body.base64Data || req.body.base64;
+    const textContent = req.body.textContent || req.body.content;
+
     if (!fileName || (!base64Data && !textContent)) {
       return res.status(400).json({ success: false, error: 'Missing fileName or file content' });
     }
@@ -5728,8 +5732,8 @@ app.post('/api/prepare-download', (req: Request, res: Response) => {
 
     tempDownloadStorage.set(downloadId, {
       data: fileBuffer,
-      mimeType: mimeType || 'application/octet-stream',
-      fileName: fileName,
+      mimeType,
+      fileName,
       createdAt: Date.now(),
     });
 
@@ -5742,7 +5746,10 @@ app.post('/api/prepare-download', (req: Request, res: Response) => {
     console.error('Error preparing report download:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+
+app.post('/api/prepare-download', handlePrepareDownload);
+app.post('/api/download/prepare', handlePrepareDownload);
 
 app.get('/api/download-file/:id/:fileName', (req: Request, res: Response) => {
   try {

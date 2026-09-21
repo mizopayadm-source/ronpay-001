@@ -27,34 +27,71 @@ export async function exportElementToPDF(
     // Ensure clean filename
     const cleanFileName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
 
-    // 1. Capture element to high-res canvas (1.5x density provides crisp 250+ DPI text while being 3x faster)
+    // 1. Capture element to high-res canvas (1.5x density provides crisp 250+ DPI text while being fast)
     if (onProgress) onProgress('Snapshot siam mek a ni...');
     
-    // Temporarily ensure element is at full width without zoom scale distortion
+    // Temporarily ensure element is visible without zoom scale distortion
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
-    // Measure target width based on element's natural bounds (prevents massive canvas overhead on receipts)
+    // Measure target width based on element's natural bounds
     const elWidth = element.offsetWidth || element.clientWidth || element.scrollWidth || 420;
     const targetWidth = Math.min(Math.max(elWidth, 380), 800);
 
-    const canvas = await html2canvas(element, {
-      scale: 1.5,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      imageTimeout: 1500,
-      windowWidth: targetWidth,
-    });
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await html2canvas(element, {
+        scale: 1.5,
+        useCORS: true,
+        allowTaint: false, // Must be false to prevent canvas tainting SecurityError on toDataURL
+        logging: false,
+        backgroundColor: '#ffffff',
+        imageTimeout: 2000,
+        windowWidth: targetWidth,
+        onclone: (clonedDoc, clonedEl) => {
+          // Ensure cloned element is unscaled and laid out cleanly
+          clonedEl.style.transform = 'none';
+          clonedEl.style.position = 'relative';
+          clonedEl.style.top = '0';
+          clonedEl.style.left = '0';
+          clonedEl.style.margin = '0 auto';
+          clonedEl.style.width = '794px';
+          
+          // Mark all images as anonymous crossOrigin in the clone
+          const imgs = clonedEl.querySelectorAll('img');
+          imgs.forEach((img) => {
+            img.setAttribute('crossorigin', 'anonymous');
+          });
+        }
+      });
+    } catch (canvasErr) {
+      console.warn('html2canvas initial attempt failed, retrying without external images:', canvasErr);
+      // Fallback html2canvas without cross-origin images to ensure PDF generation always succeeds
+      canvas = await html2canvas(element, {
+        scale: 1.2,
+        useCORS: false,
+        allowTaint: false,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: targetWidth,
+        ignoreElements: (el) => el.tagName.toLowerCase() === 'img' && (el as HTMLImageElement).src.startsWith('http'),
+      });
+    }
 
     // Restore original transform
     element.style.transform = originalTransform;
 
     if (onProgress) onProgress('PDF phek rem fel mek a ni...');
 
-    // 0.90 JPEG encoding is 4x faster than 0.95 with identical visual clarity for text
-    const imgData = canvas.toDataURL('image/jpeg', 0.90);
+    // Safely encode canvas data URL (handles any tainted edge-case)
+    let imgData = '';
+    try {
+      imgData = canvas.toDataURL('image/jpeg', 0.90);
+    } catch (dataUrlErr) {
+      console.warn('canvas.toDataURL failed, retrying PNG:', dataUrlErr);
+      imgData = canvas.toDataURL('image/png');
+    }
+
     const canvasWidth = canvas.width;
     const canvasHeight = canvas.height;
 
@@ -122,7 +159,6 @@ export async function exportElementToPDF(
     const dataUri = pdf.output('datauristring');
 
     // Multi-tier instant download execution (Web & Mobile Android/iOS)
-    // NOTE: Do NOT use target="_blank" because on Android it gets blocked by popup blocker or opens blank tabs
     let downloadTriggered = false;
     try {
       const a = document.createElement('a');
@@ -136,7 +172,7 @@ export async function exportElementToPDF(
         try {
           document.body.removeChild(a);
         } catch {}
-      }, 1000);
+      }, 2000);
     } catch (e) {
       console.warn('Direct blob anchor download failed, trying pdf.save fallback', e);
     }
@@ -155,11 +191,11 @@ export async function exportElementToPDF(
     try {
       const base64Data = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
       if (typeof fetch !== 'undefined') {
-        const prepareResp = await fetch('/api/download/prepare', {
+        const prepareResp = await fetch('/api/prepare-download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            base64: base64Data,
+            base64Data: base64Data,
             fileName: cleanFileName,
             mimeType: 'application/pdf',
           }),
