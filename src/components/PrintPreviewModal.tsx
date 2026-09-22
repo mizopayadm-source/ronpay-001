@@ -241,7 +241,7 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
     setPdfStatusText('Document buatsaih mek a ni...');
     setPdfSuccessResult(null);
 
-    // Requirement: PDF filename must use Bawm/Campaign name rather than numbers or transaction IDs
+    // Requirement: PDF filename must follow 'RonPay_Report_<Bawm/Org/Campaign>' (e.g. RonPay_Report_BMP_Shillong.pdf)
     const fileName = (() => {
       // 1. If explicit fileName provided, clean and sanitize it
       let rawCandidate = '';
@@ -258,14 +258,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         // Transaction IDs like RPAY_TXN_..., TXN_..., BILL-...
         if (/^(rpay|txn|bill|order)[\w-]*$/i.test(s)) return true;
         // Generic receipt/slip names
-        if (/^(receipt|slip|official_receipt|transaction_slip)$/i.test(s)) return true;
+        if (/^(receipt|slip|official_receipt|transaction_slip|document|print_document)$/i.test(s)) return true;
         return false;
       };
 
       if (!rawCandidate || isCandidateGeneric(rawCandidate)) {
         // Try extracting from docTitle
         let docTitleCandidate = (modalData.docTitle || '')
-          .replace(/^RonPay\s*[-–—:]*\s*/i, '')
+          .replace(/^RonPay\s*[-–—:]*\s*(Report\s*[-–—:]*\s*)?/i, '')
           .replace(/^(Official\s+)?Receipt\s*[-–—:]*\s*/i, '')
           .replace(/^(Transaction\s+)?Slip\s*[-–—:]*\s*/i, '')
           .replace(/[/\\?%*:|"<>]/g, '')
@@ -276,13 +276,13 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         }
       }
 
-      // If still missing or numeric/ID, try parsing HTML for Bawm/Campaign name
+      // If still missing or numeric/ID, try parsing HTML for Bawm/Campaign/Org name
       if (!rawCandidate || isCandidateGeneric(rawCandidate)) {
         if (modalData.html) {
-          // Look for campaign name, Bawm name, or receipt title in HTML
+          // Look for campaign name, Bawm name, organization name, or receipt title in HTML
           const campaignMatch = 
-            modalData.html.match(/(?:Campaign|Bawm|Thawhchhan|Purpose|Category)[\s:]*<[^>]*>([^<]+)</i) ||
-            modalData.html.match(/class=["'][^"']*(?:campaign|bawm|title)[^"']*["'][^>]*>([^<]+)</i) ||
+            modalData.html.match(/(?:Campaign|Bawm|Thawhchhan|Purpose|Category|Kohhran|Branch|Pawl|Department)[\s:]*<[^>]*>([^<]+)</i) ||
+            modalData.html.match(/class=["'][^"']*(?:campaign|bawm|org|title|header-title)[^"']*["'][^>]*>([^<]+)</i) ||
             modalData.html.match(/<h[1-3][^>]*>([^<]+)<\/h[1-3]>/i);
           
           if (campaignMatch && campaignMatch[1]) {
@@ -299,18 +299,20 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
         rawCandidate = 'Pawisa_Thawhchhan';
       }
 
-      // Ensure RonPay- prefix with Bawm name
+      // Strip redundant prefixes and clean to valid snake_case
       let cleanBawmName = rawCandidate
-        .replace(/^RonPay[-_\s]*/i, '')
+        .replace(/^RonPay[-_\s]*(Report[-_\s]*)?/i, '')
+        .replace(/[/\\?%*:|"<>]/g, '')
         .replace(/\s+/g, '_')
         .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
         .trim();
 
-      if (!cleanBawmName || cleanBawmName === '_') {
+      if (!cleanBawmName) {
         cleanBawmName = 'Pawisa_Thawhchhan';
       }
 
-      return `RonPay-${cleanBawmName}.pdf`;
+      return `RonPay_Report_${cleanBawmName}.pdf`;
     })();
 
     try {

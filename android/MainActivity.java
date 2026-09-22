@@ -427,15 +427,26 @@ public class MainActivity extends AppCompatActivity {
 
                 byte[] fileBytes = Base64.decode(pureBase64, Base64.DEFAULT);
 
-                // Ensure clean, user-friendly Bawm filename (avoid purely numeric timestamps / IDs)
+                // Ensure clean, user-friendly filename format: RonPay_Report_<Target>.pdf (e.g. RonPay_Report_BMP_Shillong.pdf)
                 String cleanName = (fileName != null && !fileName.trim().isEmpty())
                         ? fileName.trim().replaceAll("[/\\\\?%*:|\"<>]", "_")
-                        : "RonPay-Bawm-Report.pdf";
+                        : "RonPay_Report_Bawm.pdf";
                 
                 // If cleanName is purely numeric or generic transaction ID, make it descriptive
-                if (cleanName.matches("^\\d+(\\.pdf)?$") || cleanName.matches("^(rpay|txn|bill)[\\w-]*(\\.pdf)?$")) {
-                    cleanName = "RonPay-Pawisa_Thawhchhan.pdf";
+                if (cleanName.matches("^\\d+(\\.pdf)?$") || cleanName.matches("^(rpay|txn|bill)[\\w-]*(\\.pdf)?$") || cleanName.equalsIgnoreCase("receipt.pdf") || cleanName.equalsIgnoreCase("slip.pdf")) {
+                    cleanName = "RonPay_Report_Pawisa_Thawhchhan.pdf";
                 }
+                
+                // Standardize prefix to RonPay_Report_
+                if (!cleanName.startsWith("RonPay_Report_")) {
+                    String core = cleanName.replaceAll("(?i)^RonPay[-_\\s]*(Report[-_\\s]*)?", "")
+                                           .replaceAll("(?i)\\.pdf$", "")
+                                           .replaceAll("^_+|__+$", "")
+                                           .trim();
+                    if (core.isEmpty()) core = "Pawisa_Thawhchhan";
+                    cleanName = "RonPay_Report_" + core + ".pdf";
+                }
+
                 if (!cleanName.toLowerCase().endsWith(".pdf") && (mimeType != null && mimeType.contains("pdf"))) {
                     cleanName += ".pdf";
                 }

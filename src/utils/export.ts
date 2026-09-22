@@ -1554,7 +1554,12 @@ export const printTransactionsPDF = (
     creatorInfo,
     options
   );
-  printHtmlSafely(html, `${campaignName} - ${title}`);
+  const cleanTarget = (campaignName || creatorInfo?.orgName || 'Financial_Statement')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  const fileName = `RonPay_Report_${cleanTarget}.pdf`;
+  printHtmlSafely(html, `${campaignName} - ${title}`, fileName);
 };
 
 /**
@@ -1805,7 +1810,11 @@ export const exportMasterLedgerPrint = (
   location?: string
 ) => {
   const html = generateMasterLedgerPrintHtml(members, transactions, campaignTitle, orgName, logoUrl, location);
-  printHtmlSafely(html, `Master Ledger • ${orgName}`);
+  const cleanTarget = (campaignTitle || orgName || 'Master_Ledger')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Master Ledger • ${orgName}`, `RonPay_Report_${cleanTarget}.pdf`);
 };
 
 /**
@@ -1947,7 +1956,11 @@ export const exportMemberCategoryMatrixPrint = (
   location?: string
 ) => {
   const html = generateMemberCategoryMatrixPrintHtml(member, categories, transactions, orgName, logoUrl, location);
-  printHtmlSafely(html, `Mimal Record • ${member.name} (${member.id})`);
+  const cleanName = (member.name || member.id || 'Member')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Mimal Record • ${member.name} (${member.id})`, `RonPay_Report_${cleanName}.pdf`);
 };
 
 /**
@@ -2090,6 +2103,10 @@ export const exportMemberPassbookVerticalPrint = (
   location?: string
 ) => {
   const html = generateMemberPassbookVerticalPrintHtml(member, categories, transactions, orgName, logoUrl, location);
-  printHtmlSafely(html, `Passbook Card • ${member.name} (${member.id})`);
+  const cleanName = (member.name || member.id || 'Passbook')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Passbook Card • ${member.name} (${member.id})`, `RonPay_Report_${cleanName}.pdf`);
 };
 

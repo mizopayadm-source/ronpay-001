@@ -47,6 +47,7 @@ import {
 } from './utils/storage';
 import {
   initFirestoreRealtimeSync,
+  stopAllFirestoreListeners,
   pushAllLocalDataToFirestore,
   deleteCampaignFromFirestore,
   deleteTransactionFromFirestore,
@@ -212,6 +213,19 @@ export default function App() {
     }
   });
 
+  // Reload helper
+  const reloadLocalData = useCallback(() => {
+    setCampaigns(getStoredCampaigns());
+    setTransactions(getStoredTransactions());
+    setCreators(getStoredCreatorsList());
+    setCreatorProfile(getStoredCreatorProfile());
+    setPricingConfig(getStoredPricingConfig());
+    setAnnouncement(getStoredAnnouncement());
+    setAuditLogs(getStoredAuditLogs());
+    setMembersState(getMembers());
+    setUserPaidIds(getStoredUserPaidTxIds());
+  }, []);
+
   // Real-time Firestore Sync initialization
   useEffect(() => {
     const unsub = initFirestoreRealtimeSync({
@@ -259,7 +273,13 @@ export default function App() {
       },
     });
 
+    const handleBeforeUnload = () => {
+      stopAllFirestoreListeners();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       unsub();
     };
   }, []);
@@ -421,19 +441,6 @@ export default function App() {
     };
   }, []);
 
-  // Reload helper
-  const reloadLocalData = useCallback(() => {
-    setCampaigns(getStoredCampaigns());
-    setTransactions(getStoredTransactions());
-    setCreators(getStoredCreatorsList());
-    setCreatorProfile(getStoredCreatorProfile());
-    setPricingConfig(getStoredPricingConfig());
-    setAnnouncement(getStoredAnnouncement());
-    setAuditLogs(getStoredAuditLogs());
-    setMembersState(getMembers());
-    setUserPaidIds(getStoredUserPaidTxIds());
-  }, []);
-
   // Force cloud refresh across Firestore and Server Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
@@ -453,6 +460,12 @@ export default function App() {
       console.warn('Cloud refresh note:', e);
     }
   }, [reloadLocalData]);
+
+  // Maintain campaignsRef to stabilize URL routing without re-triggering popstate effects
+  const campaignsRef = useRef<Campaign[]>(campaigns);
+  useEffect(() => {
+    campaignsRef.current = campaigns;
+  }, [campaigns]);
 
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
   const applyRouteFromUrl = useCallback(async () => {
@@ -494,7 +507,7 @@ export default function App() {
     if (route.isPhonePeOpen && !route.receiptId) {
       // Direct payment link or /phonepe route: select campaign and show checkout (without popup auto-spawning)
       const stored = getStoredCampaigns();
-      const targetCamp = route.campaign || campaigns[0] || stored[0];
+      const targetCamp = route.campaign || campaignsRef.current[0] || stored[0];
       if (targetCamp) {
         setSelectedCampaign(targetCamp);
         setSelectedCategory(targetCamp.category);
@@ -566,7 +579,7 @@ export default function App() {
 
         const meta = route.receiptMeta;
         const baseTx = found || parsedPending;
-        const allCamps = [...campaigns, ...getStoredCampaigns()];
+        const allCamps = [...campaignsRef.current, ...getStoredCampaigns()];
         const targetCampId = data?.data?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
         const matchedCamp = allCamps.find(c => c.id === targetCampId);
 
@@ -653,7 +666,7 @@ export default function App() {
         const meta = route.receiptMeta;
         const baseTx = found || parsedPending;
 
-        const allCamps = [...campaigns, ...getStoredCampaigns()];
+        const allCamps = [...campaignsRef.current, ...getStoredCampaigns()];
         const targetCampId = sData?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
         const matchedCamp = allCamps.find(c => c.id === targetCampId);
 
@@ -750,7 +763,7 @@ export default function App() {
         updateBrowserUrl('failed', null, null, { replace: true });
       }
     }
-  }, [campaigns]);
+  }, []);
 
   const currentScreenRef = useRef<ScreenId>(currentScreen);
   useEffect(() => {
@@ -822,11 +835,16 @@ export default function App() {
   useEffect(() => {
     if (selectedCampaign && campaigns.length > 0) {
       const matched = campaigns.find(c => c.id.toLowerCase() === selectedCampaign.id.toLowerCase());
-      if (matched && matched !== selectedCampaign) {
+      if (matched && (
+        matched.status !== selectedCampaign.status ||
+        matched.title !== selectedCampaign.title ||
+        matched.targetAmount !== selectedCampaign.targetAmount ||
+        matched.upiId !== selectedCampaign.upiId
+      )) {
         setSelectedCampaign(matched);
       }
     }
-  }, [campaigns, selectedCampaign?.id]);
+  }, [campaigns, selectedCampaign]);
 
   // Handlers for Navigation
   const handleNavigate = (screen: ScreenId, options: { replace?: boolean } = { replace: false }) => {

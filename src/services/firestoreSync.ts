@@ -178,11 +178,14 @@ export function smartMerge<T extends Record<string, any>>(localItems: T[], remot
   return Array.from(map.values());
 }
 
+let hasSeededCloudThisSession = false;
+
 /**
- * Check and seed Firestore with initial default data if empty on cold start
+ * Check and seed Firestore with initial default data if empty on cold start (run once per session)
  */
 export async function seedInitialCloudDataIfEmpty() {
-  if (!isNetworkOnline) return;
+  if (hasSeededCloudThisSession || !isNetworkOnline) return;
+  hasSeededCloudThisSession = true;
   try {
     // 1. Campaigns seed check
     const campaignsSnap = await getDocs(collection(db, 'campaigns'));
@@ -269,20 +272,81 @@ function setLocalJson(key: string, data: any) {
   }
 }
 
+// Global singleton state for Firestore realtime synchronization
+let activeFirestoreUnsubscribers: Array<() => void> = [];
+const activeSubscribers = new Set<FirestoreSyncCallbacks>();
+let isFirestoreListening = false;
+
+/**
+ * Cleanly unsubscribe and stop all active Firestore snapshot listeners across the app.
+ */
+export function stopAllFirestoreListeners(): void {
+  if (activeFirestoreUnsubscribers.length > 0) {
+    activeFirestoreUnsubscribers.forEach(unsub => {
+      try {
+        unsub();
+      } catch (e) {
+        // ignore
+      }
+    });
+    activeFirestoreUnsubscribers = [];
+  }
+  isFirestoreListening = false;
+  activeSubscribers.clear();
+  updateStatus('offline', 'Firestore listeners detached.');
+  console.info('[RonPay Cloud Sync] Successfully stopped and cleaned up all Firestore snapshot listeners.');
+}
+
 /**
  * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners.
- * Every change from other browsers / mobile apps immediately triggers the callbacks and updates localStorage.
+ * Employs a singleton listener pattern: exactly 1 set of 7 listeners runs across all subscribers.
+ * Subscribing components receive real-time updates and properly decrement/cleanup on unmount.
  */
 export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
-  const unsubscribers: Array<() => void> = [];
+  // 1. Register callbacks in active subscribers set
+  activeSubscribers.add(callbacks);
+
+  // 2. If listeners are already active, do NOT create duplicate onSnapshot listeners (prevents the 49 listeners leak)
+  if (isFirestoreListening) {
+    if (callbacks.onStatusChange) {
+      callbacks.onStatusChange(connectionStatus);
+    }
+    return () => {
+      activeSubscribers.delete(callbacks);
+      if (activeSubscribers.size === 0) {
+        stopAllFirestoreListeners();
+      }
+    };
+  }
+
+  // 3. First time or re-attaching: ensure previous listeners are stopped cleanly
+  stopAllFirestoreListeners();
+  activeSubscribers.add(callbacks);
+  isFirestoreListening = true;
   updateStatus('connecting');
 
-  // Trigger initial cloud seed check
+  // Trigger initial cloud seed check safely once per session
   seedInitialCloudDataIfEmpty().catch(() => {});
+
+  const newUnsubscribers: Array<() => void> = [];
+
+  // Helper to safely broadcast to all active subscribers
+  const broadcast = <K extends keyof FirestoreSyncCallbacks>(key: K, ...args: any[]) => {
+    activeSubscribers.forEach(sub => {
+      try {
+        const fn = sub[key] as any;
+        if (typeof fn === 'function') {
+          fn(...args);
+        }
+      } catch (err) {
+        console.error(`[FirestoreSync] Broadcast error on ${String(key)}:`, err);
+      }
+    });
+  };
 
   // 1. Transactions Listener (onSnapshot on transactions collection)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(100));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -297,20 +361,20 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const deletedIds = getLocalDeletedTxIds();
         const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
 
-        // Safely merge cleanRemote with ALL valid local transactions so local records are NEVER purged
+        // Safely merge cleanRemote with valid local transactions for UI display
+        // IMPORTANT: NEVER call syncTransactionToFirestore inside onSnapshot to avoid infinite read/write feedback loops!
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
         // First add remote
         for (const t of cleanRemote) {
           if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
         }
-        // Then merge local (push any missing local to Firestore in background)
+        // Then merge local without writing back
         for (const t of localTx) {
           if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
             const k = String(t.id).toLowerCase().trim();
             if (!txMap.has(k)) {
               txMap.set(k, t);
-              syncTransactionToFirestore(t).catch(() => {});
             }
           }
         }
@@ -322,9 +386,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         });
 
         setLocalJson('ronpay_transactions_v2', merged);
-        if (callbacks.onTransactionsUpdate) {
-          callbacks.onTransactionsUpdate(merged);
-        }
+        broadcast('onTransactionsUpdate', merged);
         try {
           window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
           window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
@@ -334,7 +396,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       updateStatus('offline', error?.message);
       logFirestoreNetworkNote('Transactions listener', error);
     });
-    unsubscribers.push(unsubTx);
+    newUnsubscribers.push(unsubTx);
   } catch (err) {
     logFirestoreNetworkNote('Attach transactions listener', err);
     updateStatus('offline');
@@ -367,9 +429,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
           return timeB - timeA;
         });
         setLocalJson('ronpay_campaigns_v2', sorted);
-        if (callbacks.onCampaignsUpdate) {
-          callbacks.onCampaignsUpdate(sorted);
-        }
+        broadcast('onCampaignsUpdate', sorted);
         try {
           window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: sorted }));
         } catch {}
@@ -377,7 +437,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     }, (error) => {
       logFirestoreNetworkNote('Campaigns listener', error);
     });
-    unsubscribers.push(unsubCamp);
+    newUnsubscribers.push(unsubCamp);
   } catch (err) {
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
@@ -398,9 +458,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
         const merged = smartMerge(localMembers, remoteMembers, 'id');
         setLocalJson('ronpay_kumtluang_members_v1', merged);
-        if (callbacks.onMembersUpdate) {
-          callbacks.onMembersUpdate(merged);
-        }
+        broadcast('onMembersUpdate', merged);
         try {
           window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
         } catch {}
@@ -408,7 +466,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     }, (error) => {
       logFirestoreNetworkNote('Members listener', error);
     });
-    unsubscribers.push(unsubMem);
+    newUnsubscribers.push(unsubMem);
   } catch (err) {
     logFirestoreNetworkNote('Attach members listener', err);
   }
@@ -429,9 +487,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const localCreators = getLocalJson<CreatorProfile[]>('ronpay_creators_list_v2', INITIAL_REGISTERED_CREATORS);
         const merged = smartMerge(localCreators, remoteCreators, 'phone');
         setLocalJson('ronpay_creators_list_v2', merged);
-        if (callbacks.onCreatorsUpdate) {
-          callbacks.onCreatorsUpdate(merged);
-        }
+        broadcast('onCreatorsUpdate', merged);
 
         // Sync active creator profile if phone matches
         const currentActive = getLocalJson<CreatorProfile | null>('ronpay_creator_profile_v2', null);
@@ -454,7 +510,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     }, (error) => {
       logFirestoreNetworkNote('Creators listener', error);
     });
-    unsubscribers.push(unsubCreators);
+    newUnsubscribers.push(unsubCreators);
   } catch (err) {
     logFirestoreNetworkNote('Attach creators listener', err);
   }
@@ -467,15 +523,13 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const data = docSnap.data() as AnnouncementBanner;
         if (data && data.id) {
           setLocalJson('ronpay_announcement_v1', data);
-          if (callbacks.onAnnouncementUpdate) {
-            callbacks.onAnnouncementUpdate(data);
-          }
+          broadcast('onAnnouncementUpdate', data);
         }
       }
     }, (error) => {
       logFirestoreNetworkNote('Announcement config listener', error);
     });
-    unsubscribers.push(unsubConfig);
+    newUnsubscribers.push(unsubConfig);
   } catch (err) {
     logFirestoreNetworkNote('Attach systemConfig announcement listener', err);
   }
@@ -488,22 +542,20 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const data = docSnap.data() as SystemPricingConfig;
         if (data && data.categories) {
           setLocalJson('ronpay_pricing_config_v1', data);
-          if (callbacks.onPricingConfigUpdate) {
-            callbacks.onPricingConfigUpdate(data);
-          }
+          broadcast('onPricingConfigUpdate', data);
         }
       }
     }, (error) => {
       logFirestoreNetworkNote('Pricing config listener', error);
     });
-    unsubscribers.push(unsubPricing);
+    newUnsubscribers.push(unsubPricing);
   } catch (err) {
     logFirestoreNetworkNote('Attach pricing config listener', err);
   }
 
   // 7. Audit Logs Listener
   try {
-    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(100));
+    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
     const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
       const logs: AuditLog[] = [];
       snapshot.forEach(docSnap => {
@@ -514,27 +566,25 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       });
       if (logs.length > 0) {
         setLocalJson('ronpay_audit_logs_v1', logs);
-        if (callbacks.onAuditLogsUpdate) {
-          callbacks.onAuditLogsUpdate(logs);
-        }
+        broadcast('onAuditLogsUpdate', logs);
       }
     }, (err) => {
       logFirestoreNetworkNote('Audit logs listener', err);
     });
-    unsubscribers.push(unsubAudit);
+    newUnsubscribers.push(unsubAudit);
   } catch (err) {
     logFirestoreNetworkNote('Attach audit logs listener', err);
   }
 
-  // Return unsubscribe all function
+  activeFirestoreUnsubscribers = newUnsubscribers;
+
+  // Return unsubscribe function for this specific subscriber
   return () => {
-    unsubscribers.forEach(unsub => {
-      try {
-        unsub();
-      } catch (e) {
-        // ignore
-      }
-    });
+    activeSubscribers.delete(callbacks);
+    // When the last subscriber unmounts, unsubscribe all 7 Firestore snapshot listeners
+    if (activeSubscribers.size === 0) {
+      stopAllFirestoreListeners();
+    }
   };
 }
 
@@ -792,7 +842,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
     return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
   }
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(100));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {
@@ -816,7 +866,6 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
           const k = String(t.id).toLowerCase().trim();
           if (!txMap.has(k)) {
             txMap.set(k, t);
-            syncTransactionToFirestore(t).catch(() => {});
           }
         }
       }

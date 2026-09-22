@@ -579,8 +579,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
       const campaignTitle = resolveTxCampaignTitle(tx) || formatCategoryBawmLabel(effectiveCat) || 'Pawisa_Thawh';
       const cleanBawm = campaignTitle.replace(/[/\\?%*:|"<>]/g, '').trim();
-      const docTitle = `RonPay - ${cleanBawm}`;
-      const fileName = `RonPay-${cleanBawm.replace(/\s+/g, '_')}.pdf`;
+      const docTitle = `RonPay Report - ${cleanBawm}`;
+      const fileName = `RonPay_Report_${cleanBawm.replace(/\s+/g, '_')}.pdf`;
 
       printHtmlSafely(html, docTitle, fileName);
     } catch (err) {
