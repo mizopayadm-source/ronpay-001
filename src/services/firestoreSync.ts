@@ -137,8 +137,11 @@ function getLocalDeletedTxIds(): Set<string> {
 /**
  * Merge local and remote collections by unique key, keeping newest and most complete records
  */
+import { compressDataUrl } from '../utils/imageCompressor';
+
 export function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems: T[], key: string = 'id'): T[] {
   const map = new Map<string, T>();
+  const isCustomLogo = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');
   
   // 1. Seed with local items
   for (const item of (localItems || [])) {
@@ -161,15 +164,37 @@ export function smartMerge<T extends Record<string, any>>(localItems: T[], remot
         const localValidity = existing.validityDate ? new Date(existing.validityDate).getTime() : 0;
 
         if (remoteTime > localTime) {
-          map.set(k, { ...existing, ...remote });
+          const mergedObj: any = { ...existing, ...remote };
+          // If existing local has a custom uploaded logo and remote cloud somehow reverted to stock unsplash, keep the custom logo
+          if (isCustomLogo((existing as any).imageUrl) && !isCustomLogo((remote as any).imageUrl)) {
+            mergedObj.imageUrl = (existing as any).imageUrl;
+          }
+          map.set(k, mergedObj);
         } else if (localTime > remoteTime) {
-          map.set(k, { ...remote, ...existing });
+          const mergedObj: any = { ...remote, ...existing };
+          // If remote cloud has a custom uploaded logo and existing local is only default unsplash placeholder, cloud custom logo MUST win!
+          if (isCustomLogo((remote as any).imageUrl) && !isCustomLogo((existing as any).imageUrl)) {
+            mergedObj.imageUrl = (remote as any).imageUrl;
+          }
+          map.set(k, mergedObj);
         } else if (remoteValidity > localValidity) {
-          map.set(k, { ...existing, ...remote });
+          const mergedObj: any = { ...existing, ...remote };
+          if (isCustomLogo((existing as any).imageUrl) && !isCustomLogo((remote as any).imageUrl)) {
+            mergedObj.imageUrl = (existing as any).imageUrl;
+          }
+          map.set(k, mergedObj);
         } else if (localValidity > remoteValidity) {
-          map.set(k, { ...remote, ...existing });
+          const mergedObj: any = { ...remote, ...existing };
+          if (isCustomLogo((remote as any).imageUrl) && !isCustomLogo((existing as any).imageUrl)) {
+            mergedObj.imageUrl = (remote as any).imageUrl;
+          }
+          map.set(k, mergedObj);
         } else {
-          map.set(k, { ...(existing || {}), ...remote });
+          const mergedObj: any = { ...(existing || {}), ...remote };
+          if (isCustomLogo((existing as any).imageUrl) && !isCustomLogo((remote as any).imageUrl)) {
+            mergedObj.imageUrl = (existing as any).imageUrl;
+          }
+          map.set(k, mergedObj);
         }
       }
     }
@@ -618,14 +643,27 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
 export async function syncCampaignToFirestore(campaign: Campaign): Promise<void> {
   if (!isNetworkOnline || !campaign || !campaign.id) return;
   try {
+    let finalImageUrl = campaign.imageUrl;
+    // Compress oversized base64 to ensure document never exceeds Firestore's 1MB limit
+    if (finalImageUrl && finalImageUrl.startsWith('data:') && finalImageUrl.length > 50000) {
+      try {
+        finalImageUrl = await compressDataUrl(finalImageUrl, 400, 400, 0.8);
+      } catch (err) {
+        console.warn('[FirestoreSync] Image compression warning:', err);
+      }
+    }
+
     const cleanCampaign = sanitizeForFirestore({
       ...campaign,
+      imageUrl: finalImageUrl,
       updatedAt: new Date().toISOString()
     });
     const docRef = doc(db, 'campaigns', campaign.id);
     await setDoc(docRef, cleanCampaign, { merge: true });
+    console.info(`[RonPay Cloud] Synced campaign "${campaign.title}" to Firestore successfully`);
   } catch (err) {
     logFirestoreNetworkNote('Campaign sync', err);
+    console.warn(`[RonPay Cloud] Campaign sync warning for "${campaign.title}":`, err);
   }
 }
 

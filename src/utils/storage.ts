@@ -1,5 +1,6 @@
 import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig } from '../types';
-import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS } from '../data/initialData';
+import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO } from '../data/initialData';
+import { compressDataUrl } from './imageCompressor';
 import {
   syncCampaignToFirestore,
   deleteCampaignFromFirestore,
@@ -352,6 +353,16 @@ export const getStoredCampaigns = (): Campaign[] => {
               if (!Array.isArray(updated.subCategories) || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
                 updated.subCategories = ['BMP Fund'];
               }
+              // If image is missing or still the default unsplash stock photo, upgrade to authentic BMP crest
+              if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com')) {
+                updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
+              }
+            }
+            if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {
+              // If image is missing or still the default unsplash stock photo, upgrade to authentic YMA crest
+              if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com')) {
+                updated.imageUrl = YMA_DEFAULT_LOGO;
+              }
             }
             return updated;
           });
@@ -543,7 +554,7 @@ export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
   const stamped: Campaign = {
     ...camp,
-    updatedAt: camp.updatedAt || new Date().toISOString()
+    updatedAt: new Date().toISOString()
   };
   const current = getStoredCampaigns();
   const idx = current.findIndex(c => c.id === stamped.id);
@@ -555,12 +566,68 @@ export const saveCampaign = (camp: Campaign): void => {
     updated = [stamped, ...current];
   }
   saveStoredCampaigns(updated);
-  syncCampaignToFirestore(stamped).catch(() => {});
+  syncCampaignToFirestore(stamped).catch((err) => {
+    console.warn('[Firestore] Campaign sync note:', err);
+  });
   safeApiFetch('/api/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(stamped)
   });
+};
+
+/**
+ * Ensures all local campaign images are optimized (compressed data URLs)
+ * and actively synced to Firebase Firestore and the backend server.
+ * This guarantees custom logos for BMP Shillong, YMA Vengthar, etc.,
+ * propagate instantaneously to mobile apps and other browsers.
+ */
+export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> => {
+  if (typeof window === 'undefined') return;
+  try {
+    const campaigns = getStoredCampaigns();
+    let hasChanges = false;
+    const optimizedList: Campaign[] = [];
+
+    for (const c of campaigns) {
+      const camp = { ...c };
+      // 1. If it's a huge base64 DataURL, compress it down to lightweight mobile size
+      if (camp.imageUrl && camp.imageUrl.startsWith('data:') && camp.imageUrl.length > 50000) {
+        try {
+          const compressed = await compressDataUrl(camp.imageUrl, 400, 400, 0.8);
+          if (compressed && compressed !== camp.imageUrl) {
+            camp.imageUrl = compressed;
+            hasChanges = true;
+          }
+        } catch (e) {
+          console.warn('[ImageSync] Failed to compress image for', camp.title, e);
+        }
+      }
+
+      // 2. Ensure custom logo campaigns are actively broadcast and synced to Firestore & Server
+      const isCustomLogo = camp.imageUrl && !camp.imageUrl.includes('unsplash.com');
+      if (isCustomLogo) {
+        const stampedCamp = {
+          ...camp,
+          updatedAt: new Date().toISOString()
+        };
+        syncCampaignToFirestore(stampedCamp).catch(() => {});
+        safeApiFetch('/api/campaigns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(stampedCamp)
+        });
+      }
+
+      optimizedList.push(camp);
+    }
+
+    if (hasChanges) {
+      saveStoredCampaigns(optimizedList, true);
+    }
+  } catch (err) {
+    console.warn('ensureCampaignImagesOptimizedAndSynced error:', err);
+  }
 };
 
 export const deleteStoredCampaign = (

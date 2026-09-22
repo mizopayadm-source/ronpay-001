@@ -52,6 +52,7 @@ import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, mi
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface CreateQRScreenProps {
   onBack: () => void;
@@ -286,13 +287,20 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     setSelectedCategory(catKey);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImagePreviewUrl(event.target?.result as string);
-      };
-      reader.readAsDataURL(e.target.files[0]);
+      const file = e.target.files[0];
+      try {
+        const compressed = await compressImageFile(file, 400, 400, 0.8);
+        setImagePreviewUrl(compressed);
+      } catch (err) {
+        console.warn('Image compression fallback:', err);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setImagePreviewUrl(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -2441,18 +2449,28 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>(
     (campaign.kumtluangFeeBearer as any) || 'org_paid'
   );
+  const [isPhotoCompressing, setIsPhotoCompressing] = useState<boolean>(false);
 
-  // Handle Photo Upload
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Photo Upload with Automatic Image Optimization for instant multi-device & cloud sync
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setImageUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
+      setIsPhotoCompressing(true);
+      try {
+        const compressed = await compressImageFile(file, 400, 400, 0.8);
+        setImageUrl(compressed);
+      } catch (err) {
+        console.warn('Image compression fallback:', err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            setImageUrl(reader.result);
+          }
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setIsPhotoCompressing(false);
+      }
     }
   };
 
@@ -2609,32 +2627,64 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 </div>
               ) : (
                 <div className="w-16 h-16 rounded-xl bg-slate-200 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 shrink-0">
-                  <ImageIcon className="w-5 h-5 mb-0.5" />
-                  <span className="text-[8px] font-bold">No Photo</span>
+                  {isPhotoCompressing ? (
+                    <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                  ) : (
+                    <>
+                      <ImageIcon className="w-5 h-5 mb-0.5" />
+                      <span className="text-[8px] font-bold">No Photo</span>
+                    </>
+                  )}
                 </div>
               )}
 
               <div className="flex-1 space-y-1.5">
                 <label className="flex items-center justify-center gap-1.5 w-full bg-white hover:bg-indigo-50 text-indigo-700 font-bold px-3 py-2 rounded-xl border border-indigo-300 hover:border-indigo-400 transition cursor-pointer text-xs shadow-xs">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{imageUrl ? 'Thlalak Thlak Rawh (Change Photo)' : 'Thlalak Dah Rawh (Upload Photo)'}</span>
+                  {isPhotoCompressing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Optimizing Image...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{imageUrl ? 'Thlalak Thlak Rawh (Change Photo)' : 'Thlalak Dah Rawh (Upload Photo)'}</span>
+                    </>
+                  )}
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handlePhotoUpload}
+                    disabled={isPhotoCompressing}
                     className="hidden"
                   />
                 </label>
                 {imageUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setImageUrl(undefined)}
-                    className="text-[10px] text-rose-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" /> Thlalak hi paih rawh (Remove Photo)
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9.5px] text-emerald-700 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cloud Sync Ready
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl(undefined)}
+                      className="text-[10px] text-rose-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Paih rawh
+                    </button>
+                  </div>
                 )}
               </div>
+            </div>
+            
+            <div className="pt-1 border-t border-slate-200/60">
+              <label className="text-[9.5px] text-slate-500 font-semibold block mb-0.5">Awm sa link / URL hmang duh tan (Optional Direct URL):</label>
+              <input
+                type="url"
+                value={imageUrl && !imageUrl.startsWith('data:') ? imageUrl : ''}
+                onChange={(e) => setImageUrl(e.target.value.trim() || undefined)}
+                placeholder="https://example.com/logo.png"
+                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] focus:ring-1 focus:ring-indigo-500 outline-none"
+              />
             </div>
           </div>
 

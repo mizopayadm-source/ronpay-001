@@ -4365,6 +4365,8 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
       const clientHasExtendedValidity = clientValidity > serverValidity;
       const serverHasExtendedValidity = serverValidity > clientValidity;
 
+      const isCustomLogo = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');
+
       if (clientTime > serverTime) {
         // Client has explicitly newer update: client wins
         map.set(k, { ...existing, ...clientItem });
@@ -4376,10 +4378,16 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
         if (typeof clientVal === 'number' && clientVal > (existingVal || 0)) {
           mergedObj.collectedAmount = clientVal;
         }
+        // Protect custom uploaded logo from being overwritten by default unsplash placeholder
+        if (isCustomLogo(clientItem.imageUrl) && !isCustomLogo(existing.imageUrl)) {
+          mergedObj.imageUrl = clientItem.imageUrl;
+        }
         map.set(k, mergedObj);
       } else {
         // Timestamps are equal or missing:
-        if (clientHasExtendedValidity) {
+        if (isCustomLogo(clientItem.imageUrl) && !isCustomLogo(existing.imageUrl)) {
+          map.set(k, { ...existing, ...clientItem });
+        } else if (clientHasExtendedValidity) {
           // Client has extended validity date (e.g. Admin extend action): client wins
           map.set(k, { ...existing, ...clientItem });
         } else if (serverHasExtendedValidity) {
@@ -4546,6 +4554,18 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
   }
 });
 
+// All Campaigns Fetch for Web / Mobile Apps
+app.get('/api/campaigns', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const delCampSet = new Set((db.deletedCampaignIds || []).map((id: any) => String(id).toLowerCase().trim()));
+    const activeCampaigns = (db.campaigns || []).filter(c => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
+    res.json({ success: true, campaigns: activeCampaigns });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Single Campaign Fetch for QR Code Deep Linking / Web Portals
 app.get('/api/campaigns/:id', (req: Request, res: Response) => {
   const { id } = req.params;
@@ -4567,7 +4587,7 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
     }
     const stamped = {
       ...campaign,
-      updatedAt: campaign.updatedAt || new Date().toISOString()
+      updatedAt: new Date().toISOString()
     };
     const db = getDatabase();
     db.campaigns = mergeCollections(db.campaigns, [stamped], 'id');

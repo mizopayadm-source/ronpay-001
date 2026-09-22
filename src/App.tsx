@@ -44,6 +44,7 @@ import {
   getUserOrCreatorVisibleTransactions,
   getStoredUserPaidTxIds,
   isCampaignCreator,
+  ensureCampaignImagesOptimizedAndSynced,
 } from './utils/storage';
 import {
   initFirestoreRealtimeSync,
@@ -433,8 +434,12 @@ export default function App() {
         if (syncResult) {
           reloadLocalData();
         }
+        // Ensure image logos are optimized and synchronized to Firestore & Server for mobile and cross-browser clients
+        ensureCampaignImagesOptimizedAndSynced().catch(() => {});
       })
-      .catch(() => {});
+      .catch(() => {
+        ensureCampaignImagesOptimizedAndSynced().catch(() => {});
+      });
 
     // Periodic background sync every 25 seconds so all windows, tabs and Android phones stay in lock-step
     const syncInterval = setInterval(() => {
