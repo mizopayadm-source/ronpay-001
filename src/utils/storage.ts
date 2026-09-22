@@ -12,6 +12,7 @@ import {
   syncPricingConfigToFirestore,
   syncAuditLogToFirestore
 } from '../services/firestoreSync';
+import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
@@ -176,16 +177,21 @@ export const clearAdminAuthState = (): void => {
 
 export const broadcastTabSync = (type: string, data?: any) => {
   try {
-    if (typeof window !== 'undefined') {
-      // 1. Dispatch custom event locally so current window/components react immediately
-      window.dispatchEvent(new CustomEvent('ronpay_realtime_sync_event', { detail: { type, data, timestamp: Date.now() } }));
-      // 2. BroadcastChannel to notify all other tabs & windows of this browser
-      if ('BroadcastChannel' in window) {
-        const bc = new BroadcastChannel('ronpay_realtime_sync');
-        bc.postMessage({ type, data, timestamp: Date.now() });
-        bc.close();
-      }
-    }
+    let topic: StateSyncTopic = 'all';
+    const lowerType = (type || '').toLowerCase();
+    if (lowerType.includes('campaign')) topic = 'campaigns';
+    else if (lowerType.includes('transaction')) topic = 'transactions';
+    else if (lowerType.includes('member')) topic = 'members';
+    else if (lowerType.includes('creator') && !lowerType.includes('list')) topic = 'creator_profile';
+    else if (lowerType.includes('creator') || lowerType.includes('staff')) topic = 'creators';
+    else if (lowerType.includes('admin') || lowerType.includes('auth')) topic = 'auth';
+    else if (lowerType.includes('pricing')) topic = 'pricing_config';
+    else if (lowerType.includes('announcement')) topic = 'announcement';
+    else if (lowerType.includes('audit')) topic = 'audit_logs';
+    else if (lowerType.includes('wallet')) topic = 'wallet';
+    else if (lowerType.includes('user_paid')) topic = 'user_paid';
+
+    broadcastStateChange(topic, data);
   } catch (e) {}
 };
 
@@ -941,6 +947,8 @@ export const logoutCreator = (): CreatorProfile => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: GUEST_CREATOR_PROFILE }));
       window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: GUEST_CREATOR_PROFILE }));
+      broadcastTabSync('creator_profile', GUEST_CREATOR_PROFILE);
+      broadcastTabSync('auth', { reason: 'auth_logout' });
     }
   } catch (e) {
     console.error('Failed to log out creator', e);
@@ -977,6 +985,9 @@ export const loginCreator = (profile: CreatorProfile): void => {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
       window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: profile }));
       window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: updatedList }));
+      broadcastTabSync('creator_profile', profile);
+      broadcastTabSync('creators', updatedList);
+      broadcastTabSync('auth', { reason: 'auth_login', profile });
     }
   } catch (e) {
     console.error('Failed to login creator', e);
@@ -1012,6 +1023,8 @@ export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
       window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: profile }));
       window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: updatedList }));
+      broadcastTabSync('creator_profile', profile);
+      broadcastTabSync('creators', updatedList);
     }
   } catch (e) {
     console.error('Failed to save creator profile', e);
@@ -1072,6 +1085,7 @@ export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: creators }));
+      broadcastTabSync('creators', creators);
     }
   } catch (e) {
     console.error('Failed to save creators list', e);
@@ -1105,6 +1119,10 @@ export const saveStoredPricingConfig = (config: SystemPricingConfig) => {
     localStorage.setItem(PRICING_CONFIG_KEY, JSON.stringify(config));
     if (config) {
       syncPricingConfigToFirestore(config).catch(() => {});
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_pricing_config_updated', { detail: config }));
+      broadcastTabSync('pricing_config', config);
     }
   } catch (e) {
     console.error('Failed to save pricing config', e);
@@ -1170,6 +1188,7 @@ export const saveStoredUserPaidTxIds = (ids: string[]) => {
     localStorage.setItem(USER_PAID_TX_IDS_KEY, JSON.stringify(ids));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: ids }));
+      broadcastTabSync('user_paid', ids);
     }
   } catch (e) {
     console.error('Failed to save user paid tx ids', e);
@@ -1463,6 +1482,10 @@ export const getStoredAuditLogs = (): AuditLog[] => {
 export const saveStoredAuditLogs = (logs: AuditLog[]) => {
   try {
     localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(logs));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_audit_logs_updated', { detail: logs }));
+      broadcastTabSync('audit_logs', logs);
+    }
   } catch (e) {
     console.error('Failed to save audit logs', e);
   }
@@ -1540,6 +1563,10 @@ export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ann)
     });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_announcement_updated', { detail: ann }));
+      broadcastTabSync('announcement', ann);
+    }
   } catch (e) {
     console.error('Failed to save announcement banner', e);
   }

@@ -57,6 +57,11 @@ import {
   syncAnnouncementToFirestore,
   forceRefreshFirestore,
 } from './services/firestoreSync';
+import {
+  subscribeCrossTabSync,
+  setupWindowFocusSync,
+  invalidateCacheOnAuthOrBoot
+} from './services/crossTabSync';
 import { syncAllWithServer } from './utils/syncEngine';
 
 // Components
@@ -213,9 +218,17 @@ export default function App() {
     }
   });
 
+  // Maintain campaignsRef to stabilize URL routing without re-triggering popstate effects
+  const campaignsRef = useRef<Campaign[]>(campaigns);
+  useEffect(() => {
+    campaignsRef.current = campaigns;
+  }, [campaigns]);
+
   // Reload helper
   const reloadLocalData = useCallback(() => {
-    setCampaigns(getStoredCampaigns());
+    const freshCampaigns = getStoredCampaigns();
+    campaignsRef.current = freshCampaigns;
+    setCampaigns(freshCampaigns);
     setTransactions(getStoredTransactions());
     setCreators(getStoredCreatorsList());
     setCreatorProfile(getStoredCreatorProfile());
@@ -225,6 +238,13 @@ export default function App() {
     setMembersState(getMembers());
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
+
+  // Cache Invalidation on Auth / Session Boot:
+  // Cleanly purge stale in-memory session guards and ensure fresh initial state
+  useEffect(() => {
+    invalidateCacheOnAuthOrBoot('session_boot');
+    reloadLocalData();
+  }, [reloadLocalData]);
 
   // Real-time Firestore Sync initialization
   useEffect(() => {
@@ -369,18 +389,43 @@ export default function App() {
     window.addEventListener('ronpay_data_synced', reloadLocalData);
     window.addEventListener('storage', handleStorageChange);
 
-    // Cross-tab real-time sync via BroadcastChannel
-    let syncBroadcast: BroadcastChannel | null = null;
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        syncBroadcast = new BroadcastChannel('ronpay_realtime_sync');
-        syncBroadcast.onmessage = () => {
-          reloadLocalData();
-        };
+    // Cross-tab real-time state synchronization via BroadcastChannel ('ronpay_state_sync')
+    // Instantly syncs state across windows/tabs on write actions WITHOUT hitting Firestore
+    const unsubCrossTab = subscribeCrossTabSync((msg) => {
+      if (msg.topic === 'campaigns') {
+        const fresh = getStoredCampaigns();
+        campaignsRef.current = fresh;
+        setCampaigns(fresh);
+      } else if (msg.topic === 'transactions') {
+        setTransactions(getStoredTransactions());
+      } else if (msg.topic === 'creator_profile') {
+        setCreatorProfile(getStoredCreatorProfile());
+      } else if (msg.topic === 'creators') {
+        setCreators(getStoredCreatorsList());
+      } else if (msg.topic === 'members') {
+        setMembersState(getMembers());
+      } else if (msg.topic === 'pricing_config') {
+        setPricingConfig(getStoredPricingConfig());
+      } else if (msg.topic === 'announcement') {
+        setAnnouncement(getStoredAnnouncement());
+      } else if (msg.topic === 'audit_logs') {
+        setAuditLogs(getStoredAuditLogs());
+      } else if (msg.topic === 'user_paid') {
+        setUserPaidIds(getStoredUserPaidTxIds());
+      } else if (msg.topic === 'auth') {
+        invalidateCacheOnAuthOrBoot(msg.action === 'auth_login' ? 'auth_login' : 'auth_logout');
+        reloadLocalData();
+      } else {
+        reloadLocalData();
       }
-    } catch (err) {
-      console.warn('BroadcastChannel sync init:', err);
-    }
+    });
+
+    // Window Focus / Tab Re-activation Refetch:
+    // Performs a light check or invalidates stale localStorage/in-memory cache
+    // to sync the latest state whenever the user switches back to the tab or opens a new window.
+    const unsubFocus = setupWindowFocusSync(() => {
+      reloadLocalData();
+    });
 
     // Initial complete bi-directional sync on app startup (merges local transactions across windows)
     syncAllWithServer()
@@ -403,26 +448,10 @@ export default function App() {
         .catch(() => {});
     }, 25000);
 
-    // Sync immediately when window/tab is focused or becomes visible
-    const handleFocusSync = () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        syncAllWithServer()
-          .then(syncResult => {
-            if (syncResult) {
-              reloadLocalData();
-            }
-          })
-          .catch(() => {});
-      }
-    };
-    window.addEventListener('focus', handleFocusSync);
-    document.addEventListener('visibilitychange', handleFocusSync);
-
     return () => {
       clearInterval(syncInterval);
-      window.removeEventListener('focus', handleFocusSync);
-      document.removeEventListener('visibilitychange', handleFocusSync);
+      unsubCrossTab();
+      unsubFocus();
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
@@ -435,11 +464,8 @@ export default function App() {
       window.removeEventListener('ronpay_members_updated', handleMembersSync);
       window.removeEventListener('ronpay_data_synced', reloadLocalData);
       window.removeEventListener('storage', handleStorageChange);
-      if (syncBroadcast) {
-        try { syncBroadcast.close(); } catch (e) {}
-      }
     };
-  }, []);
+  }, [reloadLocalData]);
 
   // Force cloud refresh across Firestore and Server Database
   const handleRefreshCloudData = useCallback(async () => {
@@ -460,12 +486,6 @@ export default function App() {
       console.warn('Cloud refresh note:', e);
     }
   }, [reloadLocalData]);
-
-  // Maintain campaignsRef to stabilize URL routing without re-triggering popstate effects
-  const campaignsRef = useRef<Campaign[]>(campaigns);
-  useEffect(() => {
-    campaignsRef.current = campaigns;
-  }, [campaigns]);
 
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
   const applyRouteFromUrl = useCallback(async () => {
@@ -1164,10 +1184,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    invalidateCacheOnAuthOrBoot('auth_logout');
     const guest = logoutCreator();
     setCreatorProfile(guest);
     setIsCreatorStudioUnlocked(false);
     setIsProfileOpen(false);
+    reloadLocalData();
     handleNavigate('home');
   };
 
@@ -1378,10 +1400,12 @@ export default function App() {
                 creatorProfile={creatorProfile}
                 onBack={() => handleNavigate('home')}
                 onSuccess={(profile, cat) => {
+                  invalidateCacheOnAuthOrBoot('auth_login');
                   loginCreator(profile);
                   setCreatorProfile(profile);
                   setSelectedCategory(cat);
                   setIsCreatorStudioUnlocked(true);
+                  reloadLocalData();
                   handleNavigate('create_qr');
                 }}
                 onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
@@ -1454,9 +1478,11 @@ export default function App() {
               creatorProfile={creatorProfile}
               onBack={() => handleNavigate('home')}
               onSuccess={(profile, cat) => {
+                invalidateCacheOnAuthOrBoot('auth_login');
                 loginCreator(profile);
                 setCreatorProfile(profile);
                 setSelectedCategory(cat);
+                reloadLocalData();
                 handleNavigate('create_qr');
               }}
               onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}

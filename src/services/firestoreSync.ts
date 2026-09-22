@@ -181,6 +181,13 @@ export function smartMerge<T extends Record<string, any>>(localItems: T[], remot
 let hasSeededCloudThisSession = false;
 
 /**
+ * Resets the session guard so fresh cloud verification can run cleanly on auth or session boot.
+ */
+export function resetCloudSessionGuards(): void {
+  hasSeededCloudThisSession = false;
+}
+
+/**
  * Check and seed Firestore with initial default data if empty on cold start (run once per session)
  */
 export async function seedInitialCloudDataIfEmpty() {
