@@ -2,23 +2,23 @@
   "rewrites": [
     {
       "source": "/phonepe",
-      "destination": "/api"
+      "destination": "/api?__route=/phonepe"
     },
     {
       "source": "/phonepe-uat",
-      "destination": "/api"
+      "destination": "/api?__route=/phonepe-uat"
     },
     {
       "source": "/uat",
-      "destination": "/api"
+      "destination": "/api?__route=/uat"
     },
     {
       "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api?__route=/api/$1"
     },
     {
       "source": "/api",
-      "destination": "/api"
+      "destination": "/api?__route=/api"
     },
     {
       "source": "/(.*)",

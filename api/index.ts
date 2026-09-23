@@ -128,8 +128,8 @@ const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID || 'TSPMIZOPAYUAT_260817
 const PHONEPE_CLIENT_VERSION = process.env.PHONEPE_CLIENT_VERSION || '1';
 const PHONEPE_CLIENT_SECRET = process.env.PHONEPE_CLIENT_SECRET || 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4';
 
-let cachedPhonePeOAuthToken = '';
-let cachedPhonePeOAuthExpiry = 0;
+let cachedPhonePeOAuthToken = (globalThis as any).__RONPAY_PHONEPE_TOKEN || '';
+let cachedPhonePeOAuthExpiry = (globalThis as any).__RONPAY_PHONEPE_EXPIRY || 0;
 
 function buildPhonePeTspHeaders(options: {
   token?: string;
@@ -153,7 +153,8 @@ function buildPhonePeTspHeaders(options: {
 }
 
 async function getOrFetchPhonePeOAuthToken(): Promise<string> {
-  if (cachedPhonePeOAuthToken && Date.now() < cachedPhonePeOAuthExpiry) {
+  const now = Date.now();
+  if (cachedPhonePeOAuthToken && now < cachedPhonePeOAuthExpiry) {
     return cachedPhonePeOAuthToken;
   }
   try {
@@ -169,16 +170,19 @@ async function getOrFetchPhonePeOAuthToken(): Promise<string> {
     const oauthResp = await fetch(targetOAuthUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: tokenParams.toString()
+      body: tokenParams.toString(),
+      signal: AbortSignal.timeout(8000)
     });
     if (oauthResp.ok) {
       const oauthJson: any = await oauthResp.json();
       if (oauthJson?.access_token) {
         cachedPhonePeOAuthToken = oauthJson.access_token;
+        (globalThis as any).__RONPAY_PHONEPE_TOKEN = cachedPhonePeOAuthToken;
         const expiresAtMs = oauthJson.expires_at 
           ? (Number(oauthJson.expires_at) * 1000) 
           : (Date.now() + ((Number(oauthJson.expires_in) || 3600) - 300) * 1000);
         cachedPhonePeOAuthExpiry = expiresAtMs - (60 * 1000);
+        (globalThis as any).__RONPAY_PHONEPE_EXPIRY = cachedPhonePeOAuthExpiry;
         return cachedPhonePeOAuthToken;
       }
     }
@@ -193,7 +197,25 @@ export default async function handler(req: any, res: any) {
     const rawHost = req.headers?.host || 'ronpay.app';
     const proto = req.headers?.['x-forwarded-proto'] || 'https';
     const currentUrl = new URL(req.url || '/', `${proto}://${rawHost}`);
-    const pathname = currentUrl.pathname;
+
+    // Resolve original route accurately across Vercel serverless rewrites, proxies, and custom routing:
+    const vercelRouteParam = currentUrl.searchParams.get('__route');
+    const matchedPathHeader = (req.headers?.['x-matched-path'] as string) || 
+                              (req.headers?.['x-invoke-path'] as string) || 
+                              (req.headers?.['x-original-url'] as string) ||
+                              (req.headers?.['x-forwarded-uri'] as string) ||
+                              (req.headers?.['x-rewrite-url'] as string);
+
+    let effectivePath = currentUrl.pathname;
+    if (effectivePath === '/api' || effectivePath === '/api/' || effectivePath === '/' || effectivePath === '') {
+      if (vercelRouteParam) {
+        effectivePath = vercelRouteParam.split('?')[0];
+      } else if (matchedPathHeader) {
+        effectivePath = matchedPathHeader.split('?')[0];
+      }
+    }
+
+    const pathname = effectivePath;
     const searchParams = currentUrl.searchParams;
 
     const txnId = searchParams.get('txnId') || 
@@ -206,7 +228,15 @@ export default async function handler(req: any, res: any) {
     const status = isExplicitSuccess ? 'PAYMENT_SUCCESS' : (code ? 'PAYMENT_ERROR' : 'PENDING');
 
     // 1. PhonePe Launch Pay direct gateway launcher (GET /api/phonepe/launch-pay, /phonepe, /phonepe-uat, /uat)
-    if (pathname.includes('/launch-pay') || pathname === '/phonepe' || pathname === '/phonepe-uat' || pathname === '/uat') {
+    if (
+      pathname.includes('/launch-pay') || 
+      pathname === '/phonepe' || 
+      pathname === '/phonepe-uat' || 
+      pathname === '/uat' ||
+      pathname.endsWith('/phonepe') ||
+      pathname.endsWith('/phonepe-uat') ||
+      pathname.endsWith('/uat')
+    ) {
       const rawAmt = Number(searchParams.get('amt') || searchParams.get('amountInRupees')) || 100;
       const baseAmtStr = searchParams.get('baseAmt');
       const baseAmt = baseAmtStr !== null && baseAmtStr !== '' ? Number(baseAmtStr) : undefined;
@@ -907,6 +937,9 @@ export default async function handler(req: any, res: any) {
         success: true,
         code: 'PAYMENT_INITIATED',
         message: 'PhonePe PG V2 Payment Session Created',
+        orderId: orderId,
+        merchantOrderId: merchantTxnId,
+        redirectUrl: checkoutUrl,
         data: {
           merchantTransactionId: merchantTxnId,
           merchantOrderId: merchantTxnId,
@@ -919,6 +952,7 @@ export default async function handler(req: any, res: any) {
             type: 'PAY_PAGE',
             redirectInfo: {
               url: checkoutUrl,
+              mercuryUrl: checkoutUrl,
               method: 'GET'
             }
           }
@@ -1747,7 +1781,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 8. Safe Fallback for any other API route (Never return HTML redirect to an API call!)
-    if (pathname.startsWith('/api/')) {
+    if (pathname.startsWith('/api') || pathname.includes('/api/')) {
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 404;
       return res.end(JSON.stringify({
