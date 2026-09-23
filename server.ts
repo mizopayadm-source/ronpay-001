@@ -5662,15 +5662,19 @@ Always respond in natural, warm, polite, and fluent Mizo with structured markdow
         let response;
         try {
           response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.8-flash',
             contents: systemPrompt,
           });
         } catch (mErr) {
-          console.warn('gemini-3.8-flash fallback:', mErr);
-          response = await ai.models.generateContent({
-            model: 'gemini-flash-latest',
-            contents: systemPrompt,
-          });
+          console.warn('gemini-3.8-flash failed, trying fallback gemini-3.1-flash-lite:', mErr);
+          try {
+            response = await ai.models.generateContent({
+              model: 'gemini-3.1-flash-lite',
+              contents: systemPrompt,
+            });
+          } catch (liteErr) {
+            console.warn('gemini-3.1-flash-lite fallback failed:', liteErr);
+          }
         }
 
         if (response && response.text?.trim()) {
