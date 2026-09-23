@@ -21,6 +21,17 @@
 
     <!-- Official PhonePe Standard Checkout Bundle (Website Integration) -->
     <script src="https://mercury-uat.phonepe.com/web/bundle/checkout.js" async></script>
+    <script>
+      try {
+        var p = window.location.pathname.toLowerCase();
+        if (p === '/phonepe' || p === '/phonepe-uat' || p === '/uat' || p.indexOf('launch-pay') !== -1) {
+          window.addEventListener('DOMContentLoaded', function() {
+            var sub = document.querySelector('.ronpay-subtitle');
+            if (sub) sub.innerText = 'PhonePe PG UAT (mercury-uat)-ah kan thawn mek che...';
+          });
+        }
+      } catch(e) {}
+    </script>
 
     <style>
       /* Critical instantaneous styles to eliminate white flash on mobile startup */

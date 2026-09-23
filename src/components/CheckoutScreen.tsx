@@ -43,6 +43,7 @@ import { getMembers, addOrUpdateMember, saveTransaction } from '../utils/storage
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';
+import { getPhonePeMercuryUrl } from '../utils/phonepeDirect';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
 
@@ -847,26 +848,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         console.warn('Popup window.open warning:', e);
       }
 
-      // Fetch official PhonePe Mercury URL directly from PG backend
+      // Fetch official PhonePe Mercury URL directly from PG backend or direct sandbox fallback
       try {
-        const resp = await fetch('/api/phonepe/initiate-pay', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            merchantTransactionId: pendingTx.id,
-            amountInRupees: totalPayable,
-            baseAmountInRupees: subtotal,
-            feeOption: feeBearerOption,
-            donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
-            donorPhone: resolvedDonorPhone || '9862000000',
-            campaignId: campaign?.id || `cmp-${category}-custom`,
-            campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
-            category: category,
-            origin: window.location.origin
-          })
+        const mercuryUrl = await getPhonePeMercuryUrl({
+          amountInRupees: totalPayable,
+          merchantTransactionId: pendingTx.id,
+          feeOption: feeBearerOption,
+          donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
+          donorPhone: resolvedDonorPhone || '9862000000',
+          campaignId: campaign?.id || `cmp-${category}-custom`,
+          campaignTitle: getCampaignCauseTitle(campaign, category === 'ralna' ? 'Ralna Bawm' : config.name),
+          category: category,
+          origin: window.location.origin
         });
-        const data = await resp.json();
-        const mercuryUrl = data?.redirectUrl || data?.data?.redirectUrl || data?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || data?.data?.instrumentResponse?.redirectInfo?.url;
 
         if (mercuryUrl) {
           setPhonePeLaunchUrl(mercuryUrl);

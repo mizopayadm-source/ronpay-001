@@ -29,7 +29,10 @@ export interface ParsedRoute {
   isWalletOpen?: boolean;
   view?: 'website' | 'app';
   isPhonePeOpen?: boolean;
+  isDirectPhonePeLaunch?: boolean;
+  phonePeLaunchAmount?: number;
   donorName?: string;
+  donorPhone?: string;
   donorVeng?: string;
   isAnonymous?: boolean;
 }
@@ -184,6 +187,29 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
     const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') ? viewParam : undefined;
+    const isLaunchPayPath = pathname.toLowerCase().includes('launch-pay') ||
+                            pathname.toLowerCase() === '/phonepe' || 
+                            pathname.toLowerCase() === '/phonepe-uat' || 
+                            pathname.toLowerCase() === '/uat' ||
+                            pathname.toLowerCase().endsWith('/phonepe') ||
+                            pathname.toLowerCase().endsWith('/phonepe-uat') ||
+                            pathname.toLowerCase().endsWith('/uat');
+
+    // If visiting PhonePe gateway launch directly and not returning from a payment receipt:
+    if (isLaunchPayPath && !receiptId && !searchParams.get('receipt') && !searchParams.get('txnId') && !searchParams.get('code')) {
+      const amtStr = searchParams.get('amt') || searchParams.get('amount') || searchParams.get('amountInRupees') || '100';
+      return {
+        screen: 'phonepe_launcher' as ScreenId,
+        isDirectPhonePeLaunch: true,
+        phonePeLaunchAmount: Number(amtStr) || 100,
+        campaignId: campaignId ? decodeURIComponent(campaignId) : undefined,
+        donorName: searchParams.get('donor') || searchParams.get('donorName') || undefined,
+        donorPhone: searchParams.get('donorPhone') || searchParams.get('phone') || undefined,
+        category: (catParam as BawmCategory) || undefined,
+        view: 'app'
+      };
+    }
+
     const isPhonePePath = pathname.toLowerCase() === '/phonepe';
     const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1' || phonepeParam === 'phonepe' || isPhonePePath;
 

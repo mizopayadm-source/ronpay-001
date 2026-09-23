@@ -9,7 +9,8 @@ export type ScreenId =
   | 'success' 
   | 'failed'
   | 'cash_pending'
-  | 'phonepe_checkout';
+  | 'phonepe_checkout'
+  | 'phonepe_launcher';
 
 export type BawmCategory = 'ralna' | 'khawlsak' | 'rikrum' | 'kumtluang' | 'others';
 

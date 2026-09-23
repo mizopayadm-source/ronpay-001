@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Campaign, Transaction, BawmCategory } from '../types';
 import { saveTransaction } from '../utils/storage';
 import { getCampaignCauseTitle, getEffectiveCategory } from '../utils/translations';
+import { getPhonePeMercuryUrl } from '../utils/phonepeDirect';
 
 interface PhonePeCheckoutModalProps {
   isOpen: boolean;
@@ -163,31 +164,26 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
     setVpaError('');
     setHasLaunchedUpiApp(false);
 
-    // Pre-register transaction as PENDING in backend store
-    fetch('/api/phonepe/initiate-pay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        merchantTransactionId: newTxnId,
-        amountInRupees: totalPayable,
-        campaignId: campaign?.id,
-        campaignTitle: campaignTitle,
-        donorName: donorName || 'Valued Donor',
-        donorPhone: donorPhone,
-        category: campaign?.category || 'others',
-        feeOption: currentFeeOption,
-        origin: window.location.origin,
-        simulateStatus: 'PENDING'
-      })
+    // Fetch live official PhonePe Mercury URL with direct sandbox fallback
+    getPhonePeMercuryUrl({
+      amountInRupees: totalPayable,
+      merchantTransactionId: newTxnId,
+      campaignId: campaign?.id,
+      campaignTitle: campaignTitle,
+      donorName: donorName || 'Valued Donor',
+      donorPhone: donorPhone,
+      category: campaign?.category || 'others',
+      feeOption: currentFeeOption,
+      origin: window.location.origin
     })
-      .then(r => r.json())
-      .then(d => {
-        const u = d?.data?.instrumentResponse?.redirectInfo?.mercuryUrl || d?.data?.instrumentResponse?.redirectInfo?.url;
+      .then(u => {
         if (u) {
           setOfficialMercuryUrl(u);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('PhonePe modal URL resolution note:', err);
+      });
   }, [isOpen, amount, campaignTitle]);
 
   // Countdown timer matching PhonePe PG V2 (04:58 mins)

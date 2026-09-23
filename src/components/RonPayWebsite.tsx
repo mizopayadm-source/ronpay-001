@@ -52,6 +52,7 @@ import { BawmCategory, BillService } from '../types';
 import { askAIHriatpui } from '../services/aiHriatpuiService';
 import { PGComplianceModal } from './PGComplianceModal';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
+import { getPhonePeMercuryUrl } from '../utils/phonepeDirect';
 
 interface RonPayWebsiteProps {
   onLaunchApp: (targetScreen?: string, targetCategory?: BawmCategory) => void;
@@ -89,26 +90,48 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
   const [showSimulatedReceipt, setShowSimulatedReceipt] = useState<boolean>(false);
 
   // Direct PhonePe Official PG UAT Portal Launch Helper (mercury-uat.phonepe.com)
-  const openPhonePeUatPortal = (amount: number = 100) => {
+  const openPhonePeUatPortal = async (amount: number = 100) => {
     const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
-    const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
-    if (isAndroidOrMobileApp()) {
-      window.location.href = launchUrl;
-      return;
-    }
-    try {
-      const paymentWindow = window.open(launchUrl, '_blank');
-      if (!paymentWindow || paymentWindow.closed || typeof paymentWindow.closed === 'undefined') {
-        window.location.href = launchUrl;
+    
+    // On desktop, pre-open a blank tab to bypass popup blockers
+    let paymentWindow: Window | null = null;
+    if (!isAndroidOrMobileApp()) {
+      try {
+        paymentWindow = window.open('about:blank', '_blank');
+        if (paymentWindow?.document) {
+          paymentWindow.document.title = 'PhonePe PG UAT Portal';
+        }
+      } catch (e) {
+        console.warn('Popup blocked, falling back to same-tab redirect', e);
       }
-    } catch (e) {
-      window.location.href = launchUrl;
+    }
+
+    try {
+      const mercuryUrl = await getPhonePeMercuryUrl({
+        amountInRupees: amount,
+        campaignTitle: 'RonPay UAT Portal Payment',
+        origin: origin
+      });
+
+      if (paymentWindow && !paymentWindow.closed) {
+        paymentWindow.location.href = mercuryUrl;
+      } else {
+        window.location.href = mercuryUrl;
+      }
+    } catch (err) {
+      console.error('Failed to open PhonePe PG UAT:', err);
+      const fallbackUrl = `${origin}/phonepe?amt=${amount}`;
+      if (paymentWindow && !paymentWindow.closed) {
+        paymentWindow.location.href = fallbackUrl;
+      } else {
+        window.location.href = fallbackUrl;
+      }
     }
   };
 
   const copyPhonePeUatLink = (amount: number = 100) => {
     const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
-    const link = `${origin}/api/phonepe/launch-pay?amt=${amount}`;
+    const link = `${origin}/phonepe?amt=${amount}`;
     navigator.clipboard.writeText(link);
     setCopiedPhonePeLink(true);
     setTimeout(() => setCopiedPhonePeLink(false), 2000);

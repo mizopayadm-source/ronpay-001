@@ -77,6 +77,7 @@ import { SuccessScreen } from './components/SuccessScreen';
 import { FailedScreen } from './components/FailedScreen';
 import { CashPendingScreen } from './components/CashPendingScreen';
 import { PhonePeStandardCheckout } from './components/PhonePeStandardCheckout';
+import { PhonePeLauncherScreen } from './components/PhonePeLauncherScreen';
 import { OfflineStatusBanner } from './components/OfflineStatusBanner';
 import { BottomNav } from './components/BottomNav';
 
@@ -505,6 +506,12 @@ export default function App() {
     }
     if (route.isWalletOpen) {
       setIsWalletOpen(true);
+    }
+    if (route.isDirectPhonePeLaunch || route.screen === 'phonepe_launcher') {
+      setCurrentScreen('phonepe_launcher');
+      setAppView('app');
+      setPhonePeCheckoutAmount(route.phonePeLaunchAmount || 100);
+      return;
     }
     if (route.isPhonePeOpen && !route.receiptId) {
       // Direct payment link or /phonepe route: select campaign and show checkout (without popup auto-spawning)
@@ -1258,6 +1265,23 @@ export default function App() {
           initialLanguage={language}
         />
       </div>
+    );
+  }
+
+  if (currentScreen === 'phonepe_launcher') {
+    return (
+      <PhonePeLauncherScreen
+        amount={phonePeCheckoutAmount || 100}
+        campaignTitle={selectedCampaign?.title}
+        campaignId={selectedCampaign?.id}
+        donorName={initialRoute?.donorName}
+        donorPhone={initialRoute?.donorPhone}
+        onBackToApp={() => {
+          setCurrentScreen('home');
+          setAppView('website');
+          updateBrowserView('website');
+        }}
+      />
     );
   }
 
