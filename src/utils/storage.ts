@@ -350,17 +350,19 @@ export const getStoredCampaigns = (): Campaign[] => {
               updated.orgCode = derived;
             }
             if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
+              updated.category = 'kumtluang';
               if (!Array.isArray(updated.subCategories) || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
                 updated.subCategories = ['BMP Fund'];
               }
-              // If image is missing or still the default unsplash stock photo, upgrade to authentic BMP crest
-              if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com')) {
+              // If previously contaminated with synthetic svg data URI, restore to clean default
+              if (updated.imageUrl && updated.imageUrl.startsWith('data:image/svg+xml')) {
                 updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
               }
             }
             if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {
-              // If image is missing or still the default unsplash stock photo, upgrade to authentic YMA crest
-              if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com')) {
+              updated.category = 'kumtluang';
+              // If previously contaminated with synthetic svg data URI, restore to clean default
+              if (updated.imageUrl && updated.imageUrl.startsWith('data:image/svg+xml')) {
                 updated.imageUrl = YMA_DEFAULT_LOGO;
               }
             }
@@ -604,8 +606,14 @@ export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> =>
         }
       }
 
-      // 2. Ensure custom logo campaigns are actively broadcast and synced to Firestore & Server
-      const isCustomLogo = camp.imageUrl && !camp.imageUrl.includes('unsplash.com');
+      // 2. Normalize and clean any svg data URI that may have been temporarily set
+      if (camp.imageUrl && camp.imageUrl.startsWith('data:image/svg+xml')) {
+        camp.imageUrl = camp.id === 'cmp-1788107291420' ? BMP_SHILLONG_DEFAULT_LOGO : YMA_DEFAULT_LOGO;
+        hasChanges = true;
+      }
+
+      // 3. Ensure custom logo campaigns are actively broadcast and synced to Firestore & Server
+      const isCustomLogo = camp.imageUrl && !camp.imageUrl.includes('unsplash.com') && !camp.imageUrl.startsWith('data:image/svg+xml');
       if (isCustomLogo) {
         const stampedCamp = {
           ...camp,

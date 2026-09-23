@@ -888,13 +888,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs font-bold ${
-                      camp.category === 'ralna' ? 'bg-slate-900 border border-rose-500' :
-                      camp.category === 'khawlsak' ? 'bg-emerald-600' :
-                      camp.category === 'rikrum' ? 'bg-rose-600' : 'bg-blue-600'
-                    }`}>
-                      <QrCode className="w-4 h-4" />
-                    </div>
+                    {camp.imageUrl ? (
+                      <div className="w-9 h-9 rounded-xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                        <img 
+                          src={camp.imageUrl} 
+                          alt={camp.title} 
+                          className="w-full h-full object-cover rounded-[9px]"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs font-bold ${
+                        camp.category === 'ralna' ? 'bg-slate-900 border border-rose-500' :
+                        camp.category === 'khawlsak' ? 'bg-emerald-600' :
+                        camp.category === 'rikrum' ? 'bg-rose-600' : 'bg-blue-600'
+                      }`}>
+                        <QrCode className="w-4 h-4" />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
                         {translateDynamicText(camp.title, language)}
