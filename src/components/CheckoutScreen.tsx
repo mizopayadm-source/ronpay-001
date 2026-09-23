@@ -807,22 +807,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
-      setIsWaitingPhonePePG(true);
-      setIsPhonePeCheckoutOpen(false);
-      setIsProcessing(false);
+      setIsProcessing(true);
 
-      // On Android apps and mobile browsers, immediately navigate to eliminate popup delays or blank tab lag
-      if (isAndroidOrMobileApp()) {
-        window.location.href = fullLaunchUrl;
-        return;
-      }
-
-      // Open new tab synchronously to bypass browser popup blockers (Desktop)
+      // Open auxiliary tab synchronously on desktop to bypass browser popup blockers
       let paymentTab: Window | null = null;
-      try {
-        paymentTab = window.open('about:blank', '_blank');
-        if (paymentTab && paymentTab.document) {
-          paymentTab.document.write(`<!DOCTYPE html>
+      if (!isAndroidOrMobileApp()) {
+        try {
+          paymentTab = window.open('about:blank', '_blank');
+          if (paymentTab && paymentTab.document) {
+            paymentTab.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -838,17 +831,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   <div style="text-align:center; padding: 24px;">
     <div class="loader"></div>
     <h3 style="margin:0 0 8px;color:#5f259f;font-weight:700;font-size:18px;">PhonePe Gateway</h3>
-    <p style="margin:0;font-size:14px;color:#475569;">Official PhonePe payment page-ah kan connect mek e...</p>
+    <p style="margin:0;font-size:14px;color:#475569;">Official PhonePe payment page (₹${totalPayable})-ah kan connect mek e...</p>
     <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;">Khawngaihin lo nghak lawk rawh le.</p>
   </div>
 </body>
 </html>`);
+          }
+        } catch (e) {
+          console.warn('Popup window.open warning:', e);
         }
-      } catch (e) {
-        console.warn('Popup window.open warning:', e);
       }
 
-      // Fetch official PhonePe Mercury URL directly from PG backend or direct sandbox fallback
+      // Fetch official PhonePe Mercury URL with the EXACT order amount (₹500, etc.)
       try {
         const mercuryUrl = await getPhonePeMercuryUrl({
           amountInRupees: totalPayable,
@@ -864,72 +858,36 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
         if (mercuryUrl) {
           setPhonePeLaunchUrl(mercuryUrl);
+          setIsWaitingPhonePePG(true);
+          setIsPhonePeCheckoutOpen(false);
+          setIsProcessing(false);
 
-          // Standard Checkout Step 3: Invoke iframe PayPage per PhonePe API docs:
-          // https://developer.phonepe.com/payment-gateway/website-integration/standard-checkout/api-integration/api-integration-website
-          const launchedInIframe = await invokePhonePePayPage({
-            tokenUrl: mercuryUrl,
-            type: 'IFRAME',
-            onConcluded: async () => {
-              // Standard Checkout Step 4: Verify Payment Response
-              try {
-                const statusRes = await checkPhonePePaymentStatus(pendingTx.id);
-                if (
-                  statusRes.state === 'COMPLETED' || 
-                  statusRes.code === 'PAYMENT_SUCCESS' || 
-                  statusRes.data?.state === 'COMPLETED' || 
-                  statusRes.data?.status === 'SUCCESS' || 
-                  statusRes.data?.status === 'PAYMENT_SUCCESS'
-                ) {
-                  const finalTx: Transaction = {
-                    ...pendingTx,
-                    status: 'completed',
-                    transactionId: statusRes.data?.transactionId || statusRes.orderId || pendingTx.id,
-                    utr: statusRes.paymentDetails?.[0]?.utr || statusRes.data?.utr || ('UTR' + Date.now()),
-                    verifiedAt: new Date().toISOString()
-                  };
-                  saveTransaction(finalTx);
-                  setIsWaitingPhonePePG(false);
-                  setIsProcessing(false);
-                  onPaymentSuccess(finalTx);
-                } else {
-                  setIsVerifyingInMainTab(true);
-                }
-              } catch (e) {
-                setIsVerifyingInMainTab(true);
-              }
-            },
-            onUserCancel: () => {
-              setIsWaitingPhonePePG(false);
-              setIsProcessing(false);
-              setPhonePeVerifyMsg({ type: 'error', text: 'PhonePe payment was cancelled by customer.' });
-            },
-            onError: (err) => {
-              console.warn('PhonePe iframe invocation error:', err);
-            }
-          });
-
-          if (launchedInIframe) {
-            // PayPage displayed directly inside website iframe! Close auxiliary tab if open
-            if (paymentTab && !paymentTab.closed) {
-              paymentTab.close();
-            }
-          } else {
-            // Graceful fallback to new tab or direct redirect
-            if (paymentTab && !paymentTab.closed) {
-              paymentTab.location.href = mercuryUrl;
-            } else {
-              window.open(mercuryUrl, '_blank');
-            }
+          // On mobile apps and mobile browsers, immediately navigate to official PhonePe Mercury page
+          if (isAndroidOrMobileApp()) {
+            window.location.href = mercuryUrl;
+            return;
           }
-        } else if (paymentTab && !paymentTab.closed) {
-          paymentTab.location.href = fullLaunchUrl;
+
+          // On Desktop:
+          if (paymentTab && !paymentTab.closed) {
+            paymentTab.location.href = mercuryUrl;
+          } else {
+            window.location.href = mercuryUrl;
+          }
+        } else {
+          throw new Error('Unable to obtain PhonePe checkout session');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to initiate PhonePe PG payment:', err);
+        setIsProcessing(false);
+        setIsWaitingPhonePePG(false);
         if (paymentTab && !paymentTab.closed) {
-          paymentTab.location.href = fullLaunchUrl;
+          paymentTab.close();
         }
+        setPhonePeVerifyMsg({
+          type: 'error',
+          text: 'PhonePe Gateway connect theih a ni rih lo: ' + (err?.message || 'Khawngaihin i internet connection check la, hmet nawn leh rawh.')
+        });
       }
       return;
     }

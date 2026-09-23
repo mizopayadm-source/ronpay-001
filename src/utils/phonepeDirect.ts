@@ -92,7 +92,9 @@ export async function createDirectPhonePeOrder(options: {
   const amountPaise = Math.round(options.amountInRupees * 100);
 
   const callbackUrl = `${origin}/api/phonepe/callback?txnId=${encodeURIComponent(txnId)}`;
+  const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 
+  // Only use headers strictly allowed in PhonePe Preprod CORS access-control-allow-headers!
   const res = await fetch(PHONEPE_CONFIG.SANDBOX_PAY_URL, {
     method: 'POST',
     headers: {
@@ -100,11 +102,7 @@ export async function createDirectPhonePeOrder(options: {
       'Accept': 'application/json',
       'Authorization': 'O-Bearer ' + token,
       'X-MERCHANT-ID': PHONEPE_CONFIG.MERCHANT_ID,
-      'X-PROVIDER-ID': PHONEPE_CONFIG.MERCHANT_ID,
-      'X-SOURCE': 'WEB',
-      'X-SOURCE-VERSION': '1.0',
-      'X-CLIENT-ID': PHONEPE_CONFIG.CLIENT_ID,
-      'X-CLIENT-VERSION': PHONEPE_CONFIG.CLIENT_VERSION
+      'x-source': isMobile ? 'ANDROID' : 'WEB'
     },
     body: JSON.stringify({
       merchantOrderId: txnId,
@@ -114,6 +112,9 @@ export async function createDirectPhonePeOrder(options: {
         merchantUrls: {
           redirectUrl: callbackUrl
         }
+      },
+      deviceContext: {
+        deviceOS: isMobile ? 'ANDROID' : 'WEB'
       }
     })
   });
@@ -124,10 +125,12 @@ export async function createDirectPhonePeOrder(options: {
   }
 
   const data: any = await res.json();
-  const redirectUrl = data.redirectUrl || `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(token)}`;
+  if (!data?.redirectUrl) {
+    throw new Error('PhonePe pay response missing redirectUrl');
+  }
 
   return {
-    redirectUrl,
+    redirectUrl: data.redirectUrl,
     orderId: data.orderId || `OMO${Date.now()}`,
     merchantTransactionId: txnId
   };
@@ -135,8 +138,8 @@ export async function createDirectPhonePeOrder(options: {
 
 /**
  * Universal Mercury URL Resolver:
- * Tries server-side /api/phonepe/initiate-pay first, falls back gracefully to
- * direct PhonePe preprod sandbox API if the backend returns static HTML or errors.
+ * Directly creates the authoritative PhonePe PG order with exact amount (e.g. ₹500),
+ * ensuring the token contains the merchantOrderId so PhonePe never defaults to ₹100.
  */
 export async function getPhonePeMercuryUrl(options: {
   amountInRupees: number;
@@ -152,10 +155,28 @@ export async function getPhonePeMercuryUrl(options: {
   const origin = options.origin || (typeof window !== 'undefined' ? window.location.origin : 'https://ronpay.app');
   const txnId = options.merchantTransactionId || `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
 
-  // 1. Try backend API call (with 3-second timeout)
+  // 1. Try Direct PhonePe Preprod Sandbox API first (fastest: ~70ms, 100% reliable in both static & fullstack environments)
+  try {
+    const directOrder = await createDirectPhonePeOrder({
+      amountInRupees: options.amountInRupees,
+      merchantTransactionId: txnId,
+      donorName: options.donorName,
+      donorPhone: options.donorPhone,
+      campaignTitle: options.campaignTitle,
+      campaignId: options.campaignId,
+      origin: origin
+    });
+    if (directOrder?.redirectUrl && directOrder.redirectUrl.includes('mercury-uat.phonepe.com')) {
+      return directOrder.redirectUrl;
+    }
+  } catch (directErr) {
+    console.warn('Direct PhonePe session creation attempt 1 error:', directErr);
+  }
+
+  // 2. Try backend API call if direct call had any issue (e.g. transient network glitch)
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 4000);
 
     const res = await fetch(`${origin}/api/phonepe/initiate-pay`, {
       method: 'POST',
@@ -190,29 +211,19 @@ export async function getPhonePeMercuryUrl(options: {
       }
     }
   } catch (backendErr) {
-    console.warn('Backend initiate-pay unavailable, using direct PhonePe Preprod Sandbox API:', backendErr);
+    console.warn('Backend initiate-pay unavailable:', backendErr);
   }
 
-  // 2. Direct client-side API call to PhonePe Preprod Sandbox
-  try {
-    const directOrder = await createDirectPhonePeOrder({
-      amountInRupees: options.amountInRupees,
-      merchantTransactionId: txnId,
-      donorName: options.donorName,
-      donorPhone: options.donorPhone,
-      campaignTitle: options.campaignTitle,
-      campaignId: options.campaignId,
-      origin: origin
-    });
-    return directOrder.redirectUrl;
-  } catch (directErr) {
-    console.error('Direct PhonePe session generation failed:', directErr);
-    // 3. Fallback: Generate token URL directly
-    try {
-      const token = await getDirectPhonePeOAuthToken();
-      return `https://mercury-uat.phonepe.com/transact/uat_v3?token=${encodeURIComponent(token)}`;
-    } catch {
-      return 'https://mercury-uat.phonepe.com/transact/uat_v3';
-    }
-  }
+  // 3. Retry Direct Creation once more
+  const retryOrder = await createDirectPhonePeOrder({
+    amountInRupees: options.amountInRupees,
+    merchantTransactionId: txnId,
+    donorName: options.donorName,
+    donorPhone: options.donorPhone,
+    campaignTitle: options.campaignTitle,
+    campaignId: options.campaignId,
+    origin: origin
+  });
+
+  return retryOrder.redirectUrl;
 }

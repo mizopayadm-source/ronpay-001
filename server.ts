@@ -747,24 +747,9 @@ app.all([
           },
           deviceContext: {
             deviceOS: isMobileApp ? 'ANDROID' : 'WEB'
-          },
-          paymentModeConfig: {
-            version: 'V2',
-            enabledPaymentModes: [
-              {
-                type: 'UPI',
-                flows: ['INTENT', 'COLLECT', 'QR']
-              },
-              {
-                type: 'CARD'
-              },
-              {
-                type: 'NET_BANKING'
-              }
-            ]
           }
         }),
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(8000)
       });
 
       if (v2PayResp.ok) {
@@ -784,10 +769,6 @@ app.all([
     }
 
     const ronpayMobileCheckoutUrl = `${effectiveOrigin}/?view=app&screen=phonepe-checkout&txnId=${encodeURIComponent(merchantTransactionId)}&amt=${(totalPayablePaise / 100).toFixed(2)}&baseAmt=${(merchantSharePaise / 100).toFixed(2)}&fee=${(platformFeePaise / 100).toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId || '')}&ctitle=${encodeURIComponent(campaignTitle || '')}&cat=${encodeURIComponent(req.body?.category || '')}&donor=${encodeURIComponent(donorName || '')}&donorPhone=${encodeURIComponent(customerPhone || '')}&anon=${req.body?.isAnonymous ? '1' : '0'}`;
-
-    if (isMobileApp) {
-      phonePeCheckoutUrl = ronpayMobileCheckoutUrl;
-    }
 
     // Standard PhonePe PG V2 Payload Schema
     const paymentPayload = {
@@ -1001,24 +982,9 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
           },
           deviceContext: {
             deviceOS: isMobileApp ? 'ANDROID' : 'WEB'
-          },
-          paymentModeConfig: {
-            version: 'V2',
-            enabledPaymentModes: [
-              {
-                type: 'UPI',
-                flows: ['INTENT', 'COLLECT', 'QR']
-              },
-              {
-                type: 'CARD'
-              },
-              {
-                type: 'NET_BANKING'
-              }
-            ]
           }
         }),
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(8000)
       });
 
       if (v2PayResp.ok) {
