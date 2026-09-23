@@ -220,7 +220,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
               memMap.set(k, { ...(memMap.get(k) || {}), ...m });
             }
           }
-          saveMembers(Array.from(memMap.values()));
+          saveMembers(Array.from(memMap.values()), true);
         }
 
         // 4. Update transactions
@@ -253,7 +253,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
 
         // 5. Update creators
         if (Array.isArray(serverData.creators)) {
-          saveStoredCreatorsList(serverData.creators);
+          saveStoredCreatorsList(serverData.creators, true);
         }
 
         // 6. Update staff accounts
@@ -265,12 +265,12 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
 
         // 7. Update pricing config
         if (serverData.pricingConfig) {
-          saveStoredPricingConfig(serverData.pricingConfig);
+          saveStoredPricingConfig(serverData.pricingConfig, true);
         }
 
         // 8. Update announcement
         if (serverData.announcement) {
-          saveStoredAnnouncement(serverData.announcement);
+          saveStoredAnnouncement(serverData.announcement, true);
         }
 
         // 9. Update audit logs
@@ -523,68 +523,23 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     }
   });
 
-  // 2. Initial sync with server
-  syncAllWithServer().then(res => {
-    if (res && onSyncUpdate) onSyncUpdate(res);
-  }).catch(() => {});
+  // 2. Initial sync with server - disabled to make sync purely event-driven
+  // syncAllWithServer().then(res => { if (res && onSyncUpdate) onSyncUpdate(res); }).catch(() => {});
 
-  // 3. Real-time Server-Sent Events (SSE) stream for instantaneous cross-device / Android / multi-window sync
-  let eventSource: EventSource | null = null;
-  let sseReconnectTimer: any = null;
-
-  const connectSSE = () => {
-    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return;
-    try {
-      if (eventSource) {
-        eventSource.close();
-      }
-      eventSource = new EventSource('/api/data/events');
-
-      eventSource.onmessage = (event) => {
-        try {
-          if (!event.data) return;
-          const payload = JSON.parse(event.data);
-          if (payload && payload.type === 'data_changed') {
-            syncAllWithServer().then(res => {
-              if (res && onSyncUpdate) onSyncUpdate(res);
-            }).catch(() => {});
-          }
-        } catch (e) {}
-      };
-
-      eventSource.onerror = () => {
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
-        sseReconnectTimer = setTimeout(() => {
-          if (typeof navigator === 'undefined' || navigator.onLine) {
-            connectSSE();
-          }
-        }, 4000);
-      };
-    } catch (e) {}
-  };
-
-  connectSSE();
-
-  // 4. Instant same-browser cross-tab & cross-window synchronization via BroadcastChannel
+  // 3. Same-browser cross-tab & cross-window synchronization via BroadcastChannel
   let broadcastChannel: BroadcastChannel | null = null;
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
     try {
       broadcastChannel = new BroadcastChannel('ronpay_realtime_sync');
       broadcastChannel.onmessage = (ev) => {
-        if (ev && ev.data) {
-          syncAllWithServer().then(res => {
-            if (res && onSyncUpdate) onSyncUpdate(res);
-          }).catch(() => {});
+        if (ev && ev.data && onSyncUpdate) {
+          onSyncUpdate(getLocalFallbackState());
         }
       };
     } catch (e) {}
   }
 
-  // 5. Cross-window storage listener for local key changes across browser windows
+  // 4. Cross-window storage listener for local key changes across browser windows
   const handleStorageChange = (e: StorageEvent) => {
     if (!e.key) return;
     if (e.key.startsWith('ronpay_')) {
@@ -597,43 +552,12 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     window.addEventListener('storage', handleStorageChange);
   }
 
-  // 6. Periodic fallback sync every 25 seconds (respects backoff & offline status)
-  const intervalId = setInterval(() => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    if (Date.now() < nextAllowedSyncTime) return;
-    syncAllWithServer().then(res => {
-      if (res && onSyncUpdate) onSyncUpdate(res);
-    }).catch(() => {});
-  }, 25000);
-
-  // Sync on tab visibility change (only if online and not in backoff)
-  const handleVisibility = () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    if (Date.now() < nextAllowedSyncTime) return;
-    if (document.visibilityState === 'visible') {
-      syncAllWithServer().then(res => {
-        if (res && onSyncUpdate) onSyncUpdate(res);
-      }).catch(() => {});
-    }
-  };
-
-  document.addEventListener('visibilitychange', handleVisibility);
-  window.addEventListener('focus', handleVisibility);
-
   return () => {
     stopFirestore();
-    clearInterval(intervalId);
-    if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
     if (broadcastChannel) {
       broadcastChannel.close();
       broadcastChannel = null;
     }
-    document.removeEventListener('visibilitychange', handleVisibility);
-    window.removeEventListener('focus', handleVisibility);
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorageChange);
     }

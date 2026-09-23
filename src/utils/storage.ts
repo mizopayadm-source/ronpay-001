@@ -612,26 +612,27 @@ export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> =>
         hasChanges = true;
       }
 
-      // 3. Ensure custom logo campaigns are actively broadcast and synced to Firestore & Server
-      const isCustomLogo = camp.imageUrl && !camp.imageUrl.includes('unsplash.com') && !camp.imageUrl.startsWith('data:image/svg+xml');
-      if (isCustomLogo) {
-        const stampedCamp = {
-          ...camp,
-          updatedAt: new Date().toISOString()
-        };
-        syncCampaignToFirestore(stampedCamp).catch(() => {});
-        safeApiFetch('/api/campaigns', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(stampedCamp)
-        });
-      }
-
       optimizedList.push(camp);
     }
 
     if (hasChanges) {
       saveStoredCampaigns(optimizedList, true);
+      // Only push to cloud when an actual image repair or optimization occurred
+      for (const camp of optimizedList) {
+        const isCustomLogo = camp.imageUrl && !camp.imageUrl.includes('unsplash.com') && !camp.imageUrl.startsWith('data:image/svg+xml');
+        if (isCustomLogo) {
+          const stampedCamp = {
+            ...camp,
+            updatedAt: new Date().toISOString()
+          };
+          syncCampaignToFirestore(stampedCamp).catch(() => {});
+          safeApiFetch('/api/campaigns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(stampedCamp)
+          });
+        }
+      }
     }
   } catch (err) {
     console.warn('ensureCampaignImagesOptimizedAndSynced error:', err);
@@ -1069,7 +1070,7 @@ export const loginCreator = (profile: CreatorProfile): void => {
   }
 };
 
-export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
+export const saveStoredCreatorProfile = (profile: CreatorProfile, skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
 
@@ -1084,15 +1085,17 @@ export const saveStoredCreatorProfile = (profile: CreatorProfile) => {
     }
     localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(updatedList));
 
-    if (profile && profile.phone) {
-      syncCreatorToFirestore(profile).catch(() => {});
-    }
+    if (!skipServerPush) {
+      if (profile && profile.phone) {
+        syncCreatorToFirestore(profile).catch(() => {});
+      }
 
-    safeApiFetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creators: updatedList })
-    });
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creators: updatedList })
+      }).catch(() => {});
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: profile }));
@@ -1134,7 +1137,7 @@ export const getStoredCreatorsList = (): CreatorProfile[] => {
   return INITIAL_REGISTERED_CREATORS;
 };
 
-export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
+export const saveStoredCreatorsList = (creators: CreatorProfile[], skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(CREATORS_LIST_KEY, JSON.stringify(creators));
     
@@ -1152,11 +1155,13 @@ export const saveStoredCreatorsList = (creators: CreatorProfile[]) => {
       }
     }
 
-    safeApiFetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creators })
-    });
+    if (!skipServerPush) {
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creators })
+      }).catch(() => {});
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: creators }));
@@ -1189,11 +1194,13 @@ export const getStoredPricingConfig = (): SystemPricingConfig => {
   return DEFAULT_PRICING_CONFIG;
 };
 
-export const saveStoredPricingConfig = (config: SystemPricingConfig) => {
+export const saveStoredPricingConfig = (config: SystemPricingConfig, skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(PRICING_CONFIG_KEY, JSON.stringify(config));
-    if (config) {
-      syncPricingConfigToFirestore(config).catch(() => {});
+    if (!skipServerPush) {
+      if (config) {
+        syncPricingConfigToFirestore(config).catch(() => {});
+      }
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_pricing_config_updated', { detail: config }));
@@ -1627,17 +1634,19 @@ export const getStoredAnnouncement = (): AnnouncementBanner => {
   return DEFAULT_ANNOUNCEMENT;
 };
 
-export const saveStoredAnnouncement = (ann: AnnouncementBanner) => {
+export const saveStoredAnnouncement = (ann: AnnouncementBanner, skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(ANNOUNCEMENT_KEY, JSON.stringify(ann));
-    if (ann) {
-      syncAnnouncementToFirestore(ann).catch(() => {});
+    if (!skipServerPush) {
+      if (ann) {
+        syncAnnouncementToFirestore(ann).catch(() => {});
+      }
+      safeApiFetch('/api/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ann)
+      }).catch(() => {});
     }
-    safeApiFetch('/api/announcement', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ann)
-    });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_announcement_updated', { detail: ann }));
       broadcastTabSync('announcement', ann);
@@ -2397,7 +2406,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
   }
 };
 
-export const saveMembers = (members: MemberRecord[]): void => {
+export const saveMembers = (members: MemberRecord[], skipServerPush: boolean = false): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
     
@@ -2408,11 +2417,13 @@ export const saveMembers = (members: MemberRecord[]): void => {
       broadcastTabSync('members', members);
     }
 
-    safeApiFetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ members })
-    });
+    if (!skipServerPush) {
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ members })
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }

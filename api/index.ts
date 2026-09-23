@@ -1716,6 +1716,30 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // 6q. Announcement API (GET, POST)
+    if (pathname === '/api/announcement') {
+      const db = getCentralDatabase();
+      if (req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({
+          success: true,
+          announcement: db.announcement || null
+        }));
+      }
+      if (req.method === 'POST') {
+        const ann = await parseJsonBody(req);
+        if (ann && typeof ann === 'object') {
+          db.announcement = ann;
+          saveCentralDatabase(db);
+        }
+        res.setHeader('Content-Type', 'application/json');
+        return res.end(JSON.stringify({
+          success: true,
+          announcement: db.announcement
+        }));
+      }
+    }
+
     // 7. Health check
     if (pathname.includes('/health')) {
       res.setHeader('Content-Type', 'application/json');

@@ -428,33 +428,10 @@ export default function App() {
       reloadLocalData();
     });
 
-    // Initial complete bi-directional sync on app startup (merges local transactions across windows)
-    syncAllWithServer()
-      .then(syncResult => {
-        if (syncResult) {
-          reloadLocalData();
-        }
-        // Ensure image logos are optimized and synchronized to Firestore & Server for mobile and cross-browser clients
-        ensureCampaignImagesOptimizedAndSynced().catch(() => {});
-      })
-      .catch(() => {
-        ensureCampaignImagesOptimizedAndSynced().catch(() => {});
-      });
-
-    // Periodic background sync every 25 seconds so all windows, tabs and Android phones stay in lock-step
-    const syncInterval = setInterval(() => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      syncAllWithServer()
-        .then(syncResult => {
-          if (syncResult) {
-            reloadLocalData();
-          }
-        })
-        .catch(() => {});
-    }, 25000);
+    // Load local storage immediately on startup without background polling
+    reloadLocalData();
 
     return () => {
-      clearInterval(syncInterval);
       unsubCrossTab();
       unsubFocus();
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
