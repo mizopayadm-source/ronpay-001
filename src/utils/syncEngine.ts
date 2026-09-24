@@ -159,17 +159,40 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
 
       if (timeoutId) clearTimeout(timeoutId);
 
-      if (!response.ok) {
+      let serverData: any = null;
+
+      if (response.ok) {
+        try {
+          const result = await response.json();
+          if (result && result.success && result.data) {
+            serverData = result.data;
+          }
+        } catch {}
+      }
+
+      // Fallback for static hosts (e.g. ronpay.app on Cloudflare Pages or Vercel without Node.js backend)
+      if (!serverData) {
+        try {
+          const dbResp = await fetch('/ronpay_db.json', { cache: 'no-cache' });
+          if (dbResp.ok) {
+            const dbData = await dbResp.json();
+            if (dbData && (Array.isArray(dbData.campaigns) || Array.isArray(dbData.transactions))) {
+              serverData = dbData;
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Fallback static /ronpay_db.json fetch note:', dbErr);
+        }
+      }
+
+      if (!serverData) {
         throw new Error(`Sync server responded with status ${response.status}`);
       }
 
-      const result = await response.json();
-      if (result.success && result.data) {
+      if (serverData) {
         // Successful sync: reset failure backoff
         syncFailureCount = 0;
         nextAllowedSyncTime = 0;
-
-        const serverData = result.data;
 
         // 1. Process server tombstone records first to purge any deleted records
         if (Array.isArray(serverData.deletedCampaignIds)) {
