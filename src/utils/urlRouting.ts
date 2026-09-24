@@ -186,7 +186,15 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     const sulhnuParam = searchParams.get('sulhnu') || searchParams.get('history');
     const adminParam = searchParams.get('admin');
     const walletParam = searchParams.get('wallet');
-    const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') ? viewParam : undefined;
+    const isAppExplicit = pathname === '/app' || 
+                          pathname.startsWith('/app/') || 
+                          pathname === '/app.html' || 
+                          searchParams.get('platform') === 'android' ||
+                          searchParams.get('app') === '1' ||
+                          searchParams.get('app') === 'true';
+    const parsedView: 'website' | 'app' | undefined = (viewParam === 'app' || viewParam === 'website') 
+      ? viewParam 
+      : (isAppExplicit ? 'app' : undefined);
     const isLaunchPayPath = pathname.toLowerCase().includes('launch-pay') ||
                             pathname.toLowerCase() === '/phonepe' || 
                             pathname.toLowerCase() === '/phonepe-uat' || 

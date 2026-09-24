@@ -5,13 +5,20 @@ import './index.css';
 import { registerServiceWorker } from './utils/serviceWorker';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-registerServiceWorker();
+try {
+  registerServiceWorker();
+} catch (e) {
+  console.warn('[RonPay] Service worker setup bypassed:', e);
+}
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary name="RonPayRoot">
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
-);
+const rootEl = document.getElementById('root');
+if (rootEl) {
+  createRoot(rootEl).render(
+    <StrictMode>
+      <ErrorBoundary name="RonPayRoot">
+        <App />
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+}
 
