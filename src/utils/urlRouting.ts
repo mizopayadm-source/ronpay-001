@@ -503,8 +503,20 @@ export function cleanPaymentUrlParams() {
     )) {
       window.location.hash = '';
     }
+
+    let targetPath = url.pathname;
+    const lowerPath = targetPath.toLowerCase();
+    if (
+      lowerPath.includes('callback') ||
+      lowerPath.includes('phonepe') ||
+      lowerPath.includes('launch-pay') ||
+      lowerPath.includes('uat')
+    ) {
+      targetPath = '/';
+    }
+
     const queryStr = url.searchParams.toString();
-    const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
+    const newUrl = queryStr ? `${targetPath}?${queryStr}` : targetPath;
     window.history.replaceState({ screen: 'home' }, '', newUrl);
   } catch (e) {
     // Ignore history state errors
@@ -540,6 +552,18 @@ export function updateBrowserUrl(
       window.location.hash = '';
     }
 
+    let targetPath = url.pathname;
+    const lowerPath = targetPath.toLowerCase();
+    if (
+      screen === 'home' ||
+      lowerPath.includes('callback') ||
+      lowerPath.includes('phonepe') ||
+      lowerPath.includes('launch-pay') ||
+      lowerPath.includes('uat')
+    ) {
+      targetPath = '/';
+    }
+
     if (screen === 'checkout' && campaign) {
       url.searchParams.set('campaign', campaign.id);
       if (campaign.category) url.searchParams.set('cat', campaign.category);
@@ -554,7 +578,7 @@ export function updateBrowserUrl(
     }
 
     const queryStr = url.searchParams.toString();
-    const newUrl = queryStr ? `${url.pathname}?${queryStr}` : url.pathname;
+    const newUrl = queryStr ? `${targetPath}?${queryStr}` : targetPath;
 
     if (options.replace) {
       window.history.replaceState({ screen, campaignId: campaign?.id, category }, '', newUrl);

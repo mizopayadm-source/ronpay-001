@@ -39,11 +39,11 @@ import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
-import { getMembers, addOrUpdateMember, saveTransaction } from '../utils/storage';
+import { getMembers, addOrUpdateMember, saveTransaction, recordUserPaidTxId } from '../utils/storage';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';
-import { getPhonePeMercuryUrl } from '../utils/phonepeDirect';
+import { getPhonePeMercuryUrl, checkDirectPhonePeStatus } from '../utils/phonepeDirect';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
 
@@ -106,9 +106,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const finalTx: Transaction = {
         ...activePendingTxn,
         status: 'completed',
+        verifiedAt: new Date().toISOString(),
         ...(updatedFields || {})
       };
       saveTransaction(finalTx);
+      recordUserPaidTxId(finalTx.id);
       onPaymentSuccess(finalTx);
     };
 
@@ -121,6 +123,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         ...activePendingTxn,
         status: 'failed',
       };
+      saveTransaction(failedTx);
       if (onPaymentFailure) {
         onPaymentFailure(failedTx, reason || 'PhonePe payment cancelled or failed');
       } else {
@@ -183,51 +186,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     };
     window.addEventListener('storage', handleStorage);
 
-    // 4. Polling PhonePe sandbox order status every 1.8 seconds
+    // 4. Polling PhonePe order status every 1.5 seconds (Direct Preprod Sandbox inquiry + backend fallback)
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        const isSuccess =
-          json?.code === 'PAYMENT_SUCCESS' ||
-          json?.code === 'SUCCESS' ||
-          json?.data?.state === 'COMPLETED' ||
-          json?.data?.status === 'SUCCESS' ||
-          json?.data?.status === 'PAYMENT_SUCCESS' ||
-          json?.data?.responseCode === 'SUCCESS';
-
-        const isFailed =
-          json?.code === 'PAYMENT_ERROR' ||
-          json?.data?.state === 'FAILED' ||
-          json?.data?.state === 'CANCELLED' ||
-          json?.data?.state === 'EXPIRED' ||
-          Boolean(json?.data?.errorCode) ||
-          json?.data?.responseCode === 'PAYMENT_ERROR' ||
-          json?.data?.responseCode === 'FAILED';
-
-        if (isSuccess) {
+        const status = await checkDirectPhonePeStatus(activePendingTxn.id);
+        if (status.isSuccess) {
           triggerSuccess({
-            referenceNo: json.data?.transactionId || json.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
-            utr: json.data?.paymentInstrument?.utr || activePendingTxn.utr
+            referenceNo: status.transactionId || activePendingTxn.referenceNo,
+            utr: status.utr || activePendingTxn.utr
           });
-        } else if (isFailed) {
-          triggerFailed(json?.data?.detailedErrorCode || json?.data?.errorCode || 'PhonePe payment failed or cancelled');
+        } else if (status.isFailed) {
+          triggerFailed(status.reason || 'PhonePe payment failed or cancelled');
         }
       } catch (e) {}
-    }, 1800);
+    }, 1500);
 
-    // 5. Window focus event
+    // 5. Window focus event (e.g. when user returns to tab after phone QR scan or netbanking tab)
     const handleFocus = async () => {
       try {
-        const res = await fetch(`/api/phonepe/status/${encodeURIComponent(activePendingTxn.id)}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        if (json?.code === 'PAYMENT_SUCCESS' || json?.data?.state === 'COMPLETED') {
+        const status = await checkDirectPhonePeStatus(activePendingTxn.id);
+        if (status.isSuccess) {
           triggerSuccess({
-            referenceNo: json.data?.transactionId || json.data?.paymentInstrument?.utr || activePendingTxn.referenceNo,
-            utr: json.data?.paymentInstrument?.utr || activePendingTxn.utr
+            referenceNo: status.transactionId || activePendingTxn.referenceNo,
+            utr: status.utr || activePendingTxn.utr
           });
+        } else if (status.isFailed) {
+          triggerFailed(status.reason);
         }
       } catch (e) {}
     };
@@ -787,6 +771,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       };
 
       try {
+        saveTransaction(pendingTx);
         localStorage.setItem(`RONPAY_PENDING_TX_${merchantTxnId}`, JSON.stringify(pendingTx));
       } catch (e) {}
 

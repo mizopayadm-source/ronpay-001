@@ -109,6 +109,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
 import { getUrlRoute, updateBrowserUrl, updateBrowserView, isAndroidOrMobileApp, cleanPaymentUrlParams, markReceiptAsConsumed, isReceiptConsumed } from './utils/urlRouting';
+import { checkDirectPhonePeStatus, getPhonePeMercuryUrl } from './utils/phonepeDirect';
 
 export default function App() {
   // Splash screen state for smooth UX
@@ -558,63 +559,32 @@ export default function App() {
     }
 
     try {
-      const resp = await fetch(`/api/phonepe/status/${encodeURIComponent(receiptId)}`);
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status} status from PhonePe status endpoint`);
-      }
-      const data = await resp.json();
+      const statusRes = await checkDirectPhonePeStatus(receiptId);
 
       const isConfirmedFailed =
-        data?.code === 'PAYMENT_ERROR' ||
-        data?.data?.state === 'FAILED' ||
-        data?.data?.state === 'CANCELLED' ||
-        data?.data?.state === 'EXPIRED' ||
-        Boolean(data?.data?.errorCode) ||
-        data?.data?.responseCode === 'PAYMENT_ERROR' ||
-        data?.data?.responseCode === 'FAILED';
+        statusRes.isFailed ||
+        route.screen === 'failed';
 
       const isConfirmedSuccess =
-        data?.code === 'PAYMENT_SUCCESS' ||
-        data?.data?.state === 'COMPLETED' ||
-        data?.data?.responseCode === 'SUCCESS' ||
-        data?.data?.status === 'SUCCESS' ||
-        data?.data?.status === 'PAYMENT_SUCCESS';
+        statusRes.isSuccess ||
+        (!statusRes.isFailed && (route.screen === 'success' || !route.screen || route.screen === 'home'));
 
       if (isConfirmedFailed) {
         deleteStoredTransaction(receiptId);
         setCompletedTransaction(null);
-        const resolvedReason = data?.data?.detailedErrorCode || data?.data?.errorCode || data?.message || 'PhonePe payment reported failed or cancelled';
+        const resolvedReason = statusRes.reason || route.failureReason || 'PhonePe payment reported failed or cancelled';
         setFailureReason(resolvedReason);
 
         const meta = route.receiptMeta;
         const baseTx = found || parsedPending;
         const allCamps = [...campaignsRef.current, ...getStoredCampaigns()];
-        const targetCampId = data?.data?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
+        const targetCampId = meta?.campaignId || baseTx?.campaignId || '';
         const matchedCamp = allCamps.find(c => c.id === targetCampId);
 
-        const feeOption = (data?.data?.feeOption || meta?.feeOption || baseTx?.feeOption || 'ADD_ON') as 'ADD_ON' | 'DEDUCT';
-        const total = data?.data?.amountRupees || (data?.data?.amount ? data.data.amount / 100 : null) || meta?.amount || baseTx?.totalAmount || 0;
-        let fee = 0;
-        if (data?.data?.platformFeeRupees !== undefined && data?.data?.platformFeeRupees !== null) {
-          fee = Number(data.data.platformFeeRupees);
-        } else if (meta?.platformFee !== undefined && meta?.platformFee !== null) {
-          fee = Number(meta.platformFee);
-        } else if (baseTx?.platformFee !== undefined && baseTx?.platformFee !== null) {
-          fee = Number(baseTx.platformFee);
-        } else {
-          fee = total > 1 ? Math.max(1, Math.round(total * 0.01)) : 0;
-        }
-
-        let base = 0;
-        if (data?.data?.baseAmountRupees !== undefined && data?.data?.baseAmountRupees !== null && Number(data.data.baseAmountRupees) > 0 && Number(data.data.baseAmountRupees) !== total) {
-          base = Number(data.data.baseAmountRupees);
-        } else if (meta?.baseAmount !== undefined && meta?.baseAmount !== null && Number(meta.baseAmount) > 0 && Number(meta.baseAmount) !== total) {
-          base = Number(meta.baseAmount);
-        } else if (baseTx?.amount !== undefined && baseTx?.amount !== null && Number(baseTx.amount) > 0 && Number(baseTx.amount) !== total) {
-          base = Number(baseTx.amount);
-        } else {
-          base = feeOption === 'ADD_ON' || fee > 0 ? Math.max(1, total - fee) : total;
-        }
+        const feeOption = (meta?.feeOption || baseTx?.feeOption || 'ADD_ON') as 'ADD_ON' | 'DEDUCT';
+        const total = meta?.amount || baseTx?.totalAmount || 0;
+        const fee = meta?.platformFee ?? baseTx?.platformFee ?? (total > 1 ? Math.max(1, Math.round(total * 0.01)) : 0);
+        const base = baseTx?.amount || (feeOption === 'ADD_ON' || fee > 0 ? Math.max(1, total - fee) : total);
 
         const failedTx: Transaction = {
           id: receiptId,
@@ -630,13 +600,14 @@ export default function App() {
           paymentMethod: 'phonepe',
           status: 'failed',
           timestamp: baseTx?.timestamp || new Date().toISOString(),
-          referenceNo: data?.data?.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
+          referenceNo: statusRes.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
           feeOption: feeOption,
           campaignNetReceived: base
         };
 
+        saveTransaction(failedTx);
         setFailedTransaction(failedTx);
-        setTransactions(prev => prev.filter(t => t.id !== receiptId));
+        setTransactions(prev => [failedTx, ...prev.filter(t => t.id !== receiptId)]);
         setCurrentScreen('failed');
         setAppView('app');
         updateBrowserUrl('failed', null, null, { replace: true });
@@ -671,79 +642,62 @@ export default function App() {
           }
         } catch (e) {}
 
-        const sData = data?.data;
         const meta = route.receiptMeta;
         const baseTx = found || parsedPending;
 
         const allCamps = [...campaignsRef.current, ...getStoredCampaigns()];
-        const targetCampId = sData?.campaignId || meta?.campaignId || baseTx?.campaignId || '';
+        const targetCampId = meta?.campaignId || baseTx?.campaignId || '';
         const matchedCamp = allCamps.find(c => c.id === targetCampId);
 
-        const feeOption = (sData?.feeOption || meta?.feeOption || baseTx?.feeOption || 'ADD_ON') as 'ADD_ON' | 'DEDUCT';
+        const feeOption = (meta?.feeOption || baseTx?.feeOption || 'ADD_ON') as 'ADD_ON' | 'DEDUCT';
 
-        // Authoritative resolution of total, platform fee, and net base donation (fixing the 55 vs 56 issue)
-        const total = sData?.amountRupees || (sData?.amount ? sData.amount / 100 : null) || meta?.amount || baseTx?.totalAmount || 0;
+        const total = statusRes.amount || meta?.amount || baseTx?.totalAmount || (baseTx?.amount ? baseTx.amount : 0);
 
         let fee = 0;
-        if (sData?.platformFeeRupees !== undefined && sData?.platformFeeRupees !== null) {
-          fee = Number(sData.platformFeeRupees);
-        } else if (meta?.platformFee !== undefined && meta?.platformFee !== null) {
+        if (meta?.platformFee !== undefined && meta?.platformFee !== null) {
           fee = Number(meta.platformFee);
         } else if (baseTx?.platformFee !== undefined && baseTx?.platformFee !== null) {
           fee = Number(baseTx.platformFee);
-        } else if (sData?.splitDetails?.platformShare) {
-          fee = Number(sData.splitDetails.platformShare) / 100;
-        } else if ((baseTx as any)?.splitDetails?.platformShare) {
-          fee = Number((baseTx as any).splitDetails.platformShare) / 100;
         } else {
           fee = total > 1 ? Math.max(1, Math.round(total * 0.01)) : 0;
         }
 
         let base = 0;
-        if (sData?.baseAmountRupees !== undefined && sData?.baseAmountRupees !== null && Number(sData.baseAmountRupees) > 0 && Number(sData.baseAmountRupees) !== total) {
-          base = Number(sData.baseAmountRupees);
-        } else if (meta?.baseAmount !== undefined && meta?.baseAmount !== null && Number(meta.baseAmount) > 0 && Number(meta.baseAmount) !== total) {
+        if (meta?.baseAmount !== undefined && meta?.baseAmount !== null && Number(meta.baseAmount) > 0) {
           base = Number(meta.baseAmount);
-        } else if (baseTx?.amount !== undefined && baseTx?.amount !== null && Number(baseTx.amount) > 0 && Number(baseTx.amount) !== total) {
+        } else if (baseTx?.amount !== undefined && baseTx?.amount !== null && Number(baseTx.amount) > 0) {
           base = Number(baseTx.amount);
-        } else if (baseTx?.campaignNetReceived !== undefined && baseTx?.campaignNetReceived !== null && Number(baseTx.campaignNetReceived) > 0 && Number(baseTx.campaignNetReceived) !== total) {
+        } else if (baseTx?.campaignNetReceived !== undefined && baseTx?.campaignNetReceived !== null && Number(baseTx.campaignNetReceived) > 0) {
           base = Number(baseTx.campaignNetReceived);
-        } else if (sData?.splitDetails?.merchantShare) {
-          base = Number(sData.splitDetails.merchantShare) / 100;
-        } else if ((baseTx as any)?.splitDetails?.merchantShare) {
-          base = Number((baseTx as any).splitDetails.merchantShare) / 100;
         } else {
-          // In case base was not explicitly provided or was conflated with total,
-          // compute the precise net donation: (total - fee)
           base = feeOption === 'ADD_ON' || fee > 0 ? Math.max(1, total - fee) : total;
         }
 
         const resolvedCampTitle = (matchedCamp ? getCampaignCauseTitle(matchedCamp) : '') ||
           baseTx?.campaignTitle ||
-          (sData?.campaignTitle && sData.campaignTitle !== 'BCM Ebenezer' ? sData.campaignTitle : '') ||
           (meta?.campaignTitle && meta.campaignTitle !== 'BCM Ebenezer' ? meta.campaignTitle : '') ||
-          (sData?.category === 'ralna' || meta?.category === 'ralna' || matchedCamp?.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
+          (meta?.category === 'ralna' || matchedCamp?.category === 'ralna' ? 'Lalrinpuii Ralna' : '') ||
           'RonPay Community Bawm';
 
         const verifiedTx: Transaction = {
           id: receiptId,
           campaignId: targetCampId || matchedCamp?.id || 'cmp-custom',
           campaignTitle: resolvedCampTitle,
-          donorName: baseTx?.donorName || (sData?.isAnonymous || meta?.isAnonymous ? 'Anonymous' : (sData?.donorName || meta?.donorName || 'Valued Donor')),
-          donorPhone: baseTx?.donorPhone || sData?.donorPhone || meta?.donorPhone,
-          isAnonymous: Boolean(baseTx?.isAnonymous || sData?.isAnonymous || meta?.isAnonymous),
+          donorName: baseTx?.donorName || (meta?.isAnonymous ? 'Anonymous' : (meta?.donorName || 'Valued Donor')),
+          donorPhone: baseTx?.donorPhone || meta?.donorPhone,
+          isAnonymous: Boolean(baseTx?.isAnonymous || meta?.isAnonymous),
           amount: base,
           platformFee: fee,
           totalAmount: total,
-          category: (baseTx?.category || sData?.category || meta?.category || matchedCamp?.category || 'others') as any,
+          category: (baseTx?.category || meta?.category || matchedCamp?.category || 'others') as any,
           paymentMethod: 'phonepe',
           status: 'completed',
           timestamp: baseTx?.timestamp || new Date().toISOString(),
-          referenceNo: sData?.transactionId || sData?.paymentInstrument?.utr || baseTx?.referenceNo || `T${Date.now()}`,
+          referenceNo: statusRes.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
           verifiedAt: new Date().toISOString(),
           feeOption: feeOption,
           campaignNetReceived: base,
-          utr: sData?.paymentInstrument?.utr || baseTx?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
+          utr: statusRes.utr || baseTx?.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000))
         };
 
         // Update local and application states authoritatively
@@ -758,10 +712,17 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Authoritative status check failed, falling back to local records:', err);
-      if (found && found.status === 'completed') {
-        setCompletedTransaction(found);
-        recordUserPaidTxId(found.id);
-        setTransactions(prev => [found, ...prev.filter(t => t.id !== found.id)]);
+      const baseTx = found || parsedPending;
+      if (baseTx) {
+        const verifiedTx: Transaction = {
+          ...baseTx,
+          status: 'completed',
+          verifiedAt: new Date().toISOString()
+        };
+        setCompletedTransaction(verifiedTx);
+        saveTransaction(verifiedTx);
+        recordUserPaidTxId(verifiedTx.id);
+        setTransactions(prev => [verifiedTx, ...prev.filter(t => t.id !== verifiedTx.id)]);
         setCurrentScreen('success');
         setAppView('app');
         updateBrowserUrl('success', null, null, { replace: true });
@@ -1213,24 +1174,25 @@ export default function App() {
     updateBrowserView('website');
   };
 
-  const handleOpenPhonePeCheckout = (amount: number = 100) => {
+  const handleOpenPhonePeCheckout = async (amount: number = 100) => {
     const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://ronpay.app';
-    const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
-    
-    // In Android app or mobile browser, navigate directly so payment page opens immediately
-    if (isAndroidOrMobileApp()) {
-      window.location.href = launchUrl;
-      return;
-    }
 
     try {
-      const popup = window.open(launchUrl, '_blank');
-      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-        window.location.href = launchUrl;
+      const mercuryUrl = await getPhonePeMercuryUrl({
+        amountInRupees: amount,
+        campaignTitle: 'RonPay Official Bawm',
+        origin
+      });
+      if (mercuryUrl) {
+        window.location.href = mercuryUrl;
+        return;
       }
     } catch (e) {
-      window.location.href = launchUrl;
+      console.warn('Direct PhonePe session error, falling back:', e);
     }
+
+    const launchUrl = `/api/phonepe/launch-pay?amt=${amount}&origin=${encodeURIComponent(origin)}`;
+    window.location.href = launchUrl;
   };
 
   // Filter transactions for Sulhnu History

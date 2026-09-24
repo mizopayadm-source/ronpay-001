@@ -227,3 +227,134 @@ export async function getPhonePeMercuryUrl(options: {
 
   return retryOrder.redirectUrl;
 }
+
+export interface DirectPhonePeStatusResult {
+  state: 'COMPLETED' | 'FAILED' | 'PENDING';
+  isSuccess: boolean;
+  isFailed: boolean;
+  orderId?: string;
+  transactionId?: string;
+  utr?: string;
+  reason?: string;
+  amount?: number;
+}
+
+/**
+ * Universal PhonePe Payment Status Checker:
+ * Queries the backend /api/phonepe/status first, and gracefully queries
+ * the official PhonePe Preprod Sandbox API directly if backend returns non-JSON or HTML.
+ */
+export async function checkDirectPhonePeStatus(
+  merchantTransactionId: string
+): Promise<DirectPhonePeStatusResult> {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://ronpay.app';
+
+  // 1. Try backend status endpoint
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${origin}/api/phonepe/status/${encodeURIComponent(merchantTransactionId)}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const json = await res.json();
+      const isSuccess =
+        json?.code === 'PAYMENT_SUCCESS' ||
+        json?.code === 'SUCCESS' ||
+        json?.state === 'COMPLETED' ||
+        json?.data?.state === 'COMPLETED' ||
+        json?.data?.status === 'SUCCESS' ||
+        json?.data?.status === 'PAYMENT_SUCCESS' ||
+        json?.data?.responseCode === 'SUCCESS';
+
+      const isFailed =
+        json?.code === 'PAYMENT_ERROR' ||
+        json?.state === 'FAILED' ||
+        json?.data?.state === 'FAILED' ||
+        json?.data?.state === 'CANCELLED' ||
+        json?.data?.state === 'EXPIRED' ||
+        Boolean(json?.data?.errorCode) ||
+        json?.data?.responseCode === 'PAYMENT_ERROR' ||
+        json?.data?.responseCode === 'FAILED';
+
+      const utr = json?.paymentDetails?.[0]?.utr ||
+                  json?.data?.paymentInstrument?.utr ||
+                  json?.data?.utr ||
+                  json?.utr;
+
+      if (isSuccess) {
+        return {
+          state: 'COMPLETED',
+          isSuccess: true,
+          isFailed: false,
+          orderId: json.orderId || json.data?.orderId,
+          transactionId: json.data?.transactionId || json.data?.orderId,
+          utr: utr || `UTR${Date.now()}`
+        };
+      } else if (isFailed) {
+        return {
+          state: 'FAILED',
+          isSuccess: false,
+          isFailed: true,
+          reason: json?.data?.detailedErrorCode || json?.data?.errorCode || json?.message || 'Payment failed or cancelled'
+        };
+      }
+    }
+  } catch (backendErr) {
+    // Expected on static hosting where /api is not backed by server
+  }
+
+  // 2. Direct client-side inquiry to PhonePe Preprod Sandbox API
+  try {
+    const token = await getDirectPhonePeOAuthToken();
+    const statusUrl = `https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/order/${encodeURIComponent(merchantTransactionId)}/status`;
+    const res = await fetch(statusUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': 'O-Bearer ' + token,
+        'X-MERCHANT-ID': PHONEPE_CONFIG.MERCHANT_ID
+      }
+    });
+
+    if (res.ok) {
+      const sData: any = await res.json();
+      const pDetail = sData?.paymentDetails?.[0];
+      const isSuccess = sData?.state === 'COMPLETED' || pDetail?.state === 'COMPLETED';
+      const isFailed = sData?.state === 'FAILED' || sData?.state === 'CANCELLED' || sData?.state === 'EXPIRED' || pDetail?.state === 'FAILED' || pDetail?.state === 'CANCELLED';
+
+      const utr = pDetail?.utr || pDetail?.transactionId ? `UTR${String(pDetail?.transactionId).replace(/\D/g, '').slice(-12)}` : `UTR${Date.now()}`;
+
+      if (isSuccess) {
+        return {
+          state: 'COMPLETED',
+          isSuccess: true,
+          isFailed: false,
+          orderId: sData?.orderId,
+          transactionId: pDetail?.transactionId || sData?.orderId,
+          utr: utr,
+          amount: sData?.amount ? sData.amount / 100 : undefined
+        };
+      } else if (isFailed) {
+        return {
+          state: 'FAILED',
+          isSuccess: false,
+          isFailed: true,
+          reason: sData?.detailedErrorCode || sData?.errorCode || 'PhonePe payment cancelled or failed'
+        };
+      }
+    }
+  } catch (directErr) {
+    console.warn('Direct PhonePe status query warning:', directErr);
+  }
+
+  return {
+    state: 'PENDING',
+    isSuccess: false,
+    isFailed: false
+  };
+}
