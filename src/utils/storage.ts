@@ -330,6 +330,7 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 export const getStoredCampaigns = (): Campaign[] => {
   try {
     const deletedCampIds = getDeletedCampaignIds();
+    const canonicalCampIds = new Set(INITIAL_CAMPAIGNS.map(c => String(c.id).toLowerCase().trim()));
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
@@ -340,6 +341,10 @@ export const getStoredCampaigns = (): Campaign[] => {
             const cleanId = String(camp.id).toLowerCase().trim();
             if (cleanId === 'cmp-kumtluang-ymavt') return false;
             if (deletedCampIds.has(cleanId)) return false;
+            // Strict canonical harmonization: prune any legacy orphan test campaign not in canonical 24 list
+            if (!canonicalCampIds.has(cleanId)) {
+              return false;
+            }
             return true;
           })
           .map((camp: Campaign) => {
@@ -732,16 +737,7 @@ export const deleteStoredCampaign = (
 export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
   if (!tx) return false;
   const status = (tx.status || '').toLowerCase().trim();
-  if (
-    status === 'pending' || 
-    status === 'pending_verification' || 
-    status === 'failed' || 
-    status === 'rejected' || 
-    status === 'cancelled'
-  ) {
-    return false;
-  }
-  return true;
+  return status === 'completed' || status === 'success' || status === 'verified';
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
@@ -782,15 +778,45 @@ export const getStoredTransactions = (): Transaction[] => {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy sample entries for Liana & Kunga or old mismatched seed transactions or deleted transactions
+        // Canonical dataset index
+        const canonicalTxMap = new Map<string, Transaction>();
+        for (const it of INITIAL_TRANSACTIONS) {
+          if (it && it.id) {
+            canonicalTxMap.set(String(it.id).toLowerCase().trim(), it);
+          }
+        }
+
+        // Filter out legacy sample entries, deleted transactions, or stale non-canonical phantom records
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
-        const cleaned = parsed.filter(t => 
-          t && t.id &&
-          !deletedIds.has(String(t.id).toLowerCase().trim()) &&
-          t.donorName !== 'Liana' && 
-          t.donorName !== 'Kunga' && 
-          !legacyMismatchedIds.has(t.id)
-        );
+        const cleaned = parsed.filter(t => {
+          if (!t || !t.id) return false;
+          const cleanId = String(t.id).toLowerCase().trim();
+          if (deletedIds.has(cleanId)) return false;
+          if (t.donorName === 'Liana' || t.donorName === 'Kunga') return false;
+          if (legacyMismatchedIds.has(t.id)) return false;
+          
+          // If transaction exists in canonical dataset, always keep it
+          if (canonicalTxMap.has(cleanId)) return true;
+          
+          // If transaction was created locally recently (e.g. today or last 24h) with valid payment details, preserve it
+          if (t.timestamp) {
+            const txTime = new Date(t.timestamp).getTime();
+            const now = Date.now();
+            if (now - txTime < 24 * 60 * 60 * 1000) {
+              return true;
+            }
+          }
+          // Prune stale obsolete phantom transaction that creates disparity between devices
+          return false;
+        }).map(t => {
+          // Sync canonical status and attributes for existing canonical transactions
+          const cleanId = String(t.id).toLowerCase().trim();
+          const canonical = canonicalTxMap.get(cleanId);
+          if (canonical) {
+            return { ...t, status: canonical.status, amount: canonical.amount };
+          }
+          return t;
+        });
 
         // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
         // (like Zonunmawia or demo accounts) are never missing due to old browser cache,

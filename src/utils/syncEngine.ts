@@ -250,16 +250,28 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
           const deletedIds = getDeletedTransactionIds();
           const currentTxs = getStoredTransactions();
+          const serverTxIds = new Set(serverData.transactions.map((t: any) => String(t.id).toLowerCase().trim()));
           const txMap = new Map<string, any>();
-          for (const t of currentTxs) {
-            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
-              txMap.set(String(t.id).toLowerCase().trim(), t);
-            }
-          }
+          
+          // Seed authoritative server transactions first
           for (const t of serverData.transactions) {
             if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
               const k = String(t.id).toLowerCase().trim();
-              txMap.set(k, { ...(txMap.get(k) || {}), ...t });
+              txMap.set(k, t);
+            }
+          }
+
+          // Merge any recent local in-flight transactions (created within the last 15 minutes) not yet on server
+          const nowMs = Date.now();
+          for (const t of currentTxs) {
+            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+              const k = String(t.id).toLowerCase().trim();
+              if (!serverTxIds.has(k)) {
+                const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
+                if (nowMs - txTime < 15 * 60 * 1000) {
+                  txMap.set(k, t);
+                }
+              }
             }
           }
           const cleanTxs = Array.from(txMap.values());
