@@ -194,6 +194,17 @@ export interface CreatorProfile {
   defaultFeeOptionRule?: FeeOptionMode;
 }
 
+export interface SectionQuickPreset {
+  id: string;
+  name: string;        // e.g. "⛪ Kohhran (Bial 1-4)"
+  label: string;       // e.g. "Bial / Unit"
+  sections: string[];  // e.g. ["Bial 1 (Vengchhak)", "Bial 2 (Vengthlang)", ...]
+  icon?: string;
+  isSystem?: boolean;
+  createdAt?: string;
+  createdBy?: string;
+}
+
 export interface SystemPricingConfig {
   trialDurationDays?: number;
   globalTrialDays?: number;
@@ -208,6 +219,7 @@ export interface SystemPricingConfig {
   qrCreationPrice?: number;
   lastUpdated?: string;
   categories?: Record<string, { price?: number; label?: string; allowed?: boolean } | any>;
+  sectionPresets?: SectionQuickPreset[];
   updatedAt?: string;
   updatedBy?: string;
 }

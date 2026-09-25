@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
@@ -1277,6 +1277,76 @@ export const saveStoredPricingConfig = (config: SystemPricingConfig, skipServerP
     }
   } catch (e) {
     console.error('Failed to save pricing config', e);
+  }
+};
+
+export const DEFAULT_SECTION_PRESETS: SectionQuickPreset[] = [
+  {
+    id: 'preset-kohhran',
+    name: '⛪ Kohhran (Bial 1-4)',
+    label: 'Bial / Unit',
+    sections: ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung'],
+    isSystem: true
+  },
+  {
+    id: 'preset-yma',
+    name: '🏛️ YMA / NGO (Section A-D)',
+    label: 'Section / Veng',
+    sections: ['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung'],
+    isSystem: true
+  },
+  {
+    id: 'preset-veng',
+    name: '🏘️ Veng / Area',
+    label: 'Veng / Area',
+    sections: ['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General'],
+    isSystem: true
+  },
+  {
+    id: 'preset-group',
+    name: '👥 Group / Branch (1-4)',
+    label: 'Group / Branch',
+    sections: ['Group 1', 'Group 2', 'Group 3', 'Group 4', 'General'],
+    isSystem: true
+  }
+];
+
+export const getStoredSectionPresets = (): SectionQuickPreset[] => {
+  try {
+    const pricing = getStoredPricingConfig();
+    if (pricing?.sectionPresets && Array.isArray(pricing.sectionPresets) && pricing.sectionPresets.length > 0) {
+      return pricing.sectionPresets;
+    }
+
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem('ronpay_section_presets_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading section presets:', e);
+  }
+  return DEFAULT_SECTION_PRESETS;
+};
+
+export const saveStoredSectionPresets = (presets: SectionQuickPreset[], skipServerPush: boolean = false) => {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ronpay_section_presets_v1', JSON.stringify(presets));
+      window.dispatchEvent(new CustomEvent('ronpay_section_presets_updated', { detail: presets }));
+    }
+
+    const currentPricing = getStoredPricingConfig();
+    const updatedPricing: SystemPricingConfig = {
+      ...currentPricing,
+      sectionPresets: presets,
+      updatedAt: new Date().toISOString()
+    };
+    saveStoredPricingConfig(updatedPricing, skipServerPush);
+  } catch (e) {
+    console.warn('Error saving section presets:', e);
   }
 };
 

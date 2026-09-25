@@ -41,18 +41,21 @@ import {
   RefreshCw,
   Globe,
   Loader2,
-  Download
+  Download,
+  Save,
+  Sliders
 } from 'lucide-react';
-import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner } from '../types';
+import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner, SectionQuickPreset } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
-import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
+import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction, getStoredSectionPresets, saveStoredSectionPresets } from '../utils/storage';
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
 import { compressImageFile } from '../utils/imageCompressor';
+import { SectionPresetManagerModal } from './SectionPresetManagerModal';
 
 interface CreateQRScreenProps {
   onBack: () => void;
@@ -164,6 +167,18 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
   const [kumtluangValidity, setKumtluangValidity] = useState<string>(() => getTodayDateTimeLocal(23, 59, 0));
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>('user_paid');
+
+  // Quick Presets State & Synchronization
+  const [sectionPresets, setSectionPresets] = useState<SectionQuickPreset[]>(() => getStoredSectionPresets());
+  const [isPresetManagerOpen, setIsPresetManagerOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handlePresetsUpdate = () => {
+      setSectionPresets(getStoredSectionPresets());
+    };
+    window.addEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+    return () => window.removeEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+  }, []);
 
   // Auto-suggest unique prefix when org name changes if user hasn't explicitly edited
   useEffect(() => {
@@ -1530,35 +1545,28 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                 {/* Preset Quick Chooser */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                  {sectionPresets.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setKumtluangSectionLabel(p.label);
+                        setKumtluangSections([...p.sections]);
+                      }}
+                      className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                      title={`Apply preset: ${p.name}`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
                   <button
                     type="button"
-                    onClick={() => {
-                      setKumtluangSectionLabel('Bial / Unit');
-                      setKumtluangSections(['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']);
-                    }}
-                    className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                    onClick={() => setIsPresetManagerOpen(true)}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-slate-100 hover:bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Admin Quick Presets Setup & Management"
                   >
-                    ⛪ Kohhran (Bial 1-4)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setKumtluangSectionLabel('Section / Veng');
-                      setKumtluangSections(['Section A', 'Section B', 'Section C', 'Section D', 'General / Khawchhung']);
-                    }}
-                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
-                  >
-                    🏛️ YMA / NGO (Section A-D)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setKumtluangSectionLabel('Veng / Area');
-                      setKumtluangSections(['Veng Chhak', 'Veng Thlang', 'Veng Lai', 'Field Veng', 'General']);
-                    }}
-                    className="text-[9.5px] font-bold px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition cursor-pointer"
-                  >
-                    🏘️ Veng / Area
+                    <Sliders className="w-3 h-3 text-indigo-600" />
+                    <span>⚙️ Setup Presets</span>
                   </button>
                 </div>
 
@@ -1621,6 +1629,23 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                     </span>
                   ))}
                 </div>
+
+                {kumtluangSections.length > 0 && (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span className="text-[9.5px] text-slate-500 font-medium">
+                      Bial/Section <b>{kumtluangSections.length}</b> dah a ni tawh
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsPresetManagerOpen(true)}
+                      className="text-[10px] font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1 hover:underline cursor-pointer"
+                      title="Save these current sections as a quick preset for future bawms"
+                    >
+                      <Save className="w-3 h-3 text-blue-600" />
+                      <span>Save as Quick Preset</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Optional Target (Per Month / Per Year / Overall) */}
@@ -2175,6 +2200,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       {editingCampaign && (
         <EditCampaignModal
           campaign={editingCampaign}
+          creatorProfile={creatorProfile}
           onClose={() => setEditingCampaign(null)}
           onSave={(updated) => {
             if (onUpdateCampaign) {
@@ -2185,6 +2211,19 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
           }}
         />
       )}
+
+      {/* SECTION PRESET MANAGER MODAL (Creation View) */}
+      <SectionPresetManagerModal
+        isOpen={isPresetManagerOpen}
+        onClose={() => setIsPresetManagerOpen(false)}
+        onApplyPreset={(preset) => {
+          setKumtluangSectionLabel(preset.label);
+          setKumtluangSections([...preset.sections]);
+        }}
+        currentSections={kumtluangSections}
+        currentLabel={kumtluangSectionLabel}
+        isAdmin={isPrivilegedUser}
+      />
 
       {/* DELETE / CANCEL CAMPAIGN MODAL (Siam Sual Paihna / Tihtawpna) */}
       {deletingCampaign && (
@@ -2406,12 +2445,14 @@ interface EditCampaignModalProps {
   campaign: Campaign;
   onClose: () => void;
   onSave: (updated: Campaign) => void;
+  creatorProfile?: CreatorProfile;
 }
 
 const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   campaign,
   onClose,
   onSave,
+  creatorProfile,
 }) => {
   const [title, setTitle] = useState<string>(campaign.title || '');
   const [location, setLocation] = useState<string>(campaign.location || '');
@@ -2449,6 +2490,28 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [kumtluangFeeBearer, setKumtluangFeeBearer] = useState<'user_paid' | 'org_paid'>(
     (campaign.kumtluangFeeBearer as any) || 'org_paid'
   );
+
+  // Section / Bial setup for Kumtluang
+  const [kumtluangSectionLabel, setKumtluangSectionLabel] = useState<string>(
+    campaign.sectionLabel || 'Bial / Section'
+  );
+  const [kumtluangSections, setKumtluangSections] = useState<string[]>(
+    campaign.definedSections && campaign.definedSections.length > 0
+      ? campaign.definedSections
+      : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+  );
+  const [newSectionName, setNewSectionName] = useState<string>('');
+  const [isEditPresetManagerOpen, setIsEditPresetManagerOpen] = useState<boolean>(false);
+  const [editSectionPresets, setEditSectionPresets] = useState<SectionQuickPreset[]>(() => getStoredSectionPresets());
+
+  useEffect(() => {
+    const handlePresetsUpdate = () => {
+      setEditSectionPresets(getStoredSectionPresets());
+    };
+    window.addEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+    return () => window.removeEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+  }, []);
+
   const [isPhotoCompressing, setIsPhotoCompressing] = useState<boolean>(false);
 
   // Handle Photo Upload with Automatic Image Optimization for instant multi-device & cloud sync
@@ -2573,6 +2636,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       orgName: campaign.category === 'kumtluang' ? (orgName.trim() || undefined) : campaign.orgName,
       subCategories: campaign.category === 'kumtluang' ? subCategories : campaign.subCategories,
       kumtluangFeeBearer: campaign.category === 'kumtluang' ? kumtluangFeeBearer : undefined,
+      sectionLabel: campaign.category === 'kumtluang' ? (kumtluangSectionLabel.trim() || 'Bial / Section') : campaign.sectionLabel,
+      definedSections: campaign.category === 'kumtluang' ? kumtluangSections : campaign.definedSections,
     };
 
     onSave(updated);
@@ -3076,6 +3141,137 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 </div>
               </div>
 
+              {/* Bial / Section / Veng Structure Setup (Dropdown & Clean Data Sorting) */}
+              <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Bial / Section Dropdown Setup</span>
+                  </label>
+                  <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Pre-defined Dropdown
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Member-ten spelling error an neih loh nan leh data sorting a fel fai sa nan, dropdown a an thlan tur Bial / Section list duansa a ni.
+                </p>
+
+                {/* Preset Quick Chooser */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                  {editSectionPresets.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setKumtluangSectionLabel(p.label);
+                        setKumtluangSections([...p.sections]);
+                      }}
+                      className="text-[9.5px] font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition cursor-pointer"
+                      title={`Apply preset: ${p.name}`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIsEditPresetManagerOpen(true)}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-slate-100 hover:bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Admin Quick Presets Setup & Management"
+                  >
+                    <Sliders className="w-3 h-3 text-indigo-600" />
+                    <span>⚙️ Setup Presets</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Label Hming (Dynamic Label)
+                    </label>
+                    <input
+                      type="text"
+                      value={kumtluangSectionLabel}
+                      onChange={(e) => setKumtluangSectionLabel(e.target.value)}
+                      placeholder="e.g. Bial / Unit emaw Section / Veng"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                      Add New ({kumtluangSections.length} sections)
+                    </label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
+                              setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
+                              setNewSectionName('');
+                            }
+                          }
+                        }}
+                        placeholder="+ Bial/Section..."
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newSectionName.trim() && !kumtluangSections.includes(newSectionName.trim())) {
+                            setKumtluangSections([...kumtluangSections, newSectionName.trim()]);
+                            setNewSectionName('');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 shrink-0 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section List Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangSections.map((sec, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
+                    >
+                      <span className="truncate">{sec}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangSections(kumtluangSections.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                {kumtluangSections.length > 0 && (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span className="text-[9.5px] text-slate-500 font-medium">
+                      Bial/Section <b>{kumtluangSections.length}</b> dah a ni tawh
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditPresetManagerOpen(true)}
+                      className="text-[10px] font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1 hover:underline cursor-pointer"
+                      title="Save these current sections as a quick preset for future bawms"
+                    >
+                      <Save className="w-3 h-3 text-blue-600" />
+                      <span>Save as Quick Preset</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Target (Per Month / Year / Total) for Kumtluang */}
               <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-2">
                 <div className="flex items-center justify-between">
@@ -3296,6 +3492,19 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
             </button>
           </div>
         </form>
+
+        {/* SECTION PRESET MANAGER MODAL (Edit View) */}
+        <SectionPresetManagerModal
+          isOpen={isEditPresetManagerOpen}
+          onClose={() => setIsEditPresetManagerOpen(false)}
+          onApplyPreset={(preset) => {
+            setKumtluangSectionLabel(preset.label);
+            setKumtluangSections([...preset.sections]);
+          }}
+          currentSections={kumtluangSections}
+          currentLabel={kumtluangSectionLabel}
+          isAdmin={Boolean(creatorProfile?.isAdmin || (creatorProfile && getUserRole(creatorProfile) === 'SUPER_ADMIN') || (creatorProfile && getUserRole(creatorProfile) === 'ADMIN'))}
+        />
       </div>
     </div>
   );

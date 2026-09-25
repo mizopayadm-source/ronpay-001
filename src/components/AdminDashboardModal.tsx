@@ -81,12 +81,14 @@ import {
   SystemPricingConfig, 
   BawmFeeRule, 
   AuditLog, 
-  AnnouncementBanner,
-  AnnouncementItem,
-  UserRole,
-  StaffAccount,
-  FeeOptionMode
+  AnnouncementBanner, 
+  AnnouncementItem, 
+  UserRole, 
+  StaffAccount, 
+  FeeOptionMode,
+  SectionQuickPreset
 } from '../types';
+import { SectionPresetManagerModal } from './SectionPresetManagerModal';
 import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { 
@@ -108,7 +110,10 @@ import {
   isConfirmedTransaction,
   isStoredAdminAuthorized,
   saveAdminAuthState,
-  clearAdminAuthState
+  clearAdminAuthState,
+  getStoredSectionPresets,
+  saveStoredSectionPresets,
+  DEFAULT_SECTION_PRESETS
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -303,6 +308,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Admin Campaign Edit Modal
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+
+  // Section Presets Management State (Admin Quick Preset Setup)
+  const [isSectionPresetModalOpen, setIsSectionPresetModalOpen] = useState<boolean>(false);
+  const [sectionPresets, setSectionPresets] = useState<SectionQuickPreset[]>(() => getStoredSectionPresets());
+  const [campaignEditNewSection, setCampaignEditNewSection] = useState<string>('');
+
+  useEffect(() => {
+    const handlePresetsUpdate = () => {
+      setSectionPresets(getStoredSectionPresets());
+    };
+    window.addEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+    return () => window.removeEventListener('ronpay_section_presets_updated', handlePresetsUpdate);
+  }, []);
 
   // Restore file state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -878,6 +896,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     const campaignToSave: Campaign = {
       ...editingCampaign,
       orgCode: finalPrefix,
+      sectionLabel: editingCampaign.category === 'kumtluang' ? (editingCampaign.sectionLabel?.trim() || 'Bial / Section') : editingCampaign.sectionLabel,
+      definedSections: editingCampaign.category === 'kumtluang' ? (editingCampaign.definedSections || []) : editingCampaign.definedSections,
       status: finalStatus,
       updatedAt: new Date().toISOString()
     };
@@ -1420,15 +1440,27 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       ))}
                     </div>
 
-                    <div className="relative min-w-[200px]">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search campaign, creator, ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="relative min-w-[180px] flex-1 sm:flex-initial">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search campaign, creator, ID..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsSectionPresetModalOpen(true)}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl border border-indigo-200 text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
+                        title="Bial / Section Dropdown Quick Presets Setup & Management"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="hidden xs:inline">⚙️ Bial/Section Presets</span>
+                        <span className="xs:hidden">Presets</span>
+                      </button>
                     </div>
                   </div>
 
@@ -3659,6 +3691,127 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </table>
                     </div>
                   </div>
+
+                  {/* Bial / Section Dropdown Quick Presets Master Configuration (Admin Control) */}
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shadow-xs">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                            Bial / Section Dropdown Quick Presets Setup
+                            <span className="text-[10px] bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full font-bold">
+                              {sectionPresets.length} Presets Active
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Kohhran, Pawl, NGO leh Veng-te tana Kumtluang Bawm siam laia dropdown preset duansa (Admin Control).
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm('Quick Presets zawng zawng hi Default (System Default)-ah reset i duh em?')) {
+                              setSectionPresets(DEFAULT_SECTION_PRESETS);
+                              saveStoredSectionPresets(DEFAULT_SECTION_PRESETS);
+                              alert('🔄 Default presets-ah reset fel a ni e.');
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5"
+                          title="Reset presets to default"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Reset</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsSectionPresetModalOpen(true)}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Preset Thar / Setup</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {sectionPresets.map((preset) => (
+                        <div
+                          key={preset.id}
+                          className="bg-slate-50 hover:bg-indigo-50/30 p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-200 transition space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <h5 className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                                <span>{preset.name}</span>
+                                {preset.isSystem ? (
+                                  <span className="text-[9px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded">
+                                    System Default
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.2 rounded">
+                                    Custom Preset
+                                  </span>
+                                )}
+                              </h5>
+                              <p className="text-[10.5px] text-slate-500 font-medium">
+                                Dropdown Label: <b className="text-slate-800">{preset.label}</b> • <b>{preset.sections.length} sections</b>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setIsSectionPresetModalOpen(true)}
+                                className="p-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 hover:border-indigo-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                                title="Edit this preset"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`He preset "${preset.name}" hi i delete duh tak tak em?`)) {
+                                    const updated = sectionPresets.filter(p => p.id !== preset.id);
+                                    setSectionPresets(updated);
+                                    saveStoredSectionPresets(updated);
+                                  }
+                                }}
+                                className="p-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                                title="Delete preset"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Section Chips */}
+                          <div className="flex flex-wrap gap-1">
+                            {preset.sections.map((sec, sIdx) => (
+                              <span
+                                key={sIdx}
+                                className="text-[9.5px] bg-white border border-slate-200 text-slate-700 font-semibold px-2 py-0.5 rounded-md shadow-2xs"
+                              >
+                                {sec}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 text-[11px] text-indigo-900 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <b>Admin Thuchak:</b> Heng Quick Presets te hi Admin-in a duh angin a siam (create), a edit, a delete emaw default-ah a reset thei a, Kumtluang Bawm thar siam leh edit na zawng zawngah 1-click in a hmang nghal thei a ni.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -4131,6 +4284,194 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         className="w-full mt-1 p-2 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-slate-800"
                         placeholder="Pathian Ram Zauna, Mission, Building Fund, Tualchhung"
                       />
+                    </div>
+
+                    {/* Bial / Section / Veng Setup for Kumtluang */}
+                    <div className="bg-white p-3 rounded-2xl border border-indigo-200 space-y-2.5 overflow-hidden">
+                      <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                        <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>Bial / Section Dropdown Setup</span>
+                        </label>
+                        <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                          Pre-defined Dropdown
+                        </span>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                        Member-ten register emaw sum thawh laia spelling error an neih loh nan leh report-a Bial/Section zela fel taka an in-sort theih nan.
+                      </p>
+
+                      {/* Preset Quick Chooser */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9.5px] font-bold text-slate-500">Quick Presets:</span>
+                        {sectionPresets.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setEditingCampaign({
+                                ...editingCampaign,
+                                sectionLabel: p.label,
+                                definedSections: [...p.sections]
+                              });
+                            }}
+                            className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                            title={`Apply preset: ${p.name}`}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setIsSectionPresetModalOpen(true)}
+                          className="text-[9.5px] font-bold px-2 py-1 bg-slate-100 hover:bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          title="Admin Quick Presets Setup & Management"
+                        >
+                          <Sliders className="w-3 h-3 text-indigo-600" />
+                          <span>⚙️ Setup Presets</span>
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                            Label Hming (Dynamic Label)
+                          </label>
+                          <input
+                            type="text"
+                            value={editingCampaign.sectionLabel || 'Bial / Section'}
+                            onChange={(e) => setEditingCampaign({ ...editingCampaign, sectionLabel: e.target.value })}
+                            placeholder="e.g. Bial / Unit emaw Section / Veng"
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                            Add New ({(editingCampaign.definedSections || []).length} sections)
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={campaignEditNewSection}
+                              onChange={(e) => setCampaignEditNewSection(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const trimmed = campaignEditNewSection.trim();
+                                  if (trimmed) {
+                                    const items = trimmed.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+                                    const currentSecs = editingCampaign.definedSections || [];
+                                    const newItems = items.filter(s => !currentSecs.includes(s));
+                                    if (newItems.length > 0) {
+                                      setEditingCampaign({
+                                        ...editingCampaign,
+                                        definedSections: [...currentSecs, ...newItems]
+                                      });
+                                      setCampaignEditNewSection('');
+                                    }
+                                  }
+                                }
+                              }}
+                              placeholder="+ Bial/Section (comma-in then theih)..."
+                              className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const trimmed = campaignEditNewSection.trim();
+                                if (trimmed) {
+                                  const items = trimmed.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+                                  const currentSecs = editingCampaign.definedSections || [];
+                                  const newItems = items.filter(s => !currentSecs.includes(s));
+                                  if (newItems.length > 0) {
+                                    setEditingCampaign({
+                                      ...editingCampaign,
+                                      definedSections: [...currentSecs, ...newItems]
+                                    });
+                                    setCampaignEditNewSection('');
+                                  }
+                                }
+                              }}
+                              className="px-2.5 py-1.5 shrink-0 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer"
+                            >
+                              + Add
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section List Tags */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {(!editingCampaign.definedSections || editingCampaign.definedSections.length === 0) ? (
+                          <span className="text-[10.5px] text-slate-400 italic">
+                            Section a la awm lo. A chunga Quick Presets thlang rawh emaw input-ah khian chhu lut rawh.
+                          </span>
+                        ) : (
+                          editingCampaign.definedSections.map((sec, idx) => (
+                            <span
+                              key={idx}
+                              className="bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs max-w-full"
+                            >
+                              <span className="truncate">{sec}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = (editingCampaign.definedSections || []).filter((_, i) => i !== idx);
+                                  setEditingCampaign({ ...editingCampaign, definedSections: updated });
+                                }}
+                                className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      {editingCampaign.definedSections && editingCampaign.definedSections.length > 0 && (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                          <span className="text-[9.5px] text-slate-500 font-medium">
+                            Bial/Section <b>{editingCampaign.definedSections.length}</b> dah a ni tawh
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const defaultName = prompt('He Quick Preset thar hming tur hi chhu lut rawh:', `${editingCampaign.orgName || editingCampaign.sectionLabel || 'Custom'} Preset`);
+                                if (!defaultName || !defaultName.trim()) return;
+                                const newP: SectionQuickPreset = {
+                                  id: `preset-${Date.now()}`,
+                                  name: defaultName.trim(),
+                                  label: editingCampaign.sectionLabel?.trim() || 'Bial / Section',
+                                  sections: [...(editingCampaign.definedSections || [])],
+                                  createdAt: new Date().toISOString()
+                                };
+                                const updated = [...sectionPresets, newP];
+                                setSectionPresets(updated);
+                                saveStoredSectionPresets(updated);
+                                alert(`🎉 "${defaultName.trim()}" preset atan save fel a ni e!`);
+                              }}
+                              className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 hover:underline cursor-pointer"
+                              title="Save these current sections as a quick preset for future bawms"
+                            >
+                              <Save className="w-3 h-3 text-indigo-600" />
+                              <span>Save as Quick Preset</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm('Bial / Section zawng zawng hi clear vek i duh tak tak em?')) {
+                                  setEditingCampaign({ ...editingCampaign, definedSections: [] });
+                                }
+                              }}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                            >
+                              Clear All
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -5445,6 +5786,24 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* SECTION PRESET MANAGER MODAL (Admin Full Setup & Control) */}
+        <SectionPresetManagerModal
+          isOpen={isSectionPresetModalOpen}
+          onClose={() => setIsSectionPresetModalOpen(false)}
+          onApplyPreset={(preset) => {
+            if (editingCampaign) {
+              setEditingCampaign({
+                ...editingCampaign,
+                sectionLabel: preset.label,
+                definedSections: [...preset.sections]
+              });
+            }
+          }}
+          currentSections={editingCampaign?.definedSections}
+          currentLabel={editingCampaign?.sectionLabel}
+          isAdmin={true}
+        />
 
       </div>
     </div>

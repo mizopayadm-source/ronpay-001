@@ -1505,14 +1505,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Section / Bial / Veng
+                    {activeRegisterCampaign?.sectionLabel || 'Section / Bial / Veng'} (Thlanna)
                   </label>
                   <select
                     value={newSection}
                     onChange={(e) => setNewSection(e.target.value)}
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
-                    <option value="">-- Thlang Rawh (Bial / Section) --</option>
+                    <option value="">-- Thlang Rawh ({activeRegisterCampaign?.sectionLabel || 'Bial / Section'}) --</option>
                     {(activeRegisterCampaign?.definedSections && activeRegisterCampaign.definedSections.length > 0
                       ? activeRegisterCampaign.definedSections
                       : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
@@ -2381,14 +2381,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
               <div>
                 <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                  Section / Bial
+                  {activeEditCampaign?.sectionLabel || 'Section / Bial'}
                 </label>
                 <select
                   value={editSection}
                   onChange={(e) => setEditSection(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                 >
-                  <option value="">-- Thlang Rawh --</option>
+                  <option value="">-- Thlang Rawh ({activeEditCampaign?.sectionLabel || 'Bial / Section'}) --</option>
                   {(activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0
                     ? activeEditCampaign.definedSections
                     : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']

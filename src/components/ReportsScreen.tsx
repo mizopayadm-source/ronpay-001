@@ -484,7 +484,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         resolvedLogoUrl,
         resolvedLocation
       );
-      showExportSuccessToast('Format 1: Master Ledger (12-Thla Grid)', targetMembers.length);
+      showExportSuccessToast('Format 2: Kohhran / Pawl Master Ledger', targetMembers.length);
       return;
     }
 
@@ -557,7 +557,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         targetInfo: activeTargetInfo || undefined
       }
     );
-    showExportSuccessToast('Format 2: Official Financial Statement PDF', sortedTransactions.length);
+    showExportSuccessToast('Format 1: Official Financial Statement PDF', sortedTransactions.length);
   };
 
   const toggleNameSort = () => {
@@ -1317,16 +1317,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
             {/* Export Customization & Format Controls */}
             <div className="pt-2 border-t border-slate-100 space-y-2.5">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <button
                   onClick={() => setShowExportOptions(prev => !prev)}
                   className="text-xs text-indigo-700 font-bold flex items-center gap-1.5 hover:underline cursor-pointer"
                 >
-                  <Sliders className="w-3.5 h-3.5" />
+                  <Sliders className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Report Customization & Layout Settings</span>
-                  <span className="text-[10px] text-slate-400">({showExportOptions ? 'Hide' : 'Show'})</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">({showExportOptions ? 'Hide' : 'Show'})</span>
                 </button>
-                <span className="text-[10.5px] text-slate-500 font-medium">
+                <span className="text-[10px] text-slate-600 font-semibold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 self-start sm:self-auto">
                   {isKumtluang ? 'Kumtluang Matrix Mode' : 'Standard Itemized Mode'}
                 </span>
               </div>
@@ -1415,29 +1415,41 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               )}
 
               {/* Print Style Selector */}
-              <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200 space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <label className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
-                    <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>🖨️ Statement Print Style Thlanna:</span>
-                  </label>
-                  <select
-                    value={reportPrintStyle}
-                    onChange={(e) => {
-                      const style = e.target.value as any;
-                      setReportPrintStyle(style);
-                      if ((style === 'member_matrix' || style === 'member_passbook') && !reportMemberId) {
-                        const mList = scopedMembers.length > 0 ? scopedMembers : getMembers(selectedCampaignId);
-                        if (mList.length > 0) setReportMemberId(mList[0].id);
-                      }
-                    }}
-                    className="bg-white border-2 border-indigo-400 rounded-xl px-2.5 py-1.5 text-xs font-black text-indigo-950 focus:outline-none focus:border-indigo-600 cursor-pointer"
-                  >
-                    <option value="standard_pdf">Format 1: Official Financial Statement (PDF + Chart + Signatures)</option>
-                    <option value="master_ledger">Format 2: Kohhran / Pawl Master Ledger (Thla 12 Grid)</option>
-                    <option value="member_matrix">Format 3: Mimal Record (Horizontal Category Matrix)</option>
-                    <option value="member_passbook">Format 4: Mimal Passbook (Vertical Card Slip)</option>
-                  </select>
+              <div className="bg-indigo-50/70 p-3 sm:p-4 rounded-2xl border border-indigo-200 space-y-3 shadow-xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600/10 border border-indigo-200 flex items-center justify-center text-indigo-700 shrink-0">
+                      <Printer className="w-4 h-4 text-indigo-700" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-indigo-950 block leading-tight">
+                        Statement Print Style Thlanna:
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Thlang chhuak la, a hnuaia 'Preview & Print' hmet rawh
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 w-full md:max-w-md min-w-0">
+                    <select
+                      value={reportPrintStyle}
+                      onChange={(e) => {
+                        const style = e.target.value as any;
+                        setReportPrintStyle(style);
+                        if ((style === 'member_matrix' || style === 'member_passbook') && !reportMemberId) {
+                          const mList = scopedMembers.length > 0 ? scopedMembers : getMembers(selectedCampaignId);
+                          if (mList.length > 0) setReportMemberId(mList[0].id);
+                        }
+                      }}
+                      className="w-full bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl px-3 py-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-600 cursor-pointer shadow-2xs transition truncate"
+                    >
+                      <option value="standard_pdf">Format 1: Official Financial Statement (PDF + Chart + Signatures)</option>
+                      <option value="master_ledger">Format 2: Kohhran / Pawl Master Ledger (Thla 12 Grid)</option>
+                      <option value="member_matrix">Format 3: Mimal Record (Horizontal Category Matrix)</option>
+                      <option value="member_passbook">Format 4: Mimal Passbook (Vertical Card Slip)</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* If personal member format selected, show Member selector */}
@@ -1557,7 +1569,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-[11px] border-collapse">
+                  <table className="w-full text-left text-[11px] border-collapse min-w-[580px]">
                     <thead>
                       <tr className="bg-slate-100 text-slate-800 font-extrabold border-b border-slate-200">
                         <th className="py-2.5 px-3 border-r border-slate-200">

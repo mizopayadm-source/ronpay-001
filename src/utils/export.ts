@@ -1,5 +1,6 @@
 import { Transaction, MemberRecord, Campaign } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
+import { getTransactionMonthInfo } from './monthHelper';
 
 export interface MatrixRow {
   donorName: string;
@@ -1693,9 +1694,8 @@ export const generateMasterLedgerPrintHtml = (
     let rowTotal = 0;
     const monthCols = months.map(m => {
       const monthTxns = memberTxns.filter(t => {
-        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-        const d = new Date(t.timestamp);
-        return months[d.getMonth()] === m;
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
       });
       const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
       rowTotal += sum;
@@ -1722,6 +1722,45 @@ export const generateMasterLedgerPrintHtml = (
       </tr>
     `;
   }).join('');
+
+  // Reconcile unmatched / direct / anonymous transactions so Grand Total in Format 2 is 100% complete and equal to Format 1
+  const matchedTxIds = new Set<string>();
+  members.forEach(m => {
+    transactions.forEach(t => {
+      if (isTransactionForMember(t, m)) matchedTxIds.add(t.id);
+    });
+  });
+  const unmatchedTxns = transactions.filter(t => !matchedTxIds.has(t.id));
+
+  let unmatchedRowHtml = '';
+  if (unmatchedTxns.length > 0) {
+    let unmatchedTotal = 0;
+    const unmatchedMonthCols = months.map(m => {
+      const monthTxns = unmatchedTxns.filter(t => {
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
+      });
+      const sum = monthTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
+      unmatchedTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px; color: #b45309; font-weight: bold;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += unmatchedTotal;
+
+    unmatchedRowHtml = `
+      <tr style="background: #fffbeb;">
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px; color: #b45309;">*</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-family: monospace; color: #b45309; font-size: 10px;">ANON/GUEST</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #92400e;">Anonymous / Unregistered Donors (${unmatchedTxns.length} txns)</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #b45309; font-size: 10px;">Direct / QR</td>
+        ${unmatchedMonthCols}
+        <td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #fef3c7; color: #b45309; font-family: monospace; font-size: 11px;">
+          ${unmatchedTotal > 0 ? unmatchedTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }
 
   const monthTotalCols = months.map(m => `
     <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; font-family: monospace; font-size: 11px;">
@@ -1765,7 +1804,7 @@ export const generateMasterLedgerPrintHtml = (
           </div>
           <div style="text-align: right; font-size: 10px; color: #64748b;">
             <div>Printed Date: <b>${formatDateDDMMYYYY(new Date())}</b></div>
-            <div>Total Active Members: <b>${members.length}</b></div>
+            <div>Registered Members: <b>${members.length}</b>${unmatchedTxns.length > 0 ? ` • Direct/Guest: <b>${unmatchedTxns.length} txns</b>` : ''}</div>
             <div style="color: #047857; font-weight: 900; margin-top: 2px;">Grand Total: ₹${grandTotal.toLocaleString('en-IN')}</div>
           </div>
         </div>
@@ -1783,6 +1822,7 @@ export const generateMasterLedgerPrintHtml = (
           </thead>
           <tbody>
             ${rowsHtml}
+            ${unmatchedRowHtml}
           </tbody>
           <tfoot>
             <tr style="background: #e2e8f0; font-weight: 900;">
@@ -1840,9 +1880,8 @@ export const generateMemberCategoryMatrixPrintHtml = (
     let rowTotal = 0;
     const monthCols = months.map(m => {
       const monthTxns = memberTxns.filter(t => {
-        if (t.periodMonth && t.periodMonth.toLowerCase() === m.toLowerCase()) return true;
-        const d = new Date(t.timestamp);
-        return months[d.getMonth()] === m;
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
       });
       const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
       rowTotal += sum;
@@ -1985,9 +2024,8 @@ export const generateMemberPassbookVerticalPrintHtml = (
   const rowsHtml = months.map((month, idx) => {
     let monthTotal = 0;
     const monthTxns = memberTxns.filter(t => {
-      if (t.periodMonth && t.periodMonth.toLowerCase() === month.toLowerCase()) return true;
-      const d = new Date(t.timestamp);
-      return months[d.getMonth()] === month;
+      const info = getTransactionMonthInfo(t);
+      return info.shortMonth.toLowerCase() === month.toLowerCase();
     });
 
     const catCols = categories.map(cat => {
