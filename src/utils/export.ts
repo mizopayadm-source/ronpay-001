@@ -212,16 +212,17 @@ export const downloadFileUniversal = async (
 
 /**
  * Returns the ordered array of month abbreviations for a given From - Upto month configuration.
+ * Default is calendar year: Jan to Dec.
  */
 export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
-  const start = config?.startMonth || 'Apr';
-  const end = config?.endMonth || 'Mar';
+  const start = config?.startMonth || 'Jan';
+  const end = config?.endMonth || 'Dec';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
   const sIdx = months.indexOf(start);
   const eIdx = months.indexOf(end);
   if (sIdx === -1 || eIdx === -1) {
-    return ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+    return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   }
   
   if (sIdx === eIdx) {
@@ -415,15 +416,12 @@ export const computeMonthlyDistribution = (
   const monthTotals: Record<string, number> = {};
   months.forEach(m => { monthTotals[m] = 0; });
 
-  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
   transactions.forEach(t => {
     try {
-      const d = new Date(t.timestamp);
-      const mIdx = d.getMonth(); // 0=Jan, 3=Apr, 7=Aug
-      const mName = monthNamesShort[mIdx];
-      if (monthTotals[mName] !== undefined) {
-        monthTotals[mName] += t.amount;
+      const info = getTransactionMonthInfo(t);
+      const mName = months.find(m => m.toLowerCase() === info.shortMonth.toLowerCase());
+      if (mName && monthTotals[mName] !== undefined) {
+        monthTotals[mName] += (t.amount || 0);
       }
     } catch {
       // fallback
@@ -1681,15 +1679,118 @@ export const generateMasterLedgerPrintHtml = (
   campaignTitle: string,
   orgName: string,
   logoUrl?: string,
-  location?: string
+  location?: string,
+  sortOrder: 'name_asc' | 'name_desc' | 'id_asc' | 'section' | 'amount_desc' | string = 'name_asc'
 ): string => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthTotals: { [key: string]: number } = {};
   months.forEach(m => { monthTotals[m] = 0; });
   let grandTotal = 0;
 
-  const rowsHtml = members.map((member, idx) => {
-    const memberTxns = transactions.filter(t => isTransactionForMember(t, member));
+  // 1. Sort members according to requested order
+  const sortedMembers = [...members];
+  if (sortOrder === 'name_asc' || sortOrder === 'name-asc') {
+    sortedMembers.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  } else if (sortOrder === 'name_desc' || sortOrder === 'name-desc') {
+    sortedMembers.sort((a, b) => (b.name || '').localeCompare(a.name || '', undefined, { sensitivity: 'base' }));
+  } else if (sortOrder === 'id_asc' || sortOrder === 'id-asc') {
+    sortedMembers.sort((a, b) => (a.id || '').localeCompare(b.id || '', undefined, { numeric: true }));
+  } else if (sortOrder === 'section') {
+    sortedMembers.sort((a, b) => (a.section || '').localeCompare(b.section || '') || (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }
+
+  // 2. Strict 1-to-1 transaction allocation across members to eliminate ANY duplicate counting
+  const memberTxnsMap = new Map<string, Transaction[]>();
+  sortedMembers.forEach(m => memberTxnsMap.set(m.id, []));
+  const assignedTxIds = new Set<string>();
+
+  // Pass 1: Exact memberId match (Strict & unambiguous)
+  for (const t of transactions) {
+    if (t.memberId) {
+      const mem = sortedMembers.find(m => m.id && m.id.toLowerCase().trim() === t.memberId!.toLowerCase().trim());
+      if (mem) {
+        memberTxnsMap.get(mem.id)!.push(t);
+        assignedTxIds.add(t.id);
+      }
+    }
+  }
+
+  // Pass 2: Remark contains exact member.id
+  for (const t of transactions) {
+    if (assignedTxIds.has(t.id)) continue;
+    if (t.remark) {
+      const mem = sortedMembers.find(m => m.id && t.remark!.toLowerCase().includes(m.id.toLowerCase().trim()));
+      if (mem) {
+        memberTxnsMap.get(mem.id)!.push(t);
+        assignedTxIds.add(t.id);
+      }
+    }
+  }
+
+  // Pass 3: Phone number match
+  for (const t of transactions) {
+    if (assignedTxIds.has(t.id)) continue;
+    if (t.donorPhone) {
+      const cleanP = t.donorPhone.replace(/\D/g, '');
+      const mem = sortedMembers.find(m => {
+        const memP = (m.fullPhone || '').replace(/\D/g, '');
+        if (cleanP && memP && cleanP === memP) return true;
+        if (cleanP.length >= 4 && m.phoneLast4 && cleanP.endsWith(m.phoneLast4)) return true;
+        return false;
+      });
+      if (mem) {
+        memberTxnsMap.get(mem.id)!.push(t);
+        assignedTxIds.add(t.id);
+      }
+    }
+  }
+
+  // Pass 4: Exact donorName match (case-insensitive)
+  for (const t of transactions) {
+    if (assignedTxIds.has(t.id)) continue;
+    if (t.donorName && !t.isAnonymous && t.donorName.toLowerCase().trim() !== 'anonymous') {
+      const tClean = t.donorName.trim().toLowerCase();
+      const mem = sortedMembers.find(m => m.name && m.name.trim().toLowerCase() === tClean);
+      if (mem) {
+        memberTxnsMap.get(mem.id)!.push(t);
+        assignedTxIds.add(t.id);
+      }
+    }
+  }
+
+  // Pass 5: Normalized alphanumeric name match
+  for (const t of transactions) {
+    if (assignedTxIds.has(t.id)) continue;
+    if (t.donorName && !t.isAnonymous && t.donorName.toLowerCase().trim() !== 'anonymous') {
+      const tNorm = t.donorName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (tNorm.length > 3) {
+        const mem = sortedMembers.find(m => {
+          if (!m.name) return false;
+          const mNorm = m.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return tNorm === mNorm;
+        });
+        if (mem) {
+          memberTxnsMap.get(mem.id)!.push(t);
+          assignedTxIds.add(t.id);
+        }
+      }
+    }
+  }
+
+  // If sorting by amount, re-sort members by their allocated transaction total
+  if (sortOrder === 'amount_desc' || sortOrder === 'amount-desc') {
+    sortedMembers.sort((a, b) => {
+      const sumA = (memberTxnsMap.get(a.id) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      const sumB = (memberTxnsMap.get(b.id) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      return sumB - sumA;
+    });
+  }
+
+  // Remaining transactions are unmatched (Direct / Guest / Anonymous)
+  const unmatchedTxns = transactions.filter(t => !assignedTxIds.has(t.id));
+
+  const rowsHtml = sortedMembers.map((member, idx) => {
+    const memberTxns = memberTxnsMap.get(member.id) || [];
 
     let rowTotal = 0;
     const monthCols = months.map(m => {
@@ -1723,15 +1824,6 @@ export const generateMasterLedgerPrintHtml = (
     `;
   }).join('');
 
-  // Reconcile unmatched / direct / anonymous transactions so Grand Total in Format 2 is 100% complete and equal to Format 1
-  const matchedTxIds = new Set<string>();
-  members.forEach(m => {
-    transactions.forEach(t => {
-      if (isTransactionForMember(t, m)) matchedTxIds.add(t.id);
-    });
-  });
-  const unmatchedTxns = transactions.filter(t => !matchedTxIds.has(t.id));
-
   let unmatchedRowHtml = '';
   if (unmatchedTxns.length > 0) {
     let unmatchedTotal = 0;
@@ -1751,8 +1843,8 @@ export const generateMasterLedgerPrintHtml = (
     unmatchedRowHtml = `
       <tr style="background: #fffbeb;">
         <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px; color: #b45309;">*</td>
-        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-family: monospace; color: #b45309; font-size: 10px;">ANON/GUEST</td>
-        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #92400e;">Anonymous / Unregistered Donors (${unmatchedTxns.length} txns)</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-family: monospace; color: #b45309; font-size: 10px;">DIRECT/QR</td>
+        <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #92400e;">Direct / QR / Anonymous Donors (${unmatchedTxns.length} txns)</td>
         <td style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #b45309; font-size: 10px;">Direct / QR</td>
         ${unmatchedMonthCols}
         <td style="text-align: right; padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #fef3c7; color: #b45309; font-family: monospace; font-size: 11px;">
@@ -1771,6 +1863,18 @@ export const generateMasterLedgerPrintHtml = (
   const logoHeader = logoUrl 
     ? `<img src="${logoUrl}" style="width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1.5px solid #1e3a8a; margin-right: 12px;" />`
     : '';
+
+  const sortLabel = sortOrder === 'name_asc' || sortOrder === 'name-asc' 
+    ? 'Hming A-Z (Alphabetical)'
+    : sortOrder === 'name_desc' || sortOrder === 'name-desc'
+    ? 'Hming Z-A'
+    : sortOrder === 'id_asc' || sortOrder === 'id-asc'
+    ? 'Member ID (#)'
+    : sortOrder === 'section'
+    ? 'Section / Bial'
+    : sortOrder === 'amount_desc' || sortOrder === 'amount-desc'
+    ? 'Sum Thawh Tam Dan'
+    : 'Default';
 
   return `
     <!DOCTYPE html>
@@ -1804,7 +1908,8 @@ export const generateMasterLedgerPrintHtml = (
           </div>
           <div style="text-align: right; font-size: 10px; color: #64748b;">
             <div>Printed Date: <b>${formatDateDDMMYYYY(new Date())}</b></div>
-            <div>Registered Members: <b>${members.length}</b>${unmatchedTxns.length > 0 ? ` • Direct/Guest: <b>${unmatchedTxns.length} txns</b>` : ''}</div>
+            <div>Registered Members: <b>${sortedMembers.length}</b>${unmatchedTxns.length > 0 ? ` • Direct/Guest: <b>${unmatchedTxns.length} txns</b>` : ''}</div>
+            <div>Order: <b>${sortLabel}</b></div>
             <div style="color: #047857; font-weight: 900; margin-top: 2px;">Grand Total: ₹${grandTotal.toLocaleString('en-IN')}</div>
           </div>
         </div>
@@ -1847,9 +1952,10 @@ export const exportMasterLedgerPrint = (
   campaignTitle: string,
   orgName: string,
   logoUrl?: string,
-  location?: string
+  location?: string,
+  sortOrder: 'name_asc' | 'name_desc' | 'id_asc' | 'section' | 'amount_desc' | string = 'name_asc'
 ) => {
-  const html = generateMasterLedgerPrintHtml(members, transactions, campaignTitle, orgName, logoUrl, location);
+  const html = generateMasterLedgerPrintHtml(members, transactions, campaignTitle, orgName, logoUrl, location, sortOrder);
   const cleanTarget = (campaignTitle || orgName || 'Master_Ledger')
     .replace(/[/\\?%*:|"<>]/g, '')
     .trim()

@@ -133,12 +133,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // PDF & Report Customization State
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
-  const [chartStartMonth, setChartStartMonth] = useState<string>('Apr');
-  const [chartEndMonth, setChartEndMonth] = useState<string>('Mar');
+  const [chartStartMonth, setChartStartMonth] = useState<string>('Jan');
+  const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [showExportOptions, setShowExportOptions] = useState<boolean>(false);
   const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
   const [reportMemberId, setReportMemberId] = useState<string>('');
+  const [masterLedgerSortOrder, setMasterLedgerSortOrder] = useState<'name_asc' | 'id_asc' | 'section' | 'amount_desc' | 'name_desc'>('name_asc');
 
   // Memoized month range config (From startMonth Upto endMonth)
   const monthRangeConfig = useMemo<MonthRangeConfig>(() => ({
@@ -482,9 +483,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         selectedCampaignObj?.title || headerTitle, 
         resolvedOrgName,
         resolvedLogoUrl,
-        resolvedLocation
+        resolvedLocation,
+        masterLedgerSortOrder
       );
-      showExportSuccessToast('Format 2: Kohhran / Pawl Master Ledger', targetMembers.length);
+      const sortText = masterLedgerSortOrder === 'name_asc' ? 'A-Z' : masterLedgerSortOrder.toUpperCase();
+      showExportSuccessToast(`Format 2: Kohhran / Pawl Master Ledger (${sortText})`, targetMembers.length);
       return;
     }
 
@@ -1174,6 +1177,40 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
                   {/* Clean From - Upto Month Selectors & Paih Button */}
                   <div className="flex items-center gap-1.5 flex-wrap justify-between sm:justify-end text-xs">
+                    {/* Quick Preset Buttons (Jan-Dec default vs Apr-Mar) */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChartStartMonth('Jan');
+                          setChartEndMonth('Dec');
+                        }}
+                        className={`text-[9.5px] px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                          chartStartMonth === 'Jan' && chartEndMonth === 'Dec'
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-2xs'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+                        }`}
+                        title="Set Default Calendar Year (Jan - Dec)"
+                      >
+                        Jan-Dec (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChartStartMonth('Apr');
+                          setChartEndMonth('Mar');
+                        }}
+                        className={`text-[9.5px] px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                          chartStartMonth === 'Apr' && chartEndMonth === 'Mar'
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-2xs'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+                        }`}
+                        title="Set Financial Year (Apr - Mar)"
+                      >
+                        Apr-Mar
+                      </button>
+                    </div>
+
                     <div className="flex items-center gap-1 bg-slate-900 border border-indigo-500/40 rounded-xl px-2 py-1">
                       <span className="text-[10px] text-indigo-300 font-bold">From:</span>
                       <select
