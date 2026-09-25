@@ -476,9 +476,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </p>
           </div>
           <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
-            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Active QRs</p>
+            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Actives QRS</p>
             <p className="text-sm sm:text-base font-black text-cyan-300 mt-1">
-              {activeQRsCount} LIVE
+              {activeQRsCount} Lives
             </p>
           </div>
         </div>

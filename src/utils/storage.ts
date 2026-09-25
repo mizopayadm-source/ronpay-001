@@ -788,6 +788,7 @@ export const getStoredTransactions = (): Transaction[] => {
 
         // Filter out legacy sample entries, deleted transactions, or stale non-canonical phantom records
         const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
+        let hasAttrChange = false;
         const cleaned = parsed.filter(t => {
           if (!t || !t.id) return false;
           const cleanId = String(t.id).toLowerCase().trim();
@@ -795,25 +796,27 @@ export const getStoredTransactions = (): Transaction[] => {
           if (t.donorName === 'Liana' || t.donorName === 'Kunga') return false;
           if (legacyMismatchedIds.has(t.id)) return false;
           
-          // If transaction exists in canonical dataset, always keep it
+          // Canonical transactions are the authoritative ground truth
           if (canonicalTxMap.has(cleanId)) return true;
           
-          // If transaction was created locally recently (e.g. today or last 24h) with valid payment details, preserve it
-          if (t.timestamp) {
-            const txTime = new Date(t.timestamp).getTime();
-            const now = Date.now();
-            if (now - txTime < 24 * 60 * 60 * 1000) {
-              return true;
-            }
-          }
-          // Prune stale obsolete phantom transaction that creates disparity between devices
+          // Prune obsolete phantom transaction that creates disparity between devices
           return false;
         }).map(t => {
           // Sync canonical status and attributes for existing canonical transactions
           const cleanId = String(t.id).toLowerCase().trim();
           const canonical = canonicalTxMap.get(cleanId);
           if (canonical) {
-            return { ...t, status: canonical.status, amount: canonical.amount };
+            if (t.amount !== canonical.amount || t.status !== canonical.status) {
+              hasAttrChange = true;
+            }
+            return {
+              ...t,
+              status: canonical.status,
+              amount: canonical.amount,
+              totalAmount: canonical.totalAmount,
+              platformFee: canonical.platformFee,
+              campaignNetReceived: canonical.campaignNetReceived,
+            };
           }
           return t;
         });
@@ -832,7 +835,7 @@ export const getStoredTransactions = (): Transaction[] => {
           }
         }
 
-        if (hasNew || cleaned.length !== parsed.length) {
+        if (hasNew || cleaned.length !== parsed.length || hasAttrChange) {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
         }
 
