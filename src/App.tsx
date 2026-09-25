@@ -242,11 +242,14 @@ export default function App() {
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
 
-  // Cache Invalidation on Auth / Session Boot:
-  // Cleanly purge stale in-memory session guards and ensure fresh initial state
+  // Cache Invalidation & Automatic Server Sync on Auth / Session Boot:
+  // Cleanly purge stale in-memory session guards and ensure fresh initial state across all tabs
   useEffect(() => {
     invalidateCacheOnAuthOrBoot('session_boot');
     reloadLocalData();
+    syncAllWithServer().then(() => {
+      reloadLocalData();
+    }).catch(() => {});
   }, [reloadLocalData]);
 
   // Real-time Firestore Sync initialization

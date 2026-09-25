@@ -125,10 +125,13 @@ export function sanitizeForFirestore<T>(obj: T): T {
 function getLocalDeletedTxIds(): Set<string> {
   try {
     if (typeof window === 'undefined') return new Set();
-    const raw = localStorage.getItem('ronpay_deleted_tx_ids');
+    const raw = localStorage.getItem('ronpay_deleted_tx_ids') || localStorage.getItem('ronpay_deleted_tx_ids_v1');
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
+      if (Array.isArray(arr)) {
+        const canonicalTxIds = new Set(INITIAL_TRANSACTIONS.map(t => String(t.id).toLowerCase().trim()));
+        return new Set(arr.filter((id: any) => !canonicalTxIds.has(String(id).toLowerCase().trim())).map((id: any) => String(id).toLowerCase().trim()));
+      }
     }
   } catch {}
   return new Set();

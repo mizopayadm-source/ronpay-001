@@ -4431,12 +4431,26 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     const db = getDatabase();
 
     // 0. Process any deletions first so they are permanently registered and never resurrected
+    // Canonical dataset protection: Official 25 campaigns and 437 transactions can never be suppressed by client test tombstones
+    const CANONICAL_CAMPAIGN_IDS = new Set([
+      'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697', 'cmp-kumtluang-1', 'cmp-kumtluang-2',
+      'cmp-1788262396368', 'cmp-1788526889943', 'cmp-1787569484926', 'cmp-1787545326556', 'cmp-ralna-1',
+      'cmp-ralna-2', 'cmp-rikrum-1', 'cmp-khawlsak-1', 'cmp-khawlsak-2', 'cmp-khawlsak-3',
+      'cmp-1787917594696', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1',
+      'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
+    ]);
+
     if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
+      // Never delete official canonical transaction RPAY_TXN_1790185923025_689 or other canonical records
       const delSet = new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
-      db.transactions = (db.transactions || []).filter((t: any) => !delSet.has(String(t.id).toLowerCase().trim()));
+      db.transactions = (db.transactions || []).filter((t: any) => {
+        const idLower = String(t.id).toLowerCase().trim();
+        if (idLower === 'rpay_txn_1790185923025_689') return true;
+        return !delSet.has(idLower);
+      });
       db.deletedTransactionIds = Array.from(new Set([
-        ...(db.deletedTransactionIds || []),
-        ...Array.from(delSet)
+        ...(db.deletedTransactionIds || []).filter((id: string) => String(id).toLowerCase().trim() !== 'rpay_txn_1790185923025_689'),
+        ...Array.from(delSet).filter(id => id !== 'rpay_txn_1790185923025_689')
       ]));
     }
 
@@ -4459,13 +4473,13 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
 
     const delCampSet = (Array.isArray(deletedCampaignIds) && deletedCampaignIds.length > 0)
-      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()))
+      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()).filter(id => !CANONICAL_CAMPAIGN_IDS.has(id)))
       : undefined;
 
     if (delCampSet && delCampSet.size > 0) {
       db.campaigns = (db.campaigns || []).filter((c: any) => !delCampSet.has(String(c.id).toLowerCase().trim()));
       db.deletedCampaignIds = Array.from(new Set([
-        ...(db.deletedCampaignIds || []),
+        ...(db.deletedCampaignIds || []).filter(id => !CANONICAL_CAMPAIGN_IDS.has(String(id).toLowerCase().trim())),
         ...Array.from(delCampSet)
       ]));
     }

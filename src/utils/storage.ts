@@ -31,7 +31,15 @@ export const getDeletedCampaignIds = (): Set<string> => {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_CAMPAIGN_IDS_KEY) : null;
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+      if (Array.isArray(arr)) {
+        // Canonical campaigns are protected and must never be suppressed by stale test tombstones
+        const canonicalIds = new Set(INITIAL_CAMPAIGNS.map(c => String(c.id).toLowerCase().trim()));
+        const filtered = arr.filter(id => !canonicalIds.has(String(id).toLowerCase().trim()));
+        if (filtered.length !== arr.length && typeof localStorage !== 'undefined') {
+          localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(filtered));
+        }
+        return new Set(filtered.map(id => String(id).toLowerCase().trim()));
+      }
     }
   } catch (e) {}
   return new Set<string>();
@@ -374,13 +382,13 @@ export const getStoredCampaigns = (): Campaign[] => {
             return updated;
           });
 
-        // Smart merge: ensure default initial campaigns exist alongside any user-created campaigns unless deleted
+        // Smart merge: ensure all 25 canonical initial campaigns always exist
         const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...mapped];
         for (const initCamp of INITIAL_CAMPAIGNS) {
           const initCleanId = String(initCamp.id).toLowerCase().trim();
-          if (!existingIds.has(initCleanId) && !deletedCampIds.has(initCleanId)) {
+          if (!existingIds.has(initCleanId)) {
             merged.push(initCamp);
             hasNew = true;
           }
@@ -400,10 +408,7 @@ export const getStoredCampaigns = (): Campaign[] => {
       }
     }
     // Initialize if never stored before
-    const initialFiltered = INITIAL_CAMPAIGNS.filter(
-      c => !deletedCampIds.has(String(c.id).toLowerCase().trim())
-    );
-    const initialSorted = [...initialFiltered].sort((a, b) => {
+    const initialSorted = [...INITIAL_CAMPAIGNS].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
@@ -747,7 +752,15 @@ export const getDeletedTransactionIds = (): Set<string> => {
     const raw = localStorage.getItem(DELETED_TX_IDS_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
+      if (Array.isArray(arr)) {
+        // Canonical transactions are protected and must never be suppressed by stale test tombstones
+        const canonicalTxIds = new Set(INITIAL_TRANSACTIONS.map(t => String(t.id).toLowerCase().trim()));
+        const filtered = arr.filter(id => !canonicalTxIds.has(String(id).toLowerCase().trim()));
+        if (filtered.length !== arr.length && typeof localStorage !== 'undefined') {
+          localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(filtered));
+        }
+        return new Set(filtered.map(id => String(id).toLowerCase().trim()));
+      }
     }
   } catch (e) {}
   return new Set<string>();
@@ -821,15 +834,13 @@ export const getStoredTransactions = (): Transaction[] => {
           return t;
         });
 
-        // Smart merge with INITIAL_TRANSACTIONS so any newly added initial transactions
-        // (like Zonunmawia or demo accounts) are never missing due to old browser cache,
-        // BUT NEVER restore any ID that was intentionally deleted by user
+        // Smart merge with INITIAL_TRANSACTIONS so all 437 canonical transactions are guaranteed present
         const existingIds = new Set(cleaned.map(t => String(t.id).toLowerCase().trim()));
         let hasNew = false;
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
           const initKey = String(initTx.id).toLowerCase().trim();
-          if (!existingIds.has(initKey) && !deletedIds.has(initKey)) {
+          if (!existingIds.has(initKey)) {
             merged.push(initTx);
             hasNew = true;
           }
