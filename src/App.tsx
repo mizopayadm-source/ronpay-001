@@ -764,6 +764,16 @@ export default function App() {
         return;
       }
 
+      // 1b. If user was on checkout, popping back from mobile/browser should navigate to home cleanly
+      if (currentScreenRef.current === 'checkout' || currentScreenRef.current === 'phonepe_checkout') {
+        setSelectedCampaign(null);
+        setAutoOpenPhonePeCheckout(false);
+        cleanPaymentUrlParams();
+        setCurrentScreen('home');
+        updateBrowserUrl('home', null, null, { replace: true });
+        return;
+      }
+
       // 2. Check the route the browser is popping into
       const poppedRoute = getUrlRoute();
       if (!poppedRoute) {
@@ -784,7 +794,7 @@ export default function App() {
       }
 
       // If popped route was a payment checkout or simulator URL and user is navigating back, stay on home cleanly
-      if (poppedRoute.isPhonePeOpen && currentScreenRef.current !== 'checkout') {
+      if (poppedRoute.isPhonePeOpen || (poppedRoute.screen === 'checkout' && currentScreenRef.current !== 'checkout')) {
         setAutoOpenPhonePeCheckout(false);
         cleanPaymentUrlParams();
         setCurrentScreen('home');
@@ -805,7 +815,7 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
     };
-  }, [applyRouteFromUrl, completedTransaction?.id]);
+  }, [applyRouteFromUrl]);
 
   // Keep selectedCampaign synchronized if campaign record updates via Firestore or local merge
   useEffect(() => {
@@ -957,7 +967,7 @@ export default function App() {
     setCompletedTransaction(newTx);
     reloadLocalData();
     setIsBillModalOpen(false);
-    handleNavigate('success');
+    handleNavigate('success', { replace: true });
   };
 
   const handlePaymentSuccess = (transaction: Transaction) => {
@@ -965,7 +975,7 @@ export default function App() {
     recordUserPaidTxId(transaction.id);
     setCompletedTransaction(transaction);
     reloadLocalData();
-    handleNavigate('success');
+    handleNavigate('success', { replace: true });
   };
 
   const handlePaymentFailure = (transaction: Transaction, reason?: string) => {
@@ -1348,7 +1358,9 @@ export default function App() {
               pricingConfig={pricingConfig}
               onBack={() => {
                 setAutoOpenPhonePeCheckout(false);
-                handleNavigate('explorer');
+                setSelectedCampaign(null);
+                cleanPaymentUrlParams();
+                handleNavigate('home', { replace: true });
               }}
               onPaymentSuccess={(tx) => {
                 setAutoOpenPhonePeCheckout(false);

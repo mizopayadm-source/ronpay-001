@@ -349,11 +349,12 @@ export const getStoredCampaigns = (): Campaign[] => {
             const cleanId = String(camp.id).toLowerCase().trim();
             if (cleanId === 'cmp-kumtluang-ymavt') return false;
             if (deletedCampIds.has(cleanId)) return false;
-            // Strict canonical harmonization: prune any legacy orphan test campaign not in canonical 24 list
-            if (!canonicalCampIds.has(cleanId)) {
-              return false;
-            }
-            return true;
+            // Canonical campaigns are always preserved
+            if (canonicalCampIds.has(cleanId)) return true;
+            // Preserve valid user-created campaigns
+            const isUserCreated = cleanId.startsWith('cmp-') && !cleanId.includes('test') && Boolean(camp.title && camp.upiId);
+            if (isUserCreated) return true;
+            return false;
           })
           .map((camp: Campaign) => {
             const updated = { ...camp };
@@ -806,13 +807,24 @@ export const getStoredTransactions = (): Transaction[] => {
           if (!t || !t.id) return false;
           const cleanId = String(t.id).toLowerCase().trim();
           if (deletedIds.has(cleanId)) return false;
-          if (t.donorName === 'Liana' || t.donorName === 'Kunga') return false;
           if (legacyMismatchedIds.has(t.id)) return false;
           
-          // Canonical transactions are the authoritative ground truth
+          // 1. Authoritative ground truth: canonical initial transactions
           if (canonicalTxMap.has(cleanId)) return true;
           
-          // Prune obsolete phantom transaction that creates disparity between devices
+          // 2. Real user-created / completed / live transactions MUST BE KEPT!
+          // Preserves all payments completed on web, mobile apps, QR scans, etc.
+          const isRealTransaction = cleanId.startsWith('rpay_') || 
+                                    cleanId.startsWith('txn_') || 
+                                    cleanId.startsWith('txn-') || 
+                                    cleanId.startsWith('bill-') || 
+                                    cleanId.startsWith('cash-') || 
+                                    cleanId.startsWith('pay_') ||
+                                    Boolean(t.timestamp || t.date || t.createdAt);
+          if (isRealTransaction && Number(t.amount) > 0) {
+            return true;
+          }
+          
           return false;
         }).map(t => {
           // Sync canonical status and attributes for existing canonical transactions

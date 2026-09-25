@@ -507,7 +507,11 @@ export function cleanPaymentUrlParams() {
       window.location.hash.includes('phonepe') || 
       window.location.hash.includes('screen') || 
       window.location.hash.includes('status') ||
-      window.location.hash.includes('txn')
+      window.location.hash.includes('txn') ||
+      window.location.hash.includes('campaign') ||
+      window.location.hash.includes('cmp') ||
+      window.location.hash.includes('c/') ||
+      window.location.hash.includes('bawm')
     )) {
       window.location.hash = '';
     }
