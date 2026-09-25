@@ -58,11 +58,19 @@ export const formatDateTimeDDMMYYYY = (dateInput?: string | Date | number | null
       }
     }
 
-    const d = typeof dateInput === 'object' && dateInput instanceof Date 
+    let d = typeof dateInput === 'object' && dateInput instanceof Date 
       ? dateInput 
       : new Date(dateInput);
     if (isNaN(d.getTime())) return String(dateInput);
     
+    // Auto-heal future timestamps: If a timestamp is in the future by ~5.5 hours (or up to 6 hours),
+    // it was caused by formatting an already-IST local time as UTC (with .000Z), causing Asia/Kolkata
+    // formatter to add +05:30 a second time. We detect and auto-correct this back to actual local time.
+    const nowMs = Date.now();
+    if (d.getTime() > nowMs + 60000 && d.getTime() - nowMs <= (6.5 * 3600 * 1000)) {
+      d = new Date(d.getTime() - (5.5 * 3600 * 1000));
+    }
+
     // Format in Indian Standard Time (Asia/Kolkata, UTC+5:30)
     const formatter = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',

@@ -272,8 +272,10 @@ export function setupWindowFocusSync(
 export function invalidateCacheOnAuthOrBoot(
   reason: 'auth_login' | 'auth_logout' | 'session_boot' = 'session_boot'
 ): void {
-  // 1. Reset Firestore singleton session guards so cold-start or fresh-session checks run cleanly
-  resetCloudSessionGuards();
+  // 1. Only reset cloud session guards on explicit auth logout to prevent excessive Firestore reads
+  if (reason === 'auth_logout') {
+    resetCloudSessionGuards();
+  }
 
   // 2. Mark session boot timestamp
   try {

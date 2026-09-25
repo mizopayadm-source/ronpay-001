@@ -4234,6 +4234,28 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         changed = true;
       }
     }
+
+    // 4. Auto-heal future timestamps & double-IST offsets
+    const nowMs = Date.now();
+    const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
+    if (txTime > nowMs + 60000) {
+      const matchRpay = String(t.id).match(/^RPAY_TXN_(\d{13})/i);
+      if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
+        t.timestamp = new Date(Number(matchRpay[1])).toISOString();
+        t.createdAt = t.timestamp;
+        if (t.verifiedAt && new Date(t.verifiedAt).getTime() > nowMs + 60000) {
+          t.verifiedAt = new Date(Number(matchRpay[1]) + 15000).toISOString();
+        }
+        changed = true;
+      } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
+        t.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
+        t.createdAt = t.timestamp;
+        if (t.verifiedAt && new Date(t.verifiedAt).getTime() > nowMs + 60000) {
+          t.verifiedAt = t.timestamp;
+        }
+        changed = true;
+      }
+    }
   }
 
   return changed;

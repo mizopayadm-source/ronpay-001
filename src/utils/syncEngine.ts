@@ -252,25 +252,39 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           const currentTxs = getStoredTransactions();
           const serverTxIds = new Set(serverData.transactions.map((t: any) => String(t.id).toLowerCase().trim()));
           const txMap = new Map<string, any>();
+          const nowMs = Date.now();
+
+          const sanitizeTxTimestamp = (t: any) => {
+            if (!t) return;
+            const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
+            if (txTime > nowMs + 60000) {
+              const matchRpay = String(t.id).match(/^RPAY_TXN_(\d{13})/i);
+              if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
+                t.timestamp = new Date(Number(matchRpay[1])).toISOString();
+                t.createdAt = t.timestamp;
+              } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
+                t.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
+                t.createdAt = t.timestamp;
+              }
+            }
+          };
           
           // Seed authoritative server transactions first
           for (const t of serverData.transactions) {
             if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+              sanitizeTxTimestamp(t);
               const k = String(t.id).toLowerCase().trim();
               txMap.set(k, t);
             }
           }
 
-          // Merge any recent local in-flight transactions (created within the last 15 minutes) not yet on server
-          const nowMs = Date.now();
+          // Merge any local transactions not yet on server (ensuring none are lost during offline periods)
           for (const t of currentTxs) {
             if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+              sanitizeTxTimestamp(t);
               const k = String(t.id).toLowerCase().trim();
               if (!serverTxIds.has(k)) {
-                const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
-                if (nowMs - txTime < 15 * 60 * 1000) {
-                  txMap.set(k, t);
-                }
+                txMap.set(k, t);
               }
             }
           }
@@ -587,6 +601,57 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     window.addEventListener('storage', handleStorageChange);
   }
 
+  // 5. Server-Sent Events (SSE) for instant sub-second multi-device synchronization
+  let eventSource: EventSource | null = null;
+  let sseReconnectTimer: any = null;
+  if (typeof window !== 'undefined' && 'EventSource' in window) {
+    const connectSSE = () => {
+      try {
+        eventSource = new EventSource('/api/data/events');
+        eventSource.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
+              syncAllWithServer().then(res => {
+                if (res && onSyncUpdate) onSyncUpdate(res);
+              }).catch(() => {});
+            }
+          } catch {}
+        };
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (!sseReconnectTimer) {
+            sseReconnectTimer = setTimeout(() => {
+              sseReconnectTimer = null;
+              connectSSE();
+            }, 10000);
+          }
+        };
+      } catch (err) {
+        console.warn('SSE connection note:', err);
+      }
+    };
+    connectSSE();
+
+    // Mobile & multi-browser resume listener: When user opens app or brings phone screen back from sleep
+    const handleVisibilityOrOnline = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        if (!eventSource) {
+          connectSSE();
+        }
+        syncAllWithServer().then(res => {
+          if (res && onSyncUpdate) onSyncUpdate(res);
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrOnline);
+    window.addEventListener('online', handleVisibilityOrOnline);
+  }
+
   return () => {
     stopFirestore();
     if (broadcastChannel) {
@@ -595,6 +660,14 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     }
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorageChange);
+    }
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
     }
   };
 }

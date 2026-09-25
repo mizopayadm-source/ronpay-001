@@ -1677,9 +1677,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     <FileSpreadsheet className="w-3 h-3 text-emerald-700" />
                     <span>Excel (.xls)</span>
                   </button>
-                  <span className="text-[9.5px] bg-slate-100 text-slate-600 px-2 py-1 rounded-lg font-bold">
-                    Live Audit
-                  </span>
+                  <button
+                    onClick={handleManualCloudSync}
+                    disabled={isSyncingCloud}
+                    className="text-[9.5px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
+                    title="Refresh and sync transactions"
+                  >
+                    <RefreshCw className={`w-2.5 h-2.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingCloud ? 'Syncing...' : 'Live Sync'}</span>
+                  </button>
                 </div>
               </div>
 

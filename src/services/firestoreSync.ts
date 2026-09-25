@@ -216,14 +216,22 @@ export function resetCloudSessionGuards(): void {
 }
 
 /**
- * Check and seed Firestore with initial default data if empty on cold start (run once per session)
+ * Check and seed Firestore with initial default data if empty on cold start (run once per device/browser)
  */
 export async function seedInitialCloudDataIfEmpty() {
   if (hasSeededCloudThisSession || !isNetworkOnline) return;
   hasSeededCloudThisSession = true;
+
+  // Once checked/seeded in this browser environment, bypass completely to avoid wasteful Firestore reads
   try {
-    // 1. Campaigns seed check
-    const campaignsSnap = await getDocs(collection(db, 'campaigns'));
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_firestore_seeded_ok') === 'true') {
+      return;
+    }
+  } catch {}
+
+  try {
+    // 1. Campaigns seed check with limit(1) - consumes at most 1 read instead of reading entire collection
+    const campaignsSnap = await getDocs(query(collection(db, 'campaigns'), limit(1)));
     if (campaignsSnap.empty) {
       console.log('[Firestore] Seeding initial campaigns to Firestore...');
       const batch = writeBatch(db);
@@ -254,8 +262,8 @@ export async function seedInitialCloudDataIfEmpty() {
       }), { merge: true });
     }
 
-    // 4. Initial Creators seed check
-    const creatorsSnap = await getDocs(collection(db, 'creators'));
+    // 4. Initial Creators seed check with limit(1) - consumes at most 1 read instead of reading entire collection
+    const creatorsSnap = await getDocs(query(collection(db, 'creators'), limit(1)));
     if (creatorsSnap.empty) {
       const batch = writeBatch(db);
       for (const cr of INITIAL_REGISTERED_CREATORS) {
@@ -267,8 +275,8 @@ export async function seedInitialCloudDataIfEmpty() {
       await batch.commit();
     }
 
-    // 5. Initial Members seed check
-    const membersSnap = await getDocs(collection(db, 'members'));
+    // 5. Initial Members seed check with limit(1) - consumes at most 1 read instead of reading entire collection
+    const membersSnap = await getDocs(query(collection(db, 'members'), limit(1)));
     if (membersSnap.empty) {
       const batch = writeBatch(db);
       for (const m of INITIAL_DEFAULT_MEMBERS) {
@@ -279,6 +287,12 @@ export async function seedInitialCloudDataIfEmpty() {
       }
       await batch.commit();
     }
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('ronpay_firestore_seeded_ok', 'true');
+      }
+    } catch {}
   } catch (err) {
     logFirestoreNetworkNote('Seed cloud data check', err);
   }
@@ -379,15 +393,28 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     });
   };
 
-  // 1. Transactions Listener (onSnapshot on transactions collection)
+  // 1. Transactions Listener (onSnapshot on recent transactions only - 20 items to drastically reduce reads)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(100));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(20));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
+      const nowMs = Date.now();
       snapshot.forEach(docSnap => {
         const data = docSnap.data() as Transaction;
         if (data && data.id) {
+          // Auto-heal future timestamps if double IST offset occurred
+          const txTime = data.timestamp ? new Date(data.timestamp).getTime() : 0;
+          if (txTime > nowMs + 60000) {
+            const matchRpay = String(data.id).match(/^RPAY_TXN_(\d{13})/i);
+            if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
+              data.timestamp = new Date(Number(matchRpay[1])).toISOString();
+              data.createdAt = data.timestamp;
+            } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
+              data.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
+              data.createdAt = data.timestamp;
+            }
+          }
           remoteTxList.push(data);
         }
       });
@@ -477,9 +504,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
-  // 3. Members Listener (Kumtluang / YMA / Bawm member database)
+  // 3. Members Listener (Kumtluang / YMA / Bawm member database) - limited to 30 to prevent high read volume
   try {
-    const memQuery = collection(db, 'members');
+    const memQuery = query(collection(db, 'members'), limit(30));
     const unsubMem = onSnapshot(memQuery, (snapshot) => {
       const remoteMembers: MemberRecord[] = [];
       snapshot.forEach(docSnap => {
@@ -506,9 +533,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach members listener', err);
   }
 
-  // 4. Creators Profile & List Listener
+  // 4. Creators Profile & List Listener - limited to 15 to reduce reads
   try {
-    const creatorsQuery = collection(db, 'creators');
+    const creatorsQuery = query(collection(db, 'creators'), limit(15));
     const unsubCreators = onSnapshot(creatorsQuery, (snapshot) => {
       const remoteCreators: CreatorProfile[] = [];
       snapshot.forEach(docSnap => {
@@ -588,9 +615,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach pricing config listener', err);
   }
 
-  // 7. Audit Logs Listener
+  // 7. Audit Logs Listener - limited to 5 to reduce reads
   try {
-    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
+    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(5));
     const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
       const logs: AuditLog[] = [];
       snapshot.forEach(docSnap => {

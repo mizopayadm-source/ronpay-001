@@ -746,11 +746,20 @@ export default function App() {
     currentScreenRef.current = currentScreen;
   }, [currentScreen]);
 
-  // Deep linking: Listen for popstate and hashchange to keep browser history synchronized
+  // Deep linking & Mobile Navigation: Listen for popstate and hashchange to keep browser history synchronized
+  // and prevent unwanted back-navigation loops into completed payment/checkout pages
   useEffect(() => {
     const handlePopState = () => {
-      // 1. If user was on success or failed screen, popping back from mobile/browser should navigate to home cleanly
-      if (currentScreenRef.current === 'success' || currentScreenRef.current === 'failed') {
+      // 1. If user is currently on any payment, checkout, or receipt screen,
+      // pressing mobile/browser BACK should ALWAYS navigate cleanly to 'home' without looping.
+      if (
+        currentScreenRef.current === 'success' ||
+        currentScreenRef.current === 'failed' ||
+        currentScreenRef.current === 'cash_pending' ||
+        currentScreenRef.current === 'checkout' ||
+        currentScreenRef.current === 'phonepe_checkout' ||
+        currentScreenRef.current === 'phonepe_launcher'
+      ) {
         if (completedTransaction?.id) {
           markReceiptAsConsumed(completedTransaction.id);
         }
@@ -764,44 +773,50 @@ export default function App() {
         return;
       }
 
-      // 1b. If user was on checkout, popping back from mobile/browser should navigate to home cleanly
-      if (currentScreenRef.current === 'checkout' || currentScreenRef.current === 'phonepe_checkout') {
-        setSelectedCampaign(null);
-        setAutoOpenPhonePeCheckout(false);
-        cleanPaymentUrlParams();
-        setCurrentScreen('home');
-        updateBrowserUrl('home', null, null, { replace: true });
-        return;
-      }
-
       // 2. Check the route the browser is popping into
       const poppedRoute = getUrlRoute();
-      if (!poppedRoute) {
-        setCurrentScreen('home');
+
+      // Check if the popped route is ANY payment, checkout, or receipt route
+      const isPaymentOrCheckoutRoute =
+        !poppedRoute ||
+        poppedRoute.screen === 'checkout' ||
+        poppedRoute.screen === 'phonepe_checkout' ||
+        poppedRoute.screen === 'phonepe_launcher' ||
+        poppedRoute.screen === 'success' ||
+        poppedRoute.screen === 'failed' ||
+        poppedRoute.screen === 'cash_pending' ||
+        poppedRoute.isPhonePeOpen ||
+        poppedRoute.isDirectPhonePeLaunch ||
+        Boolean(poppedRoute.receiptId) ||
+        Boolean(poppedRoute.campaignId);
+
+      // If the route being popped into is a payment/checkout/receipt route:
+      // Prevent returning to payment! Keep the user on 'home' (or if on a subpage like explorer/reports, return to 'home')
+      if (isPaymentOrCheckoutRoute) {
+        if (completedTransaction?.id) {
+          markReceiptAsConsumed(completedTransaction.id);
+        }
+        if (poppedRoute?.receiptId) {
+          markReceiptAsConsumed(poppedRoute.receiptId);
+        }
+        setCompletedTransaction(null);
+        setFailedTransaction(null);
         setSelectedCampaign(null);
         setAutoOpenPhonePeCheckout(false);
+        cleanPaymentUrlParams();
+        setCurrentScreen('home');
+        updateBrowserUrl('home', null, null, { replace: true });
         return;
       }
 
-      // If the popped route points to an already consumed/completed receipt, prevent re-opening the receipt
-      if (poppedRoute.receiptId && isReceiptConsumed(poppedRoute.receiptId)) {
-        setCurrentScreen('home');
-        setSelectedCampaign(null);
-        setAutoOpenPhonePeCheckout(false);
+      // If user is currently on 'home' and presses BACK on mobile, never navigate backward into past screens
+      if (currentScreenRef.current === 'home') {
         cleanPaymentUrlParams();
         updateBrowserUrl('home', null, null, { replace: true });
         return;
       }
 
-      // If popped route was a payment checkout or simulator URL and user is navigating back, stay on home cleanly
-      if (poppedRoute.isPhonePeOpen || poppedRoute.screen === 'checkout') {
-        setAutoOpenPhonePeCheckout(false);
-        cleanPaymentUrlParams();
-        setCurrentScreen('home');
-        updateBrowserUrl('home', null, null, { replace: true });
-        return;
-      }
-
+      // 3. Otherwise, apply legitimate non-payment route (e.g. explorer, reports, create_qr, etc.)
       applyRouteFromUrl();
     };
 
@@ -1256,9 +1271,8 @@ export default function App() {
         donorName={initialRoute?.donorName}
         donorPhone={initialRoute?.donorPhone}
         onBackToApp={() => {
-          setCurrentScreen('home');
-          setAppView('website');
-          updateBrowserView('website');
+          cleanPaymentUrlParams();
+          handleNavigate('home', { replace: true });
         }}
       />
     );
@@ -1553,11 +1567,21 @@ export default function App() {
               creatorName={creatorProfile.name || 'Bawm Creator'}
               creatorProfile={creatorProfile}
               campaigns={campaigns}
-              onGoHome={() => handleNavigate('home')}
+              onGoHome={() => {
+                if (completedTransaction?.id) {
+                  markReceiptAsConsumed(completedTransaction.id);
+                }
+                setCompletedTransaction(null);
+                setAutoOpenPhonePeCheckout(false);
+                setSelectedCampaign(null);
+                cleanPaymentUrlParams();
+                handleNavigate('home', { replace: true });
+              }}
               onApprove={(approvedTx) => {
                 setTransactions(prev => prev.map(t => t.id === approvedTx.id ? approvedTx : t));
                 setCompletedTransaction(approvedTx);
                 setCurrentScreen('success');
+                updateBrowserUrl('success', null, null, { replace: true });
               }}
               onReject={(rejectedTx) => {
                 setTransactions(prev => prev.map(t => t.id === rejectedTx.id ? rejectedTx : t));
@@ -1568,11 +1592,17 @@ export default function App() {
           {currentScreen === 'phonepe_checkout' && (
             <PhonePeStandardCheckout
               campaign={selectedCampaign || campaigns[0]}
-              onBack={() => handleNavigate('checkout')}
+              onBack={() => {
+                setAutoOpenPhonePeCheckout(false);
+                setSelectedCampaign(null);
+                cleanPaymentUrlParams();
+                handleNavigate('home', { replace: true });
+              }}
               onSuccess={(tx) => {
                 setTransactions(prev => [tx, ...prev.filter(t => t.id !== tx.id)]);
                 setCompletedTransaction(tx);
                 setCurrentScreen('success');
+                updateBrowserUrl('success', null, null, { replace: true });
               }}
             />
           )}

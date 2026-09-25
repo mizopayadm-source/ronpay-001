@@ -843,6 +843,23 @@ export const getStoredTransactions = (): Transaction[] => {
               campaignNetReceived: canonical.campaignNetReceived,
             };
           }
+
+          // Auto-heal future timestamps if double IST offset occurred (e.g. IST formatted as UTC)
+          const nowMs = Date.now();
+          const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
+          if (txTime > nowMs + 60000) {
+            const matchRpay = String(t.id).match(/^RPAY_TXN_(\d{13})/i);
+            if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
+              t.timestamp = new Date(Number(matchRpay[1])).toISOString();
+              t.createdAt = t.timestamp;
+              hasAttrChange = true;
+            } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
+              t.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
+              t.createdAt = t.timestamp;
+              hasAttrChange = true;
+            }
+          }
+
           return t;
         });
 
