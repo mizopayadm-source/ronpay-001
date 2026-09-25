@@ -794,7 +794,7 @@ export default function App() {
       }
 
       // If popped route was a payment checkout or simulator URL and user is navigating back, stay on home cleanly
-      if (poppedRoute.isPhonePeOpen || (poppedRoute.screen === 'checkout' && currentScreenRef.current !== 'checkout')) {
+      if (poppedRoute.isPhonePeOpen || poppedRoute.screen === 'checkout') {
         setAutoOpenPhonePeCheckout(false);
         cleanPaymentUrlParams();
         setCurrentScreen('home');
