@@ -81,8 +81,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onCreateQRClick,
   onSelectBawm,
   onOpenBillService,
-  campaigns,
-  transactions,
+  campaigns = [],
+  transactions = [],
   creatorProfile,
   announcement,
   onOpenReports,
@@ -173,13 +173,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  // Compute dynamic live stats
-  const totalRaised = transactions
-    .filter(isConfirmedTransaction)
-    .reduce((sum, t) => sum + t.amount, 0);
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
-  const todayCount = transactions.filter(isConfirmedTransaction).length;
-  const activeQRsCount = campaigns.filter(c => c.status === 'active').length;
+  // Compute dynamic live stats
+  const totalRaised = safeTransactions
+    .filter(isConfirmedTransaction)
+    .reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
+
+  const todayCount = safeTransactions.filter(isConfirmedTransaction).length;
+  const activeQRsCount = safeCampaigns.filter(c => c && c.status === 'active').length;
 
   const renderBillIcon = (iconName: string) => {
     switch (iconName) {
@@ -204,12 +207,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // All existing QRs sorted newest first
   const allSortedQRs = useMemo(() => {
-    return [...campaigns].sort((a, b) => {
+    return [...safeCampaigns].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
-  }, [campaigns]);
+  }, [safeCampaigns]);
 
   // Filtered QRs based on search keyword and category filter
   const filteredQRs = useMemo(() => {

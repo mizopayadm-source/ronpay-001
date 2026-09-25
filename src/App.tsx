@@ -114,6 +114,9 @@ import { checkDirectPhonePeStatus, getPhonePeMercuryUrl } from './utils/phonepeD
 export default function App() {
   // Splash screen state for smooth UX
   const [showSplash, setShowSplash] = useState<boolean>(true);
+  const handleFinishSplash = useCallback(() => {
+    setShowSplash(false);
+  }, []);
 
   // Extract initial deep link routing parameters from URL (e.g. Google Lens, Camera, Web link)
   const initialRoute = typeof window !== 'undefined' ? getUrlRoute() : null;
@@ -1168,6 +1171,7 @@ export default function App() {
     if (targetCategory) {
       setSelectedCategory(targetCategory);
     }
+    setShowSplash(false);
     setAppView('app');
     updateBrowserView('app', (targetScreen as ScreenId) || 'home');
   };
@@ -1211,7 +1215,7 @@ export default function App() {
     return (
       <div className="min-h-screen w-full bg-slate-50 text-slate-900 font-sans antialiased selection:bg-orange-500 selection:text-white">
         {showSplash && (
-          <SplashScreen onFinish={() => setShowSplash(false)} minDurationMs={400} />
+          <SplashScreen onFinish={handleFinishSplash} minDurationMs={350} />
         )}
         <RonPayWebsite
           onLaunchApp={handleLaunchApp}
@@ -1254,7 +1258,7 @@ export default function App() {
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
       {/* Animated Zero-White-Screen Splash Overlay */}
       {showSplash && (
-        <SplashScreen onFinish={() => setShowSplash(false)} minDurationMs={600} />
+        <SplashScreen onFinish={handleFinishSplash} minDurationMs={400} />
       )}
 
       {/* Container with responsive boundary */}

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { RonPayLogo } from './RonPayLogo';
-import { Sparkles, ShieldCheck, Zap } from 'lucide-react';
+import { Sparkles, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
 
 interface SplashScreenProps {
   onFinish?: () => void;
@@ -9,36 +9,62 @@ interface SplashScreenProps {
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({
   onFinish,
-  minDurationMs = 800,
+  minDurationMs = 500,
 }) => {
-  const [progress, setProgress] = useState(15);
+  const [progress, setProgress] = useState(25);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [loadingText, setLoadingText] = useState('RonPay in-ready mek a ni...');
 
+  const onFinishRef = useRef(onFinish);
   useEffect(() => {
-    // Step-wise progress simulation
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
+
+  const dismissSplash = () => {
+    setIsFadingOut(true);
+    setTimeout(() => {
+      if (onFinishRef.current) {
+        onFinishRef.current();
+      }
+    }, 100);
+  };
+
+  useEffect(() => {
+    const duration = Math.min(600, Math.max(300, minDurationMs));
+
+    // Step-wise progress simulation without getting canceled by parent re-renders
     const t1 = setTimeout(() => {
-      setProgress(45);
+      setProgress(55);
       setLoadingText('Offline Database & Bawm sync mek...');
-    }, 200);
+    }, 150);
 
     const t2 = setTimeout(() => {
       setProgress(85);
       setLoadingText('Security & Fast QR Engine ready...');
-    }, 450);
+    }, 280);
 
     const t3 = setTimeout(() => {
       setProgress(100);
       setLoadingText('In-load fel e!');
-    }, minDurationMs - 200);
+    }, Math.max(250, duration - 120));
 
     const t4 = setTimeout(() => {
       setIsFadingOut(true);
-    }, minDurationMs);
+    }, duration);
 
     const t5 = setTimeout(() => {
-      if (onFinish) onFinish();
-    }, minDurationMs + 250);
+      if (onFinishRef.current) {
+        onFinishRef.current();
+      }
+    }, duration + 150);
+
+    // Failsafe safety timer: Guaranteed dismissal after at most 900ms under all network conditions
+    const failsafe = setTimeout(() => {
+      setIsFadingOut(true);
+      if (onFinishRef.current) {
+        onFinishRef.current();
+      }
+    }, 900);
 
     return () => {
       clearTimeout(t1);
@@ -46,15 +72,18 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       clearTimeout(t3);
       clearTimeout(t4);
       clearTimeout(t5);
+      clearTimeout(failsafe);
     };
-  }, [minDurationMs, onFinish]);
+  }, [minDurationMs]);
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-between bg-gradient-to-b from-[#070f1e] via-[#0a1628] to-[#040914] text-white p-6 transition-opacity duration-300 ${
+      onClick={dismissSplash}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-between bg-gradient-to-b from-[#070f1e] via-[#0a1628] to-[#040914] text-white p-6 transition-opacity duration-300 cursor-pointer select-none ${
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
       style={{ minHeight: '100dvh' }}
+      title="Click or tap to enter RonPay"
     >
       {/* Background ambient decorative glows */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full bg-orange-500/10 blur-3xl pointer-events-none" />
@@ -66,10 +95,17 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>Secure Platform</span>
         </span>
-        <span className="flex items-center gap-1 text-orange-400/90 font-bold">
-          <Zap className="w-3 h-3 text-orange-400 fill-orange-400" />
-          <span>v2.4 Live</span>
-        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            dismissSplash();
+          }}
+          className="flex items-center gap-1 text-amber-400 font-bold bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded-full border border-amber-400/30 transition text-[10px]"
+        >
+          <span>Lut Rawh</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Center Hero: RonPay Logo with pulse glow & branding */}
@@ -112,7 +148,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           <span>Fast QR • Instant UPI Tracking • Offline Ready</span>
         </div>
         <span className="text-[9.5px] text-slate-500 font-medium">
-          Mizoram • Powered by RonPay Fintech Engine
+          Mizoram • Tap screen to open app
         </span>
       </div>
     </div>
