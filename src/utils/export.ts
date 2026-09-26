@@ -1015,7 +1015,7 @@ export const generateTransactionsPDFHtml = (
 
   // Summary bar with breakdown of Online & Cash Collections
   const collectionSummaryBarHtml = `
-    <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; page-break-inside: avoid;">
+    <div class="summary-bar" style="width: 100%; display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; page-break-inside: avoid; box-sizing: border-box;">
       <div style="flex: 1; min-width: 150px; background: #eef2ff; border: 1px solid #c7d2fe; padding: 6px 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
         <div>
           <div style="font-size: 8.5px; font-weight: 800; color: #4338ca; text-transform: uppercase;">⚡ Online (UPI)</div>
@@ -1053,7 +1053,7 @@ export const generateTransactionsPDFHtml = (
     const surplus = Math.max(0, totalAmount - target);
 
     targetSummaryHtml = `
-      <div style="background: #f8fafc; border: 1.5px solid #818cf8; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; page-break-inside: avoid;">
+      <div class="target-bar" style="width: 100%; background: #f8fafc; border: 1.5px solid #818cf8; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; page-break-inside: avoid; box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="font-size: 10.5px; font-weight: 900; color: #312e81; text-transform: uppercase; letter-spacing: 0.3px;">🎯 TARGET & COLLECTION PROGRESS</span>
@@ -1162,12 +1162,25 @@ export const generateTransactionsPDFHtml = (
       print-color-adjust: exact;
     }
     
+    /* Document Sheet Wrapper to guarantee exact alignment across headers, cards, and tables */
+    .statement-sheet {
+      width: 100%;
+      min-width: 100%;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     /* Enhanced Top Header Banner (Only on first page) */
     .header-banner {
+      width: 100%;
+      box-sizing: border-box;
       background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
       border: 1.5px solid #312e81;
       border-radius: 18px;
       padding: 16px 20px;
+      margin-left: 0;
+      margin-right: 0;
       margin-bottom: 16px;
       display: flex;
       align-items: center;
@@ -1282,13 +1295,29 @@ export const generateTransactionsPDFHtml = (
       overflow-x: auto;
     }
 
+    .summary-bar {
+      width: 100%;
+      box-sizing: border-box;
+      margin-left: 0;
+      margin-right: 0;
+    }
+    .target-bar {
+      width: 100%;
+      box-sizing: border-box;
+      margin-left: 0;
+      margin-right: 0;
+    }
+
     /* Table Styles */
     table { 
       width: 100%; 
+      box-sizing: border-box;
       border-collapse: collapse; 
       text-align: left; 
       font-size: 11px; 
       margin-top: 10px; 
+      margin-left: 0;
+      margin-right: 0;
     }
     thead th {
       background: #1e1b4b;
