@@ -1505,6 +1505,27 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     </select>
                   </div>
                 )}
+
+                {/* Master Ledger Sort Order Selector (A-Z, Z-A, ID, Section, Amount) */}
+                {reportPrintStyle === 'master_ledger' && (
+                  <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
+                    <span className="text-[11px] font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">A-Z</span>
+                      <span>Master Ledger Print Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-indigo-300 hover:border-indigo-500 rounded-xl p-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Hming A-Z (Alphabetical) — Default</option>
+                      <option value="name_desc">🔤 Hming Z-A (Reverse Alphabetical)</option>
+                      <option value="id_asc">🔢 Member ID Danin (BMPSHL-001...)</option>
+                      <option value="section">🏘️ Section / Bial Danin</option>
+                      <option value="amount_desc">💰 Sum Thawh Tam Danin (Highest to Lowest)</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Action Export Buttons */}

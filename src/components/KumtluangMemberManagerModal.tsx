@@ -258,6 +258,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [printYear, setPrintYear] = useState<string>('2026');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
+  const [masterLedgerSortOrder, setMasterLedgerSortOrder] = useState<'name_asc' | 'id_asc' | 'section' | 'amount_desc' | 'name_desc'>('name_asc');
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
@@ -1750,6 +1751,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
                 )}
 
+                {/* Master Ledger Order Options */}
+                {printStyle === 'style1_master' && (
+                  <div className="animate-fadeIn p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-xs font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">A-Z</span>
+                      <span>Master Ledger Print Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-indigo-300 hover:border-indigo-500 rounded-xl p-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Hming A-Z (Alphabetical) — Default</option>
+                      <option value="name_desc">🔤 Hming Z-A (Reverse Alphabetical)</option>
+                      <option value="id_asc">🔢 Member ID Danin (BMPSHL-001...)</option>
+                      <option value="section">🏘️ Section / Bial Danin</option>
+                      <option value="amount_desc">💰 Sum Thawh Tam Danin (Highest to Lowest)</option>
+                    </select>
+                  </div>
+                )}
+
                 {/* Audit Statement Options */}
                 {printStyle === 'style4_audit' && (
                   <div className="animate-fadeIn p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
@@ -1799,7 +1821,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         activeCamp?.title || 'Consolidated Kumtluang Master Roll', 
                         orgDisplay,
                         logoDisplay,
-                        locationDisplay
+                        locationDisplay,
+                        masterLedgerSortOrder
                       );
                     } else if (printStyle === 'style4_audit') {
                       printTransactionsPDF(
