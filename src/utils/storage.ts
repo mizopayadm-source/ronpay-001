@@ -1,5 +1,5 @@
 import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig } from '../types';
-import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO } from '../data/initialData';
+import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
   syncCampaignToFirestore,
@@ -363,20 +363,27 @@ export const getStoredCampaigns = (): Campaign[] => {
               const derived = initialMatch?.orgCode || derivePrefixFromText(updated.orgName || updated.title);
               updated.orgCode = derived;
             }
+            if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
+              updated.category = 'kumtluang';
+              // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
+              if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
+                updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
+              }
+            }
             if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
               updated.category = 'kumtluang';
               if (!Array.isArray(updated.subCategories) || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
                 updated.subCategories = ['BMP Fund'];
               }
-              // If previously contaminated with synthetic svg data URI, restore to clean default
-              if (updated.imageUrl && updated.imageUrl.startsWith('data:image/svg+xml')) {
+              // If previously contaminated with synthetic svg data URI or broken unsplash URL, restore to clean default
+              if (!updated.imageUrl || updated.imageUrl.startsWith('data:image/svg+xml') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
               }
             }
             if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {
               updated.category = 'kumtluang';
-              // If previously contaminated with synthetic svg data URI, restore to clean default
-              if (updated.imageUrl && updated.imageUrl.startsWith('data:image/svg+xml')) {
+              // If previously contaminated with synthetic svg data URI or broken unsplash URL, restore to clean default
+              if (!updated.imageUrl || updated.imageUrl.startsWith('data:image/svg+xml') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = YMA_DEFAULT_LOGO;
               }
             }
@@ -617,7 +624,13 @@ export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> =>
         }
       }
 
-      // 2. Normalize and clean any svg data URI that may have been temporarily set
+      // 2. Normalize and clean any svg data URI or broken unsplash URLs
+      if (camp.id === 'cmp-kumtluang-1' || String(camp.title).toLowerCase().includes('bcm ebenezer')) {
+        if (!camp.imageUrl || camp.imageUrl.includes('unsplash.com') || camp.imageUrl.includes('photo-1548625361-195feee10fce')) {
+          camp.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
+          hasChanges = true;
+        }
+      }
       if (camp.imageUrl && camp.imageUrl.startsWith('data:image/svg+xml')) {
         camp.imageUrl = camp.id === 'cmp-1788107291420' ? BMP_SHILLONG_DEFAULT_LOGO : YMA_DEFAULT_LOGO;
         hasChanges = true;
@@ -858,6 +871,13 @@ export const getStoredTransactions = (): Transaction[] => {
               t.createdAt = t.timestamp;
               hasAttrChange = true;
             }
+          }
+
+          // Reassign duplicate member deposit RPAY-771843 to canonical BMPSHL-1718
+          if (cleanId === 'rpay-771843' || String(t.memberId).toLowerCase().trim() === 'bmpshl-1253') {
+            t.memberId = 'BMPSHL-1718';
+            t.donorVeng = 'Shillong Unit';
+            hasAttrChange = true;
           }
 
           return t;
@@ -2384,19 +2404,6 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     status: 'paid'
   },
   {
-    id: 'BMPSHL-1253',
-    campaignId: 'cmp-1788107291420',
-    name: 'J Lalsangliana',
-    orgCode: 'BMPSHL',
-    phoneLast4: '1253',
-    fullPhone: '8635241253',
-    section: 'Bial 1 (Vengchhak)',
-    isFamilyHead: true,
-    dependents: [],
-    createdAt: '2026-08-30T17:17:12.449Z',
-    status: 'paid'
-  },
-  {
     id: 'BMPSHL-6709',
     campaignId: 'cmp-1788107291420',
     name: 'Lalkhawmuana',
@@ -2433,19 +2440,19 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        storedMembers = parsed.filter(m => m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+        storedMembers = parsed.filter(m => m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
       }
     }
 
     // Merge default initial members with stored members (excluding deleted)
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+      if (m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
         map.set(m.id.toLowerCase().trim(), m);
       }
     }
     for (const m of storedMembers) {
-      if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+      if (m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
         const k = m.id.toLowerCase().trim();
         const existing = map.get(k);
         const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
@@ -2461,6 +2468,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
         if (t && t.memberId && String(t.memberId).trim()) {
           const mid = String(t.memberId).trim();
           const k = mid.toLowerCase();
+          if (k === 'bmpshl-1253') continue;
           if (!deletedMemIds.has(k) && !map.has(k)) {
             const orgCode = mid.split('-')[0] || '';
             const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');

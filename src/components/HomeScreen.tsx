@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
-import { BILL_SERVICES } from '../data/initialData';
+import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction } from '../utils/storage';
@@ -899,7 +899,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           className="w-full h-full object-cover rounded-[9px]"
                           referrerPolicy="no-referrer"
                           onError={(e) => {
-                            (e.currentTarget as HTMLElement).style.display = 'none';
+                            const img = e.currentTarget;
+                            if ((camp.id === 'cmp-kumtluang-1' || camp.title?.toLowerCase().includes('bcm ebenezer')) && img.src !== BCM_EBENEZER_DEFAULT_LOGO) {
+                              img.src = BCM_EBENEZER_DEFAULT_LOGO;
+                              return;
+                            }
+                            img.style.display = 'none';
+                            const parent = img.parentElement;
+                            if (parent) {
+                              parent.classList.remove('bg-white', 'p-0.5', 'border-slate-200/90');
+                              parent.classList.add(
+                                camp.category === 'ralna' ? 'bg-slate-900' :
+                                camp.category === 'khawlsak' ? 'bg-emerald-600' :
+                                camp.category === 'rikrum' ? 'bg-rose-600' : 'bg-blue-600',
+                                'text-white'
+                              );
+                              parent.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>';
+                            }
                           }}
                         />
                       </div>

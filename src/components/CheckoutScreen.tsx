@@ -36,7 +36,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
-import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
+import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
 import { getMembers, addOrUpdateMember, saveTransaction, recordUserPaidTxId } from '../utils/storage';
@@ -1205,6 +1205,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   alt={campaign.title}
                   referrerPolicy="no-referrer"
                   className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-300 shadow-sm group-hover/img:scale-105 transition-transform"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if ((campaign.id === 'cmp-kumtluang-1' || campaign.title?.toLowerCase().includes('bcm ebenezer')) && img.src !== BCM_EBENEZER_DEFAULT_LOGO) {
+                      img.src = BCM_EBENEZER_DEFAULT_LOGO;
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 bg-black/30 rounded-2xl opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
                   <Maximize2 className="w-4 h-4 drop-shadow-md" />

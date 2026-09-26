@@ -32,7 +32,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
-import { BAWM_CONFIG } from '../data/initialData';
+import { BAWM_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
@@ -688,6 +688,12 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         alt={camp.title}
                         referrerPolicy="no-referrer"
                         className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl object-cover border border-slate-200 shadow-xs group-hover/img:scale-105 transition-transform"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if ((camp.id === 'cmp-kumtluang-1' || camp.title?.toLowerCase().includes('bcm ebenezer')) && img.src !== BCM_EBENEZER_DEFAULT_LOGO) {
+                            img.src = BCM_EBENEZER_DEFAULT_LOGO;
+                          }
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/30 rounded-xl opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
                         <Maximize2 className="w-4 h-4 drop-shadow-md" />

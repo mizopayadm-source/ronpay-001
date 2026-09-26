@@ -88,6 +88,7 @@ function saveCentralDatabase(db: CentralDatabase) {
 }
 
 function mergeCollections<T extends Record<string, any>>(existing: T[] = [], incoming: T[] = [], key: string = 'id'): T[] {
+  const isCustomLogo = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');
   const map = new Map<string, T>();
   for (const item of (existing || [])) {
     if (item && item[key]) {
@@ -98,7 +99,23 @@ function mergeCollections<T extends Record<string, any>>(existing: T[] = [], inc
     if (item && item[key]) {
       const k = String(item[key]).toLowerCase().trim();
       const prev = map.get(k);
-      map.set(k, { ...(prev || {}), ...item });
+      if (!prev) {
+        map.set(k, item);
+      } else {
+        const itemTime = new Date(item.updatedAt || item.approvedAt || item.timestamp || item.createdAt || 0).getTime();
+        const prevTime = new Date(prev.updatedAt || prev.approvedAt || prev.timestamp || prev.createdAt || 0).getTime();
+
+        let mergedObj: any = itemTime >= prevTime ? { ...prev, ...item } : { ...item, ...prev };
+
+        // Custom logo protection: never overwrite a valid custom logo with unsplash or empty placeholder
+        if (isCustomLogo(item.imageUrl) && !isCustomLogo(prev.imageUrl)) {
+          mergedObj.imageUrl = item.imageUrl;
+        } else if (isCustomLogo(prev.imageUrl) && !isCustomLogo(item.imageUrl)) {
+          mergedObj.imageUrl = prev.imageUrl;
+        }
+
+        map.set(k, mergedObj);
+      }
     }
   }
   return Array.from(map.values());

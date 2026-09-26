@@ -1,4 +1,5 @@
 import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount } from '../types';
+import { BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { 
   getStoredCampaigns, 
   saveStoredCampaigns, 
@@ -217,9 +218,35 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         // 2. Update campaigns
         if (Array.isArray(serverData.campaigns)) {
           const deletedCampIds = getDeletedCampaignIds();
-          const cleanServerCampaigns = serverData.campaigns.filter(
-            (c: any) => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim())
-          );
+          const localCampaigns = getStoredCampaigns();
+          const localMap = new Map(localCampaigns.map(c => [String(c.id).toLowerCase().trim(), c]));
+          const isCustom = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');
+
+          const cleanServerCampaigns = serverData.campaigns
+            .filter((c: any) => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()))
+            .map((sc: any) => {
+              const local = localMap.get(String(sc.id).toLowerCase().trim());
+              const updated = { ...sc };
+              // Protect local custom uploaded logo from being overwritten by server unsplash or empty logo
+              if (local && isCustom(local.imageUrl) && !isCustom(updated.imageUrl)) {
+                updated.imageUrl = local.imageUrl;
+              }
+              // If local has newer timestamp and a custom logo, local keeps its image
+              if (local && local.updatedAt && updated.updatedAt) {
+                const localTime = new Date(local.updatedAt).getTime();
+                const serverTime = new Date(updated.updatedAt).getTime();
+                if (localTime > serverTime && isCustom(local.imageUrl)) {
+                  updated.imageUrl = local.imageUrl;
+                }
+              }
+              // Ensure BCM Ebenezer always has valid church photo
+              if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
+                if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
+                  updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
+                }
+              }
+              return updated;
+            });
           saveStoredCampaigns(cleanServerCampaigns, true);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: cleanServerCampaigns }));

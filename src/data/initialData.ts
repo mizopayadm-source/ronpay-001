@@ -58,16 +58,21 @@ export const BAWM_CONFIG: Record<BawmCategory, BawmInfo> = {
   },
 };
 
-export const BMP_SHILLONG_DEFAULT_LOGO = 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80';
-
-export const YMA_DEFAULT_LOGO = 'https://images.unsplash.com/photo-1548625361-195feee10fce?auto=format&fit=crop&w=500&q=80';
-
-// Canonical Initial Campaigns & Transactions directly loaded from authoritative database (24 campaigns, 535 txns including 87 BMP Shillong txns)
+// Canonical Initial Campaigns & Transactions directly loaded from authoritative database
 import ronpayDb from "./ronpay_db.json";
 
 export const INITIAL_CAMPAIGNS: Campaign[] = (ronpayDb.campaigns || []) as unknown as Campaign[];
 
 export const INITIAL_TRANSACTIONS: Transaction[] = (ronpayDb.transactions || []) as unknown as Transaction[];
+
+export const BCM_EBENEZER_DEFAULT_LOGO: string =
+  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-kumtluang-1')?.imageUrl || '/images/bcm_ebenezer.jpg';
+
+export const BMP_SHILLONG_DEFAULT_LOGO: string =
+  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1788107291420')?.imageUrl || '/images/bcm_ebenezer.jpg';
+
+export const YMA_DEFAULT_LOGO: string =
+  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1787829303143')?.imageUrl || '/images/bcm_ebenezer.jpg';
 
 export const BILL_SERVICES: BillService[] = [
   {

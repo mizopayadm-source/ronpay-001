@@ -4309,6 +4309,19 @@ function saveDatabase(db: DatabaseSchema) {
     const tempFilePath = `${DB_FILE_PATH}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
     fs.writeFileSync(tempFilePath, JSON.stringify(db, null, 2), 'utf-8');
     fs.renameSync(tempFilePath, DB_FILE_PATH);
+
+    // Keep src/data/ronpay_db.json and public/ronpay_db.json in sync for builds and static access
+    try {
+      const srcPath = path.join(process.cwd(), 'src', 'data', 'ronpay_db.json');
+      if (fs.existsSync(path.dirname(srcPath))) {
+        fs.writeFileSync(srcPath, JSON.stringify(db, null, 2), 'utf-8');
+      }
+      const publicPath = path.join(process.cwd(), 'public', 'ronpay_db.json');
+      if (fs.existsSync(path.dirname(publicPath))) {
+        fs.writeFileSync(publicPath, JSON.stringify(db, null, 2), 'utf-8');
+      }
+    } catch {}
+
     // Broadcast live event to all connected web/mobile apps in real-time
     broadcastServerEvent('data_changed', { timestamp: db.lastUpdated });
   } catch (err) {

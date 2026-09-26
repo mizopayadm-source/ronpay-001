@@ -216,8 +216,9 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
 
     const rows = filteredMembers.map((member, idx) => {
       const memberTxns = scopedTransactions.filter(t => 
-        (t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim()) ||
-        (t.remark && t.remark.includes(member.id))
+        (t.memberId && t.memberId.toLowerCase().trim() === member.id.toLowerCase().trim()) ||
+        (t.remark && t.remark.toLowerCase().includes(member.id.toLowerCase().trim())) ||
+        (!t.memberId && t.donorName && t.donorName.toLowerCase().trim() === member.name.toLowerCase().trim())
       );
 
       let rowTotal = 0;
