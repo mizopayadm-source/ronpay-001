@@ -79,6 +79,10 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
 
   // Intercept mobile hardware back button on receipt screen so it returns to home cleanly without looping
   useEffect(() => {
+    try {
+      window.history.pushState({ screen: 'success_guard' }, '', window.location.href);
+    } catch {}
+
     const handlePopState = () => {
       onGoHome();
     };

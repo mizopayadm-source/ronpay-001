@@ -464,9 +464,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     updateStatus('offline');
   }
 
-  // 2. Campaigns Listener (onSnapshot on campaigns collection)
+  // 2. Campaigns Listener (onSnapshot on campaigns collection - limited to 40 to minimize reads)
   try {
-    const campQuery = collection(db, 'campaigns');
+    const campQuery = query(collection(db, 'campaigns'), limit(40));
     const unsubCamp = onSnapshot(campQuery, (snapshot) => {
       updateStatus('connected');
       const remoteCampaigns: Campaign[] = [];
@@ -917,7 +917,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
     return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
   }
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(100));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(30));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {

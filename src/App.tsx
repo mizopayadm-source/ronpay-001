@@ -108,7 +108,17 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
-import { getUrlRoute, updateBrowserUrl, updateBrowserView, isAndroidOrMobileApp, cleanPaymentUrlParams, markReceiptAsConsumed, isReceiptConsumed } from './utils/urlRouting';
+import { 
+  getUrlRoute, 
+  updateBrowserUrl, 
+  updateBrowserView, 
+  isAndroidOrMobileApp, 
+  cleanPaymentUrlParams, 
+  markReceiptAsConsumed, 
+  isReceiptConsumed,
+  markCampaignPaidInSession,
+  isCampaignPaidInSession 
+} from './utils/urlRouting';
 import { checkDirectPhonePeStatus, getPhonePeMercuryUrl } from './utils/phonepeDirect';
 
 export default function App() {
@@ -535,6 +545,18 @@ export default function App() {
 
     // If NO receiptId is present, we can apply route.screen directly
     if (!route.receiptId) {
+      if (
+        (route.screen === 'checkout' || route.isPhonePeOpen) &&
+        route.campaignId &&
+        isCampaignPaidInSession(route.campaignId)
+      ) {
+        cleanPaymentUrlParams();
+        setSelectedCampaign(null);
+        setAutoOpenPhonePeCheckout(false);
+        setCurrentScreen('home');
+        updateBrowserUrl('home', null, null, { replace: true });
+        return;
+      }
       if (route.screen) {
         setCurrentScreen(route.screen);
       }
@@ -762,6 +784,7 @@ export default function App() {
       ) {
         if (completedTransaction?.id) {
           markReceiptAsConsumed(completedTransaction.id);
+          markCampaignPaidInSession(completedTransaction.campaignId);
         }
         setCompletedTransaction(null);
         setFailedTransaction(null);
@@ -778,26 +801,29 @@ export default function App() {
 
       // Check if the popped route is ANY payment, checkout, or receipt route
       const isPaymentOrCheckoutRoute =
-        !poppedRoute ||
-        poppedRoute.screen === 'checkout' ||
-        poppedRoute.screen === 'phonepe_checkout' ||
-        poppedRoute.screen === 'phonepe_launcher' ||
-        poppedRoute.screen === 'success' ||
-        poppedRoute.screen === 'failed' ||
-        poppedRoute.screen === 'cash_pending' ||
-        poppedRoute.isPhonePeOpen ||
-        poppedRoute.isDirectPhonePeLaunch ||
-        Boolean(poppedRoute.receiptId) ||
-        Boolean(poppedRoute.campaignId);
+        poppedRoute?.screen === 'checkout' ||
+        poppedRoute?.screen === 'phonepe_checkout' ||
+        poppedRoute?.screen === 'phonepe_launcher' ||
+        poppedRoute?.screen === 'success' ||
+        poppedRoute?.screen === 'failed' ||
+        poppedRoute?.screen === 'cash_pending' ||
+        poppedRoute?.isPhonePeOpen ||
+        poppedRoute?.isDirectPhonePeLaunch ||
+        Boolean(poppedRoute?.receiptId) ||
+        Boolean(poppedRoute?.campaignId && isCampaignPaidInSession(poppedRoute.campaignId));
 
       // If the route being popped into is a payment/checkout/receipt route:
       // Prevent returning to payment! Keep the user on 'home' (or if on a subpage like explorer/reports, return to 'home')
       if (isPaymentOrCheckoutRoute) {
         if (completedTransaction?.id) {
           markReceiptAsConsumed(completedTransaction.id);
+          markCampaignPaidInSession(completedTransaction.campaignId);
         }
         if (poppedRoute?.receiptId) {
           markReceiptAsConsumed(poppedRoute.receiptId);
+        }
+        if (poppedRoute?.campaignId) {
+          markCampaignPaidInSession(poppedRoute.campaignId);
         }
         setCompletedTransaction(null);
         setFailedTransaction(null);
@@ -988,7 +1014,13 @@ export default function App() {
   const handlePaymentSuccess = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
+    if (transaction.campaignId) {
+      markCampaignPaidInSession(transaction.campaignId);
+    }
     setCompletedTransaction(transaction);
+    setSelectedCampaign(null);
+    setAutoOpenPhonePeCheckout(false);
+    cleanPaymentUrlParams();
     reloadLocalData();
     handleNavigate('success', { replace: true });
   };
@@ -1516,6 +1548,7 @@ export default function App() {
               onGoHome={() => {
                 if (completedTransaction?.id) {
                   markReceiptAsConsumed(completedTransaction.id);
+                  markCampaignPaidInSession(completedTransaction.campaignId);
                 }
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);
@@ -1526,6 +1559,7 @@ export default function App() {
               onExploreMore={() => {
                 if (completedTransaction?.id) {
                   markReceiptAsConsumed(completedTransaction.id);
+                  markCampaignPaidInSession(completedTransaction.campaignId);
                 }
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);

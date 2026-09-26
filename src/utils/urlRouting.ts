@@ -224,6 +224,17 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {
       const cleanId = decodeURIComponent(campaignId).trim();
+
+      // Mobile Navigation & History Guard: If this campaign was already successfully paid for in this session,
+      // never re-open the checkout/payment page when user presses Back or navigates back!
+      if (isCampaignPaidInSession(cleanId) && screenParam !== 'success' && !receiptId) {
+        cleanPaymentUrlParams();
+        return {
+          screen: 'home',
+          view: parsedView || 'app',
+        };
+      }
+
       const allCampaigns = [
         ...(campaignsList || []),
         ...getStoredCampaigns(),
@@ -462,7 +473,9 @@ export const PAYMENT_ROUTING_PARAMS = [
   'roll', 'member_roll', 'memberRoll', 'sulhnu', 'history', 'admin', 'wallet'
 ];
 
+// Global tracking of receipts and paid campaigns in this session to prevent back-button loops
 const consumedReceiptIds = new Set<string>();
+const paidCampaignsInSession = new Set<string>();
 
 export function markReceiptAsConsumed(receiptId?: string | null) {
   if (!receiptId || typeof receiptId !== 'string') return;
@@ -490,6 +503,39 @@ export function isReceiptConsumed(receiptId?: string | null): boolean {
       const list: string[] = JSON.parse(stored);
       if (Array.isArray(list) && list.includes(cleanId)) {
         consumedReceiptIds.add(cleanId);
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+export function markCampaignPaidInSession(campaignId?: string | null) {
+  if (!campaignId || typeof campaignId !== 'string') return;
+  const cleanId = campaignId.trim().toLowerCase();
+  if (!cleanId) return;
+  paidCampaignsInSession.add(cleanId);
+  try {
+    const stored = sessionStorage.getItem('RONPAY_PAID_CAMPAIGNS');
+    const list: string[] = stored ? JSON.parse(stored) : [];
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
+      sessionStorage.setItem('RONPAY_PAID_CAMPAIGNS', JSON.stringify(list));
+    }
+  } catch {}
+}
+
+export function isCampaignPaidInSession(campaignId?: string | null): boolean {
+  if (!campaignId || typeof campaignId !== 'string') return false;
+  const cleanId = campaignId.trim().toLowerCase();
+  if (!cleanId) return false;
+  if (paidCampaignsInSession.has(cleanId)) return true;
+  try {
+    const stored = sessionStorage.getItem('RONPAY_PAID_CAMPAIGNS');
+    if (stored) {
+      const list: string[] = JSON.parse(stored);
+      if (Array.isArray(list) && list.includes(cleanId)) {
+        paidCampaignsInSession.add(cleanId);
         return true;
       }
     }
