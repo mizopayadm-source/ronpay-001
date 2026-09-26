@@ -4458,7 +4458,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697', 'cmp-kumtluang-1', 'cmp-kumtluang-2',
       'cmp-1788262396368', 'cmp-1788526889943', 'cmp-1787569484926', 'cmp-1787545326556', 'cmp-ralna-1',
       'cmp-ralna-2', 'cmp-rikrum-1', 'cmp-khawlsak-1', 'cmp-khawlsak-2', 'cmp-khawlsak-3',
-      'cmp-1787917594696', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1',
+      'cmp-1787917594696',
       'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
     ]);
 

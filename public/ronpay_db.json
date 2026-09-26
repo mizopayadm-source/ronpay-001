@@ -484,133 +484,6 @@
       "orgName": "BCM Ebenezer"
     },
     {
-      "status": "active",
-      "createdAt": "2026-09-18T08:14:24.726Z",
-      "createdBy": "9862599881",
-      "updatedAt": "2026-09-18T08:14:35.579Z",
-      "targetUpiId": "9862599881@okaxis",
-      "titleEn": "BIaka Lungphun",
-      "isApproved": true,
-      "causeMizo": "Lungphunnaah hian lo tel ve ula",
-      "orgCode": "BIA",
-      "eventHost": "BIakmawia",
-      "title": "BIaka Lungphun",
-      "location": "Aizawl, Mizoram",
-      "subCategories": [
-        "Lawmpuina (Gift Envelope)",
-        "Chhungkaw Thilpek",
-        "Thawhlawm"
-      ],
-      "cause": "Lungphunnaah hian lo tel ve ula",
-      "causeEn": "BIaka Lungphun family collection & gifts",
-      "category": "chhungkaw",
-      "creatorName": "BIakmawia",
-      "trxnFeeBearer": "user_paid",
-      "titleMizo": "BIaka Lungphun",
-      "feeOptionRule": "ADD_ON",
-      "eventDate": "2026-09-26T13:43",
-      "id": "cmp-chk-mu6on2s6",
-      "validityDate": "2026-10-18T08:14:24.726Z",
-      "upiId": "9862599881@okaxis",
-      "eventType": "lungphun"
-    },
-    {
-      "status": "active",
-      "causeMizo": "Rev. Dr. R. Zothansanga Inneih Lawmpuina pual thawhlawm & lawmpuina",
-      "titleMizo": "Rev. Dr. R. Zothansanga Inneih Lawmpuina",
-      "feeOptionRule": "ADD_ON",
-      "causeEn": "Rev. Dr. R. Zothansanga Inneih Lawmpuina family collection & gifts",
-      "category": "chhungkaw",
-      "creatorName": "Rev. Dr. R. Zothansanga",
-      "eventType": "inneih",
-      "isApproved": true,
-      "title": "Rev. Dr. R. Zothansanga Inneih Lawmpuina",
-      "upiId": "9862599881@okaxis",
-      "eventHost": "Rev. Dr. R. Zothansanga",
-      "subCategories": [
-        "Lawmpuina (Gift Envelope)",
-        "Chhungkaw Thilpek",
-        "Thawhlawm"
-      ],
-      "titleEn": "Rev. Dr. R. Zothansanga Inneih Lawmpuina",
-      "id": "cmp-chk-mu6ojr7t",
-      "targetUpiId": "9862599881@okaxis",
-      "cause": "Rev. Dr. R. Zothansanga Inneih Lawmpuina pual thawhlawm & lawmpuina",
-      "createdAt": "2026-09-18T08:11:49.769Z",
-      "validityDate": "2026-10-18T08:11:49.769Z",
-      "updatedAt": "2026-09-18T08:14:35.571Z",
-      "orgCode": "REV",
-      "trxnFeeBearer": "user_paid",
-      "createdBy": "9862599881",
-      "location": "Aizawl, Mizoram"
-    },
-    {
-      "updatedAt": "2026-09-18T08:14:35.571Z",
-      "id": "cmp-chhungkaw-2",
-      "contactPerson": "Lalrinawma Rohlupuia",
-      "upiId": "rohlupuia.memorial@okhdfcbank",
-      "createdBy": "9862300000",
-      "description": "Ka pu Rohlupuia hriatrengna lungphun puala chhungkaw lawmpuina leh thawhlawm dahkhawmna.",
-      "orgName": "Rohlupuia Family Memorial",
-      "category": "chhungkaw",
-      "createdAt": "2026-09-05T09:00",
-      "causeEn": "Memorial stone dedication and family feast envelope",
-      "eventHost": "Rohlupuia Chhungkua",
-      "causeMizo": "Ka pu Rohlupuia pual lungphun & chhungkaw inkhawm",
-      "cause": "Lungphun & Memorial Thawhlawm",
-      "title": "Rohlupuia Chhungkaw Lungphun & Ruai",
-      "validityDate": "2026-12-15T23:59",
-      "status": "active",
-      "gpsCoords": "23.7225, 92.7144",
-      "eventType": "lungphun",
-      "location": "Khatla, Aizawl, Mizoram",
-      "orgCode": "RHL",
-      "subCategories": [
-        "Lungphun Pual",
-        "Chhungkaw Thawhlawm",
-        "Ruai Buatsaihna"
-      ],
-      "titleEn": "Memorial Stone Raising - Rohlupuia Family",
-      "eventDate": "2026-11-14T10:00",
-      "contactPhone": "9436155667",
-      "imageUrl": "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=500&q=80",
-      "trxnFeeBearer": "user_paid",
-      "titleMizo": "Rohlupuia Chhungkaw Lungphun & Ruai"
-    },
-    {
-      "createdAt": "2026-09-01T10:00",
-      "title": "Lalmuanpuia & Lalnunmawii Inneih Lawmpuina",
-      "titleEn": "Wedding Gift Envelope - Lalmuanpuia & Lalnunmawii",
-      "contactPhone": "9862311223",
-      "createdBy": "9862300000",
-      "orgCode": "MNW",
-      "updatedAt": "2026-09-18T08:14:35.571Z",
-      "subCategories": [
-        "Lawmpuina (Gift Envelope)",
-        "Chhungkaw Thilpek",
-        "Wedding Blessing"
-      ],
-      "status": "active",
-      "category": "chhungkaw",
-      "causeMizo": "Inneih Lawmpuina Thilpek & Thawhlawm",
-      "trxnFeeBearer": "user_paid",
-      "eventHost": "C. Lalmuanpuia & Lalnunmawii",
-      "validityDate": "2026-11-30T23:59",
-      "id": "cmp-chhungkaw-1",
-      "imageUrl": "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=500&q=80",
-      "upiId": "muanpuia.wedding@oksbi",
-      "contactPerson": "C. Lalmuanpuia",
-      "gpsCoords": "23.7380, 92.7180",
-      "location": "Chanmari West, Aizawl, Mizoram",
-      "titleMizo": "Lalmuanpuia & Lalnunmawii Inneih Lawmpuina",
-      "orgName": "Muanpuia & Mawii Wedding",
-      "causeEn": "Wedding monetary gift & blessing envelope",
-      "eventDate": "2026-10-25T11:00",
-      "description": "Muanpuia leh Mawii inneih lawmpuina dahkhawmna. Hmun hla leh chhungkhat laina ten awlsam taka lawmpuina sum an thawn theih nan.",
-      "cause": "Inneih Lawmpuina (Wedding Envelope & Blessing Gift)",
-      "eventType": "inneih"
-    },
-    {
       "gpsCoords": "Pangzawl",
       "vuitu": "Rbt Ziona",
       "approvedAt": "2026-09-18T09:29:39.340Z",
@@ -750,7 +623,12 @@
       ]
     }
   ],
-  "deletedCampaignIds": [],
+  "deletedCampaignIds": [
+    "cmp-chk-mu6on2s6",
+    "cmp-chk-mu6ojr7t",
+    "cmp-chhungkaw-2",
+    "cmp-chhungkaw-1"
+  ],
   "members": [
     {
       "id": "YMAVT-5859",
@@ -14087,6 +13965,14 @@
   },
   "auditLogs": [
     {
+      "id": "audit-1790407981828-i4sic",
+      "action": "DELETE_CAMPAIGN",
+      "actor": "Admin",
+      "targetId": "cmp-chk-mu6on2s6, cmp-chk-mu6ojr7t, cmp-chhungkaw-2, cmp-chhungkaw-1",
+      "details": "Campaigns BIaka Lungphun, Rev. Dr. R. Zothansanga Inneih Lawmpuina, Rohlupuia Chhungkaw Lungphun & Ruai, Lalmuanpuia & Lalnunmawii Inneih Lawmpuina were removed until Chhungkaw bawm is created.",
+      "timestamp": "2026-09-26T07:33:01.828Z"
+    },
+    {
       "id": "log-1",
       "action": "System Initialized",
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
@@ -16287,5 +16173,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-09-25T10:28:00.757Z"
+  "lastUpdated": "2026-09-26T07:33:01.828Z"
 }

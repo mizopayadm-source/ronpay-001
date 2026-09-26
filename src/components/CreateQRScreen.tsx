@@ -466,14 +466,40 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     }
 
     // System-wide Unique Prefix Code Enforcement
-    const derivedPrefix = prefixCode.trim() 
-      ? prefixCode.trim().toUpperCase() 
-      : derivePrefixFromText(selectedCategory === 'kumtluang' ? kumtluangOrg : title);
+    let derivedPrefix = prefixCode.trim().toUpperCase();
+    if (!derivedPrefix) {
+      derivedPrefix = derivePrefixFromText(selectedCategory === 'kumtluang' ? kumtluangOrg : title);
+    }
 
     if (isPrefixCodeTaken(derivedPrefix)) {
-      const suggestions = suggestAlternativePrefixes(derivedPrefix);
-      alert(`⚠️ Prefix Code "${derivedPrefix}" hi Bawm dangin an hmang tawh a ni (Already Taken)!\n\nKhawngaihin prefix dang thlang rawh le:\n${suggestions.join(', ')}`);
-      return;
+      if (selectedCategory !== 'kumtluang') {
+        // Non-kumtluang categories (Rikrum, Ralna, Khawlsak, Chhungkaw) do not manage member rolls.
+        // Auto-assign an alternative unique prefix behind the scenes without blocking or alerting the user.
+        const suggestions = suggestAlternativePrefixes(derivedPrefix);
+        derivedPrefix = suggestions[0] || `${derivedPrefix.substring(0, 2)}${Math.floor(10 + Math.random() * 89)}`;
+      } else {
+        const suggestions = suggestAlternativePrefixes(derivedPrefix);
+        alert(`⚠️ Prefix Code "${derivedPrefix}" hi Bawm dangin an hmang tawh a ni (Already Taken)!\n\nKhawngaihin prefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+        return;
+      }
+    }
+
+    // Duplicate Check: If BOTH Title AND Location are identical to an existing active campaign,
+    // notify the creator to avoid accidental duplicate submissions, but allow them to proceed if it is distinct.
+    const cleanTitle = title.trim().toLowerCase();
+    const cleanLoc = location.trim().toLowerCase();
+    const duplicateSamePlace = campaigns.find(c => 
+      c.status !== 'archived' && 
+      c.status !== 'rejected' &&
+      c.title.trim().toLowerCase() === cleanTitle && 
+      c.location.trim().toLowerCase() === cleanLoc
+    );
+
+    if (duplicateSamePlace) {
+      const proceed = window.confirm(
+        `ℹ️ Hriattirna: He hming leh veng ("${title}" - ${location}) ah hian Bawm dang a awm tawh a ni.\n\nThil thuhmun (duplicate) a nih lohva, he bawm hi siam chhunzawm zel i duh chuan "OK" hmet rawh le.`
+      );
+      if (!proceed) return;
     }
 
     // Derive bilingual title and cause representations
@@ -2575,11 +2601,16 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const finalPrefix = editOrgCode.trim().toUpperCase() || campaign.orgCode || derivePrefixFromText(orgName || title);
+    let finalPrefix = editOrgCode.trim().toUpperCase() || campaign.orgCode || derivePrefixFromText(orgName || title);
     if (isPrefixCodeTaken(finalPrefix, campaign.id)) {
-      const suggestions = suggestAlternativePrefixes(finalPrefix);
-      alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
-      return;
+      if (campaign.category !== 'kumtluang') {
+        const suggestions = suggestAlternativePrefixes(finalPrefix, campaign.id);
+        finalPrefix = suggestions[0] || `${finalPrefix.substring(0, 2)}${Math.floor(10 + Math.random() * 89)}`;
+      } else {
+        const suggestions = suggestAlternativePrefixes(finalPrefix);
+        alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+        return;
+      }
     }
 
     const oldPrefix = (campaign.orgCode || '').trim().toUpperCase();

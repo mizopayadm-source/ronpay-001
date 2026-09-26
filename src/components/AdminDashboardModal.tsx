@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
+  Maximize2,
+  Minimize2,
   ShieldCheck, 
   KeyRound, 
   Users, 
@@ -270,6 +272,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     return auditLogs || getStoredAuditLogs();
   });
   const [auditFilter, setAuditFilter] = useState<string>('all');
+
+  // Full Screen / Expanded Display Mode for Desktop & Web Browsers
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('ronpay_admin_fullscreen');
+      if (saved !== null) return saved === 'true';
+      // Default to full screen on screens >= 768px (iPad / Laptop / Desktop PC)
+      if (typeof window !== 'undefined') {
+        return window.innerWidth >= 768;
+      }
+    } catch {
+      // fallback
+    }
+    return true;
+  });
+
+  const toggleFullScreen = () => {
+    setIsFullScreen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ronpay_admin_fullscreen', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Creator License, Profile, Photos & Custom Override Modal
   const [editingCreator, setEditingCreator] = useState<CreatorProfile | null>(null);
@@ -874,12 +901,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
     const originalCamp = campaigns.find(c => c.id === editingCampaign.id);
     const oldPrefix = (originalCamp?.orgCode || '').trim().toUpperCase();
-    const finalPrefix = (editingCampaign.orgCode || '').trim().toUpperCase() || oldPrefix || derivePrefixFromText(editingCampaign.orgName || editingCampaign.title);
+    let finalPrefix = (editingCampaign.orgCode || '').trim().toUpperCase() || oldPrefix || derivePrefixFromText(editingCampaign.orgName || editingCampaign.title);
 
     if (isPrefixCodeTaken(finalPrefix, editingCampaign.id)) {
-      const suggestions = suggestAlternativePrefixes(finalPrefix);
-      alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
-      return;
+      if (editingCampaign.category !== 'kumtluang') {
+        const suggestions = suggestAlternativePrefixes(finalPrefix, editingCampaign.id);
+        finalPrefix = suggestions[0] || `${finalPrefix.substring(0, 2)}${Math.floor(10 + Math.random() * 89)}`;
+        editingCampaign.orgCode = finalPrefix;
+      } else {
+        const suggestions = suggestAlternativePrefixes(finalPrefix);
+        alert(`⚠️ Prefix Code "${finalPrefix}" hi Bawm dangin an hmang tawh a ni!\n\nPrefix dang thlang rawh le:\n${suggestions.join(', ')}`);
+        return;
+      }
     }
 
     let migratedCount = 0;
@@ -1028,8 +1061,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-xs animate-fadeIn text-slate-900">
-      <div className="bg-white w-full max-w-4xl h-full sm:h-[90vh] max-h-[90vh] sm:rounded-3xl rounded-none shadow-2xl border-0 sm:border border-slate-200 relative flex flex-col shrink-0 overflow-hidden">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-xs animate-fadeIn text-slate-900 transition-all ${
+      isFullScreen 
+        ? 'p-0 bg-slate-950/85' 
+        : 'p-0 sm:p-2 md:p-3 bg-slate-900/70'
+    }`}>
+      <div className={`bg-white relative flex flex-col shrink-0 overflow-hidden shadow-2xl transition-all duration-150 ${
+        isFullScreen 
+          ? 'w-full h-full max-w-none max-h-none rounded-none border-0' 
+          : 'w-full max-w-[98vw] 2xl:max-w-[96vw] h-full sm:h-[97vh] max-h-[97vh] sm:rounded-3xl rounded-none border-0 sm:border border-slate-200'
+      }`}>
         
         {/* Top Header */}
         <div className="bg-gradient-to-r from-indigo-900 via-indigo-850 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-700/50 shrink-0">
@@ -1049,6 +1090,26 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Full Screen / Window Size Toggle */}
+            <button
+              type="button"
+              onClick={toggleFullScreen}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black transition cursor-pointer border border-white/20 active:scale-95 shadow-2xs"
+              title={isFullScreen ? "Restore Window Size (Window ah siam rawh)" : "Full Screen Mode (Screen lian puiin dah rawh)"}
+            >
+              {isFullScreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden md:inline">Window</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden md:inline">Full Screen</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={onClose}
@@ -1471,7 +1532,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       <p className="font-bold text-sm text-slate-600">No campaigns found in this filter.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3.5">
                       {filteredCampaigns.map(camp => {
                         const isPending = camp.status === 'pending_approval';
                         const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
@@ -1894,7 +1955,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         <p className="font-bold text-sm text-slate-600">No creator profiles found in this category.</p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
                         {filteredCreators.map(creator => {
                           const isPending = !creator.isApproved;
                           const isBlocked = !!creator.isBlocked;
