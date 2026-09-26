@@ -1,6 +1,7 @@
 import { Transaction, MemberRecord, Campaign } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
 import { getTransactionMonthInfo } from './monthHelper';
+import { getMembers } from './storage';
 
 export interface MatrixRow {
   donorName: string;
@@ -252,8 +253,47 @@ export const buildKumtluangMatrix = (
   let onlineTotal = 0;
   let cashTotal = 0;
 
+  // Build canonical member name resolution map to merge any slight discrepancies or partial names
+  const memberNameMap = new Map<string, string>();
+  const registeredMemberNames: string[] = [];
+  try {
+    const mems = getMembers(campaign?.id);
+    mems.forEach(m => {
+      if (m && m.name) {
+        if (m.id) memberNameMap.set(m.id.toLowerCase().trim(), m.name.trim());
+        registeredMemberNames.push(m.name.trim());
+      }
+    });
+  } catch (e) {}
+
   transactions.forEach(t => {
-    const donor = t.isAnonymous ? 'Anonymous' : (t.donorName || 'Unknown Donor');
+    let donor = t.isAnonymous ? 'Anonymous' : (t.donorName || 'Unknown Donor');
+
+    // 1. Strict memberId lookup (e.g. BMPSHL-1739 -> Upa Thawngphena Tuallawt)
+    if (!t.isAnonymous && t.memberId) {
+      const canonicalName = memberNameMap.get(t.memberId.toLowerCase().trim());
+      if (canonicalName) {
+        donor = canonicalName;
+      }
+    }
+
+    // 2. Fuzzy / Partial Name Security Guard: If donorName is a partial/short form of a registered member
+    // (e.g. 'Upa Thawngphena' when registered member is 'Upa Thawngphena Tuallawt')
+    if (!t.isAnonymous && donor !== 'Unknown Donor') {
+      const donorNorm = donor.toLowerCase().trim();
+      for (const canonical of registeredMemberNames) {
+        const canNorm = canonical.toLowerCase().trim();
+        if (canNorm === donorNorm) {
+          donor = canonical;
+          break;
+        }
+        if (canNorm.startsWith(donorNorm + ' ') || canNorm.endsWith(' ' + donorNorm)) {
+          donor = canonical;
+          break;
+        }
+      }
+    }
+
     const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
 
     if (method === 'online') {

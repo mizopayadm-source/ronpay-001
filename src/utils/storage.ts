@@ -880,6 +880,12 @@ export const getStoredTransactions = (): Transaction[] => {
             hasAttrChange = true;
           }
 
+          // Enforce canonical name for BMPSHL-1739 (Upa Thawngphena Tuallawt)
+          if (String(t.memberId).toLowerCase().trim() === 'bmpshl-1739' && t.donorName !== 'Upa Thawngphena Tuallawt') {
+            t.donorName = 'Upa Thawngphena Tuallawt';
+            hasAttrChange = true;
+          }
+
           return t;
         });
 
@@ -2688,6 +2694,17 @@ export const saveTransaction = (tx: Transaction): void => {
     String(tx.id || '').startsWith('TXN-BILL-') || 
     String(tx.campaignId || '').startsWith('bill-');
   if (!isBill) {
+    // Canonical member name enforcement if memberId is set
+    if (tx.memberId) {
+      try {
+        const mems = getMembers(tx.campaignId);
+        const mem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());
+        if (mem && mem.name) {
+          tx.donorName = mem.name;
+        }
+      } catch (e) {}
+    }
+
     const titleL = String(tx.campaignTitle || '').toLowerCase();
     const cleanTitle = titleL.replace(/,+$/, '').trim();
     const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && tx.memberId.startsWith('BMPSHL'));

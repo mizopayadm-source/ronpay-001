@@ -1822,7 +1822,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 type="text"
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
-                placeholder="e.g. Ralna thuchah / Lawmthu sawina / Note..."
+                placeholder={
+                  (category === 'ralna' || campaign?.category === 'ralna')
+                    ? 'e.g. Ralna thuchah / Tawrhpuina / adt'
+                    : (category === 'rikrum' || campaign?.category === 'rikrum')
+                    ? 'Thuchah / Tawrhpuina / adt'
+                    : (category === 'khawlsak' || campaign?.category === 'khawlsak')
+                    ? 'Thuchah'
+                    : 'Thuchah / Remark (Optional)...'
+                }
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
               />
             </div>

@@ -10295,7 +10295,7 @@
     {
       "txHash": "CASHT45KLMCA",
       "updatedAt": "2026-09-20T08:23:06.711Z",
-      "donorName": "Upa Thawngphena",
+      "donorName": "Upa Thawngphena Tuallawt",
       "platformFee": 2,
       "campaignTitle": "BMP Shillong",
       "donorVeng": "Section A",
@@ -10840,7 +10840,7 @@
         "BMP Fund": 500
       },
       "updatedAt": "2026-09-20T08:23:08.340Z",
-      "donorName": "Upa Thawngphena",
+      "donorName": "Upa Thawngphena Tuallawt",
       "txHash": "CASHC871Z2U2",
       "platformFee": 0,
       "memberId": "BMPSHL-1739",
@@ -16375,5 +16375,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-09-26T13:27:43.502Z"
+  "lastUpdated": "2026-09-26T13:42:42.578Z"
 }
