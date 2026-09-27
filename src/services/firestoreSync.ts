@@ -228,6 +228,18 @@ export async function seedInitialCloudDataIfEmpty() {
     }
   } catch {}
 
+  // Only super admin or admin should ever trigger seed checks; normal visitors bypass completely
+  const isAdmin = typeof localStorage !== 'undefined' && 
+    (localStorage.getItem('ronpay_admin_role_v1') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role_v1') === 'ADMIN');
+  if (!isAdmin) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('ronpay_firestore_seeded_ok', 'true');
+      }
+    } catch {}
+    return;
+  }
+
   try {
     // 1. Campaigns seed check with limit(1) - consumes at most 1 read instead of reading entire collection
     const campaignsSnap = await getDocs(query(collection(db, 'campaigns'), limit(1)));
@@ -392,9 +404,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     });
   };
 
-  // 1. Transactions Listener (onSnapshot on recent transactions only - 20 items to drastically reduce reads)
+  // 1. Transactions Listener (onSnapshot on recent transactions only - 8 items to drastically reduce reads)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(20));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(8));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -463,9 +475,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     updateStatus('offline');
   }
 
-  // 2. Campaigns Listener (onSnapshot on campaigns collection - limited to 40 to minimize reads)
+  // 2. Campaigns Listener (onSnapshot on campaigns collection - limited to 25 to minimize reads)
   try {
-    const campQuery = query(collection(db, 'campaigns'), limit(40));
+    const campQuery = query(collection(db, 'campaigns'), limit(25));
     const unsubCamp = onSnapshot(campQuery, (snapshot) => {
       updateStatus('connected');
       const remoteCampaigns: Campaign[] = [];
@@ -503,9 +515,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
-  // 3. Members Listener (Kumtluang / YMA / Bawm member database) - limited to 30 to prevent high read volume
+  // 3. Members Listener (Kumtluang / YMA / Bawm member database) - limited to 15 to prevent high read volume
   try {
-    const memQuery = query(collection(db, 'members'), limit(30));
+    const memQuery = query(collection(db, 'members'), limit(15));
     const unsubMem = onSnapshot(memQuery, (snapshot) => {
       const remoteMembers: MemberRecord[] = [];
       snapshot.forEach(docSnap => {
@@ -532,9 +544,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach members listener', err);
   }
 
-  // 4. Creators Profile & List Listener - limited to 15 to reduce reads
+  // 4. Creators Profile & List Listener - limited to 6 to reduce reads
   try {
-    const creatorsQuery = query(collection(db, 'creators'), limit(15));
+    const creatorsQuery = query(collection(db, 'creators'), limit(6));
     const unsubCreators = onSnapshot(creatorsQuery, (snapshot) => {
       const remoteCreators: CreatorProfile[] = [];
       snapshot.forEach(docSnap => {
@@ -614,25 +626,29 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach pricing config listener', err);
   }
 
-  // 7. Audit Logs Listener - limited to 5 to reduce reads
+  // 7. Audit Logs Listener - only attach if user is an Admin to prevent wasteful reads on normal visits
   try {
-    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(5));
-    const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
-      const logs: AuditLog[] = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data() as AuditLog;
-        if (data && data.id) {
-          logs.push(data);
+    const isAdminUser = typeof localStorage !== 'undefined' && 
+      (localStorage.getItem('ronpay_admin_role_v1') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role_v1') === 'ADMIN');
+    if (isAdminUser) {
+      const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(5));
+      const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
+        const logs: AuditLog[] = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as AuditLog;
+          if (data && data.id) {
+            logs.push(data);
+          }
+        });
+        if (logs.length > 0) {
+          setLocalJson('ronpay_audit_logs_v1', logs);
+          broadcast('onAuditLogsUpdate', logs);
         }
+      }, (err) => {
+        logFirestoreNetworkNote('Audit logs listener', err);
       });
-      if (logs.length > 0) {
-        setLocalJson('ronpay_audit_logs_v1', logs);
-        broadcast('onAuditLogsUpdate', logs);
-      }
-    }, (err) => {
-      logFirestoreNetworkNote('Audit logs listener', err);
-    });
-    newUnsubscribers.push(unsubAudit);
+      newUnsubscribers.push(unsubAudit);
+    }
   } catch (err) {
     logFirestoreNetworkNote('Attach audit logs listener', err);
   }
