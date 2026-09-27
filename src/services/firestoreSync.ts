@@ -129,8 +129,7 @@ function getLocalDeletedTxIds(): Set<string> {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        const canonicalTxIds = new Set(INITIAL_TRANSACTIONS.map(t => String(t.id).toLowerCase().trim()));
-        return new Set(arr.filter((id: any) => !canonicalTxIds.has(String(id).toLowerCase().trim())).map((id: any) => String(id).toLowerCase().trim()));
+        return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
       }
     }
   } catch {}

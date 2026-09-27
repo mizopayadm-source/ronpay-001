@@ -767,13 +767,7 @@ export const getDeletedTransactionIds = (): Set<string> => {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        // Canonical transactions are protected and must never be suppressed by stale test tombstones
-        const canonicalTxIds = new Set(INITIAL_TRANSACTIONS.map(t => String(t.id).toLowerCase().trim()));
-        const filtered = arr.filter(id => !canonicalTxIds.has(String(id).toLowerCase().trim()));
-        if (filtered.length !== arr.length && typeof localStorage !== 'undefined') {
-          localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(filtered));
-        }
-        return new Set(filtered.map(id => String(id).toLowerCase().trim()));
+        return new Set(arr.map(id => String(id).toLowerCase().trim()));
       }
     }
   } catch (e) {}
@@ -895,7 +889,7 @@ export const getStoredTransactions = (): Transaction[] => {
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
           const initKey = String(initTx.id).toLowerCase().trim();
-          if (!existingIds.has(initKey)) {
+          if (!existingIds.has(initKey) && !deletedIds.has(initKey)) {
             merged.push(initTx);
             hasNew = true;
           }

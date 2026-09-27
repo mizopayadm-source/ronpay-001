@@ -1413,26 +1413,34 @@ export const generateTransactionsPDFHtml = (
   // If Kumtluang Bawm, format matrix table: Sl No | Hming | Mode | Cat 1 | Cat 2 | ... | Total
   if (isKumtluang) {
     const matrix = buildKumtluangMatrix(transactions, sortOrder);
-    const matrixHeaderThs = matrix.categories.map(c => `<th style="text-align: right; padding: 9px 12px; font-weight: 800;">${c.toUpperCase()}</th>`).join('');
+    const catCount = matrix.categories.length;
+    const isDense = catCount >= 5;
+    const colPad = isDense ? 'padding: 6px 4px;' : 'padding: 8px 10px;';
+    const colFontSize = isDense ? 'font-size: 8.5px;' : 'font-size: 9.5px;';
+    const colThPad = isDense ? 'padding: 8px 4px;' : 'padding: 10px 10px;';
+
+    const matrixHeaderThs = matrix.categories.map(c => 
+      `<th style="text-align: right; ${colThPad} ${colFontSize} font-weight: 800; white-space: normal; word-break: break-word; line-height: 1.15;">${c.toUpperCase()}</th>`
+    ).join('');
     
     const matrixRowsHtml = matrix.rows.map((r, idx) => {
       const modeBadge = r.paymentMethodLabel === 'CASH'
-        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
+        ? `<span style="background: #fef3c7; color: #92400e; font-weight: bold; font-size: ${isDense ? '8px' : '8.5px'}; padding: 2px ${isDense ? '4px' : '6px'}; border-radius: 4px; border: 1px solid #fde68a;">💵 CASH</span>`
         : r.paymentMethodLabel === 'ONLINE'
-        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
-        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
+        ? `<span style="background: #e0e7ff; color: #3730a3; font-weight: bold; font-size: ${isDense ? '8px' : '8.5px'}; padding: 2px ${isDense ? '4px' : '6px'}; border-radius: 4px; border: 1px solid #c7d2fe;">⚡ ONLINE</span>`
+        : `<span style="background: #f1f5f9; color: #0f172a; font-weight: bold; font-size: ${isDense ? '8px' : '8.5px'}; padding: 2px ${isDense ? '4px' : '6px'}; border-radius: 4px; border: 1px solid #cbd5e1;">⚡+💵 MIXED</span>`;
 
       return `
       <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: 45px;">${idx + 1}</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">${r.donorName}</td>
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center; width: 85px;">${modeBadge}</td>
+        <td style="${isDense ? 'padding: 6px 3px;' : 'padding: 8px 12px;'} border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: ${isDense ? '36px' : '45px'};">${idx + 1}</td>
+        <td style="${isDense ? 'padding: 6px 5px; font-size: 10px;' : 'padding: 8px 12px; font-size: 11px;'} border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a; white-space: nowrap;">${r.donorName}</td>
+        <td style="${isDense ? 'padding: 6px 3px;' : 'padding: 8px 12px;'} border-bottom: 1px solid #e2e8f0; text-align: center; width: ${isDense ? '70px' : '85px'};">${modeBadge}</td>
         ${matrix.categories.map(c => `
-          <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
+          <td style="${colPad} ${colFontSize} border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
             ${r.categoryAmounts[c] > 0 ? `₹${r.categoryAmounts[c].toLocaleString('en-IN')}` : '-'}
           </td>
         `).join('')}
-        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; color: #4338ca; background-color: #f1f5f9;">
+        <td style="${colPad} border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 900; ${colFontSize} color: #4338ca; background-color: #f1f5f9;">
           ₹${r.total.toLocaleString('en-IN')}
         </td>
       </tr>
@@ -1440,7 +1448,7 @@ export const generateTransactionsPDFHtml = (
     }).join('');
 
     const matrixFooterTds = matrix.categories.map(c => `
-      <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 12px;">
+      <td style="text-align: right; ${colPad} font-weight: 900; color: #047857; border-top: 2px solid #0f172a; ${isDense ? 'font-size: 10px;' : 'font-size: 12px;'}">
         ₹${matrix.columnTotals[c].toLocaleString('en-IN')}
       </td>
     `).join('');
@@ -1455,51 +1463,53 @@ export const generateTransactionsPDFHtml = (
           <style>${sharedPrintStyles}</style>
         </head>
         <body>
-          <div class="header-banner">
-            <div class="header-left-wrap">
-              ${avatarHtml}
-              <div class="header-content-stack">
-                <h1 class="org-title">${orgDisplay}</h1>
-                <div class="location-text">📍 ${locationDisplay}</div>
-                <div class="doc-badge-title">Reports & Financial Statements</div>
-                <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
+          <div class="statement-sheet">
+            <div class="header-banner">
+              <div class="header-left-wrap">
+                ${avatarHtml}
+                <div class="header-content-stack">
+                  <h1 class="org-title">${orgDisplay}</h1>
+                  <div class="location-text">📍 ${locationDisplay}</div>
+                  <div class="doc-badge-title">Reports & Financial Statements</div>
+                  <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
+                </div>
               </div>
+              ${monthlyChartHtml}
             </div>
-            ${monthlyChartHtml}
-          </div>
 
-          ${collectionSummaryBarHtml}
-          ${targetSummaryHtml}
+            ${collectionSummaryBarHtml}
+            ${targetSummaryHtml}
 
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 45px; text-align: center;">SL NO.</th>
-                <th style="padding: 10px 12px;">HMING (DONOR)</th>
-                <th style="width: 85px; text-align: center;">MODE</th>
-                ${matrixHeaderThs}
-                <th style="text-align: right; padding: 10px 12px; background: #312e81;">TOTAL (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${matrixRowsHtml}
-            </tbody>
-            <tfoot>
-              <tr class="total-row">
-                <td colspan="3" style="padding: 11px 12px; font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; font-size: 12px;">GRAND TOTAL</td>
-                ${matrixFooterTds}
-                <td style="text-align: right; padding: 11px 12px; font-weight: 900; color: #047857; border-top: 2px solid #0f172a; font-size: 13px; background-color: #dcfce7;">
-                  ₹${matrix.grandTotal.toLocaleString('en-IN')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: ${isDense ? '36px' : '45px'}; text-align: center; ${colThPad}">SL NO.</th>
+                  <th style="${isDense ? 'padding: 8px 6px; font-size: 9px;' : 'padding: 10px 12px;'}">HMING (DONOR)</th>
+                  <th style="width: ${isDense ? '70px' : '85px'}; text-align: center; ${colThPad}">MODE</th>
+                  ${matrixHeaderThs}
+                  <th style="text-align: right; ${colThPad} ${colFontSize} background: #312e81;">TOTAL (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${matrixRowsHtml}
+              </tbody>
+              <tfoot>
+                <tr class="total-row">
+                  <td colspan="3" style="${colPad} font-weight: 900; color: #1e1b4b; border-top: 2px solid #0f172a; ${isDense ? 'font-size: 11px;' : 'font-size: 12px;'}">GRAND TOTAL</td>
+                  ${matrixFooterTds}
+                  <td style="text-align: right; ${colPad} font-weight: 900; color: #047857; border-top: 2px solid #0f172a; ${isDense ? 'font-size: 11.5px;' : 'font-size: 13px;'} background-color: #dcfce7;">
+                    ₹${matrix.grandTotal.toLocaleString('en-IN')}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
 
-          ${signatureBlockHtml}
+            ${signatureBlockHtml}
 
-          <div class="footer">
-            <span>${orgDisplay} • Official Financial Statement</span>
-            <span>Generated Date: ${formatDateDDMMYYYY(new Date())}</span>
+            <div class="footer">
+              <span>${orgDisplay} • Official Financial Statement</span>
+              <span>Generated Date: ${formatDateDDMMYYYY(new Date())}</span>
+            </div>
           </div>
         </body>
       </html>
@@ -1545,52 +1555,54 @@ export const generateTransactionsPDFHtml = (
         <style>${sharedPrintStyles}</style>
       </head>
       <body>
-        <div class="header-banner">
-          <div class="header-left-wrap">
-            ${avatarHtml}
-            <div class="header-content-stack">
-              <h1 class="org-title">${orgDisplay}</h1>
-              <div class="location-text">📍 ${locationDisplay}</div>
-              <div class="doc-badge-title">Reports & Financial Statements</div>
-              <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
+        <div class="statement-sheet">
+          <div class="header-banner">
+            <div class="header-left-wrap">
+              ${avatarHtml}
+              <div class="header-content-stack">
+                <h1 class="org-title">${orgDisplay}</h1>
+                <div class="location-text">📍 ${locationDisplay}</div>
+                <div class="doc-badge-title">Reports & Financial Statements</div>
+                <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
+              </div>
             </div>
+            ${monthlyChartHtml}
           </div>
-          ${monthlyChartHtml}
-        </div>
 
-        ${collectionSummaryBarHtml}
-        ${targetSummaryHtml}
+          ${collectionSummaryBarHtml}
+          ${targetSummaryHtml}
 
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 45px; text-align: center;">SL NO.</th>
-              <th>DATE & TIME</th>
-              <th>HMING (DONOR)</th>
-              <th style="text-align: center;">PAYMENT MODE</th>
-              <th>REMARKS / NOTE</th>
-              <th>REFERENCE / HASH</th>
-              <th style="text-align: right;">AMOUNT (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-          <tfoot>
-            <tr style="background: #e2e8f0; font-weight: 900;">
-              <td colspan="6" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
-              <td style="padding: 11px 12px; border-top: 2px solid #0f172a; text-align: right; font-size: 13px; color: #047857; background: #dcfce7;">
-                ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 45px; text-align: center;">SL NO.</th>
+                <th>DATE & TIME</th>
+                <th>HMING (DONOR)</th>
+                <th style="text-align: center;">PAYMENT MODE</th>
+                <th>REMARKS / NOTE</th>
+                <th>REFERENCE / HASH</th>
+                <th style="text-align: right;">AMOUNT (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <tr style="background: #e2e8f0; font-weight: 900;">
+                <td colspan="6" style="padding: 11px 12px; border-top: 2px solid #0f172a; font-size: 12px; color: #1e1b4b;">GRAND TOTAL COLLECTION</td>
+                <td style="padding: 11px 12px; border-top: 2px solid #0f172a; text-align: right; font-size: 13px; color: #047857; background: #dcfce7;">
+                  ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
 
-        ${signatureBlockHtml}
+          ${signatureBlockHtml}
 
-        <div class="footer">
-          <span>${orgDisplay} • Official Financial Statement</span>
-          <span>Generated Date: ${formatDateDDMMYYYY(new Date())}</span>
+          <div class="footer">
+            <span>${orgDisplay} • Official Financial Statement</span>
+            <span>Generated Date: ${formatDateDDMMYYYY(new Date())}</span>
+          </div>
         </div>
       </body>
     </html>

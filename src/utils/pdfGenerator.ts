@@ -34,7 +34,7 @@ async function paginateCanvasToPDF(
 
   const canvasWidth = canvas.width;
   const canvasHeight = canvas.height;
-  const isLandscape = canvasWidth > canvasHeight * 1.15;
+  const isLandscape = canvasWidth > canvasHeight * 1.05 || (renderTarget && renderTarget.scrollWidth > 860);
 
   const pdf = new jsPDF({
     orientation: isLandscape ? 'landscape' : 'portrait',
@@ -422,9 +422,38 @@ export async function exportHTMLToPDF(
     if (onProgress) onProgress('Snapshot siam mek a ni...');
 
     const renderTarget = iframeDoc.body;
-    renderTarget.style.width = '794px';
     renderTarget.style.margin = '0';
     renderTarget.style.backgroundColor = '#ffffff';
+
+    // Check if HTML explicitly specifies landscape (e.g. Master Ledger, Mimal Record)
+    const isExplicitLandscape = fullHtml.toLowerCase().includes('landscape');
+
+    // Measure table and natural content width so headers and table align with 100% precision
+    const tableEl = iframeDoc.querySelector('table');
+    const tableWidth = tableEl ? Math.ceil(tableEl.getBoundingClientRect().width || tableEl.scrollWidth) : 0;
+    const bodyScrollWidth = Math.ceil(iframeDoc.body.scrollWidth || 794);
+    
+    // Choose base width: 1123 for landscape, 794 for portrait
+    const defaultWidth = isExplicitLandscape ? 1123 : 794;
+    // Determine content width: if table is wider than default width, expand iframe & body to match table!
+    const effectiveWidth = Math.max(defaultWidth, tableWidth + 32, bodyScrollWidth);
+
+    iframe.style.width = `${effectiveWidth}px`;
+    renderTarget.style.width = `${effectiveWidth}px`;
+    renderTarget.style.minWidth = `${effectiveWidth}px`;
+
+    // Enforce 100% width on all header cards, summary bars, target bars, sheet wrappers, tables, and footers
+    // to guarantee they are 100% flush and aligned on both left and right edges!
+    const alignElements = iframeDoc.querySelectorAll<HTMLElement>(
+      '.statement-sheet, .header-banner, .summary-bar, .target-bar, table, thead, tbody, tfoot, .sign-grid, .footer'
+    );
+    alignElements.forEach((el) => {
+      el.style.width = '100%';
+      el.style.maxWidth = '100%';
+      el.style.boxSizing = 'border-box';
+      el.style.marginLeft = '0';
+      el.style.marginRight = '0';
+    });
 
     let canvas: HTMLCanvasElement;
     try {
@@ -435,7 +464,7 @@ export async function exportHTMLToPDF(
         logging: false,
         backgroundColor: '#ffffff',
         imageTimeout: 2000,
-        windowWidth: 794,
+        windowWidth: effectiveWidth,
       });
     } catch (primaryCanvasErr) {
       console.warn('Isolated canvas render failed, retrying without external images:', primaryCanvasErr);
@@ -450,7 +479,7 @@ export async function exportHTMLToPDF(
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 794,
+        windowWidth: effectiveWidth,
       });
     }
 
@@ -495,13 +524,15 @@ export async function exportElementToPDF(
     const originalTransform = element.style.transform;
     element.style.transform = 'none';
 
+    const elementWidth = Math.max(794, element.scrollWidth || 0);
+
     const canvas = await html2canvas(element, {
       scale: 1.5,
       useCORS: true,
       allowTaint: false,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: 794,
+      windowWidth: elementWidth,
     });
 
     element.style.transform = originalTransform;
