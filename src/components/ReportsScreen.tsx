@@ -1773,10 +1773,20 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       className="p-3 rounded-2xl border border-slate-200/90 bg-slate-50/80 hover:bg-white hover:border-indigo-200 hover:shadow-xs transition text-xs space-y-2"
                     >
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-black text-slate-900 text-xs">
                             {tx.isAnonymous ? 'Anonymous Donor' : tx.donorName}
                           </span>
+                          {tx.donorType === 'group' && (
+                            <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                              👥 GROUP
+                            </span>
+                          )}
+                          {tx.donorType === 'general' && (
+                            <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              🏛️ GENERAL
+                            </span>
+                          )}
                           <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
                             getEffectiveCategory(tx, creatorCampaigns) === 'ralna' ? 'bg-slate-900 text-white' :
                             getEffectiveCategory(tx, creatorCampaigns) === 'khawlsak' ? 'bg-emerald-100 text-emerald-800' :
@@ -1937,9 +1947,11 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onDelete,
 }) => {
   const [donorName, setDonorName] = useState<string>(transaction.donorName || '');
+  const [donorPhone, setDonorPhone] = useState<string>(transaction.donorPhone || '');
+  const [utr, setUtr] = useState<string>(transaction.utrRef || transaction.utr || '');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(transaction.isAnonymous || false);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
-  const [status, setStatus] = useState<'completed' | 'pending_verification'>((transaction.status as any) || 'completed');
+  const [status, setStatus] = useState<string>(transaction.status || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
   
   // Date & Period state for auditing and correcting records
@@ -2025,6 +2037,9 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     const updated: Transaction = {
       ...transaction,
       donorName: donorName.trim(),
+      donorPhone: donorPhone.trim() || undefined,
+      utr: utr.trim() || undefined,
+      utrRef: utr.trim() || undefined,
       isAnonymous: isAnonymous,
       amount: currentSubtotal,
       platformFee: platformFee,
@@ -2199,6 +2214,30 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
           )}
 
+          {/* Donor Phone & Bank UTR / Ref No */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Petu Phone Number</label>
+              <input
+                type="tel"
+                value={donorPhone}
+                onChange={(e) => setDonorPhone(e.target.value)}
+                placeholder="e.g. 9862xxxxxx"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Bank UTR / Ref No.</label>
+              <input
+                type="text"
+                value={utr}
+                onChange={(e) => setUtr(e.target.value)}
+                placeholder="12-digit UTR e.g. 4289..."
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 text-xs"
+              />
+            </div>
+          </div>
+
           {/* Payment Method & Status */}
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -2206,9 +2245,9 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs"
               >
-                <option value="online">Online UPI</option>
+                <option value="online">Online UPI / PhonePe</option>
                 <option value="cash">Cash Counter</option>
               </select>
             </div>
@@ -2216,14 +2255,26 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Status</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900"
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-xs"
               >
-                <option value="completed">Completed</option>
+                <option value="completed">Completed (Verified)</option>
+                <option value="pending">Pending (La chian loh)</option>
                 <option value="pending_verification">Pending Verification</option>
+                <option value="failed">Failed / Cancelled</option>
               </select>
             </div>
           </div>
+
+          {/* Pending Notice for Online / PhonePe transactions */}
+          {transaction.status === 'pending' && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded-xl text-[11px] leading-relaxed flex items-start gap-2">
+              <span className="text-amber-600 font-bold shrink-0 text-sm">⚠️</span>
+              <div>
+                <strong>Hriattirna (Pending Status):</strong> He donation hi PhonePe kaltlanga lak a ni a, petu hian UPI PIN chhu lovin a kalsan (abandon) a ni thei. In bank statement-ah a lut ngei tih i chian hnuah chauh <em>'Completed'</em>-ah dah rawh.
+              </div>
+            </div>
+          )}
 
           {/* Remark / Note field */}
           <div>
@@ -2237,12 +2288,22 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             />
           </div>
 
-          {/* Total calculations badge */}
-          <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-            <span className="font-bold text-slate-700">Calculated Total:</span>
-            <span className="font-black font-mono text-indigo-900 text-sm">
-              ₹{currentSubtotal.toLocaleString('en-IN')}
-            </span>
+          {/* Total calculations & fee breakdown badge */}
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="font-medium">Bawm Dawngtu Tan (Net Amount):</span>
+              <span className="font-bold font-mono text-slate-900">₹{currentSubtotal.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-500 text-[11px]">
+              <span>RonPay Platform Fee (1%):</span>
+              <span className="font-medium font-mono text-slate-600">+₹{platformFee.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="border-t border-slate-200 pt-1.5 flex justify-between items-center">
+              <span className="font-black text-indigo-950">Petu Chawi Zat (Total Paid):</span>
+              <span className="font-black font-mono text-indigo-700 text-sm">
+                ₹{totalAmount.toLocaleString('en-IN')}
+              </span>
+            </div>
           </div>
 
           {/* Actions: Save & Delete */}

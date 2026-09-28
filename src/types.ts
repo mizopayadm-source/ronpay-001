@@ -108,6 +108,8 @@ export interface Transaction {
   donorVeng?: string;
   memberId?: string;
   subId?: string;
+  donorType?: 'member' | 'group' | 'general' | string;
+  groupName?: string;
   isAnonymous?: boolean;
   isDependent?: boolean;
   isSynced?: boolean;

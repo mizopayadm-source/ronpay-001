@@ -38,6 +38,8 @@ interface UPIIntentModalProps {
   donorName: string;
   donorPhone?: string;
   donorVeng?: string;
+  donorType?: string;
+  groupName?: string;
   memberId?: string;
   subId?: string;
   isDependent?: boolean;
@@ -63,6 +65,8 @@ export function UPIIntentModal({
   donorName,
   donorPhone,
   donorVeng,
+  donorType,
+  groupName,
   memberId,
   subId,
   isDependent = false,
@@ -220,6 +224,8 @@ export function UPIIntentModal({
         donorName: isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (donorPhone?.trim() || undefined),
         donorVeng: isAnonymous ? undefined : (donorVeng?.trim() || undefined),
+        donorType: donorType || undefined,
+        groupName: groupName || undefined,
         memberId: isAnonymous ? undefined : memberId,
         subId: isAnonymous ? undefined : subId,
         isDependent: isAnonymous ? false : isDependent,

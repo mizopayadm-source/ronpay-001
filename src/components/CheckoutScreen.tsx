@@ -19,9 +19,12 @@ import {
   CheckCircle2,
   Maximize2,
   AlertCircle,
+  User,
   Users,
   UserPlus,
   UserCheck,
+  Landmark,
+  Layers,
   Search,
   Plus,
   X,
@@ -275,6 +278,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isAnonymous, setIsAnonymous] = useState<boolean>(() => Boolean(initialIsAnonymous));
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
+
+  // Kumtluang Contribution Mode: 'member' (Mimal Roll) | 'group' (Group / Unit) | 'general' (Inkhawm / Jama)
+  const [kumtluangDonorType, setKumtluangDonorType] = useState<'member' | 'group' | 'general'>('member');
+
+  // Group Collection States
+  const [groupName, setGroupName] = useState<string>('');
+  const [groupLeaderName, setGroupLeaderName] = useState<string>('');
+  const [groupLeaderPhone, setGroupLeaderPhone] = useState<string>('');
+  const [groupSection, setGroupSection] = useState<string>(() => initialDonorSection || 'Bial 1 (Vengchhak)');
+
+  // General / Offering Collection States
+  const [generalTitle, setGeneralTitle] = useState<string>('Pathianni Chawhma Thawhlawm');
+  const [generalCollectorName, setGeneralCollectorName] = useState<string>('');
+  const [generalCollectorPhone, setGeneralCollectorPhone] = useState<string>('');
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
@@ -663,6 +680,68 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     window.open(`https://www.google.com/maps?q=${encodeURIComponent(coords)}`, '_blank');
   };
 
+  const getResolvedDonorInfo = () => {
+    let resolvedDonorName = donorName.trim();
+    let resolvedDonorPhone = donorPhone.trim();
+    let resolvedDonorVeng = donorSection.trim();
+    let resolvedMemberId: string | undefined = undefined;
+    let resolvedSubId: string | undefined = undefined;
+    let resolvedIsDependent = false;
+    let resolvedDonorType: 'member' | 'group' | 'general' = 'member';
+    let resolvedGroupName: string | undefined = undefined;
+
+    if (category === 'kumtluang') {
+      if (!isAnonymous) {
+        if (kumtluangDonorType === 'group') {
+          resolvedDonorType = 'group';
+          resolvedGroupName = groupName.trim();
+          resolvedDonorName = groupLeaderName.trim()
+            ? `${groupName.trim()} (${groupLeaderName.trim()})`
+            : groupName.trim();
+          resolvedDonorPhone = groupLeaderPhone.trim();
+          resolvedDonorVeng = groupSection.trim();
+        } else if (kumtluangDonorType === 'general') {
+          resolvedDonorType = 'general';
+          resolvedDonorName = generalCollectorName.trim()
+            ? `${generalTitle.trim()} (${generalCollectorName.trim()})`
+            : generalTitle.trim();
+          resolvedDonorPhone = generalCollectorPhone.trim();
+          resolvedDonorVeng = '';
+        } else {
+          resolvedDonorType = 'member';
+          let activeMember = selectedMember;
+          if (!activeMember && newRegName.trim()) {
+            activeMember = handleQuickRegisterSubmit();
+          }
+          if (activeMember) {
+            if (selectedPayerType !== 'primary') {
+              const dep = activeMember.dependents?.find(d => d.subId === selectedPayerType);
+              resolvedDonorName = dep ? dep.name : activeMember.name;
+              resolvedSubId = selectedPayerType;
+              resolvedIsDependent = true;
+            } else {
+              resolvedDonorName = activeMember.name;
+            }
+            resolvedDonorPhone = activeMember.fullPhone || (activeMember.phoneLast4 ? `943600${activeMember.phoneLast4}` : resolvedDonorPhone);
+            resolvedDonorVeng = activeMember.section || resolvedDonorVeng;
+            resolvedMemberId = activeMember.id;
+          }
+        }
+      }
+    }
+
+    return {
+      donorName: resolvedDonorName,
+      donorPhone: resolvedDonorPhone,
+      donorVeng: resolvedDonorVeng,
+      memberId: resolvedMemberId,
+      subId: resolvedSubId,
+      isDependent: resolvedIsDependent,
+      donorType: resolvedDonorType,
+      groupName: resolvedGroupName,
+    };
+  };
+
   const handleImageClick = (imageUrl?: string) => {
     if (imageUrl && onPreviewImage) {
       onPreviewImage(
@@ -698,37 +777,41 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       return;
     }
 
-    let resolvedDonorName = donorName.trim();
-    let resolvedDonorPhone = donorPhone.trim();
-    let resolvedDonorVeng = donorSection.trim();
-    let resolvedMemberId: string | undefined = undefined;
-    let resolvedSubId: string | undefined = undefined;
-    let resolvedIsDependent = false;
+    const donorInfo = getResolvedDonorInfo();
+    const { 
+      donorName: resolvedDonorName, 
+      donorPhone: resolvedDonorPhone, 
+      donorVeng: resolvedDonorVeng, 
+      memberId: resolvedMemberId, 
+      subId: resolvedSubId, 
+      isDependent: resolvedIsDependent, 
+      donorType: resolvedDonorType, 
+      groupName: resolvedGroupName 
+    } = donorInfo;
 
     if (category === 'kumtluang') {
       if (!isAnonymous) {
-        let activeMember = selectedMember;
-        // If not selected yet, but user filled new registration inputs:
-        if (!activeMember && newRegName.trim()) {
-          activeMember = handleQuickRegisterSubmit();
-        }
-
-        if (activeMember) {
-          if (selectedPayerType !== 'primary') {
-            const dep = activeMember.dependents?.find(d => d.subId === selectedPayerType);
-            resolvedDonorName = dep ? dep.name : activeMember.name;
-            resolvedSubId = selectedPayerType;
-            resolvedIsDependent = true;
-          } else {
-            resolvedDonorName = activeMember.name;
+        if (kumtluangDonorType === 'group') {
+          if (!groupName.trim()) {
+            alert('⚠️ Khawngaihin Group / Unit Hming chhu lut rawh le (e.g. Group A, Unit 1, TKP Fellowship).');
+            return;
           }
-          resolvedDonorPhone = activeMember.fullPhone || (activeMember.phoneLast4 ? `943600${activeMember.phoneLast4}` : resolvedDonorPhone);
-          resolvedDonorVeng = activeMember.section || resolvedDonorVeng;
-          resolvedMemberId = activeMember.id;
-        } else if (!resolvedDonorName) {
-          setIsNewMemberMode(true);
-          alert('⚠️ Kumtluang Bawm-ah hian Petu Hming leh Phone Number ziah luh ngei ngei tur a ni (emaw I Member ID/Phone zawng rawh le).\n\nHming thup i duh a nih chuan chung lama "Hming thup" checkbox kha tick rawh.');
-          return;
+        } else if (kumtluangDonorType === 'general') {
+          if (!generalTitle.trim()) {
+            alert('⚠️ Khawngaihin Thawhlawm / Sum Hming (Title) chhu lut rawh le (e.g. Pathianni Chawhma Thawhlawm).');
+            return;
+          }
+        } else {
+          // Member mode
+          let activeMember = selectedMember;
+          if (!activeMember && newRegName.trim()) {
+            activeMember = handleQuickRegisterSubmit();
+          }
+          if (!activeMember && !resolvedDonorName) {
+            setIsNewMemberMode(true);
+            alert('⚠️ Kumtluang Bawm-ah hian Petu Hming leh Phone Number ziah luh ngei ngei tur a ni (emaw I Member ID/Phone zawng rawh le).\n\nHming thup i duh a nih chuan chung lama "Hming thup" checkbox kha tick rawh.');
+            return;
+          }
         }
       }
     } else {
@@ -750,6 +833,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
         donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+        donorType: category === 'kumtluang' ? resolvedDonorType : undefined,
+        groupName: category === 'kumtluang' ? resolvedGroupName : undefined,
         memberId: isAnonymous ? undefined : resolvedMemberId,
         subId: isAnonymous ? undefined : resolvedSubId,
         isDependent: isAnonymous ? false : resolvedIsDependent,
@@ -895,6 +980,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         donorName: isAnonymous ? 'Anonymous' : (resolvedDonorName || 'Valued Donor'),
         donorPhone: isAnonymous ? undefined : (resolvedDonorPhone || undefined),
         donorVeng: isAnonymous ? undefined : (resolvedDonorVeng || undefined),
+        donorType: category === 'kumtluang' ? resolvedDonorType : undefined,
+        groupName: category === 'kumtluang' ? resolvedGroupName : undefined,
         memberId: isAnonymous ? undefined : resolvedMemberId,
         subId: isAnonymous ? undefined : resolvedSubId,
         isDependent: isAnonymous ? false : resolvedIsDependent,
@@ -920,6 +1007,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   };
 
   const isRalna = category === 'ralna';
+  const currentDonorInfo = getResolvedDonorInfo();
 
   return (
     <div className="space-y-4 pb-1">
@@ -1313,8 +1401,51 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {/* KUMTLUANG SPECIFIC: Member ID & Phone Lookup, Auto-Registration & Dual User Selection */}
           {category === 'kumtluang' && !isAnonymous ? (
             <div className="space-y-3 pt-1">
-              {/* 1. Quick Search / Member Recognition Bar */}
-              <div className="space-y-1">
+              {/* 3-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) vs General (Inkhawm / Jama) */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setKumtluangDonorType('member')}
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                    kumtluangDonorType === 'member'
+                      ? 'bg-blue-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Mimal (Roll)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKumtluangDonorType('group')}
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                    kumtluangDonorType === 'group'
+                      ? 'bg-indigo-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Group / Unit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKumtluangDonorType('general')}
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                    kumtluangDonorType === 'general'
+                      ? 'bg-emerald-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <Landmark className="w-3.5 h-3.5" />
+                  <span>General / Jama</span>
+                </button>
+              </div>
+
+              {/* MODE 1: MIMAL (MEMBER ROLL) */}
+              {kumtluangDonorType === 'member' && (
+                <div className="space-y-3">
+                  {/* 1. Quick Search / Member Recognition Bar */}
+                  <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-bold text-slate-600 block">
                     Phone Number (10 digits) / Member ID / Hming zawng rawh:
@@ -1794,7 +1925,191 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {/* MODE 2: GROUP / DEPARTMENT / UNIT */}
+          {kumtluangDonorType === 'group' && (
+            <div className="bg-indigo-50/70 border-2 border-indigo-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
+              <div className="flex items-start gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-black text-indigo-950">Group / Department / Unit Sum Thehkhawm</h5>
+                  <p className="text-[10px] text-indigo-800 font-medium">
+                    Group, Unit, Fellowship, Department emaw Chhungkua anga sum tuak thehluhna. Member ID hranpa zawn a ngai lo.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Presets for Group Name */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  Group / Unit Hming Thlang Rawh (emaw a hnuaiah chhu rawh):
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {['Group A', 'Group B', 'Group C', 'Unit 1', 'Unit 2', 'TKP Fellowship', 'Kohhran Hmeichhe Group', 'Sunday School Department', 'Chhungkua Thawhkhawm'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setGroupName(preset)}
+                      className={`text-[10.5px] px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                        groupName === preset
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="e.g. Group A / TKP Fellowship / Unit 1..."
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              {/* Leader / Depositor Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                    Thehluttu / Leader / Treasurer Hming *
+                  </label>
+                  <input
+                    type="text"
+                    value={groupLeaderName}
+                    onChange={(e) => setGroupLeaderName(e.target.value)}
+                    placeholder="e.g. Rammuanpuia (Leader)"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                    Phone Number (Receipt dawn nan)
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={groupLeaderPhone}
+                    onChange={(e) => setGroupLeaderPhone(e.target.value)}
+                    placeholder="e.g. 9436123456"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              {/* Section / Bial selection */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                  {campaign?.sectionLabel || 'Bial / Section / Veng'} (Duham tan)
+                </label>
+                <select
+                  value={groupSection}
+                  onChange={(e) => setGroupSection(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                >
+                  <option value="">-- Section / Bial Thlang Rawh (Optional) --</option>
+                  {(campaign?.definedSections && campaign.definedSections.length > 0
+                    ? campaign.definedSections
+                    : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                  ).map((sec, idx) => (
+                    <option key={idx} value={sec}>{sec}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* MODE 3: GENERAL / INKHAWM THAWHLAWM (JAMA) */}
+          {kumtluangDonorType === 'general' && (
+            <div className="bg-emerald-50/70 border-2 border-emerald-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
+              <div className="flex items-start gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-black text-emerald-950">General / Inkhawm Thawhlawm (Jama)</h5>
+                  <p className="text-[10px] text-emerald-800 font-medium">
+                    Inkhawm thawhlawm, Tawngtai inkhawm, Buhfaiṭham khawn, Khawmpui emaw Bazar/Sum tuak tlingkhawm thehluhna. Member ID zawn a ngai lo.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Presets for Offering Title */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  Thawhlawm / Sum Hming (Thupui):
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    'Pathianni Chawhma Thawhlawm',
+                    'Pathianni Zan Thawhlawm',
+                    'Zing Tawngtai Thawhlawm',
+                    'Nilai Zan Thawhlawm',
+                    'Buhfaiṭham Khawn Khawm',
+                    'Khawmpui Thawhlawm',
+                    'General Bazar / Sum Tuakna'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setGeneralTitle(preset)}
+                      className={`text-[10.5px] px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                        generalTitle === preset
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={generalTitle}
+                  onChange={(e) => setGeneralTitle(e.target.value)}
+                  placeholder="e.g. Pathianni Chawhma Thawhlawm..."
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              {/* Collector / Inkhawm Hruaitu Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                    Thehluttu / Hruaitu / Treasurer Hming (Duham tan)
+                  </label>
+                  <input
+                    type="text"
+                    value={generalCollectorName}
+                    onChange={(e) => setGeneralCollectorName(e.target.value)}
+                    placeholder="e.g. Inkhawm Hruaitu / Treasurer"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                    Phone Number (Receipt dawn nan)
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={generalCollectorPhone}
+                    onChange={(e) => setGeneralCollectorPhone(e.target.value)}
+                    placeholder="e.g. 9862xxxxxx"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
             /* STANDARD DONOR INFORMATION (Ralna, Khawlsak, Rikrum) */
             !isAnonymous && (
               <div>
@@ -2366,12 +2681,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         amount={subtotal}
         platformFee={platformFee}
         feeOption={feeBearerOption}
-        donorName={isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor')}
-        donorPhone={donorPhone.trim() || undefined}
-        donorVeng={donorSection.trim() || undefined}
-        memberId={selectedMember?.id}
-        subId={selectedPayerType !== 'primary' ? selectedPayerType : undefined}
-        isDependent={selectedPayerType !== 'primary'}
+        donorName={isAnonymous ? 'Anonymous' : (currentDonorInfo.donorName || 'Valued Donor')}
+        donorPhone={currentDonorInfo.donorPhone || undefined}
+        donorVeng={currentDonorInfo.donorVeng || undefined}
+        donorType={category === 'kumtluang' ? currentDonorInfo.donorType : undefined}
+        groupName={category === 'kumtluang' ? currentDonorInfo.groupName : undefined}
+        memberId={currentDonorInfo.memberId}
+        subId={currentDonorInfo.subId}
+        isDependent={currentDonorInfo.isDependent}
         isAnonymous={isAnonymous}
         remark={remark.trim() || undefined}
         subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
@@ -2395,12 +2712,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         platformFee={platformFee}
         feeOption={feeBearerOption}
         campaignNetReceived={campaignNetReceived}
-        donorName={isAnonymous ? 'Anonymous' : (donorName.trim() || 'Valued Donor')}
-        donorPhone={donorPhone.trim() || undefined}
-        donorVeng={donorSection.trim() || undefined}
-        memberId={selectedMember?.id}
-        subId={selectedPayerType !== 'primary' ? selectedPayerType : undefined}
-        isDependent={selectedPayerType !== 'primary'}
+        donorName={isAnonymous ? 'Anonymous' : (currentDonorInfo.donorName || 'Valued Donor')}
+        donorPhone={currentDonorInfo.donorPhone || undefined}
+        donorVeng={currentDonorInfo.donorVeng || undefined}
+        donorType={category === 'kumtluang' ? currentDonorInfo.donorType : undefined}
+        groupName={category === 'kumtluang' ? currentDonorInfo.groupName : undefined}
+        memberId={currentDonorInfo.memberId}
+        subId={currentDonorInfo.subId}
+        isDependent={currentDonorInfo.isDependent}
         isAnonymous={isAnonymous}
         remark={remark.trim() || undefined}
         subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}

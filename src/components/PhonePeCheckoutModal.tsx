@@ -38,6 +38,8 @@ interface PhonePeCheckoutModalProps {
   donorName: string;
   donorPhone?: string;
   donorVeng?: string;
+  donorType?: string;
+  groupName?: string;
   memberId?: string;
   subId?: string;
   isDependent?: boolean;
@@ -71,6 +73,8 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
   donorName,
   donorPhone,
   donorVeng,
+  donorType,
+  groupName,
   memberId,
   subId,
   isDependent = false,
@@ -478,6 +482,8 @@ export const PhonePeCheckoutModal: React.FC<PhonePeCheckoutModalProps> = ({
       donorName: donorName?.trim() || 'Valued Donor',
       donorPhone: donorPhone?.trim() || undefined,
       donorVeng: donorVeng?.trim() || undefined,
+      donorType: donorType || undefined,
+      groupName: groupName || undefined,
       memberId,
       subId,
       isDependent,
