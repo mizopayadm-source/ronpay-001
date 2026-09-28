@@ -75,6 +75,8 @@ export interface Campaign {
   feeOptionRule?: FeeOptionMode;
   sectionLabel?: string;
   definedSections?: string[];
+  groupPresets?: string[];
+  generalPresets?: string[];
   contactPerson?: string;
   contactPhone?: string;
   description?: string;

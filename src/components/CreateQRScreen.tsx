@@ -163,6 +163,23 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     'Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung'
   ]);
   const [newSectionName, setNewSectionName] = useState<string>('');
+
+  // Kumtluang Group / Unit & General Inkhawm Thawhlawm Presets (Creator Pre-set to avoid spelling errors)
+  const [kumtluangGroupPresets, setKumtluangGroupPresets] = useState<string[]>([
+    'Group A', 'Group B', 'Group C', 'Group D'
+  ]);
+  const [newGroupPresetInput, setNewGroupPresetInput] = useState<string>('');
+
+  const [kumtluangGeneralPresets, setKumtluangGeneralPresets] = useState<string[]>([
+    'Pathianni Chawhma Thawhlawm',
+    'Pathianni Chawhnu Thawhlawm',
+    'Pathianni Zan Thawhlawm',
+    'Nilai Zan Thawhlawm',
+    'Buhfaiṭham Thawhlawm',
+    'Inrinni Zan Thawhlawm',
+    'Bial Inkhawmpui Thawhlawm'
+  ]);
+  const [newGeneralPresetInput, setNewGeneralPresetInput] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');
   const [kumtluangValidity, setKumtluangValidity] = useState<string>(() => getTodayDateTimeLocal(23, 59, 0));
@@ -562,6 +579,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       trxnFeeBearer: selectedCategory === 'kumtluang' ? kumtluangFeeBearer : undefined,
       sectionLabel: selectedCategory === 'kumtluang' ? kumtluangSectionLabel : undefined,
       definedSections: selectedCategory === 'kumtluang' ? kumtluangSections : undefined,
+      groupPresets: selectedCategory === 'kumtluang' ? kumtluangGroupPresets : undefined,
+      generalPresets: selectedCategory === 'kumtluang' ? kumtluangGeneralPresets : undefined,
 
       // Fee Option Policy: Inherit creator default, system default, or ADD_ON
       feeOptionRule: creatorProfile.defaultFeeOptionRule || pricingConfig?.defaultFeeOptionRule || 'ADD_ON',
@@ -1674,6 +1693,201 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                 )}
               </div>
 
+              {/* Group / Unit Preset Setup (Creator Pre-set to avoid spelling errors) */}
+              <div className="bg-white p-3 rounded-2xl border border-indigo-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Group / Unit Presets (Creator Pre-set)</span>
+                  </label>
+                  <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Data Integrity Guard
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Member / Collector-ten spelling danglam vanga report buai nuai an neih loh nan, Creator-in thlan tur Group list a set sa a ni.
+                </p>
+
+                {/* Quick Templates for Groups */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Templates:</span>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['Group A', 'Group B', 'Group C', 'Group D'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Group A, B, C, D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Unit 1, 2, 3, 4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['KTP', 'Kohhran Hmeichhia', 'Pavalai', 'Naupang Sunday School', 'Senior Dept'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Kohhran Depts
+                  </button>
+                </div>
+
+                {/* Add New Group Preset Input */}
+                <div className="flex gap-1 pt-1">
+                  <input
+                    type="text"
+                    value={newGroupPresetInput}
+                    onChange={(e) => setNewGroupPresetInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newGroupPresetInput.trim() && !kumtluangGroupPresets.includes(newGroupPresetInput.trim())) {
+                          setKumtluangGroupPresets([...kumtluangGroupPresets, newGroupPresetInput.trim()]);
+                          setNewGroupPresetInput('');
+                        }
+                      }
+                    }}
+                    placeholder="+ Group / Unit Hming thar (e.g. Group E, Choir)..."
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newGroupPresetInput.trim() && !kumtluangGroupPresets.includes(newGroupPresetInput.trim())) {
+                        setKumtluangGroupPresets([...kumtluangGroupPresets, newGroupPresetInput.trim()]);
+                        setNewGroupPresetInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 shrink-0 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Dah Belh
+                  </button>
+                </div>
+
+                {/* Group Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangGroupPresets.map((g, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>{g}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangGroupPresets(kumtluangGroupPresets.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* General / Inkhawm Thawhlawm Preset Setup (Creator Pre-set to avoid spelling errors) */}
+              <div className="bg-white p-3 rounded-2xl border border-emerald-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Inkhawm & Thawhlawm Presets (Creator Pre-set)</span>
+                  </label>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Record Guard
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Inkhawm Thawhlawm hming hawrawp inang lo hlek avanga data in-mix nuai loh nan, Creator-in thlan tur Thawhlawm hming a set sa a ni.
+                </p>
+
+                {/* Quick Templates for General Offerings */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Templates:</span>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGeneralPresets([
+                      'Pathianni Chawhma Thawhlawm',
+                      'Pathianni Chawhnu Thawhlawm',
+                      'Pathianni Zan Thawhlawm',
+                      'Nilai Zan Thawhlawm',
+                      'Buhfaiṭham Thawhlawm',
+                      'Inrinni Zan Thawhlawm',
+                      'Bial Inkhawmpui Thawhlawm'
+                    ])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    Standard Inkhawm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGeneralPresets([
+                      'Zing Tawngtai Thawhlawm',
+                      'Ramthawh Thawhlawm',
+                      'Krismas & Kumthar Thawhlawm',
+                      'Naupang Pual Thawhlawm',
+                      'General Bazar / Sum Tuakna'
+                    ])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    Special & Khawmpui
+                  </button>
+                </div>
+
+                {/* Add New General Preset Input */}
+                <div className="flex gap-1 pt-1">
+                  <input
+                    type="text"
+                    value={newGeneralPresetInput}
+                    onChange={(e) => setNewGeneralPresetInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newGeneralPresetInput.trim() && !kumtluangGeneralPresets.includes(newGeneralPresetInput.trim())) {
+                          setKumtluangGeneralPresets([...kumtluangGeneralPresets, newGeneralPresetInput.trim()]);
+                          setNewGeneralPresetInput('');
+                        }
+                      }
+                    }}
+                    placeholder="+ Thawhlawm Hming thar (e.g. Bial Inkhawmpui Thawhlawm)..."
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newGeneralPresetInput.trim() && !kumtluangGeneralPresets.includes(newGeneralPresetInput.trim())) {
+                        setKumtluangGeneralPresets([...kumtluangGeneralPresets, newGeneralPresetInput.trim()]);
+                        setNewGeneralPresetInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 shrink-0 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Dah Belh
+                  </button>
+                </div>
+
+                {/* General Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangGeneralPresets.map((g, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>{g}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangGeneralPresets(kumtluangGeneralPresets.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               {/* Optional Target (Per Month / Per Year / Overall) */}
               <div className="bg-white p-3 rounded-2xl border border-blue-200 space-y-2">
                 <div className="flex items-center justify-between">
@@ -2527,6 +2741,29 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
   );
   const [newSectionName, setNewSectionName] = useState<string>('');
+
+  // Group & General Presets in EditCampaignModal
+  const [kumtluangGroupPresets, setKumtluangGroupPresets] = useState<string[]>(
+    campaign.groupPresets && campaign.groupPresets.length > 0
+      ? campaign.groupPresets
+      : ['Group A', 'Group B', 'Group C', 'Group D']
+  );
+  const [newGroupPresetInput, setNewGroupPresetInput] = useState<string>('');
+
+  const [kumtluangGeneralPresets, setKumtluangGeneralPresets] = useState<string[]>(
+    campaign.generalPresets && campaign.generalPresets.length > 0
+      ? campaign.generalPresets
+      : [
+          'Pathianni Chawhma Thawhlawm',
+          'Pathianni Chawhnu Thawhlawm',
+          'Pathianni Zan Thawhlawm',
+          'Nilai Zan Thawhlawm',
+          'Buhfaiṭham Thawhlawm',
+          'Inrinni Zan Thawhlawm',
+          'Bial Inkhawmpui Thawhlawm'
+        ]
+  );
+  const [newGeneralPresetInput, setNewGeneralPresetInput] = useState<string>('');
   const [isEditPresetManagerOpen, setIsEditPresetManagerOpen] = useState<boolean>(false);
   const [editSectionPresets, setEditSectionPresets] = useState<SectionQuickPreset[]>(() => getStoredSectionPresets());
 
@@ -2669,6 +2906,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       kumtluangFeeBearer: campaign.category === 'kumtluang' ? kumtluangFeeBearer : undefined,
       sectionLabel: campaign.category === 'kumtluang' ? (kumtluangSectionLabel.trim() || 'Bial / Section') : campaign.sectionLabel,
       definedSections: campaign.category === 'kumtluang' ? kumtluangSections : campaign.definedSections,
+      groupPresets: campaign.category === 'kumtluang' ? kumtluangGroupPresets : campaign.groupPresets,
+      generalPresets: campaign.category === 'kumtluang' ? kumtluangGeneralPresets : campaign.generalPresets,
     };
 
     onSave(updated);
@@ -3301,6 +3540,201 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Group / Unit Preset Setup (Creator Pre-set to avoid spelling errors) */}
+              <div className="bg-white p-3 rounded-2xl border border-indigo-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Group / Unit Presets (Creator Pre-set)</span>
+                  </label>
+                  <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Data Integrity Guard
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Member / Collector-ten spelling danglam vanga report buai nuai an neih loh nan, Creator-in thlan tur Group list a set sa a ni.
+                </p>
+
+                {/* Quick Templates for Groups */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Templates:</span>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['Group A', 'Group B', 'Group C', 'Group D'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Group A, B, C, D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Unit 1, 2, 3, 4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGroupPresets(['KTP', 'Kohhran Hmeichhia', 'Pavalai', 'Naupang Sunday School', 'Senior Dept'])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition cursor-pointer"
+                  >
+                    Kohhran Depts
+                  </button>
+                </div>
+
+                {/* Add New Group Preset Input */}
+                <div className="flex gap-1 pt-1">
+                  <input
+                    type="text"
+                    value={newGroupPresetInput}
+                    onChange={(e) => setNewGroupPresetInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newGroupPresetInput.trim() && !kumtluangGroupPresets.includes(newGroupPresetInput.trim())) {
+                          setKumtluangGroupPresets([...kumtluangGroupPresets, newGroupPresetInput.trim()]);
+                          setNewGroupPresetInput('');
+                        }
+                      }
+                    }}
+                    placeholder="+ Group / Unit Hming thar (e.g. Group E, Choir)..."
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newGroupPresetInput.trim() && !kumtluangGroupPresets.includes(newGroupPresetInput.trim())) {
+                        setKumtluangGroupPresets([...kumtluangGroupPresets, newGroupPresetInput.trim()]);
+                        setNewGroupPresetInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 shrink-0 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Dah Belh
+                  </button>
+                </div>
+
+                {/* Group Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangGroupPresets.map((g, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>{g}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangGroupPresets(kumtluangGroupPresets.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* General / Inkhawm Thawhlawm Preset Setup (Creator Pre-set to avoid spelling errors) */}
+              <div className="bg-white p-3 rounded-2xl border border-emerald-200 space-y-2.5 overflow-hidden">
+                <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1">
+                  <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Inkhawm & Thawhlawm Presets (Creator Pre-set)</span>
+                  </label>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md self-start xs:self-auto">
+                    Record Guard
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                  Inkhawm Thawhlawm hming hawrawp inang lo hlek avanga data in-mix nuai loh nan, Creator-in thlan tur Thawhlawm hming a set sa a ni.
+                </p>
+
+                {/* Quick Templates for General Offerings */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9.5px] font-bold text-slate-500">Quick Templates:</span>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGeneralPresets([
+                      'Pathianni Chawhma Thawhlawm',
+                      'Pathianni Chawhnu Thawhlawm',
+                      'Pathianni Zan Thawhlawm',
+                      'Nilai Zan Thawhlawm',
+                      'Buhfaiṭham Thawhlawm',
+                      'Inrinni Zan Thawhlawm',
+                      'Bial Inkhawmpui Thawhlawm'
+                    ])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    Standard Inkhawm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKumtluangGeneralPresets([
+                      'Zing Tawngtai Thawhlawm',
+                      'Ramthawh Thawhlawm',
+                      'Krismas & Kumthar Thawhlawm',
+                      'Naupang Pual Thawhlawm',
+                      'General Bazar / Sum Tuakna'
+                    ])}
+                    className="text-[9.5px] font-bold px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition cursor-pointer"
+                  >
+                    Special & Khawmpui
+                  </button>
+                </div>
+
+                {/* Add New General Preset Input */}
+                <div className="flex gap-1 pt-1">
+                  <input
+                    type="text"
+                    value={newGeneralPresetInput}
+                    onChange={(e) => setNewGeneralPresetInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newGeneralPresetInput.trim() && !kumtluangGeneralPresets.includes(newGeneralPresetInput.trim())) {
+                          setKumtluangGeneralPresets([...kumtluangGeneralPresets, newGeneralPresetInput.trim()]);
+                          setNewGeneralPresetInput('');
+                        }
+                      }
+                    }}
+                    placeholder="+ Thawhlawm Hming thar (e.g. Bial Inkhawmpui Thawhlawm)..."
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newGeneralPresetInput.trim() && !kumtluangGeneralPresets.includes(newGeneralPresetInput.trim())) {
+                        setKumtluangGeneralPresets([...kumtluangGeneralPresets, newGeneralPresetInput.trim()]);
+                        setNewGeneralPresetInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 shrink-0 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Dah Belh
+                  </button>
+                </div>
+
+                {/* General Tags */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {kumtluangGeneralPresets.map((g, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold px-2 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs"
+                    >
+                      <span>{g}</span>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangGeneralPresets(kumtluangGeneralPresets.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-700 font-black cursor-pointer ml-1 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {/* Target (Per Month / Year / Total) for Kumtluang */}

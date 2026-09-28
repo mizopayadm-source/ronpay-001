@@ -287,11 +287,77 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [groupLeaderName, setGroupLeaderName] = useState<string>('');
   const [groupLeaderPhone, setGroupLeaderPhone] = useState<string>('');
   const [groupSection, setGroupSection] = useState<string>(() => initialDonorSection || 'Bial 1 (Vengchhak)');
+  const [groupAmount, setGroupAmount] = useState<number | ''>('');
 
   // General / Offering Collection States
   const [generalTitle, setGeneralTitle] = useState<string>('Pathianni Chawhma Thawhlawm');
   const [generalCollectorName, setGeneralCollectorName] = useState<string>('');
   const [generalCollectorPhone, setGeneralCollectorPhone] = useState<string>('');
+  const [generalAmount, setGeneralAmount] = useState<number | ''>('');
+
+  // Track if user explicitly chose to enter a custom group or custom general name
+  const [isCustomGroup, setIsCustomGroup] = useState<boolean>(false);
+  const [isCustomGeneral, setIsCustomGeneral] = useState<boolean>(false);
+
+  // Dynamic Group & General Presets (Creator Pre-set prioritized to ensure data consistency)
+  const [groupPresets, setGroupPresets] = useState<string[]>(() => {
+    if (campaign?.groupPresets && campaign.groupPresets.length > 0) {
+      return campaign.groupPresets;
+    }
+    const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
+    const saved = localStorage.getItem(key) || localStorage.getItem('ronpay_group_presets_global');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return ['Group A', 'Group B', 'Group C', 'Group D'];
+  });
+
+  const [generalPresets, setGeneralPresets] = useState<string[]>(() => {
+    if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
+      return campaign.generalPresets;
+    }
+    const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
+    const saved = localStorage.getItem(key) || localStorage.getItem('ronpay_general_presets_global');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'Pathianni Chawhma Thawhlawm',
+      'Pathianni Chawhnu Thawhlawm',
+      'Pathianni Zan Thawhlawm',
+      'Nilai Zan Thawhlawm',
+      'Buhfaiṭham Thawhlawm',
+      'Inrinni Zan Thawhlawm',
+      'Bial Inkhawmpui Thawhlawm'
+    ];
+  });
+
+  // Sync presets whenever campaign changes or is updated by creator
+  useEffect(() => {
+    if (campaign?.groupPresets && campaign.groupPresets.length > 0) {
+      setGroupPresets(campaign.groupPresets);
+      if (!groupName || (!campaign.groupPresets.includes(groupName) && !isCustomGroup)) {
+        setGroupName(campaign.groupPresets[0]);
+      }
+    }
+    if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
+      setGeneralPresets(campaign.generalPresets);
+      if (!generalTitle || (!campaign.generalPresets.includes(generalTitle) && !isCustomGeneral)) {
+        setGeneralTitle(campaign.generalPresets[0]);
+      }
+    }
+  }, [campaign?.id, campaign?.groupPresets, campaign?.generalPresets]);
+
+  const [newGroupPresetInput, setNewGroupPresetInput] = useState<string>('');
+  const [showAddGroupPreset, setShowAddGroupPreset] = useState<boolean>(false);
+  const [newGeneralPresetInput, setNewGeneralPresetInput] = useState<string>('');
+  const [showAddGeneralPreset, setShowAddGeneralPreset] = useState<boolean>(false);
 
   // Kumtluang Member & Family Sub-ID State
   const [donorPhone, setDonorPhone] = useState<string>('');
@@ -610,6 +676,82 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       ...prev,
       [catName]: num,
     }));
+  };
+
+  const handleAddGroupPreset = (nameToAdd: string) => {
+    const trimmed = nameToAdd.trim();
+    if (!trimmed) return;
+    if (!groupPresets.includes(trimmed)) {
+      const updated = [...groupPresets, trimmed];
+      setGroupPresets(updated);
+      const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+    }
+    setGroupName(trimmed);
+    setNewGroupPresetInput('');
+    setShowAddGroupPreset(false);
+  };
+
+  const handleRemoveGroupPreset = (nameToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = groupPresets.filter(p => p !== nameToRemove);
+    setGroupPresets(updated);
+    const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+    if (groupName === nameToRemove) setGroupName('');
+  };
+
+  const handleAddGeneralPreset = (nameToAdd: string) => {
+    const trimmed = nameToAdd.trim();
+    if (!trimmed) return;
+    if (!generalPresets.includes(trimmed)) {
+      const updated = [...generalPresets, trimmed];
+      setGeneralPresets(updated);
+      const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+    }
+    setGeneralTitle(trimmed);
+    setNewGeneralPresetInput('');
+    setShowAddGeneralPreset(false);
+  };
+
+  const handleRemoveGeneralPreset = (nameToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = generalPresets.filter(p => p !== nameToRemove);
+    setGeneralPresets(updated);
+    const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+    if (generalTitle === nameToRemove) setGeneralTitle('');
+  };
+
+  const handleGroupAmountChange = (val: string) => {
+    if (val === '') {
+      setGroupAmount('');
+      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Group Target';
+      setSubcatAmounts({ [defaultCat]: 0 });
+    } else {
+      const num = parseFloat(val) || 0;
+      setGroupAmount(num);
+      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Group Target';
+      setSubcatAmounts({ [defaultCat]: num });
+    }
+  };
+
+  const handleGeneralAmountChange = (val: string) => {
+    if (val === '') {
+      setGeneralAmount('');
+      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Thawhlawm';
+      setSubcatAmounts({ [defaultCat]: 0 });
+    } else {
+      const num = parseFloat(val) || 0;
+      setGeneralAmount(num);
+      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Thawhlawm';
+      setSubcatAmounts({ [defaultCat]: num });
+    }
   };
 
   // Calculate totals
@@ -1944,32 +2086,95 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
               {/* Quick Presets for Group Name */}
               <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                  Group / Unit Hming Thlang Rawh (emaw a hnuaiah chhu rawh):
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {['Group A', 'Group B', 'Group C', 'Unit 1', 'Unit 2', 'TKP Fellowship', 'Kohhran Hmeichhe Group', 'Sunday School Department', 'Chhungkua Thawhkhawm'].map((preset) => (
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-bold text-slate-700 block">
+                    Group / Unit Hming Thlang Rawh (emaw a hnuaiah chhu rawh):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupPreset(!showAddGroupPreset)}
+                    className="text-[9.5px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Preset Thar Dahna
+                  </button>
+                </div>
+
+                {/* Inline form to add custom group preset */}
+                {showAddGroupPreset && (
+                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-indigo-200 rounded-xl">
+                    <input
+                      type="text"
+                      value={newGroupPresetInput}
+                      onChange={(e) => setNewGroupPresetInput(e.target.value)}
+                      placeholder="e.g. Pavalai Fellowship / Chhangte Unit"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                    />
                     <button
-                      key={preset}
                       type="button"
-                      onClick={() => setGroupName(preset)}
-                      className={`text-[10.5px] px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                      onClick={() => handleAddGroupPreset(newGroupPresetInput)}
+                      className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg hover:bg-indigo-700 transition cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGroupPreset(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {groupPresets.map((preset) => (
+                    <div
+                      key={preset}
+                      className={`inline-flex items-center gap-1 text-[10.5px] pl-2.5 pr-1.5 py-1 rounded-lg font-bold border transition ${
                         groupName === preset
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
                       }`}
                     >
-                      {preset}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setGroupName(preset)}
+                        className="cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRemoveGroupPreset(preset, e)}
+                        title="Paih bo rawh"
+                        className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                          groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                        }`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  placeholder="e.g. Group A / TKP Fellowship / Unit 1..."
-                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
-                />
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                    placeholder="e.g. Group A / TKP Fellowship / Unit 1..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                  />
+                  {groupName.trim() && !groupPresets.includes(groupName.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddGroupPreset(groupName)}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-lg hover:bg-indigo-100 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Leader / Depositor Info */}
@@ -2021,6 +2226,44 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   ))}
                 </select>
               </div>
+
+              {/* Direct Group Amount & Payment Date Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t-2 border-indigo-200/90 mt-1">
+                <div>
+                  <label className="text-[10.5px] font-black text-indigo-950 block mb-1">
+                    Sum Zat (Amount ₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-sm text-indigo-700">₹</span>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      placeholder="e.g. 5000"
+                      value={groupAmount === '' ? (subtotal > 0 ? subtotal : '') : groupAmount}
+                      onChange={(e) => handleGroupAmountChange(e.target.value)}
+                      className="w-full bg-white border-2 border-indigo-300 rounded-xl py-2 pl-7 pr-3 font-black text-sm text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] font-black text-indigo-950 block mb-1">
+                    Pek Ni (Payment Date) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={selectedCustomDate}
+                      onChange={(e) => {
+                        handleCustomDateChange(e.target.value);
+                        setUseCustomDate(true);
+                      }}
+                      className="w-full bg-white border-2 border-indigo-300 rounded-xl py-2 px-3 font-bold text-xs text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -2041,40 +2284,95 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
               {/* Quick Presets for Offering Title */}
               <div>
-                <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                  Thawhlawm / Sum Hming (Thupui):
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {[
-                    'Pathianni Chawhma Thawhlawm',
-                    'Pathianni Zan Thawhlawm',
-                    'Zing Tawngtai Thawhlawm',
-                    'Nilai Zan Thawhlawm',
-                    'Buhfaiṭham Khawn Khawm',
-                    'Khawmpui Thawhlawm',
-                    'General Bazar / Sum Tuakna'
-                  ].map((preset) => (
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-bold text-slate-700 block">
+                    Thawhlawm / Sum Hming (Thupui):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGeneralPreset(!showAddGeneralPreset)}
+                    className="text-[9.5px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Preset Thar Dahna
+                  </button>
+                </div>
+
+                {/* Inline form to add custom general preset */}
+                {showAddGeneralPreset && (
+                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-emerald-200 rounded-xl">
+                    <input
+                      type="text"
+                      value={newGeneralPresetInput}
+                      onChange={(e) => setNewGeneralPresetInput(e.target.value)}
+                      placeholder="e.g. Naupang Sunday School / Pavalai Thawhlawm"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
+                    />
                     <button
-                      key={preset}
                       type="button"
-                      onClick={() => setGeneralTitle(preset)}
-                      className={`text-[10.5px] px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                      onClick={() => handleAddGeneralPreset(newGeneralPresetInput)}
+                      className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg hover:bg-emerald-700 transition cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGeneralPreset(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {generalPresets.map((preset) => (
+                    <div
+                      key={preset}
+                      className={`inline-flex items-center gap-1 text-[10.5px] pl-2.5 pr-1.5 py-1 rounded-lg font-bold border transition ${
                         generalTitle === preset
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
                       }`}
                     >
-                      {preset}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setGeneralTitle(preset)}
+                        className="cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRemoveGeneralPreset(preset, e)}
+                        title="Paih bo rawh"
+                        className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                          generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                        }`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  value={generalTitle}
-                  onChange={(e) => setGeneralTitle(e.target.value)}
-                  placeholder="e.g. Pathianni Chawhma Thawhlawm..."
-                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
-                />
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={generalTitle}
+                    onChange={(e) => setGeneralTitle(e.target.value)}
+                    placeholder="e.g. Pathianni Chawhma Thawhlawm..."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                  {generalTitle.trim() && !generalPresets.includes(generalTitle.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddGeneralPreset(generalTitle)}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-lg hover:bg-emerald-100 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Collector / Inkhawm Hruaitu Info */}
@@ -2104,6 +2402,44 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     placeholder="e.g. 9862xxxxxx"
                     className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
+                </div>
+              </div>
+
+              {/* Direct General Amount & Payment Date Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t-2 border-emerald-200/90 mt-1">
+                <div>
+                  <label className="text-[10.5px] font-black text-emerald-950 block mb-1">
+                    Thawhlawm Zat (Amount ₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-sm text-emerald-700">₹</span>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      placeholder="e.g. 8450"
+                      value={generalAmount === '' ? (subtotal > 0 ? subtotal : '') : generalAmount}
+                      onChange={(e) => handleGeneralAmountChange(e.target.value)}
+                      className="w-full bg-white border-2 border-emerald-300 rounded-xl py-2 pl-7 pr-3 font-black text-sm text-emerald-950 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] font-black text-emerald-950 block mb-1">
+                    Pek Ni (Offering Date) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={selectedCustomDate}
+                      onChange={(e) => {
+                        handleCustomDateChange(e.target.value);
+                        setUseCustomDate(true);
+                      }}
+                      className="w-full bg-white border-2 border-emerald-300 rounded-xl py-2 px-3 font-bold text-xs text-emerald-950 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -2156,7 +2492,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs space-y-3">
           <div className="flex justify-between items-center">
             <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-              {category === 'kumtluang' ? 'Kumtluang Sub-Category Breakdown' : 'Donation Amount (₹)'}
+              {category === 'kumtluang' 
+                ? (kumtluangDonorType === 'group' 
+                    ? 'Group Sum Thehluhna & Breakdown' 
+                    : kumtluangDonorType === 'general' 
+                    ? 'Thawhlawm / Sum Thehluhna & Breakdown' 
+                    : 'Kumtluang Sub-Category Breakdown') 
+                : 'Donation Amount (₹)'}
             </h4>
             {category === 'kumtluang' && (
               <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
@@ -2165,7 +2507,25 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             )}
           </div>
 
-          {category === 'kumtluang' && (
+          {category === 'kumtluang' && kumtluangDonorType !== 'member' ? (
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div>
+                <span className="text-xs font-black text-indigo-950 block">
+                  {kumtluangDonorType === 'group' 
+                    ? `👥 ${groupName ? groupName : 'Group'} Thehluh Zat:` 
+                    : `🏛️ ${generalTitle ? generalTitle : 'Thawhlawm'} Thehluh Zat:`}
+                </span>
+                <span className="text-[10.5px] text-indigo-800 font-medium">
+                  Pek Ni: <b className="font-bold text-indigo-950">{formatDateDDMMYYYY(selectedCustomDate)}</b> ({periodLabel})
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-black font-mono text-indigo-950 bg-white px-3 py-1 rounded-xl border border-indigo-200 shadow-2xs inline-block">
+                  ₹{subtotal.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          ) : category === 'kumtluang' && (
             <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2.5">
               <label className="text-[10.5px] font-extrabold text-slate-700 block">
                 Pek Hun / Frequency Thlanna (Monthly / Quarterly / Yearly)
@@ -2296,6 +2656,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
           {category === 'kumtluang' ? (
             <div className="space-y-2.5">
+              {kumtluangDonorType !== 'member' && Object.keys(subcatAmounts).length > 1 && (
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Category hrang hranga thendarh duh tan (Optional Sub-Category Breakdown):
+                </div>
+              )}
               {Object.keys(subcatAmounts).map((catName) => (
                 <div key={catName} className="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                   <span className="text-xs font-bold text-slate-800 flex-1 truncate">{catName}</span>
