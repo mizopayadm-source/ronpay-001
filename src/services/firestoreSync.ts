@@ -490,11 +490,40 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 
       if (remoteCampaigns.length > 0) {
         const deletedCampIds = getDeletedCampaignIds();
-        const filteredRemote = remoteCampaigns.filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
+        const isCampExcluded = (c: Campaign | undefined | null) => {
+          if (!c || !c.id) return true;
+          const cleanId = String(c.id).toLowerCase().trim();
+          // BMP Shillong (cmp-1788107291420) is an authoritative permanent kumtluang bawm and must NEVER be excluded
+          if (cleanId === 'cmp-1788107291420') return false;
+          const titleLower = String(c.title || '').toLowerCase();
+          const orgLower = String(c.orgName || '').toLowerCase();
+          if (titleLower.includes('bmp') && titleLower.includes('shillong')) return false;
+          if (orgLower.includes('bmp') && orgLower.includes('shillong')) return false;
+
+          if (
+            cleanId === 'cmp-kumtluang-ymavt' ||
+            cleanId === 'cmp-1790613933759' || 
+            cleanId === 'cmp-1790611183923' || 
+            cleanId === 'cmp-1790611018907' || 
+            cleanId === 'cmp-1790610970360' ||
+            (titleLower.includes('tkp') && titleLower.includes('shillong')) ||
+            (orgLower.includes('tkp') && orgLower.includes('shillong')) ||
+            (deletedCampIds.has(cleanId) && cleanId !== 'cmp-1788107291420')
+          ) return true;
+          return false;
+        };
+        const filteredRemote = remoteCampaigns.filter(c => !isCampExcluded(c));
         const localCamps = getLocalJson<Campaign[]>('ronpay_campaigns_v2', INITIAL_CAMPAIGNS)
-          .filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
+          .filter(c => !isCampExcluded(c));
         const merged = smartMerge(localCamps, filteredRemote, 'id')
-          .filter(c => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()));
+          .filter(c => !isCampExcluded(c));
+
+        // Always guarantee BMP Shillong authoritative campaign is present
+        const bmpCamp = INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1788107291420');
+        if (bmpCamp && !merged.some(c => String(c.id).toLowerCase().trim() === 'cmp-1788107291420')) {
+          merged.push(bmpCamp);
+        }
+
         // Always sort newest first so all devices (Android, web, preview) display the exact same deterministic list
         const sorted = [...merged].sort((a, b) => {
           const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;

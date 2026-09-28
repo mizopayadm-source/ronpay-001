@@ -2278,7 +2278,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
           {/* Remark / Note field */}
           <div>
-            <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Remark / Note (Duham tan)</label>
+            <label className="text-[10.5px] font-bold text-slate-700 block mb-1">Remark / Note (Optional)</label>
             <input
               type="text"
               value={remark}

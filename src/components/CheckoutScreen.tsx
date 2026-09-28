@@ -42,7 +42,16 @@ import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
-import { getMembers, addOrUpdateMember, saveTransaction, recordUserPaidTxId } from '../utils/storage';
+import { 
+  getMembers, 
+  addOrUpdateMember, 
+  saveTransaction, 
+  recordUserPaidTxId,
+  getStoredCreatorProfile,
+  isCampaignCreator,
+  saveCampaign
+} from '../utils/storage';
+import { syncCampaignToFirestore } from '../services/firestoreSync';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';
@@ -88,6 +97,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(false);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
+
+  // Creator Ownership Verification for preset governance
+  const creatorProfile = useMemo(() => getStoredCreatorProfile(), []);
+  const isOwner = useMemo(() => {
+    return Boolean(campaign && isCampaignCreator(campaign, creatorProfile));
+  }, [campaign, creatorProfile]);
 
   // PhonePe PG New Tab Live State Synchronization
   const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
@@ -293,6 +308,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [generalTitle, setGeneralTitle] = useState<string>('Pathianni Chawhma Thawhlawm');
   const [generalCollectorName, setGeneralCollectorName] = useState<string>('');
   const [generalCollectorPhone, setGeneralCollectorPhone] = useState<string>('');
+  const [generalSection, setGeneralSection] = useState<string>(() => initialDonorSection || '');
   const [generalAmount, setGeneralAmount] = useState<number | ''>('');
 
   // Track if user explicitly chose to enter a custom group or custom general name
@@ -687,6 +703,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
       localStorage.setItem(key, JSON.stringify(updated));
       localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+      if (campaign && isOwner) {
+        const updatedCamp = { ...campaign, groupPresets: updated };
+        saveCampaign(updatedCamp);
+        syncCampaignToFirestore(updatedCamp);
+      }
     }
     setGroupName(trimmed);
     setNewGroupPresetInput('');
@@ -700,6 +721,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
     localStorage.setItem(key, JSON.stringify(updated));
     localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+    if (campaign && isOwner) {
+      const updatedCamp = { ...campaign, groupPresets: updated };
+      saveCampaign(updatedCamp);
+      syncCampaignToFirestore(updatedCamp);
+    }
     if (groupName === nameToRemove) setGroupName('');
   };
 
@@ -712,6 +738,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
       localStorage.setItem(key, JSON.stringify(updated));
       localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+      if (campaign && isOwner) {
+        const updatedCamp = { ...campaign, generalPresets: updated };
+        saveCampaign(updatedCamp);
+        syncCampaignToFirestore(updatedCamp);
+      }
     }
     setGeneralTitle(trimmed);
     setNewGeneralPresetInput('');
@@ -725,38 +756,39 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
     localStorage.setItem(key, JSON.stringify(updated));
     localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+    if (campaign && isOwner) {
+      const updatedCamp = { ...campaign, generalPresets: updated };
+      saveCampaign(updatedCamp);
+      syncCampaignToFirestore(updatedCamp);
+    }
     if (generalTitle === nameToRemove) setGeneralTitle('');
   };
 
   const handleGroupAmountChange = (val: string) => {
     if (val === '') {
       setGroupAmount('');
-      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Group Target';
-      setSubcatAmounts({ [defaultCat]: 0 });
     } else {
       const num = parseFloat(val) || 0;
       setGroupAmount(num);
-      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Group Target';
-      setSubcatAmounts({ [defaultCat]: num });
     }
   };
 
   const handleGeneralAmountChange = (val: string) => {
     if (val === '') {
       setGeneralAmount('');
-      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Thawhlawm';
-      setSubcatAmounts({ [defaultCat]: 0 });
     } else {
       const num = parseFloat(val) || 0;
       setGeneralAmount(num);
-      const defaultCat = (campaign?.subCategories && campaign.subCategories[0]) || Object.keys(subcatAmounts)[0] || 'Thawhlawm';
-      setSubcatAmounts({ [defaultCat]: num });
     }
   };
 
-  // Calculate totals
+  // Calculate totals: Group and General use their direct sum; Member mode sums the subcategories
   const subtotal = category === 'kumtluang'
-    ? (Object.values(subcatAmounts) as number[]).reduce((acc: number, curr: number) => acc + curr, 0)
+    ? (kumtluangDonorType === 'group'
+        ? (typeof groupAmount === 'number' ? groupAmount : 0)
+        : kumtluangDonorType === 'general'
+        ? (typeof generalAmount === 'number' ? generalAmount : 0)
+        : (Object.values(subcatAmounts) as number[]).reduce((acc: number, curr: number) => acc + curr, 0))
     : (typeof standardAmount === 'number' ? standardAmount : 0);
 
   // Dynamic Platform Fee based on Admin Pricing Config & Per-Creator Overrides
@@ -848,7 +880,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             ? `${generalTitle.trim()} (${generalCollectorName.trim()})`
             : generalTitle.trim();
           resolvedDonorPhone = generalCollectorPhone.trim();
-          resolvedDonorVeng = '';
+          resolvedDonorVeng = generalSection.trim();
         } else {
           resolvedDonorType = 'member';
           let activeMember = selectedMember;
@@ -989,7 +1021,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         timestamp: new Date().toISOString(),
         remark: remark.trim() || undefined,
         feeOption: feeBearerOption,
-        subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
+        subCategoryBreakdown: category === 'kumtluang' 
+          ? (resolvedDonorType === 'group'
+              ? { [resolvedGroupName || 'Group Sum']: subtotal }
+              : resolvedDonorType === 'general'
+              ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
+              : subcatAmounts)
+          : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
         periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
         periodYear: category === 'kumtluang' ? selectedYear : undefined,
@@ -1134,7 +1172,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         paymentMethod: 'cash',
         status: 'pending_verification',
         remark: remark.trim() || undefined,
-        subCategoryBreakdown: category === 'kumtluang' ? subcatAmounts : undefined,
+        subCategoryBreakdown: category === 'kumtluang' 
+          ? (resolvedDonorType === 'group'
+              ? { [resolvedGroupName || 'Group Sum']: subtotal }
+              : resolvedDonorType === 'general'
+              ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
+              : subcatAmounts)
+          : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
         periodLabel: category === 'kumtluang' ? periodLabel : undefined,
         timestamp: new Date().toISOString(),
@@ -2084,24 +2128,31 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               </div>
 
-              {/* Quick Presets for Group Name */}
+              {/* Quick Presets for Group Name (Creator pre-set to prevent accidental input errors) */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10px] font-bold text-slate-700 block">
-                    Group / Unit Hming Thlang Rawh (emaw a hnuaiah chhu rawh):
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddGroupPreset(!showAddGroupPreset)}
-                    className="text-[9.5px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" /> Preset Thar Dahna
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 block">
+                      Group / Unit Hming Thlang Rawh:
+                    </label>
+                    <span className="text-[8.5px] font-bold text-indigo-700 bg-indigo-100/70 border border-indigo-200/80 px-1.5 py-0.2 rounded">
+                      Creator Set
+                    </span>
+                  </div>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGroupPreset(!showAddGroupPreset)}
+                      className="text-[9.5px] font-black text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-indigo-200"
+                    >
+                      <Plus className="w-3 h-3" /> Creator: Preset Dahna
+                    </button>
+                  )}
                 </div>
 
-                {/* Inline form to add custom group preset */}
-                {showAddGroupPreset && (
-                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-indigo-200 rounded-xl">
+                {/* Inline form to add custom group preset - STRICTLY for Campaign Creator */}
+                {isOwner && showAddGroupPreset && (
+                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-indigo-200 rounded-xl shadow-xs">
                     <input
                       type="text"
                       value={newGroupPresetInput}
@@ -2114,7 +2165,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       onClick={() => handleAddGroupPreset(newGroupPresetInput)}
                       className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg hover:bg-indigo-700 transition cursor-pointer"
                     >
-                      Save
+                      Save Preset
                     </button>
                     <button
                       type="button"
@@ -2130,7 +2181,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   {groupPresets.map((preset) => (
                     <div
                       key={preset}
-                      className={`inline-flex items-center gap-1 text-[10.5px] pl-2.5 pr-1.5 py-1 rounded-lg font-bold border transition ${
+                      className={`inline-flex items-center gap-1 text-[10.5px] ${isOwner ? 'pl-2.5 pr-1.5' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
                         groupName === preset
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
@@ -2138,21 +2189,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     >
                       <button
                         type="button"
-                        onClick={() => setGroupName(preset)}
+                        onClick={() => {
+                          setGroupName(preset);
+                          setIsCustomGroup(false);
+                        }}
                         className="cursor-pointer"
                       >
                         {preset}
                       </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleRemoveGroupPreset(preset, e)}
-                        title="Paih bo rawh"
-                        className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
-                          groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
-                        }`}
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveGroupPreset(preset, e)}
+                          title="Creator: Paih bo rawh"
+                          className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                            groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                          }`}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2161,26 +2217,29 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <input
                     type="text"
                     value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
+                    onChange={(e) => {
+                      setGroupName(e.target.value);
+                      setIsCustomGroup(true);
+                    }}
                     placeholder="e.g. Group A / TKP Fellowship / Unit 1..."
                     className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
                   />
-                  {groupName.trim() && !groupPresets.includes(groupName.trim()) && (
+                  {isOwner && groupName.trim() && !groupPresets.includes(groupName.trim()) && (
                     <button
                       type="button"
                       onClick={() => handleAddGroupPreset(groupName)}
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-lg hover:bg-indigo-100 flex items-center gap-1 cursor-pointer"
                     >
-                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Creator: Save as Preset
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Leader / Depositor Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col justify-end">
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1 leading-tight min-h-[24px] flex items-end">
                     Thehluttu / Leader / Treasurer Hming *
                   </label>
                   <input
@@ -2188,12 +2247,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     value={groupLeaderName}
                     onChange={(e) => setGroupLeaderName(e.target.value)}
                     placeholder="e.g. Rammuanpuia (Leader)"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 h-9"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                <div className="flex flex-col justify-end">
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1 leading-tight min-h-[24px] flex items-end">
                     Phone Number (Receipt dawn nan)
                   </label>
                   <input
@@ -2202,7 +2261,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     value={groupLeaderPhone}
                     onChange={(e) => setGroupLeaderPhone(e.target.value)}
                     placeholder="e.g. 9436123456"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 h-9"
                   />
                 </div>
               </div>
@@ -2210,14 +2269,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               {/* Section / Bial selection */}
               <div>
                 <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                  {campaign?.sectionLabel || 'Bial / Section / Veng'} (Duham tan)
+                  {campaign?.sectionLabel || 'Bial / Unit'}
                 </label>
                 <select
                   value={groupSection}
                   onChange={(e) => setGroupSection(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
                 >
-                  <option value="">-- Section / Bial Thlang Rawh (Optional) --</option>
+                  <option value="">-- {campaign?.sectionLabel || 'Bial / Unit'} Thlang Rawh (Optional) --</option>
                   {(campaign?.definedSections && campaign.definedSections.length > 0
                     ? campaign.definedSections
                     : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
@@ -2240,10 +2299,27 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       min={1}
                       required
                       placeholder="e.g. 5000"
-                      value={groupAmount === '' ? (subtotal > 0 ? subtotal : '') : groupAmount}
+                      value={groupAmount === '' ? '' : groupAmount}
                       onChange={(e) => handleGroupAmountChange(e.target.value)}
                       className="w-full bg-white border-2 border-indigo-300 rounded-xl py-2 pl-7 pr-3 font-black text-sm text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
                     />
+                  </div>
+                  {/* Quick amount chips */}
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pt-1.5">
+                    {[500, 1000, 2000, 5000, 10000].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => handleGroupAmountChange(String(amt))}
+                        className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer shrink-0 ${
+                          groupAmount === amt 
+                            ? 'bg-indigo-600 text-white shadow-xs' 
+                            : 'bg-indigo-100/70 text-indigo-800 hover:bg-indigo-200'
+                        }`}
+                      >
+                        ₹{amt.toLocaleString('en-IN')}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -2282,24 +2358,31 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               </div>
 
-              {/* Quick Presets for Offering Title */}
+              {/* Quick Presets for Offering Title (Creator pre-set to prevent accidental input errors) */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10px] font-bold text-slate-700 block">
-                    Thawhlawm / Sum Hming (Thupui):
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddGeneralPreset(!showAddGeneralPreset)}
-                    className="text-[9.5px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" /> Preset Thar Dahna
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-700 block">
+                      Thawhlawm / Sum Hming Thlang Rawh:
+                    </label>
+                    <span className="text-[8.5px] font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-200/80 px-1.5 py-0.2 rounded">
+                      Creator Set
+                    </span>
+                  </div>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGeneralPreset(!showAddGeneralPreset)}
+                      className="text-[9.5px] font-black text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-emerald-200"
+                    >
+                      <Plus className="w-3 h-3" /> Creator: Preset Dahna
+                    </button>
+                  )}
                 </div>
 
-                {/* Inline form to add custom general preset */}
-                {showAddGeneralPreset && (
-                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-emerald-200 rounded-xl">
+                {/* Inline form to add custom general preset - STRICTLY for Campaign Creator */}
+                {isOwner && showAddGeneralPreset && (
+                  <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-emerald-200 rounded-xl shadow-xs">
                     <input
                       type="text"
                       value={newGeneralPresetInput}
@@ -2312,7 +2395,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       onClick={() => handleAddGeneralPreset(newGeneralPresetInput)}
                       className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg hover:bg-emerald-700 transition cursor-pointer"
                     >
-                      Save
+                      Save Preset
                     </button>
                     <button
                       type="button"
@@ -2328,7 +2411,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   {generalPresets.map((preset) => (
                     <div
                       key={preset}
-                      className={`inline-flex items-center gap-1 text-[10.5px] pl-2.5 pr-1.5 py-1 rounded-lg font-bold border transition ${
+                      className={`inline-flex items-center gap-1 text-[10.5px] ${isOwner ? 'pl-2.5 pr-1.5' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
                         generalTitle === preset
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
@@ -2336,21 +2419,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     >
                       <button
                         type="button"
-                        onClick={() => setGeneralTitle(preset)}
+                        onClick={() => {
+                          setGeneralTitle(preset);
+                          setIsCustomGeneral(false);
+                        }}
                         className="cursor-pointer"
                       >
                         {preset}
                       </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleRemoveGeneralPreset(preset, e)}
-                        title="Paih bo rawh"
-                        className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
-                          generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
-                        }`}
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveGeneralPreset(preset, e)}
+                          title="Creator: Paih bo rawh"
+                          className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                            generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                          }`}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2359,39 +2447,42 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <input
                     type="text"
                     value={generalTitle}
-                    onChange={(e) => setGeneralTitle(e.target.value)}
+                    onChange={(e) => {
+                      setGeneralTitle(e.target.value);
+                      setIsCustomGeneral(true);
+                    }}
                     placeholder="e.g. Pathianni Chawhma Thawhlawm..."
                     className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
-                  {generalTitle.trim() && !generalPresets.includes(generalTitle.trim()) && (
+                  {isOwner && generalTitle.trim() && !generalPresets.includes(generalTitle.trim()) && (
                     <button
                       type="button"
                       onClick={() => handleAddGeneralPreset(generalTitle)}
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-lg hover:bg-emerald-100 flex items-center gap-1 cursor-pointer"
                     >
-                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Creator: Save as Preset
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Collector / Inkhawm Hruaitu Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
-                    Thehluttu / Hruaitu / Treasurer Hming (Duham tan)
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col justify-end">
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1 leading-tight min-h-[24px] flex items-end">
+                    Thehluttu / Hruaitu / Treasurer Hming
                   </label>
                   <input
                     type="text"
                     value={generalCollectorName}
                     onChange={(e) => setGeneralCollectorName(e.target.value)}
                     placeholder="e.g. Inkhawm Hruaitu / Treasurer"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 h-9"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                <div className="flex flex-col justify-end">
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1 leading-tight min-h-[24px] flex items-end">
                     Phone Number (Receipt dawn nan)
                   </label>
                   <input
@@ -2400,9 +2491,29 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     value={generalCollectorPhone}
                     onChange={(e) => setGeneralCollectorPhone(e.target.value)}
                     placeholder="e.g. 9862xxxxxx"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 h-9"
                   />
                 </div>
+              </div>
+
+              {/* Section / Bial selection */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                  {campaign?.sectionLabel || 'Bial / Unit'}
+                </label>
+                <select
+                  value={generalSection}
+                  onChange={(e) => setGeneralSection(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                >
+                  <option value="">-- {campaign?.sectionLabel || 'Bial / Unit'} Thlang Rawh (Optional) --</option>
+                  {(campaign?.definedSections && campaign.definedSections.length > 0
+                    ? campaign.definedSections
+                    : ['Bial 1 (Vengchhak)', 'Bial 2 (Vengthlang)', 'Bial 3 (Venglai)', 'Bial 4 (Field Veng)', 'General / Khawchhung']
+                  ).map((sec, idx) => (
+                    <option key={idx} value={sec}>{sec}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Direct General Amount & Payment Date Fields */}
@@ -2418,10 +2529,27 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       min={1}
                       required
                       placeholder="e.g. 8450"
-                      value={generalAmount === '' ? (subtotal > 0 ? subtotal : '') : generalAmount}
+                      value={generalAmount === '' ? '' : generalAmount}
                       onChange={(e) => handleGeneralAmountChange(e.target.value)}
                       className="w-full bg-white border-2 border-emerald-300 rounded-xl py-2 pl-7 pr-3 font-black text-sm text-emerald-950 focus:outline-none focus:border-emerald-600 shadow-2xs"
                     />
+                  </div>
+                  {/* Quick amount chips */}
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pt-1.5">
+                    {[500, 1000, 2000, 5000, 10000].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => handleGeneralAmountChange(String(amt))}
+                        className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer shrink-0 ${
+                          generalAmount === amt 
+                            ? 'bg-emerald-600 text-white shadow-xs' 
+                            : 'bg-emerald-100/70 text-emerald-800 hover:bg-emerald-200'
+                        }`}
+                      >
+                        ₹{amt.toLocaleString('en-IN')}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -2494,190 +2622,200 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
               {category === 'kumtluang' 
                 ? (kumtluangDonorType === 'group' 
-                    ? 'Group Sum Thehluhna & Breakdown' 
+                    ? 'Group Sum Thehluh Zat' 
                     : kumtluangDonorType === 'general' 
-                    ? 'Thawhlawm / Sum Thehluhna & Breakdown' 
-                    : 'Kumtluang Sub-Category Breakdown') 
+                    ? 'Thawhlawm / Sum Thehluh Zat' 
+                    : 'Kumtluang Sub-Category Breakdown (Mimal Thilpek)') 
                 : 'Donation Amount (₹)'}
             </h4>
             {category === 'kumtluang' && (
-              <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
-                📅 {periodLabel}
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${
+                kumtluangDonorType === 'group'
+                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                  : kumtluangDonorType === 'general'
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                  : 'text-blue-700 bg-blue-50 border-blue-200'
+              }`}>
+                📅 {kumtluangDonorType === 'member' ? periodLabel : formatDateDDMMYYYY(selectedCustomDate)}
               </span>
             )}
           </div>
 
-          {category === 'kumtluang' && kumtluangDonorType !== 'member' ? (
-            <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-xs font-black text-indigo-950 block">
-                  {kumtluangDonorType === 'group' 
-                    ? `👥 ${groupName ? groupName : 'Group'} Thehluh Zat:` 
-                    : `🏛️ ${generalTitle ? generalTitle : 'Thawhlawm'} Thehluh Zat:`}
-                </span>
-                <span className="text-[10.5px] text-indigo-800 font-medium">
-                  Pek Ni: <b className="font-bold text-indigo-950">{formatDateDDMMYYYY(selectedCustomDate)}</b> ({periodLabel})
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-lg font-black font-mono text-indigo-950 bg-white px-3 py-1 rounded-xl border border-indigo-200 shadow-2xs inline-block">
-                  ₹{subtotal.toLocaleString('en-IN')}
-                </span>
-              </div>
-            </div>
-          ) : category === 'kumtluang' && (
-            <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2.5">
-              <label className="text-[10.5px] font-extrabold text-slate-700 block">
-                Pek Hun / Frequency Thlanna (Monthly / Quarterly / Yearly)
-              </label>
-
-              {/* Frequency Mode Selector Tabs */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/70 rounded-xl text-[11px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setPeriodType('monthly')}
-                  className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
-                    periodType === 'monthly'
-                      ? 'bg-white text-indigo-700 font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Monthly (Thla tin)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriodType('quarterly')}
-                  className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
-                    periodType === 'quarterly'
-                      ? 'bg-white text-indigo-700 font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Quarterly (Thla 3 dan)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriodType('yearly')}
-                  className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
-                    periodType === 'yearly'
-                      ? 'bg-white text-indigo-700 font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Yearly (Kumtluan)
-                </button>
-              </div>
-
-              {/* Specific Period Pickers */}
-              <div className="grid grid-cols-2 gap-2 pt-0.5">
-                {periodType === 'monthly' && (
-                  <div>
-                    <label className="text-[10px] text-slate-500 font-bold block mb-1">Thla (Month)</label>
-                    <select
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
-                    >
-                      {ALL_MONTH_NAMES_FULL.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {periodType === 'quarterly' && (
-                  <div>
-                    <label className="text-[10px] text-slate-500 font-bold block mb-1">Quarter (Thla 3 Huam)</label>
-                    <select
-                      value={selectedQuarter}
-                      onChange={(e) => setSelectedQuarter(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
-                    >
-                      <option value="Q1 (Jan - Mar)">Q1 (January - March)</option>
-                      <option value="Q2 (Apr - Jun)">Q2 (April - June)</option>
-                      <option value="Q3 (Jul - Sep)">Q3 (July - September)</option>
-                      <option value="Q4 (Oct - Dec)">Q4 (October - December)</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className={periodType === 'yearly' ? 'col-span-2' : ''}>
-                  <label className="text-[10px] text-slate-500 font-bold block mb-1">Kum (Year)</label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
-                  >
-                    {getYearOptions(1, 3).map(yr => (
-                      <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
-                    ))}
-                  </select>
+          {category === 'kumtluang' ? (
+            kumtluangDonorType !== 'member' ? (
+              /* GROUP & GENERAL SUMMARY: STRICTLY NO MIMAL BREAKDOWN OR FREQUENCY SELECTORS */
+              <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
+                kumtluangDonorType === 'group'
+                  ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
+                  : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+              }`}>
+                <div>
+                  <span className="text-xs font-black block">
+                    {kumtluangDonorType === 'group' 
+                      ? `👥 ${groupName ? groupName : 'Group'} Thehluh Zat:` 
+                      : `🏛️ ${generalTitle ? generalTitle : 'Thawhlawm'} Thehluh Zat:`}
+                  </span>
+                  <span className="text-[10.5px] opacity-85 font-medium mt-0.5 block">
+                    Pek Ni: <b className="font-bold">{formatDateDDMMYYYY(selectedCustomDate)}</b>
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-black font-mono bg-white px-3.5 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs inline-block">
+                    ₹{subtotal.toLocaleString('en-IN')}
+                  </span>
                 </div>
               </div>
-
-              {/* Date duh tan (Specific Date Picker Option) */}
-              <div className="pt-2 border-t border-blue-100/90 mt-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10.5px] text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={useCustomDate}
-                      onChange={(e) => setUseCustomDate(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                    />
-                    <span>Pek ni bik (Date) thlan duh tan</span>
+            ) : (
+              /* MIMAL (MEMBER ROLL) BREAKDOWN */
+              <div className="space-y-3">
+                <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2.5">
+                  <label className="text-[10.5px] font-extrabold text-slate-700 block">
+                    Pek Hun / Frequency Thlanna (Monthly / Quarterly / Yearly)
                   </label>
-                  {useCustomDate && (
-                    <span className="text-[9.5px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded">
-                      Thla leh Kum a in-sync ang
-                    </span>
-                  )}
-                </div>
 
-                {useCustomDate && (
-                  <div className="mt-2 animate-in fade-in duration-200 space-y-1">
-                    <input
-                      type="date"
-                      value={selectedCustomDate}
-                      onChange={(e) => handleCustomDateChange(e.target.value)}
-                      className="w-full bg-white border border-indigo-200 rounded-xl p-2 text-xs font-bold text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
-                    />
-                    {selectedCustomDate && (
-                      <div className="text-[10px] text-indigo-700 font-semibold flex items-center justify-between px-1">
-                        <span>Ni thlan: <b className="font-bold text-indigo-950">{formatDateDDMMYYYY(selectedCustomDate)}</b></span>
-                        <span className="text-[9px] text-slate-400 font-mono">(DD/MM/YYYY)</span>
+                  {/* Frequency Mode Selector Tabs */}
+                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/70 rounded-xl text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodType('monthly')}
+                      className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
+                        periodType === 'monthly'
+                          ? 'bg-white text-indigo-700 font-black shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Monthly (Thla tin)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodType('quarterly')}
+                      className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
+                        periodType === 'quarterly'
+                          ? 'bg-white text-indigo-700 font-black shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Quarterly (Thla 3 dan)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodType('yearly')}
+                      className={`py-1.5 px-2 rounded-lg transition text-center cursor-pointer ${
+                        periodType === 'yearly'
+                          ? 'bg-white text-indigo-700 font-black shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Yearly (Kumtluan)
+                    </button>
+                  </div>
+
+                  {/* Specific Period Pickers */}
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    {periodType === 'monthly' && (
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Thla (Month)</label>
+                        <select
+                          value={selectedMonth}
+                          onChange={(e) => setSelectedMonth(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                        >
+                          {ALL_MONTH_NAMES_FULL.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {periodType === 'quarterly' && (
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold block mb-1">Quarter (Thla 3 Huam)</label>
+                        <select
+                          value={selectedQuarter}
+                          onChange={(e) => setSelectedQuarter(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                        >
+                          <option value="Q1 (Jan - Mar)">Q1 (January - March)</option>
+                          <option value="Q2 (Apr - Jun)">Q2 (April - June)</option>
+                          <option value="Q3 (Jul - Sep)">Q3 (July - September)</option>
+                          <option value="Q4 (Oct - Dec)">Q4 (October - December)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div className={periodType === 'yearly' ? 'col-span-2' : ''}>
+                      <label className="text-[10px] text-slate-500 font-bold block mb-1">Kum (Year)</label>
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                      >
+                        {getYearOptions(1, 3).map(yr => (
+                          <option key={yr} value={yr}>{yr} {periodType === 'yearly' ? '(Kumtluan)' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Date duh tan (Specific Date Picker Option) */}
+                  <div className="pt-2 border-t border-blue-100/90 mt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10.5px] text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={useCustomDate}
+                          onChange={(e) => setUseCustomDate(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                        />
+                        <span>Pek ni bik (Date) thlan duh tan</span>
+                      </label>
+                      {useCustomDate && (
+                        <span className="text-[9.5px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded">
+                          Thla leh Kum a in-sync ang
+                        </span>
+                      )}
+                    </div>
+
+                    {useCustomDate && (
+                      <div className="mt-2 animate-in fade-in duration-200 space-y-1">
+                        <input
+                          type="date"
+                          value={selectedCustomDate}
+                          onChange={(e) => handleCustomDateChange(e.target.value)}
+                          className="w-full bg-white border border-indigo-200 rounded-xl p-2 text-xs font-bold text-indigo-950 focus:outline-none focus:border-indigo-600 shadow-2xs"
+                        />
+                        {selectedCustomDate && (
+                          <div className="text-[10px] text-indigo-700 font-semibold flex items-center justify-between px-1">
+                            <span>Ni thlan: <b className="font-bold text-indigo-950">{formatDateDDMMYYYY(selectedCustomDate)}</b></span>
+                            <span className="text-[9px] text-slate-400 font-mono">(DD/MM/YYYY)</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                </div>
 
-          {category === 'kumtluang' ? (
-            <div className="space-y-2.5">
-              {kumtluangDonorType !== 'member' && Object.keys(subcatAmounts).length > 1 && (
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Category hrang hranga thendarh duh tan (Optional Sub-Category Breakdown):
+                {/* Sub-Category Amounts (Pathian Ram Zauna, Mission, Building Fund, etc.) */}
+                <div className="space-y-2.5">
+                  {Object.keys(subcatAmounts).map((catName) => (
+                    <div key={catName} className="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                      <span className="text-xs font-bold text-slate-800 flex-1 truncate">{catName}</span>
+                      <div className="flex items-center gap-1 w-28 shrink-0">
+                        <span className="text-xs font-bold text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={subcatAmounts[catName] === 0 ? '' : subcatAmounts[catName]}
+                          onChange={(e) => handleSubcatChange(catName, e.target.value)}
+                          placeholder="0"
+                          className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-black text-right text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-              {Object.keys(subcatAmounts).map((catName) => (
-                <div key={catName} className="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                  <span className="text-xs font-bold text-slate-800 flex-1 truncate">{catName}</span>
-                  <div className="flex items-center gap-1 w-28 shrink-0">
-                    <span className="text-xs font-bold text-slate-400">₹</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={subcatAmounts[catName] === 0 ? '' : subcatAmounts[catName]}
-                      onChange={(e) => handleSubcatChange(catName, e.target.value)}
-                      placeholder="0"
-                      className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-black text-right text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+              </div>
+            )
           ) : (
             <div className="space-y-2.5">
               <div className="relative">
@@ -3056,7 +3194,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isDependent={currentDonorInfo.isDependent}
         isAnonymous={isAnonymous}
         remark={remark.trim() || undefined}
-        subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+        subcatAmounts={category === 'kumtluang' 
+          ? (currentDonorInfo.donorType === 'group'
+              ? { [currentDonorInfo.groupName || 'Group Sum']: subtotal }
+              : currentDonorInfo.donorType === 'general'
+              ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
+              : subcatAmounts)
+          : undefined}
         periodType={category === 'kumtluang' ? periodType : undefined}
         periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
         periodYear={category === 'kumtluang' ? selectedYear : undefined}
@@ -3087,7 +3231,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isDependent={currentDonorInfo.isDependent}
         isAnonymous={isAnonymous}
         remark={remark.trim() || undefined}
-        subcatAmounts={category === 'kumtluang' ? subcatAmounts : undefined}
+        subcatAmounts={category === 'kumtluang' 
+          ? (currentDonorInfo.donorType === 'group'
+              ? { [currentDonorInfo.groupName || 'Group Sum']: subtotal }
+              : currentDonorInfo.donorType === 'general'
+              ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
+              : subcatAmounts)
+          : undefined}
         periodType={category === 'kumtluang' ? periodType : undefined}
         periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
         periodYear={category === 'kumtluang' ? selectedYear : undefined}

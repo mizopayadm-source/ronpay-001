@@ -43,7 +43,8 @@ import {
   Loader2,
   Download,
   Save,
-  Sliders
+  Sliders,
+  Landmark
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner, SectionQuickPreset } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';

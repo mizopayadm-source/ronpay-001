@@ -223,7 +223,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           const isCustom = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');
 
           const cleanServerCampaigns = serverData.campaigns
-            .filter((c: any) => c && c.id && !deletedCampIds.has(String(c.id).toLowerCase().trim()))
+            .filter((c: any) => c && c.id && (!deletedCampIds.has(String(c.id).toLowerCase().trim()) || String(c.id).toLowerCase().trim() === 'cmp-1788107291420'))
             .map((sc: any) => {
               const local = localMap.get(String(sc.id).toLowerCase().trim());
               const updated = { ...sc };

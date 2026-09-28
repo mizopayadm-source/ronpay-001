@@ -347,8 +347,22 @@ export const getStoredCampaigns = (): Campaign[] => {
           .filter((camp: Campaign) => {
             if (!camp || !camp.id) return false;
             const cleanId = String(camp.id).toLowerCase().trim();
-            if (cleanId === 'cmp-kumtluang-ymavt') return false;
-            if (deletedCampIds.has(cleanId)) return false;
+            // BMP Shillong (cmp-1788107291420) is an authoritative permanent kumtluang bawm and must always be retained
+            if (cleanId === 'cmp-1788107291420') return true;
+            const titleLower = String(camp.title || '').toLowerCase();
+            const orgLower = String(camp.orgName || '').toLowerCase();
+            if (
+              cleanId === 'cmp-kumtluang-ymavt' ||
+              cleanId === 'cmp-1790613933759' || 
+              cleanId === 'cmp-1790611183923' || 
+              cleanId === 'cmp-1790611018907' || 
+              cleanId === 'cmp-1790610970360' ||
+              (titleLower.includes('tkp') && titleLower.includes('shillong')) ||
+              (orgLower.includes('tkp') && orgLower.includes('shillong'))
+            ) {
+              return false;
+            }
+            if (deletedCampIds.has(cleanId) && cleanId !== 'cmp-1788107291420') return false;
             // Canonical campaigns are always preserved
             if (canonicalCampIds.has(cleanId)) return true;
             // Preserve valid user-created campaigns
@@ -363,21 +377,20 @@ export const getStoredCampaigns = (): Campaign[] => {
               const derived = initialMatch?.orgCode || derivePrefixFromText(updated.orgName || updated.title);
               updated.orgCode = derived;
             }
+            if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
+              updated.category = 'kumtluang';
+              if (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0) {
+                updated.subCategories = ['BMP Fund'];
+              }
+              if (!updated.imageUrl) {
+                updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
+              }
+            }
             if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
               updated.category = 'kumtluang';
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
-              }
-            }
-            if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
-              updated.category = 'kumtluang';
-              if (!Array.isArray(updated.subCategories) || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
-                updated.subCategories = ['BMP Fund'];
-              }
-              // If previously contaminated with synthetic svg data URI or broken unsplash URL, restore to clean default
-              if (!updated.imageUrl || updated.imageUrl.startsWith('data:image/svg+xml') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
-                updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
               }
             }
             if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {

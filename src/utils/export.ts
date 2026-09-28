@@ -8,6 +8,9 @@ export interface MatrixRow {
   categoryAmounts: { [category: string]: number };
   total: number;
   isAnonymous?: boolean;
+  donorType?: 'member' | 'group' | 'general';
+  groupName?: string;
+  section?: string;
   paymentMethods: ('online' | 'cash')[];
   paymentMethodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH';
   remarks?: string[];
@@ -20,6 +23,12 @@ export interface KumtluangMatrixData {
   grandTotal: number;
   onlineTotal: number;
   cashTotal: number;
+  memberRows: MatrixRow[];
+  groupRows: MatrixRow[];
+  generalRows: MatrixRow[];
+  memberTotal: number;
+  groupTotal: number;
+  generalTotal: number;
 }
 
 export const ALL_MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
@@ -249,6 +258,9 @@ export const buildKumtluangMatrix = (
   const donorMap = new Map<string, { [cat: string]: number }>();
   const donorPaymentMethods = new Map<string, Set<'online' | 'cash'>>();
   const donorRemarks = new Map<string, string[]>();
+  const donorTypeMap = new Map<string, 'member' | 'group' | 'general'>();
+  const donorGroupNameMap = new Map<string, string>();
+  const donorSectionMap = new Map<string, string>();
 
   let onlineTotal = 0;
   let cashTotal = 0;
@@ -269,17 +281,24 @@ export const buildKumtluangMatrix = (
   transactions.forEach(t => {
     let donor = t.isAnonymous ? 'Anonymous' : (t.donorName || 'Unknown Donor');
 
-    // 1. Strict memberId lookup (e.g. BMPSHL-1739 -> Upa Thawngphena Tuallawt)
-    if (!t.isAnonymous && t.memberId) {
+    // Determine donor type (strictly isolate Member vs Group vs General)
+    const resolvedType: 'member' | 'group' | 'general' = 
+      t.donorType === 'group' || (t.groupName && t.groupName.trim().length > 0)
+        ? 'group'
+        : t.donorType === 'general'
+        ? 'general'
+        : 'member';
+
+    // 1. Strict memberId lookup (e.g. BMPSHL-1739 -> Upa Thawngphena Tuallawt) - Only for member type!
+    if (!t.isAnonymous && t.memberId && resolvedType === 'member') {
       const canonicalName = memberNameMap.get(t.memberId.toLowerCase().trim());
       if (canonicalName) {
         donor = canonicalName;
       }
     }
 
-    // 2. Fuzzy / Partial Name Security Guard: If donorName is a partial/short form of a registered member
-    // (e.g. 'Upa Thawngphena' when registered member is 'Upa Thawngphena Tuallawt')
-    if (!t.isAnonymous && donor !== 'Unknown Donor') {
+    // 2. Fuzzy / Partial Name Security Guard: only for member type
+    if (!t.isAnonymous && donor !== 'Unknown Donor' && resolvedType === 'member') {
       const donorNorm = donor.toLowerCase().trim();
       for (const canonical of registeredMemberNames) {
         const canNorm = canonical.toLowerCase().trim();
@@ -292,6 +311,16 @@ export const buildKumtluangMatrix = (
           break;
         }
       }
+    }
+
+    if (!donorTypeMap.has(donor)) {
+      donorTypeMap.set(donor, resolvedType);
+    }
+    if (t.groupName && !donorGroupNameMap.has(donor)) {
+      donorGroupNameMap.set(donor, t.groupName);
+    }
+    if (t.donorVeng && !donorSectionMap.has(donor)) {
+      donorSectionMap.set(donor, t.donorVeng);
     }
 
     const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
@@ -416,10 +445,15 @@ export const buildKumtluangMatrix = (
 
     const remarksList = donorRemarks.get(donorName);
 
+    const dType = donorTypeMap.get(donorName) || 'member';
+
     rows.push({
       donorName,
       categoryAmounts: cleanCatAmounts,
       total: rowTotal,
+      donorType: dType,
+      groupName: donorGroupNameMap.get(donorName),
+      section: donorSectionMap.get(donorName),
       paymentMethods: methodsArr,
       paymentMethodLabel: methodLabel,
       remarks: remarksList && remarksList.length > 0 ? remarksList : undefined,
@@ -435,6 +469,14 @@ export const buildKumtluangMatrix = (
     rows.sort((a, b) => b.total - a.total);
   }
 
+  // Pre-calculate segregated sub-collections so Mimal, Group, and General are strictly isolated
+  const memberRows = rows.filter(r => r.donorType === 'member');
+  const groupRows = rows.filter(r => r.donorType === 'group');
+  const generalRows = rows.filter(r => r.donorType === 'general');
+  const memberTotal = memberRows.reduce((s, r) => s + r.total, 0);
+  const groupTotal = groupRows.reduce((s, r) => s + r.total, 0);
+  const generalTotal = generalRows.reduce((s, r) => s + r.total, 0);
+
   return {
     categories,
     rows,
@@ -442,6 +484,12 @@ export const buildKumtluangMatrix = (
     grandTotal,
     onlineTotal,
     cashTotal,
+    memberRows,
+    groupRows,
+    generalRows,
+    memberTotal,
+    groupTotal,
+    generalTotal,
   };
 };
 
@@ -1653,6 +1701,11 @@ export const printTransactionsPDF = (
 export const isTransactionForMember = (t: Transaction, member: MemberRecord): boolean => {
   if (!t || !member) return false;
 
+  // Strict Isolation: Group and General transactions NEVER match individual members
+  if (t.donorType === 'group' || t.donorType === 'general' || (t.groupName && t.groupName.trim().length > 0)) {
+    return false;
+  }
+
   // Strict Org / Campaign Guard: Prevent cross-campaign contamination (e.g. EBE vs KTL)
   if (t.memberId && member.orgCode) {
     const tPrefix = t.memberId.split('-')[0].toUpperCase();
@@ -1780,13 +1833,16 @@ export const generateMasterLedgerPrintHtml = (
     sortedMembers.sort((a, b) => (a.section || '').localeCompare(b.section || '') || (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }
 
+  // 1b. Strict Isolation: Member Ledger only processes transactions belonging to individual members (never groups or general offerings)
+  const memberOnlyTransactions = transactions.filter(t => t.donorType !== 'group' && t.donorType !== 'general' && (!t.groupName || t.groupName.trim().length === 0));
+
   // 2. Strict 1-to-1 transaction allocation across members to eliminate ANY duplicate counting
   const memberTxnsMap = new Map<string, Transaction[]>();
   sortedMembers.forEach(m => memberTxnsMap.set(m.id, []));
   const assignedTxIds = new Set<string>();
 
   // Pass 1: Exact memberId match (Strict & unambiguous)
-  for (const t of transactions) {
+  for (const t of memberOnlyTransactions) {
     if (t.memberId) {
       const mem = sortedMembers.find(m => m.id && m.id.toLowerCase().trim() === t.memberId!.toLowerCase().trim());
       if (mem) {
@@ -1797,7 +1853,7 @@ export const generateMasterLedgerPrintHtml = (
   }
 
   // Pass 2: Remark contains exact member.id
-  for (const t of transactions) {
+  for (const t of memberOnlyTransactions) {
     if (assignedTxIds.has(t.id)) continue;
     if (t.remark) {
       const mem = sortedMembers.find(m => m.id && t.remark!.toLowerCase().includes(m.id.toLowerCase().trim()));
@@ -1809,7 +1865,7 @@ export const generateMasterLedgerPrintHtml = (
   }
 
   // Pass 3: Phone number match
-  for (const t of transactions) {
+  for (const t of memberOnlyTransactions) {
     if (assignedTxIds.has(t.id)) continue;
     if (t.donorPhone) {
       const cleanP = t.donorPhone.replace(/\D/g, '');
@@ -1827,7 +1883,7 @@ export const generateMasterLedgerPrintHtml = (
   }
 
   // Pass 4: Exact donorName match (case-insensitive)
-  for (const t of transactions) {
+  for (const t of memberOnlyTransactions) {
     if (assignedTxIds.has(t.id)) continue;
     if (t.donorName && !t.isAnonymous && t.donorName.toLowerCase().trim() !== 'anonymous') {
       const tClean = t.donorName.trim().toLowerCase();
@@ -1840,7 +1896,7 @@ export const generateMasterLedgerPrintHtml = (
   }
 
   // Pass 5: Normalized alphanumeric name match
-  for (const t of transactions) {
+  for (const t of memberOnlyTransactions) {
     if (assignedTxIds.has(t.id)) continue;
     if (t.donorName && !t.isAnonymous && t.donorName.toLowerCase().trim() !== 'anonymous') {
       const tNorm = t.donorName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1868,7 +1924,7 @@ export const generateMasterLedgerPrintHtml = (
   }
 
   // Remaining transactions are unmatched (Direct / Guest / Anonymous)
-  const unmatchedTxns = transactions.filter(t => !assignedTxIds.has(t.id));
+  const unmatchedTxns = memberOnlyTransactions.filter(t => !assignedTxIds.has(t.id));
 
   const rowsHtml = sortedMembers.map((member, idx) => {
     const memberTxns = memberTxnsMap.get(member.id) || [];
