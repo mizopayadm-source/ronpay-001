@@ -35,6 +35,7 @@ export const CampaignTransferModal: React.FC<CampaignTransferModalProps> = ({
   const [newUpiId, setNewUpiId] = useState('');
   const [transferReason, setTransferReason] = useState('Term inthlak / Annual Office Bearer Handover');
   const [acknowledged, setAcknowledged] = useState(false);
+  const [keepOldOfficerAsCoOfficer, setKeepOldOfficerAsCoOfficer] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -71,6 +72,18 @@ export const CampaignTransferModal: React.FC<CampaignTransferModalProps> = ({
 
     try {
       const now = new Date().toISOString();
+      const existingAuthorized = campaign.authorizedOfficers || [];
+      const updatedAuthorized = keepOldOfficerAsCoOfficer
+        ? [
+            ...existingAuthorized.filter(o => o.phone.replace(/\D/g, '').slice(-10) !== currentCreatorPhone.replace(/\D/g, '').slice(-10)),
+            {
+              name: currentCreatorName,
+              phone: currentCreatorPhone,
+              role: 'Outgoing Officer / Co-Manager'
+            }
+          ]
+        : existingAuthorized;
+
       const updatedCampaign: Campaign = {
         ...campaign,
         createdBy: cleanPhone,
@@ -79,6 +92,7 @@ export const CampaignTransferModal: React.FC<CampaignTransferModalProps> = ({
         contactPhone: cleanPhone,
         upiId: cleanUpi || campaign.upiId,
         targetUpiId: cleanUpi || campaign.targetUpiId || campaign.upiId,
+        authorizedOfficers: updatedAuthorized,
         transferredAt: now,
         transferredFrom: currentCreatorPhone,
         transferredTo: cleanPhone,
@@ -113,10 +127,24 @@ export const CampaignTransferModal: React.FC<CampaignTransferModalProps> = ({
           upiId: cleanUpi || campaign.upiId,
           targetUpiId: cleanUpi || campaign.targetUpiId,
           isVerified: true,
+          isApproved: true,
           status: 'approved',
+          approvedCategories: [campaign.category],
           createdAt: now
         };
         saveStoredCreatorsList([newCreatorRecord, ...creators]);
+      } else {
+        const updatedCreators = creators.map(c => {
+          if (c.phone && c.phone.replace(/\D/g, '').slice(-10) === cleanPhone.slice(-10)) {
+            const currentApproved = c.approvedCategories || [];
+            return {
+              ...c,
+              approvedCategories: Array.from(new Set([...currentApproved, campaign.category]))
+            };
+          }
+          return c;
+        });
+        saveStoredCreatorsList(updatedCreators);
       }
 
       // 3. Record Audit Log for governance and transparency
@@ -280,6 +308,17 @@ export const CampaignTransferModal: React.FC<CampaignTransferModalProps> = ({
                 He Bawm hi a chunga mi hnenah hian hlan a nih hnuah chuan amah hian <strong>Bawm enkawl theihna (Member roll, Report leh Cash entry)</strong> a nei tawh ang a, i phone number atangin enkawl theihna chu thar hnenah a in-transfer ang.
               </p>
             </div>
+            <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={keepOldOfficerAsCoOfficer}
+                onChange={(e) => setKeepOldOfficerAsCoOfficer(e.target.checked)}
+                className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className="font-bold text-[11px] text-slate-800">
+                Enkawltu hlui hi Co-Officer / Assistant-ah la dah ve rawh (Transition period support)
+              </span>
+            </label>
             <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 cursor-pointer">
               <input
                 type="checkbox"

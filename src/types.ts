@@ -178,16 +178,22 @@ export interface CategoryRequest {
 }
 
 export interface CreatorProfile {
+  id?: string;
   phone: string;
   name: string;
   designation?: string;
   orgName?: string;
   location?: string;
   upiId?: string;
+  targetUpiId?: string;
+  category?: BawmCategory;
   role?: string;
+  status?: string;
   isApproved?: boolean;
   isAdmin?: boolean;
   isPhoneVerified?: boolean;
+  isVerified?: boolean;
+  createdAt?: string;
   plan?: 'trial' | 'standard' | 'premium' | 'kumtluang' | string;
   subscriptionPlan?: string;
   subscriptionExpiresAt?: string;
@@ -425,6 +431,16 @@ export interface MemberRecord {
   status?: 'paid' | 'pending' | 'partial';
   enrollmentYear?: number | string;
   activeYears?: string[];
+  isDeactivated?: boolean;
+  deactivatedReason?: string;
+  deactivatedAt?: string;
+  yearStatus?: Record<string, {
+    status: 'active' | 'transferred_out' | 'deceased' | 'inactive';
+    reason?: string;
+    section?: string;
+    pledgeAmount?: number;
+    updatedAt?: string;
+  }>;
 }
 
 export interface WalletTransaction {

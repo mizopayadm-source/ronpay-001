@@ -27,10 +27,15 @@ import {
   DollarSign,
   ShieldAlert,
   UserCheck,
-  Lock
+  Lock,
+  ArrowRightLeft,
+  UserMinus,
+  RefreshCw,
+  History,
+  CalendarDays
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
 import { getUserRole } from '../utils/rbac';
 import { 
@@ -50,7 +55,16 @@ import {
 import { compressImageFile } from '../utils/imageCompressor';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
 import { KumtluangExcelImportModal } from './KumtluangExcelImportModal';
+import { CampaignTransferModal } from './CampaignTransferModal';
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
+import {
+  isMemberActiveInYear,
+  getMemberActiveYears,
+  getMemberYearStatusInfo,
+  rolloverMembersToNewYear,
+  updateMemberYearStatus,
+  getAvailableRollYears
+} from '../utils/memberYearRoll';
 
 // Helper to check if a campaign was strictly created by this creator (strict ownership, no cross-creator leakage)
 const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null): boolean => {
@@ -238,6 +252,24 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [depRelInput, setDepRelInput] = useState<string>('Fa');
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [regRollYear, setRegRollYear] = useState<string>(() => getCurrentYearString());
+
+  // SECY / Creator Campaign Handover State
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
+  const [transferSuccessInfo, setTransferSuccessInfo] = useState<{ title: string; newOfficer: string; phone: string } | null>(null);
+
+  // Year-wise Member Roll (Kum bi Roll) State
+  const [selectedRollYear, setSelectedRollYear] = useState<string>(() => getCurrentYearString());
+  const [rollStatusFilter, setRollStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [isRolloverModalOpen, setIsRolloverModalOpen] = useState<boolean>(false);
+  const [rolloverSourceYear, setRolloverSourceYear] = useState<string>(() => String(Number(getCurrentYearString()) - 1));
+  const [rolloverTargetYear, setRolloverTargetYear] = useState<string>(() => getCurrentYearString());
+  const [rolloverSuccessMsg, setRolloverSuccessMsg] = useState<string | null>(null);
+
+  // Year Deactivation / Removal Dialog State
+  const [deactivateTargetMember, setDeactivateTargetMember] = useState<MemberRecord | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState<'transferred_out' | 'deceased' | 'inactive'>('transferred_out');
+  const [deactivateNote, setDeactivateNote] = useState<string>('');
 
   // Editing Member State
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
@@ -589,6 +621,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       relation: dep.relation
     }));
 
+    const rollYearToEnroll = regRollYear || selectedRollYear || getCurrentYearString();
     const newM: MemberRecord = {
       id: generatedId,
       campaignId: targetCamp?.id || 'cmp-kumtluang-1',
@@ -601,6 +634,16 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       avatarUrl: newAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: formattedDependents,
+      enrollmentYear: rollYearToEnroll,
+      activeYears: [rollYearToEnroll],
+      yearStatus: {
+        [rollYearToEnroll]: {
+          status: 'active',
+          reason: 'Initial registration / In-chhiar thar',
+          section: newSection.trim() || undefined,
+          updatedAt: new Date().toISOString()
+        }
+      },
       createdAt: new Date().toISOString()
     };
 
@@ -691,6 +734,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
 
     const updatedM: MemberRecord = {
+      ...editingMember,
       id: newId,
       campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
       name: editName.trim() || editingMember.name,
@@ -702,7 +746,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       avatarUrl: editAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: updatedDeps,
-      createdAt: editingMember.createdAt
+      createdAt: editingMember.createdAt,
+      enrollmentYear: editingMember.enrollmentYear || selectedRollYear,
+      activeYears: editingMember.activeYears && editingMember.activeYears.length > 0 ? editingMember.activeYears : [selectedRollYear],
+      yearStatus: editingMember.yearStatus
     };
 
     addOrUpdateMember(updatedM);
@@ -716,9 +763,70 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     alert(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
   };
 
+  // Rollover members from previous year to new year (Annual Roll Rollover)
+  const handleExecuteRollover = () => {
+    if (rolloverSourceYear === rolloverTargetYear) {
+      alert('Kum hmasa (Source) leh Kum thar (Target) a inang thei lo.');
+      return;
+    }
+
+    const allCurrent = getMembers();
+    const { updatedMembers, rolledOverCount } = rolloverMembersToNewYear(
+      allCurrent,
+      rolloverSourceYear,
+      rolloverTargetYear,
+      selectedCampaignId === 'all' ? undefined : selectedCampaignId
+    );
+
+    saveMembers(updatedMembers);
+    const refreshed = getScopedMembersForView(selectedCampaignId);
+    setMembers(refreshed);
+    setSelectedRollYear(rolloverTargetYear);
+    setRollStatusFilter('active');
+    setRolloverSuccessMsg(`✅ Member ${rolledOverCount}-te chu Kum ${rolloverTargetYear} Roll-ah hlawhtling takin chhawm luh an ni ta!`);
+    onDataUpdated();
+    setTimeout(() => {
+      setIsRolloverModalOpen(false);
+      setRolloverSuccessMsg(null);
+    }, 2000);
+  };
+
+  // Deactivate member for a specific year (Pem chhuak / Boral / Inactive - keeps past years safe!)
+  const handleDeactivateMemberForYear = () => {
+    if (!deactivateTargetMember) return;
+    const reasonText = deactivateNote.trim() || 
+      (deactivateReason === 'transferred_out' ? 'Pem chhuak' : deactivateReason === 'deceased' ? 'Boral' : 'Chawl lailawk');
+    const updated = updateMemberYearStatus(
+      deactivateTargetMember,
+      selectedRollYear,
+      deactivateReason,
+      reasonText
+    );
+    addOrUpdateMember(updated);
+    const refreshed = getScopedMembersForView(selectedCampaignId);
+    setMembers(refreshed);
+    setDeactivateTargetMember(null);
+    setDeactivateNote('');
+    onDataUpdated();
+  };
+
+  // Re-activate member in roll for specific year
+  const handleReactivateMemberForYear = (m: MemberRecord) => {
+    const updated = updateMemberYearStatus(
+      m,
+      selectedRollYear,
+      'active',
+      `Kum ${selectedRollYear} Roll-ah in-chhiar leh`
+    );
+    addOrUpdateMember(updated);
+    const refreshed = getScopedMembersForView(selectedCampaignId);
+    setMembers(refreshed);
+    onDataUpdated();
+  };
+
   // Delete Member
   const handleDeleteMember = (memberId: string, memberName: string) => {
-    if (window.confirm(`Member "${memberName}" (${memberId}) hi paih (delete) i chiang em?`)) {
+    if (window.confirm(`Member "${memberName}" (${memberId}) hi hlumhlut takin paih (delete permanently) i chiang em?`)) {
       deleteMember(memberId, selectedCampaignId);
       const updated = getMembers(selectedCampaignId);
       setMembers(updated);
@@ -743,10 +851,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     return counts;
   }, [allowedCampaigns, getScopedMembersForView, members, isOpen]);
 
-  // Filtered members for Member Roll Table
+  // Filtered members for Member Roll Table with Year-wise and Status filtering
   const filteredTableMembers = useMemo(() => {
     return members.filter(m => {
       if (!m) return false;
+
+      // Year & Active Status filtering
+      if (selectedRollYear !== 'all') {
+        const isActiveThisYear = isMemberActiveInYear(m, selectedRollYear);
+        if (rollStatusFilter === 'active' && !isActiveThisYear) return false;
+        if (rollStatusFilter === 'inactive' && isActiveThisYear) return false;
+      }
+
       if (!dirSearch.trim()) return true;
       const q = dirSearch.toLowerCase().trim();
       const matchName = m.name ? m.name.toLowerCase().includes(q) : false;
@@ -756,7 +872,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       const matchDep = m.dependents ? m.dependents.some(d => (d.name && d.name.toLowerCase().includes(q)) || (d.subId && d.subId.toLowerCase().includes(q))) : false;
       return matchName || matchId || matchPhone || matchSec || matchDep;
     });
-  }, [members, dirSearch]);
+  }, [members, dirSearch, selectedRollYear, rollStatusFilter]);
+
+  const rollYearActiveCount = useMemo(() => {
+    if (selectedRollYear === 'all') return members.length;
+    return members.filter(m => isMemberActiveInYear(m, selectedRollYear)).length;
+  }, [members, selectedRollYear]);
+
+  const rollYearInactiveCount = useMemo(() => {
+    if (selectedRollYear === 'all') return 0;
+    return members.filter(m => !isMemberActiveInYear(m, selectedRollYear)).length;
+  }, [members, selectedRollYear]);
+
+  const availableRollYearsList = useMemo(() => {
+    return getAvailableRollYears(members);
+  }, [members]);
 
   // Target campaign for Print Tab
   const printTargetCampaign = printOrgScope !== 'all' 
@@ -932,8 +1062,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             </div>
           </div>
           
-          <div className="flex-1 max-w-md w-full">
-            <div className="relative">
+          <div className="flex items-center gap-2 max-w-lg w-full">
+            <div className="relative flex-1">
               <select
                 id="active-bawm-dropdown"
                 value={selectedCampaignId}
@@ -966,8 +1096,41 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 <ChevronDown className="w-4 h-4" />
               </div>
             </div>
+
+            {/* SECY / Creator Handover Button */}
+            {activeScopedCampaign && (
+              <button
+                type="button"
+                id="btn-kumtluang-transfer"
+                onClick={() => setIsTransferModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+                title="Creator / SECY nihna mi thar hnenah hlan chhawng rawh (Annual Office Bearer Handover)"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">SECY Handover</span>
+                <span className="sm:hidden">Handover</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Official Transfer Success Alert */}
+        {transferSuccessInfo && (
+          <div className="bg-emerald-600 text-white p-2.5 px-4 sm:px-6 flex items-center justify-between text-xs font-bold animate-fadeIn shrink-0 shadow-inner">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-200" />
+              <span>
+                ✅ <strong>{transferSuccessInfo.title}</strong> enkawlna chu <strong>{transferSuccessInfo.newOfficer}</strong> (Phone: {transferSuccessInfo.phone}) hnenah hlawhtling taka hlan a ni ta!
+              </span>
+            </div>
+            <button
+              onClick={() => setTransferSuccessInfo(null)}
+              className="p-1 hover:bg-emerald-700 rounded-lg text-emerald-200 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-1.5 sm:gap-2 pt-2 overflow-x-auto shrink-0 no-scrollbar">
@@ -1449,23 +1612,43 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </p>
                 </div>
 
-                {/* Target Bawm Selector */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Select Target QR / Bawm (He Member hi eng Bawm-ah nge enroll dawn?): <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={regTargetCampaignId}
-                    onChange={(e) => setRegTargetCampaignId(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    required
-                  >
-                    {allowedCampaigns.map(c => (
-                      <option key={c.id} value={c.id}>
-                        🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
-                      </option>
-                    ))}
-                  </select>
+                {/* Target Bawm & Roll Year Selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Select Target QR / Bawm: <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={regTargetCampaignId}
+                      onChange={(e) => setRegTargetCampaignId(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      required
+                    >
+                      {allowedCampaigns.map(c => (
+                        <option key={c.id} value={c.id}>
+                          🏛️ {c.orgName || c.title} [Prefix: {c.orgCode || 'QR'}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      📅 Kum bi (Roll Year): <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={regRollYear}
+                      onChange={(e) => setRegRollYear(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      required
+                    >
+                      {availableRollYearsList.map(yr => (
+                        <option key={yr} value={yr}>
+                          Kum {yr} {yr === getCurrentYearString() ? '(Current)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2240,6 +2423,95 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </div>
                 </div>
 
+                {/* Year-wise Member Roll (Kum bi) Control Bar */}
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 sm:p-3.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm border border-indigo-800/60">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <CalendarDays className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-black tracking-wider text-indigo-300 block">
+                          Kum bi (Roll Year):
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={selectedRollYear}
+                            onChange={(e) => setSelectedRollYear(e.target.value)}
+                            className="bg-indigo-900/90 border border-indigo-400 text-white font-black text-xs px-2.5 py-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
+                          >
+                            {availableRollYearsList.map(yr => (
+                              <option key={yr} value={yr} className="bg-slate-900 text-white">
+                                Kum {yr} {yr === getCurrentYearString() ? '(Live Roll)' : ''}
+                              </option>
+                            ))}
+                            <option value="all" className="bg-slate-900 text-white">
+                              🌐 Kum zawng zawng (All Years)
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Tabs: Active vs Inactive */}
+                    {selectedRollYear !== 'all' && (
+                      <div className="flex items-center bg-indigo-900/80 p-0.5 sm:p-1 rounded-xl border border-indigo-800 text-[11px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setRollStatusFilter('active')}
+                          className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                            rollStatusFilter === 'active'
+                              ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
+                              : 'text-indigo-200 hover:text-white'
+                          }`}
+                        >
+                          Active ({rollYearActiveCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRollStatusFilter('inactive')}
+                          className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                            rollStatusFilter === 'inactive'
+                              ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                              : 'text-indigo-200 hover:text-white'
+                          }`}
+                        >
+                          Pem / Inactive ({rollYearInactiveCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRollStatusFilter('all')}
+                          className={`px-2 py-1 rounded-lg transition cursor-pointer ${
+                            rollStatusFilter === 'all'
+                              ? 'bg-white text-indigo-950 font-black shadow-xs'
+                              : 'text-indigo-200 hover:text-white'
+                          }`}
+                        >
+                          All ({members.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rollover / Annual Copy Button */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      id="btn-open-year-rollover"
+                      onClick={() => {
+                        setRolloverTargetYear(selectedRollYear === 'all' ? getCurrentYearString() : selectedRollYear);
+                        setRolloverSourceYear(String(Number(selectedRollYear === 'all' ? getCurrentYearString() : selectedRollYear) - 1));
+                        setIsRolloverModalOpen(true);
+                      }}
+                      className="w-full md:w-auto px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Kum hmasa a mi kum tharah chhawm rawh (Rollover / Copy forward)"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Kum Thar Roll Siamna (Rollover)</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Search Bar and Action Counter */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="relative w-full sm:w-80">
@@ -2310,6 +2582,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               <div className="block md:hidden space-y-3">
                 {filteredTableMembers.map(m => {
                   const memberCamp = campaigns.find(c => c.id === m.campaignId);
+                  const yearInfo = getMemberYearStatusInfo(m, selectedRollYear);
                   return (
                     <div key={m.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3">
                       <div className="flex items-start justify-between gap-2">
@@ -2330,6 +2603,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                               <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
                                 {m.id}
                               </span>
+                              {selectedRollYear !== 'all' && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${yearInfo.badgeClass}`}>
+                                  {yearInfo.label}
+                                </span>
+                              )}
                               {m.section && (
                                 <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
                                   {m.section}
@@ -2367,7 +2645,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         </div>
                       )}
 
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
                         <button
                           type="button"
                           onClick={() => {
@@ -2386,10 +2664,34 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>Edit</span>
                         </button>
+                        {selectedRollYear !== 'all' && (
+                          yearInfo.status === 'active' ? (
+                            <button
+                              type="button"
+                              onClick={() => setDeactivateTargetMember(m)}
+                              className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1"
+                              title={`Kum ${selectedRollYear} Roll atanga Hlih / Pem`}
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                              <span>Hlih</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleReactivateMemberForYear(m)}
+                              className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1"
+                              title={`Kum ${selectedRollYear} Roll-ah in-chhiar leh rawh`}
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>In-chhiar leh</span>
+                            </button>
+                          )
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDeleteMember(m.id, m.name)}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                          title="Hlumhlut takin paih"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -2418,12 +2720,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {filteredTableMembers.map(m => {
                         const memberCamp = campaigns.find(c => c.id === m.campaignId);
+                        const yearInfo = getMemberYearStatusInfo(m, selectedRollYear);
                         return (
                           <tr key={m.id} className="hover:bg-indigo-50/40 transition-colors">
-                            <td className="p-3 font-mono font-black text-indigo-700">
-                              <span className="bg-indigo-50 px-2 py-1 rounded-md border border-indigo-200/80">
-                                {m.id}
-                              </span>
+                            <td className="p-3">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-200/80">
+                                  {m.id}
+                                </span>
+                                {selectedRollYear !== 'all' && (
+                                  <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${yearInfo.badgeClass}`}>
+                                    {yearInfo.label}
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {selectedCampaignId === 'all' && (
@@ -2494,11 +2804,33 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
+                                {selectedRollYear !== 'all' && (
+                                  yearInfo.status === 'active' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeactivateTargetMember(m)}
+                                      className="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                      title={`Kum ${selectedRollYear} Roll atanga Hlih / Pem`}
+                                    >
+                                      <UserMinus className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReactivateMemberForYear(m)}
+                                      className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg font-bold text-[10px] transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                      title={`Kum ${selectedRollYear} Roll-ah in-chhiar leh rawh`}
+                                    >
+                                      <UserCheck className="w-3 h-3" />
+                                      <span>In-chhiar leh</span>
+                                    </button>
+                                  )
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteMember(m.id, m.name)}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                  title="Delete Member"
+                                  title="Delete Member Permanently"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -2834,6 +3166,238 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           </div>
         </div>
       )}
+
+      {/* Annual Roll Rollover Modal (Kum Thar Roll Siamna) */}
+      {isRolloverModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-slate-200 shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base leading-tight">
+                    Kum Thar Member Roll Siamna
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Kum hmasa roll a mi kum thar roll-ah chhawmna (Annual Roll Rollover)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRolloverModalOpen(false);
+                  setRolloverSuccessMsg(null);
+                }}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {rolloverSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{rolloverSuccessMsg}</span>
+              </div>
+            )}
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10.5px] font-bold text-slate-500">Target Bawm:</span>
+                <span className="font-black text-slate-800 truncate">
+                  {selectedCampaignId === 'all' ? '🌐 All Lists (Consolidated)' : (activeScopedCampaign?.orgName || activeScopedCampaign?.title || 'Selected Bawm')}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Kohhran / Pawl-ah kum tin in-chhiar thar a awm thin a. Kum hmasa a member active zawng zawngte hi kum tharah hian chhawm luh vek an ni ang a, chumi hnuah kum thar atang hian an chanchin i <strong>edit / add / remove</strong> thei ang.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  1. Kum Hmasa (Source Year):
+                </label>
+                <select
+                  value={rolloverSourceYear}
+                  onChange={(e) => setRolloverSourceYear(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  {availableRollYearsList.map(yr => (
+                    <option key={yr} value={yr}>Kum {yr}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                  2. Kum Thar Tur (Target Year):
+                </label>
+                <select
+                  value={rolloverTargetYear}
+                  onChange={(e) => setRolloverTargetYear(e.target.value)}
+                  className="w-full p-2.5 bg-white border-2 border-indigo-500 rounded-xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  {availableRollYearsList.map(yr => (
+                    <option key={yr} value={yr}>Kum {yr}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-200 text-xs space-y-1.5">
+              <span className="font-bold text-indigo-950 flex items-center gap-1.5 text-[11px]">
+                <ShieldAlert className="w-3.5 h-3.5 text-indigo-600" />
+                Historical Record Him Tlatna:
+              </span>
+              <p className="text-[10.5px] text-indigo-800 leading-snug">
+                Kum {rolloverSourceYear}-a member-te sum thawh tawh leh Passbook records zawng zawng a bo lo vang. Kum {rolloverTargetYear} atan roll thar a in-hawng chauh dawn a ni.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsRolloverModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteRollover}
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Kum {rolloverTargetYear} Roll-ah Chhawm Rawh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivate Member for Year Modal (Pem / Boral / Inactive) */}
+      {deactivateTargetMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 border border-slate-200 shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <UserMinus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base leading-tight">
+                    Member Roll atanga Hlihna
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Kum {selectedRollYear} Roll atanga lakchhuahna
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeactivateTargetMember(null)}
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Member:</span>
+                <span className="font-bold text-slate-900">{deactivateTargetMember.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Member ID:</span>
+                <span className="font-mono font-bold text-indigo-700">{deactivateTargetMember.id}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Roll Year:</span>
+                <span className="font-bold text-amber-700">Kum {selectedRollYear}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Hlih / Paih duh chhan thlang rawh: <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={deactivateReason}
+                  onChange={(e) => setDeactivateReason(e.target.value as any)}
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="transferred_out">Pem Chhuak (Veng / Kohhran dangah an in-sawn)</option>
+                  <option value="deceased">Boral (Mitthi / Chhiatna)</option>
+                  <option value="inactive">Chawl Lailawk (Kum {selectedRollYear} roll-ah telh loh)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Chhinchhiahna / Remark (Optional):
+                </label>
+                <input
+                  type="text"
+                  value={deactivateNote}
+                  onChange={(e) => setDeactivateNote(e.target.value)}
+                  placeholder="e.g. Mission Veng-ah an pem chhuak ta e"
+                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-emerald-800">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Past Records Retained:
+                </span>
+                <p>
+                  He member hi Kum {selectedRollYear} Roll atang chauhvin hlih a ni ang a. Kum hmasa a a thawh tawh leh Passbook records te chu a him reng ang.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeactivateTargetMember(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeactivateMemberForYear}
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95"
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                <span>Kum {selectedRollYear} Roll atangin Hlih Rawh</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Campaign Transfer Modal (SECY / Creator Handover) */}
+      <CampaignTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        campaign={activeScopedCampaign}
+        currentCreator={creatorProfile || null}
+        onTransferred={(updatedCampaign) => {
+          setIsTransferModalOpen(false);
+          setTransferSuccessInfo({
+            title: updatedCampaign.title,
+            newOfficer: updatedCampaign.creatorName || updatedCampaign.contactPerson || 'New Officer',
+            phone: updatedCampaign.contactPhone || updatedCampaign.createdBy || ''
+          });
+          onDataUpdated();
+        }}
+      />
 
       {/* Excel / CSV Bulk Importer Modal */}
       <KumtluangExcelImportModal
