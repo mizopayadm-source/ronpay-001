@@ -4124,6 +4124,20 @@ function getDefaultDatabase(): DatabaseSchema {
 function autoHealDatabase(db: DatabaseSchema): boolean {
   let changed = false;
 
+  // 0. Filter out invalid/corrupted transactions with absurd amounts
+  if (Array.isArray(db.transactions)) {
+    const origLen = db.transactions.length;
+    db.transactions = db.transactions.filter((t: any) => {
+      if (!t || !t.id) return false;
+      const amt = Number(t.amount);
+      if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+      return true;
+    });
+    if (db.transactions.length !== origLen) {
+      changed = true;
+    }
+  }
+
   // 1. Recover members from transactions if any are missing
   const memMap = new Map<string, any>();
   for (const m of (db.members || [])) {
@@ -4531,7 +4545,13 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);
     }
     if (Array.isArray(transactions)) {
-      const cleanTx = transactions.filter((t: any) => t && t.id && !serverDelTxSet.has(String(t.id).toLowerCase().trim()));
+      const cleanTx = transactions.filter((t: any) => {
+        if (!t || !t.id) return false;
+        if (serverDelTxSet.has(String(t.id).toLowerCase().trim())) return false;
+        const amt = Number(t.amount);
+        if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+        return true;
+      });
       db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);
       db.transactions.sort((a: any, b: any) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;

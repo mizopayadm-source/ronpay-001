@@ -68,7 +68,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { getMembers, isCampaignCreator } from '../utils/storage';
+import { getMembers, isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { 
   formatDateDDMMYYYY, 
@@ -222,6 +222,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
 
     return transactions.filter(t => {
+      // 0. Only verified and completed transactions count toward collection reports
+      if (!t || !isConfirmedTransaction(t)) return false;
+      const amt = Number(t.amount);
+      if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's authorized campaigns
       if (!isStaffFullAccess && !creatorCampaignIds.has(t.campaignId)) {
         return false;
@@ -239,7 +244,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       }
 
       // 4. Date range filter
-      const txDate = t.timestamp.slice(0, 10);
+      const txDate = (t.timestamp || t.date || '').slice(0, 10);
       if (startDate && txDate < startDate) return false;
       if (endDate && txDate > endDate) return false;
 
@@ -269,21 +274,24 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     baseTransactions.forEach(t => {
       const isGrp = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0);
       const isGen = t.donorType === 'general';
+      const amt = Number(t.amount) || 0;
       if (isGrp) {
         groupCount++;
-        groupSum += t.amount;
+        groupSum += amt;
       } else if (isGen) {
         generalCount++;
-        generalSum += t.amount;
+        generalSum += amt;
       } else {
         memberCount++;
-        memberSum += t.amount;
+        memberSum += amt;
       }
     });
 
+    const allSum = baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
     return {
       allCount: baseTransactions.length,
-      allSum: baseTransactions.reduce((s, t) => s + t.amount, 0),
+      allSum,
       memberCount,
       memberSum,
       groupCount,
@@ -370,7 +378,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Calculate totals (Platform Fee is completely excluded from Reports)
   const totalCount = filteredTransactions.length;
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
-  const grandTotal = filteredTransactions.reduce((sum, t) => sum + t.amount, 0);
+  const grandTotal = filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Selected campaign display name
   const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
@@ -1060,18 +1068,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   {recordTypeFilter === 'general' && 'General / Inkhawm Chiah'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => setRecordTypeFilter('all')}
-                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border min-w-0 ${
                     recordTypeFilter === 'all'
                       ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <span className="truncate">🌟 All Records</span>
-                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>
+                  <span className="truncate max-w-full text-center">🌟 All Records</span>
+                  <span className={`text-[10px] font-bold truncate max-w-full text-center ${recordTypeFilter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>
                     {countsByRecordType.allCount} txns • ₹{countsByRecordType.allSum.toLocaleString('en-IN')}
                   </span>
                 </button>
@@ -1079,14 +1087,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setRecordTypeFilter('member')}
-                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border min-w-0 ${
                     recordTypeFilter === 'member'
                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <span className="truncate">👤 Mimal (Member)</span>
-                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'member' ? 'text-blue-200' : 'text-slate-500'}`}>
+                  <span className="truncate max-w-full text-center">👤 Mimal (Member)</span>
+                  <span className={`text-[10px] font-bold truncate max-w-full text-center ${recordTypeFilter === 'member' ? 'text-blue-200' : 'text-slate-500'}`}>
                     {countsByRecordType.memberCount} txns • ₹{countsByRecordType.memberSum.toLocaleString('en-IN')}
                   </span>
                 </button>
@@ -1094,14 +1102,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setRecordTypeFilter('group')}
-                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border min-w-0 ${
                     recordTypeFilter === 'group'
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <span className="truncate">👥 Group / Unit</span>
-                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'group' ? 'text-indigo-200' : 'text-slate-500'}`}>
+                  <span className="truncate max-w-full text-center">👥 Group / Unit</span>
+                  <span className={`text-[10px] font-bold truncate max-w-full text-center ${recordTypeFilter === 'group' ? 'text-indigo-200' : 'text-slate-500'}`}>
                     {countsByRecordType.groupCount} txns • ₹{countsByRecordType.groupSum.toLocaleString('en-IN')}
                   </span>
                 </button>
@@ -1109,14 +1117,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setRecordTypeFilter('general')}
-                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border min-w-0 ${
                     recordTypeFilter === 'general'
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <span className="truncate">🏛️ General / Inkhawm</span>
-                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'general' ? 'text-emerald-200' : 'text-slate-500'}`}>
+                  <span className="truncate max-w-full text-center">🏛️ General / Inkhawm</span>
+                  <span className={`text-[10px] font-bold truncate max-w-full text-center ${recordTypeFilter === 'general' ? 'text-emerald-200' : 'text-slate-500'}`}>
                     {countsByRecordType.generalCount} txns • ₹{countsByRecordType.generalSum.toLocaleString('en-IN')}
                   </span>
                 </button>
@@ -1282,7 +1290,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               <>
 
             {/* Active Report Focus Banner with Uploaded Campaign Image (Spacious & High-Visibility) */}
-            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5.5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-4 sm:p-5 rounded-3xl border border-indigo-700/60 shadow-lg flex flex-col md:flex-row justify-between md:items-center gap-4 overflow-hidden">
               <div className="flex items-start sm:items-center gap-3.5 sm:gap-4.5 min-w-0 flex-1">
                 {/* Vei lamah: Creator-in Thlalak a dah sa */}
                 {activeCampaignImage ? (
@@ -1299,7 +1307,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     <img 
                       src={activeCampaignImage} 
                       alt={headerTitle} 
-                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-amber-400 shadow-md transition-transform group-hover:scale-105"
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-amber-400 shadow-md transition-transform group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
                     <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent rounded-2xl flex items-center justify-center transition-colors">
@@ -1309,58 +1317,58 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     </div>
                   </div>
                 ) : selectedCampaignId === 'all' ? (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-900/90 via-slate-900 to-indigo-950 border-2 border-indigo-500/40 flex flex-col items-center justify-center text-indigo-200 shrink-0 gap-1.5 shadow-md">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-indigo-900/90 via-slate-900 to-indigo-950 border-2 border-indigo-500/40 flex flex-col items-center justify-center text-indigo-200 shrink-0 gap-1 shadow-md">
+                    <div className="w-7 h-7 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
                       <Layers className="w-4 h-4 text-indigo-300" />
                     </div>
-                    <span className="text-[8.5px] text-indigo-200 font-extrabold uppercase tracking-wider text-center px-1">
+                    <span className="text-[8px] text-indigo-200 font-extrabold uppercase tracking-wider text-center px-1">
                       All Campaigns
                     </span>
                   </div>
                 ) : (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
-                    <ImageIcon className="w-8 h-8 text-indigo-400" />
-                    <span className="text-[8.5px] text-indigo-300 font-bold uppercase tracking-wider">No Photo</span>
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-900/80 border border-indigo-700/60 flex flex-col items-center justify-center text-indigo-300 shrink-0 gap-1 shadow-md">
+                    <ImageIcon className="w-7 h-7 text-indigo-400" />
+                    <span className="text-[8px] text-indigo-300 font-bold uppercase tracking-wider">No Photo</span>
                   </div>
                 )}
 
                 {/* Thlalak sir / hrul ah: Text Hierarchy */}
-                <div className="space-y-1 min-w-0 flex-1">
-                  {/* 1. Chung ber atan: NGO / Church / Hming / Title (Hawrawp Font Size lian hlek) */}
-                  <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-tight break-words">
+                <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
+                  {/* 1. Chung ber atan: NGO / Church / Hming / Title */}
+                  <h3 className="text-base sm:text-lg md:text-xl font-black text-white leading-snug truncate max-w-full">
                     {headerTitle}
                   </h3>
 
-                  {/* 2. A hnuai ah: Veng / Khua / etc Creatorin a dah luh kha (Hawrawp te deuh zawk) */}
-                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5">
+                  {/* 2. A hnuai ah: Veng / Khua / etc Creatorin a dah luh kha */}
+                  <p className="text-xs sm:text-sm font-semibold text-amber-300/95 leading-normal flex items-center gap-1.5 truncate">
                     <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>{headerLocation}</span>
+                    <span className="truncate">{headerLocation}</span>
                   </p>
 
                   {/* 3. A hnuaiah: Reports & Financial Statements */}
-                  <p className="text-[11px] sm:text-xs font-bold text-sky-400 tracking-wide">
+                  <p className="text-[11px] sm:text-xs font-bold text-sky-400 tracking-wide truncate">
                     Reports & Financial Statements
                   </p>
 
                   {/* 4. A hnuai leh ah: Trxn Date */}
-                  <p className="text-[10.5px] sm:text-[11px] font-medium text-slate-300 flex items-center gap-1.5">
+                  <p className="text-[10.5px] sm:text-[11px] font-medium text-slate-300 flex items-center gap-1.5 truncate">
                     <Calendar className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
-                    <span>Trxn Date: <b className="text-white font-bold">{dateRangeText}</b></span>
+                    <span className="truncate">Trxn Date: <b className="text-white font-bold">{dateRangeText}</b></span>
                   </p>
                 </div>
               </div>
 
               {/* Summary Total Card */}
-              <div className="bg-slate-950/60 border border-indigo-500/30 p-3 sm:p-3.5 rounded-2xl text-left md:text-right shrink-0 md:min-w-[170px] flex md:flex-col justify-between items-center md:items-end">
-                <div>
+              <div className="bg-slate-950/70 border border-indigo-500/40 p-3 sm:p-4 rounded-2xl text-left md:text-right shrink-0 md:min-w-[170px] max-w-full flex md:flex-col justify-between items-center md:items-end gap-2 shadow-inner">
+                <div className="min-w-0">
                   <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider block">
                     Pek Tling Khawm Zat
                   </span>
-                  <span className="text-base sm:text-xl font-black text-emerald-400 leading-tight block mt-0.5">
+                  <span className="text-lg sm:text-2xl font-black text-emerald-400 leading-tight block mt-0.5 truncate">
                     ₹{grandTotal.toLocaleString('en-IN')}
                   </span>
                 </div>
-                <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold self-center md:self-end mt-0 md:mt-1">
+                <span className="text-[9px] bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold self-center md:self-end shrink-0">
                   100% Direct (0% Fee)
                 </span>
               </div>

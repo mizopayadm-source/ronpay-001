@@ -852,6 +852,8 @@ export const getStoredTransactions = (): Transaction[] => {
           const cleanId = String(t.id).toLowerCase().trim();
           if (deletedIds.has(cleanId)) return false;
           if (legacyMismatchedIds.has(t.id)) return false;
+          const numAmt = Number(t.amount);
+          if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0 || numAmt > 500000) return false;
           
           // 1. Authoritative ground truth: canonical initial transactions
           if (canonicalTxMap.has(cleanId)) return true;
@@ -865,7 +867,7 @@ export const getStoredTransactions = (): Transaction[] => {
                                     cleanId.startsWith('cash-') || 
                                     cleanId.startsWith('pay_') ||
                                     Boolean(t.timestamp || t.date || t.createdAt);
-          if (isRealTransaction && Number(t.amount) > 0) {
+          if (isRealTransaction) {
             return true;
           }
           
