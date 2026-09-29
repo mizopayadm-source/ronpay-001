@@ -51,7 +51,7 @@ import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
-import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction, getStoredSectionPresets, saveStoredSectionPresets } from '../utils/storage';
+import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getStoredSectionPresets, saveStoredSectionPresets } from '../utils/storage';
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
@@ -2313,7 +2313,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
 
                     {/* Total Raised & Stats (Creator Dashboard) */}
                     {(() => {
-                      const campTxns = transactions.filter(t => (t.campaignId === camp.id || t.campaignTitle === camp.title) && isConfirmedTransaction(t));
+                      const campTxns = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
                       const raised = campTxns.reduce((sum, t) => sum + t.amount, 0);
 
                       // For Ralna Bawm: strictly NO target and NO progress bar
@@ -2481,7 +2481,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
             </div>
 
             {(() => {
-              const campTxns = transactions.filter(t => (t.campaignId === deletingCampaign.id || t.campaignTitle === deletingCampaign.title) && isConfirmedTransaction(t));
+              const campTxns = transactions.filter(t => isTransactionForCampaign(t, deletingCampaign) && isConfirmedTransaction(t));
               const totalRaised = campTxns.reduce((sum, t) => sum + t.amount, 0);
               const hasPayments = campTxns.length > 0;
 

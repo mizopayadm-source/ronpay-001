@@ -47,7 +47,7 @@ import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
-import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction } from '../utils/storage';
+import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -177,11 +177,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
   // Compute dynamic live stats
-  const totalRaised = safeTransactions
-    .filter(isConfirmedTransaction)
-    .reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
+  const confirmedTxs = safeTransactions.filter(isConfirmedTransaction);
+  const totalRaised = confirmedTxs.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
+  const totalTxnsCount = confirmedTxs.length;
 
-  const todayCount = safeTransactions.filter(isConfirmedTransaction).length;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayTxnsCount = confirmedTxs.filter(t => {
+    const tDate = (t?.timestamp || t?.createdAt || t?.date || '').slice(0, 10);
+    return tDate === todayStr;
+  }).length;
+
   const activeQRsCount = safeCampaigns.filter(c => c && c.status === 'active').length;
 
   const renderBillIcon = (iconName: string) => {
@@ -478,10 +483,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </p>
           </div>
           <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
-            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Today Txns</p>
+            <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Total Txns</p>
             <p className="text-sm sm:text-base font-black text-emerald-300 mt-1">
-              {todayCount} Txns
+              {totalTxnsCount} Txns
             </p>
+            {todayTxnsCount > 0 && (
+              <p className="text-[8px] text-emerald-200/90 font-bold mt-0.5">
+                ({language === 'mizo' ? 'Vawiin' : 'Today'}: {todayTxnsCount})
+              </p>
+            )}
           </div>
           <div className="bg-white/5 p-2.5 rounded-xl border border-white/10 backdrop-blur-xs">
             <p className="text-[9px] text-indigo-200 font-bold uppercase tracking-wider">Actives QRS</p>
@@ -871,7 +881,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           ) : (
             displayedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
-            const campTransactions = transactions.filter(t => (t.campaignId === camp.id || t.campaignTitle === camp.title) && isConfirmedTransaction(t));
+            const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const target = camp.targetAmount || (
               camp.category === 'ralna' ? 25000 :

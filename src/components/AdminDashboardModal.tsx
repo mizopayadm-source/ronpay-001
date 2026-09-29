@@ -837,7 +837,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       );
       const cCampIds = new Set(cCampaigns.map(camp => camp.id));
       const cTxns = transactions.filter(
-        t => cCampIds.has(t.campaignId) || cCampaigns.some(camp => camp.title === t.campaignTitle)
+        t => (cCampIds.has(t.campaignId) || cCampaigns.some(camp => camp.title === t.campaignTitle)) && isConfirmedTransaction(t)
       );
       const totalVolume = cTxns.reduce((sum, t) => sum + t.amount, 0);
 
@@ -1055,8 +1055,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   });
 
   // Financial Stats
-  const totalVolume = transactions.reduce((acc, t) => acc + t.amount, 0);
-  const totalPlatformFees = transactions.reduce((acc, t) => acc + (t.platformFee || Math.round(t.amount * 0.01)), 0);
+  const confirmedTransactions = transactions.filter(isConfirmedTransaction);
+  const totalVolume = confirmedTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalPlatformFees = confirmedTransactions.reduce((acc, t) => acc + (t.platformFee || Math.round(t.amount * 0.01)), 0);
 
   if (!isOpen) return null;
 

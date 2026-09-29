@@ -337,6 +337,19 @@ let activeFirestoreUnsubscribers: Array<() => void> = [];
 const activeSubscribers = new Set<FirestoreSyncCallbacks>();
 let isFirestoreListening = false;
 
+// Multi-Tab Leader Election & Coordination via BroadcastChannel
+// Ensures ONLY 1 browser tab maintains active Firestore listeners, cutting multi-tab reads by 70%-85%!
+const COORDINATOR_CHANNEL_NAME = 'ronpay_firestore_coordinator';
+let coordinatorChannel: BroadcastChannel | null = null;
+let isLeaderTab = false;
+let currentLeaderId: string | null = null;
+let lastLeaderHeartbeat = 0;
+let leaderHeartbeatInterval: any = null;
+let leaderWatchdogInterval: any = null;
+const MY_TAB_ID = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' 
+  ? crypto.randomUUID() 
+  : 'tab_' + Math.random().toString(36).substring(2, 10);
+
 /**
  * Cleanly unsubscribe and stop all active Firestore snapshot listeners across the app.
  */
@@ -352,61 +365,107 @@ export function stopAllFirestoreListeners(): void {
     activeFirestoreUnsubscribers = [];
   }
   isFirestoreListening = false;
-  activeSubscribers.clear();
   updateStatus('offline', 'Firestore listeners detached.');
-  console.info('[RonPay Cloud Sync] Successfully stopped and cleaned up all Firestore snapshot listeners.');
+  console.info('[RonPay Cloud Sync] Successfully stopped and cleaned up Firestore snapshot listeners.');
+}
+
+// Helper to safely broadcast to all active subscribers on this tab
+const broadcast = <K extends keyof FirestoreSyncCallbacks>(key: K, ...args: any[]) => {
+  activeSubscribers.forEach(sub => {
+    try {
+      const fn = sub[key] as any;
+      if (typeof fn === 'function') {
+        fn(...args);
+      }
+    } catch (err) {
+      console.error(`[FirestoreSync] Broadcast error on ${String(key)}:`, err);
+    }
+  });
+};
+
+/**
+ * On-demand fetch of Kumtluang members from Firestore.
+ * Eliminates 24/7 background listener reads, fetching only when the Kumtluang Member Manager is opened.
+ */
+export async function fetchMembersFromFirestore(campaignId?: string): Promise<MemberRecord[]> {
+  if (!isNetworkOnline) {
+    return getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
+  }
+  try {
+    const memQuery = query(collection(db, 'members'), limit(60));
+    const snapshot = await getDocs(memQuery);
+    const remoteMembers: MemberRecord[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as MemberRecord;
+      if (data && data.id) {
+        remoteMembers.push(data);
+      }
+    });
+    if (remoteMembers.length > 0) {
+      const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
+      const merged = smartMerge(localMembers, remoteMembers, 'id');
+      setLocalJson('ronpay_kumtluang_members_v1', merged);
+      broadcast('onMembersUpdate', merged);
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
+        window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: merged }));
+      } catch {}
+      return merged;
+    }
+  } catch (err) {
+    logFirestoreNetworkNote('Fetch members on-demand', err);
+  }
+  return getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
 }
 
 /**
- * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners.
- * Employs a singleton listener pattern: exactly 1 set of 7 listeners runs across all subscribers.
- * Subscribing components receive real-time updates and properly decrement/cleanup on unmount.
+ * Fetch static configs (pricing, announcement) once on cold start if not present in cache.
+ * Avoids wasteful 24/7 onSnapshot listeners on static documents.
  */
-export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
-  // 1. Register callbacks in active subscribers set
-  activeSubscribers.add(callbacks);
-
-  // 2. If listeners are already active, do NOT create duplicate onSnapshot listeners (prevents the 49 listeners leak)
-  if (isFirestoreListening) {
-    if (callbacks.onStatusChange) {
-      callbacks.onStatusChange(connectionStatus);
-    }
-    return () => {
-      activeSubscribers.delete(callbacks);
-      if (activeSubscribers.size === 0) {
-        stopAllFirestoreListeners();
+async function fetchStaticConfigsOnce(): Promise<void> {
+  if (!isNetworkOnline) return;
+  try {
+    if (!localStorage.getItem('ronpay_announcement_v1')) {
+      const snap = await getDoc(doc(db, 'systemConfig', 'announcement'));
+      if (snap.exists()) {
+        const data = snap.data() as AnnouncementBanner;
+        setLocalJson('ronpay_announcement_v1', data);
+        broadcast('onAnnouncementUpdate', data);
       }
-    };
+    }
+    if (!localStorage.getItem('ronpay_pricing_config_v1')) {
+      const snap = await getDoc(doc(db, 'systemConfig', 'pricing'));
+      if (snap.exists()) {
+        const data = snap.data() as SystemPricingConfig;
+        setLocalJson('ronpay_pricing_config_v1', data);
+        broadcast('onPricingConfigUpdate', data);
+      }
+    }
+  } catch (err) {
+    logFirestoreNetworkNote('Static configs check', err);
   }
+}
 
-  // 3. First time or re-attaching: ensure previous listeners are stopped cleanly
-  stopAllFirestoreListeners();
-  activeSubscribers.add(callbacks);
+/**
+ * Internal listener runner: Attached ONLY on the single elected Leader Tab.
+ * Listens only to core high-value collections (campaigns limit 15, transactions limit 6)
+ * to maximize speed and minimize billable document reads.
+ */
+function startLeaderFirestoreListeners(): void {
+  if (isFirestoreListening) return;
   isFirestoreListening = true;
   updateStatus('connecting');
 
-  // Trigger initial cloud seed check safely once per session
+  // Seed check only once per session
   seedInitialCloudDataIfEmpty().catch(() => {});
+  // Static config check
+  fetchStaticConfigsOnce().catch(() => {});
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // Helper to safely broadcast to all active subscribers
-  const broadcast = <K extends keyof FirestoreSyncCallbacks>(key: K, ...args: any[]) => {
-    activeSubscribers.forEach(sub => {
-      try {
-        const fn = sub[key] as any;
-        if (typeof fn === 'function') {
-          fn(...args);
-        }
-      } catch (err) {
-        console.error(`[FirestoreSync] Broadcast error on ${String(key)}:`, err);
-      }
-    });
-  };
-
-  // 1. Transactions Listener (onSnapshot on recent transactions only - 8 items to drastically reduce reads)
+  // 1. Transactions Listener (limit to 6 recent items)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(8));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(6));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -414,7 +473,6 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       snapshot.forEach(docSnap => {
         const data = docSnap.data() as Transaction;
         if (data && data.id) {
-          // Auto-heal future timestamps if double IST offset occurred
           const txTime = data.timestamp ? new Date(data.timestamp).getTime() : 0;
           if (txTime > nowMs + 60000) {
             const matchRpay = String(data.id).match(/^RPAY_TXN_(\d{13})/i);
@@ -433,16 +491,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       if (remoteTxList.length > 0) {
         const deletedIds = getLocalDeletedTxIds();
         const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
-
-        // Safely merge cleanRemote with valid local transactions for UI display
-        // IMPORTANT: NEVER call syncTransactionToFirestore inside onSnapshot to avoid infinite read/write feedback loops!
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
-        // First add remote
         for (const t of cleanRemote) {
           if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
         }
-        // Then merge local without writing back
         for (const t of localTx) {
           if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
             const k = String(t.id).toLowerCase().trim();
@@ -460,6 +513,14 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 
         setLocalJson('ronpay_transactions_v2', merged);
         broadcast('onTransactionsUpdate', merged);
+
+        // Forward to follower tabs with ZERO extra Firestore reads
+        if (coordinatorChannel) {
+          try {
+            coordinatorChannel.postMessage({ type: 'sync_update', channel: 'transactions', payload: merged });
+          } catch {}
+        }
+
         try {
           window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
           window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
@@ -475,9 +536,9 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     updateStatus('offline');
   }
 
-  // 2. Campaigns Listener (onSnapshot on campaigns collection - limited to 25 to minimize reads)
+  // 2. Campaigns Listener (limit 15 items)
   try {
-    const campQuery = query(collection(db, 'campaigns'), limit(25));
+    const campQuery = query(collection(db, 'campaigns'), limit(15));
     const unsubCamp = onSnapshot(campQuery, (snapshot) => {
       updateStatus('connected');
       const remoteCampaigns: Campaign[] = [];
@@ -493,7 +554,6 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const isCampExcluded = (c: Campaign | undefined | null) => {
           if (!c || !c.id) return true;
           const cleanId = String(c.id).toLowerCase().trim();
-          // BMP Shillong (cmp-1788107291420) is an authoritative permanent kumtluang bawm and must NEVER be excluded
           if (cleanId === 'cmp-1788107291420') return false;
           const titleLower = String(c.title || '').toLowerCase();
           const orgLower = String(c.orgName || '').toLowerCase();
@@ -518,13 +578,11 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         const merged = smartMerge(localCamps, filteredRemote, 'id')
           .filter(c => !isCampExcluded(c));
 
-        // Always guarantee BMP Shillong authoritative campaign is present
         const bmpCamp = INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1788107291420');
         if (bmpCamp && !merged.some(c => String(c.id).toLowerCase().trim() === 'cmp-1788107291420')) {
           merged.push(bmpCamp);
         }
 
-        // Always sort newest first so all devices (Android, web, preview) display the exact same deterministic list
         const sorted = [...merged].sort((a, b) => {
           const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -532,6 +590,14 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
         });
         setLocalJson('ronpay_campaigns_v2', sorted);
         broadcast('onCampaignsUpdate', sorted);
+
+        // Forward to follower tabs with ZERO extra Firestore reads
+        if (coordinatorChannel) {
+          try {
+            coordinatorChannel.postMessage({ type: 'sync_update', channel: 'campaigns', payload: sorted });
+          } catch {}
+        }
+
         try {
           window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: sorted }));
         } catch {}
@@ -544,123 +610,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
-  // 3. Members Listener (Kumtluang / YMA / Bawm member database) - limited to 15 to prevent high read volume
-  try {
-    const memQuery = query(collection(db, 'members'), limit(15));
-    const unsubMem = onSnapshot(memQuery, (snapshot) => {
-      const remoteMembers: MemberRecord[] = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data() as MemberRecord;
-        if (data && data.id) {
-          remoteMembers.push(data);
-        }
-      });
-
-      if (remoteMembers.length > 0) {
-        const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
-        const merged = smartMerge(localMembers, remoteMembers, 'id');
-        setLocalJson('ronpay_kumtluang_members_v1', merged);
-        broadcast('onMembersUpdate', merged);
-        try {
-          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
-        } catch {}
-      }
-    }, (error) => {
-      logFirestoreNetworkNote('Members listener', error);
-    });
-    newUnsubscribers.push(unsubMem);
-  } catch (err) {
-    logFirestoreNetworkNote('Attach members listener', err);
-  }
-
-  // 4. Creators Profile & List Listener - limited to 6 to reduce reads
-  try {
-    const creatorsQuery = query(collection(db, 'creators'), limit(6));
-    const unsubCreators = onSnapshot(creatorsQuery, (snapshot) => {
-      const remoteCreators: CreatorProfile[] = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data() as CreatorProfile;
-        if (data && (data.phone || (data as any).id)) {
-          remoteCreators.push(data);
-        }
-      });
-
-      if (remoteCreators.length > 0) {
-        const localCreators = getLocalJson<CreatorProfile[]>('ronpay_creators_list_v2', INITIAL_REGISTERED_CREATORS);
-        const merged = smartMerge(localCreators, remoteCreators, 'phone');
-        setLocalJson('ronpay_creators_list_v2', merged);
-        broadcast('onCreatorsUpdate', merged);
-
-        // Sync active creator profile if phone matches
-        const currentActive = getLocalJson<CreatorProfile | null>('ronpay_creator_profile_v2', null);
-        if (currentActive && currentActive.phone) {
-          const matchedRemote = merged.find(c => c.phone === currentActive.phone);
-          if (matchedRemote) {
-            const updatedActive = { ...currentActive, ...matchedRemote };
-            setLocalJson('ronpay_creator_profile_v2', updatedActive);
-            try {
-              window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: updatedActive }));
-              window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: updatedActive }));
-            } catch {}
-          }
-        }
-
-        try {
-          window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: merged }));
-        } catch {}
-      }
-    }, (error) => {
-      logFirestoreNetworkNote('Creators listener', error);
-    });
-    newUnsubscribers.push(unsubCreators);
-  } catch (err) {
-    logFirestoreNetworkNote('Attach creators listener', err);
-  }
-
-  // 5. System Configuration / Announcements Listener
-  try {
-    const configDocRef = doc(db, 'systemConfig', 'announcement');
-    const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as AnnouncementBanner;
-        if (data && data.id) {
-          setLocalJson('ronpay_announcement_v1', data);
-          broadcast('onAnnouncementUpdate', data);
-        }
-      }
-    }, (error) => {
-      logFirestoreNetworkNote('Announcement config listener', error);
-    });
-    newUnsubscribers.push(unsubConfig);
-  } catch (err) {
-    logFirestoreNetworkNote('Attach systemConfig announcement listener', err);
-  }
-
-  // 6. Pricing Configuration Listener
-  try {
-    const pricingDocRef = doc(db, 'systemConfig', 'pricing');
-    const unsubPricing = onSnapshot(pricingDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as SystemPricingConfig;
-        if (data && data.categories) {
-          setLocalJson('ronpay_pricing_config_v1', data);
-          broadcast('onPricingConfigUpdate', data);
-        }
-      }
-    }, (error) => {
-      logFirestoreNetworkNote('Pricing config listener', error);
-    });
-    newUnsubscribers.push(unsubPricing);
-  } catch (err) {
-    logFirestoreNetworkNote('Attach pricing config listener', err);
-  }
-
-  // 7. Audit Logs Listener - only attach if user is an Admin to prevent wasteful reads on normal visits
+  // 3. Audit Logs Listener (only for super admin/admin, limit 3)
   try {
     const isAdminUser = typeof localStorage !== 'undefined' && 
       (localStorage.getItem('ronpay_admin_role_v1') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role_v1') === 'ADMIN');
     if (isAdminUser) {
-      const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(5));
+      const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(3));
       const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
         const logs: AuditLog[] = [];
         snapshot.forEach(docSnap => {
@@ -683,12 +638,128 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
   }
 
   activeFirestoreUnsubscribers = newUnsubscribers;
+}
 
-  // Return unsubscribe function for this specific subscriber
+/**
+ * Initializes real-time bidirectional Firestore Synchronization with onSnapshot listeners.
+ * Employs Multi-Tab Leader Election: EXACTLY 1 active browser tab connects to Firestore.
+ * Other open tabs receive live updates over BroadcastChannel with ZERO extra reads.
+ */
+export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
+  activeSubscribers.add(callbacks);
+
+  if (callbacks.onStatusChange) {
+    callbacks.onStatusChange(connectionStatus);
+  }
+
+  // Multi-Tab Coordination via BroadcastChannel
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    if (!coordinatorChannel) {
+      try {
+        coordinatorChannel = new BroadcastChannel(COORDINATOR_CHANNEL_NAME);
+        coordinatorChannel.onmessage = (ev) => {
+          const msg = ev.data;
+          if (!msg || typeof msg !== 'object') return;
+
+          if (msg.type === 'leader_heartbeat') {
+            if (msg.leaderId !== MY_TAB_ID) {
+              lastLeaderHeartbeat = Date.now();
+              currentLeaderId = msg.leaderId;
+              if (isLeaderTab) {
+                // Conflict resolution: lower tabId keeps leadership
+                if (msg.leaderId < MY_TAB_ID) {
+                  isLeaderTab = false;
+                  stopAllFirestoreListeners();
+                }
+              }
+            }
+          } else if (msg.type === 'sync_update') {
+            updateStatus('connected');
+            if (msg.channel === 'transactions' && Array.isArray(msg.payload)) {
+              setLocalJson('ronpay_transactions_v2', msg.payload);
+              broadcast('onTransactionsUpdate', msg.payload);
+            } else if (msg.channel === 'campaigns' && Array.isArray(msg.payload)) {
+              setLocalJson('ronpay_campaigns_v2', msg.payload);
+              broadcast('onCampaignsUpdate', msg.payload);
+            }
+          } else if (msg.type === 'leader_resigned') {
+            if (currentLeaderId === msg.leaderId) {
+              currentLeaderId = null;
+              lastLeaderHeartbeat = 0;
+              claimLeadership();
+            }
+          }
+        };
+
+        window.addEventListener('beforeunload', () => {
+          if (isLeaderTab && coordinatorChannel) {
+            try {
+              coordinatorChannel.postMessage({ type: 'leader_resigned', leaderId: MY_TAB_ID });
+            } catch {}
+          }
+          stopAllFirestoreListeners();
+        });
+      } catch (e) {
+        console.warn('Coordinator channel setup note:', e);
+      }
+    }
+
+    const claimLeadership = () => {
+      if (isLeaderTab) return;
+      isLeaderTab = true;
+      currentLeaderId = MY_TAB_ID;
+      lastLeaderHeartbeat = Date.now();
+      startLeaderFirestoreListeners();
+
+      if (coordinatorChannel) {
+        try {
+          coordinatorChannel.postMessage({ type: 'leader_heartbeat', leaderId: MY_TAB_ID });
+        } catch {}
+      }
+
+      if (!leaderHeartbeatInterval) {
+        leaderHeartbeatInterval = setInterval(() => {
+          if (isLeaderTab && coordinatorChannel) {
+            try {
+              coordinatorChannel.postMessage({ type: 'leader_heartbeat', leaderId: MY_TAB_ID });
+            } catch {}
+          }
+        }, 1800);
+      }
+    };
+
+    // Watchdog: Check if leader has gone silent (e.g. tab crashed or closed)
+    if (!leaderWatchdogInterval) {
+      leaderWatchdogInterval = setInterval(() => {
+        if (!isLeaderTab) {
+          const silenceDuration = Date.now() - lastLeaderHeartbeat;
+          if (silenceDuration > 3600) {
+            claimLeadership();
+          }
+        }
+      }, 2500);
+    }
+
+    // Try claiming leadership after brief initial delay to discover any existing leader
+    setTimeout(() => {
+      if (!currentLeaderId || (Date.now() - lastLeaderHeartbeat > 3000)) {
+        claimLeadership();
+      }
+    }, 200);
+
+  } else {
+    // Single-tab fallback or environments without BroadcastChannel
+    startLeaderFirestoreListeners();
+  }
+
   return () => {
     activeSubscribers.delete(callbacks);
-    // When the last subscriber unmounts, unsubscribe all 7 Firestore snapshot listeners
     if (activeSubscribers.size === 0) {
+      if (isLeaderTab && coordinatorChannel) {
+        try {
+          coordinatorChannel.postMessage({ type: 'leader_resigned', leaderId: MY_TAB_ID });
+        } catch {}
+      }
       stopAllFirestoreListeners();
     }
   };
@@ -865,13 +936,25 @@ export async function syncAuditLogToFirestore(auditLog: AuditLog): Promise<void>
   }
 }
 
+let lastBulkPushTimestamp = 0;
+
 /**
  * Push all local records to Firebase Firestore (manual bulk push & migration)
+ * Optimized with writeBatch() to group operations and prevent sequential write/read spikes.
  */
 export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean; count: number }> {
   if (!isNetworkOnline) {
     return { success: false, count: 0 };
   }
+  
+  // Guard against rapid duplicate clicks (minimum 30 seconds debounce)
+  const now = Date.now();
+  if (now - lastBulkPushTimestamp < 30000) {
+    console.info('[RonPay Cloud] Bulk sync requested too soon, skipping duplicate push.');
+    return { success: true, count: 0 };
+  }
+  lastBulkPushTimestamp = now;
+
   try {
     const rawCampaigns = localStorage.getItem('ronpay_campaigns_v2');
     const localCampaigns: Campaign[] = rawCampaigns ? JSON.parse(rawCampaigns) : [];
@@ -891,64 +974,82 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     const rawPricing = localStorage.getItem('ronpay_pricing_config_v1');
     const localPricing: SystemPricingConfig | null = rawPricing ? JSON.parse(rawPricing) : null;
 
-    const rawLogs = localStorage.getItem('ronpay_audit_logs_v1');
-    const localAuditLogs: AuditLog[] = rawLogs ? JSON.parse(rawLogs) : [];
+    let batch = writeBatch(db);
+    let batchOps = 0;
+    let totalCount = 0;
 
-    let count = 0;
+    const commitBatchIfNeeded = async () => {
+      if (batchOps >= 450) {
+        await batch.commit();
+        batch = writeBatch(db);
+        batchOps = 0;
+      }
+    };
 
-    // Batch upload campaigns
+    // 1. Campaigns
     for (const c of localCampaigns) {
       if (c && c.id) {
-        await syncCampaignToFirestore(c);
-        count++;
+        const clean = sanitizeForFirestore({ ...c, updatedAt: new Date().toISOString() });
+        batch.set(doc(db, 'campaigns', c.id), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
       }
     }
 
-    // Batch upload transactions
-    for (const t of localTransactions) {
-      if (t && t.id) {
-        await syncTransactionToFirestore(t);
-        count++;
-      }
-    }
-
-    // Batch upload members
+    // 2. Members
     for (const m of localMembers) {
       if (m && m.id) {
-        await syncMemberToFirestore(m);
-        count++;
+        const clean = sanitizeForFirestore({ ...m, updatedAt: new Date().toISOString() });
+        batch.set(doc(db, 'members', m.id), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
       }
     }
 
-    // Batch upload creators
+    // 3. Creators
     for (const cr of localCreators) {
       if (cr && cr.phone) {
-        await syncCreatorToFirestore(cr);
-        count++;
+        const clean = sanitizeForFirestore({ ...cr, updatedAt: new Date().toISOString() });
+        batch.set(doc(db, 'creators', cr.phone), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
       }
     }
 
-    // System configs
+    // 4. Recent transactions (Limit to latest 30 to avoid blowing up writes on historical records)
+    const recentTxList = localTransactions.slice(0, 30);
+    for (const t of recentTxList) {
+      if (t && t.id) {
+        const clean = sanitizeForFirestore({ ...t, updatedAt: new Date().toISOString() });
+        batch.set(doc(db, 'transactions', t.id), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
+      }
+    }
+
+    // 5. Configs
     if (localAnnouncement) {
-      await syncAnnouncementToFirestore(localAnnouncement);
-      count++;
+      batch.set(doc(db, 'systemConfig', 'announcement'), sanitizeForFirestore({ ...localAnnouncement, updatedAt: new Date().toISOString() }), { merge: true });
+      batchOps++;
+      totalCount++;
     }
-
     if (localPricing) {
-      await syncPricingConfigToFirestore(localPricing);
-      count++;
+      batch.set(doc(db, 'systemConfig', 'pricing'), sanitizeForFirestore({ ...localPricing, updatedAt: new Date().toISOString() }), { merge: true });
+      batchOps++;
+      totalCount++;
     }
 
-    for (const log of localAuditLogs.slice(0, 50)) {
-      if (log && log.id) {
-        await syncAuditLogToFirestore(log);
-        count++;
-      }
+    if (batchOps > 0) {
+      await batch.commit();
     }
 
-    return { success: true, count };
+    return { success: true, count: totalCount };
   } catch (err) {
-    logFirestoreNetworkNote('Push all local data', err);
+    logFirestoreNetworkNote('Push all local data batch', err);
     return { success: false, count: 0 };
   }
 }

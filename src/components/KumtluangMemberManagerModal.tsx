@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
+import { fetchMembersFromFirestore } from '../services/firestoreSync';
 import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
@@ -318,6 +319,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
+
+  // Fetch fresh members on demand when Kumtluang modal opens (eliminates 24/7 background listener reads)
+  useEffect(() => {
+    if (isOpen) {
+      fetchMembersFromFirestore().catch(() => {});
+    }
+  }, [isOpen]);
 
   // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
   useEffect(() => {

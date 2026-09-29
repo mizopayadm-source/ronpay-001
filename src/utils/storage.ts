@@ -775,6 +775,27 @@ export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
   return status === 'completed' || status === 'success' || status === 'verified';
 };
 
+export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign | null): boolean => {
+  if (!t || !camp) return false;
+  const cId = String(camp.id || '').trim().toLowerCase();
+  const tCampId = String(t.campaignId || '').trim().toLowerCase();
+  if (cId && tCampId && cId === tCampId) return true;
+
+  const cTitle = String(camp.title || '').trim().toLowerCase();
+  const tTitle = String(t.campaignTitle || '').trim().toLowerCase();
+  if (cTitle && tTitle) {
+    if (cTitle === tTitle) return true;
+    if (cTitle.includes(tTitle) || tTitle.includes(cTitle)) return true;
+  }
+
+  // Authoritative alias matching
+  if (cId === 'cmp-kumtluang-1' && (tTitle.includes('ebenezer') || tCampId === 'cmp-kumtluang-1')) return true;
+  if (cId === 'cmp-1787829303143' && (tTitle.includes('vengthar') || tCampId === 'cmp-kumtluang-ymavt')) return true;
+  if (cId === 'cmp-1788107291420' && (tTitle.includes('bmp') || tTitle.includes('shillong') || (t.memberId && String(t.memberId).startsWith('BMPSHL')))) return true;
+  if (cId === 'cmp-1788526889943' && (tTitle.includes('lalrinpuii') || tCampId === 'cmp-1787545326556')) return true;
+  return false;
+};
+
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
 
 export const getDeletedTransactionIds = (): Set<string> => {
@@ -918,12 +939,35 @@ export const getStoredTransactions = (): Transaction[] => {
         // Auto-correct any legacy campaign titles & categories cached in localStorage
         let hasFixed = false;
         for (const t of merged) {
-          if (t.campaignId === 'cmp-1788526889943' || (t.category === 'ralna' && t.campaignTitle === 'BCM Ebenezer')) {
-            if (t.campaignTitle !== 'Lalrinpuii Ralna') {
+          const campTitle = String(t.campaignTitle || '').trim();
+          const campId = String(t.campaignId || '').trim();
+
+          // 1. Lalrinpuii Ralna normalization
+          if (campId === 'cmp-1787545326556' || (campTitle === 'Lalrinpuii Ralna' && !campId.startsWith('bill-')) || (t.category === 'ralna' && campTitle === 'BCM Ebenezer')) {
+            if (t.campaignId !== 'cmp-1788526889943' || t.campaignTitle !== 'Lalrinpuii Ralna') {
+              t.campaignId = 'cmp-1788526889943';
               t.campaignTitle = 'Lalrinpuii Ralna';
+              t.category = 'ralna';
               hasFixed = true;
             }
           }
+
+          // 2. BCM Ebenezer normalization
+          if (campTitle === 'BCM Ebenezer' || (campId === 'cmp-kumtluang-1' && campTitle !== 'BCM Ebenezer, Zobawk')) {
+            t.campaignId = 'cmp-kumtluang-1';
+            t.campaignTitle = 'BCM Ebenezer, Zobawk';
+            t.category = 'kumtluang';
+            hasFixed = true;
+          }
+
+          // 3. YMA Vengthar normalization
+          if (campId === 'cmp-kumtluang-ymavt' || campTitle === 'YMA Vengthar Branch' || campTitle === 'YMA Vengthar Br') {
+            t.campaignId = 'cmp-1787829303143';
+            t.campaignTitle = 'YMA Vengthar Br, Zobawk, Lunglei';
+            t.category = 'kumtluang';
+            hasFixed = true;
+          }
+
           if (t.campaignId === 'cmp-1788527889945' && t.campaignTitle === 'BCM Ebenezer') {
             t.campaignTitle = 'Pocket Money';
             hasFixed = true;
