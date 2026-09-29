@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
-import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
+import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction } from '../utils/storage';
@@ -240,12 +240,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return list;
   }, [allSortedQRs, qrSearchQuery, qrCategoryFilter]);
 
-  // Displayed QRs (Show 5 by default, expand when searching, filtering, or showAllQRs toggled)
+  // Displayed QRs (Show 10 by default, ensure featured campaigns like BMP Shillong are included, expand when searching, filtering, or showAllQRs toggled)
   const displayedQRs = useMemo(() => {
     if (qrSearchQuery.trim() || qrCategoryFilter !== 'all' || showAllQRs) {
       return filteredQRs;
     }
-    return filteredQRs.slice(0, 5);
+    const defaultSlice = filteredQRs.slice(0, 10);
+    const bmpCamp = filteredQRs.find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp shillong')));
+    if (bmpCamp && !defaultSlice.some(c => c.id === bmpCamp.id)) {
+      defaultSlice.push(bmpCamp);
+    }
+    return defaultSlice;
   }, [filteredQRs, qrSearchQuery, qrCategoryFilter, showAllQRs]);
 
   return (
@@ -902,6 +907,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             const img = e.currentTarget;
                             if ((camp.id === 'cmp-kumtluang-1' || camp.title?.toLowerCase().includes('bcm ebenezer')) && img.src !== BCM_EBENEZER_DEFAULT_LOGO) {
                               img.src = BCM_EBENEZER_DEFAULT_LOGO;
+                              return;
+                            }
+                            if ((camp.id === 'cmp-1788107291420' || camp.title?.toLowerCase().includes('bmp')) && img.src !== BMP_SHILLONG_DEFAULT_LOGO) {
+                              img.src = BMP_SHILLONG_DEFAULT_LOGO;
                               return;
                             }
                             img.style.display = 'none';

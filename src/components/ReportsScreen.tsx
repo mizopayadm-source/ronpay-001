@@ -51,8 +51,16 @@ import {
   exportFormattedExcel,
   printTransactionsPDF, 
   exportMasterLedgerPrint,
+  exportGroupMasterLedgerPrint,
+  exportGeneralMasterLedgerPrint,
   exportMemberCategoryMatrixPrint,
+  exportGroupCategoryMatrixPrint,
+  exportGeneralCategoryMatrixPrint,
   exportMemberPassbookVerticalPrint,
+  exportGroupPassbookPrint,
+  exportGeneralPassbookPrint,
+  GroupRecordItem,
+  GeneralRecordItem,
   buildKumtluangMatrix,
   computeMonthlyDistribution,
   MonthRangeConfig,
@@ -137,7 +145,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const [chartEndMonth, setChartEndMonth] = useState<string>('Dec');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [showExportOptions, setShowExportOptions] = useState<boolean>(false);
-  const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
+  const [reportPrintStyle, setReportPrintStyle] = useState<'standard_pdf' | 'master_ledger' | 'group_ledger' | 'general_ledger' | 'member_matrix' | 'member_passbook'>('standard_pdf');
+  const [recordTypeFilter, setRecordTypeFilter] = useState<'all' | 'member' | 'group' | 'general'>('all');
+  const [matrixScopeType, setMatrixScopeType] = useState<'member' | 'group' | 'general'>('member');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedGeneralId, setSelectedGeneralId] = useState<string>('');
   const [reportMemberId, setReportMemberId] = useState<string>('');
   const [masterLedgerSortOrder, setMasterLedgerSortOrder] = useState<'name_asc' | 'id_asc' | 'section' | 'amount_desc' | 'name_desc'>('name_asc');
 
@@ -205,8 +217,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
   }, [isCreator, creatorCampaigns, selectedFilter]);
 
-  // Filter transactions: STRICT CREATOR ONLY ACCESS (Strict user-isolation, bypassed only for Admin/Super Admin)
-  const filteredTransactions = useMemo(() => {
+  // Base Transactions matching creator scope, category, campaign, date, and search
+  const baseTransactions = useMemo(() => {
     if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
 
     return transactions.filter(t => {
@@ -243,7 +255,96 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, startDate, endDate, searchQuery]);
+
+  // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
+  const countsByRecordType = useMemo(() => {
+    let memberCount = 0;
+    let memberSum = 0;
+    let groupCount = 0;
+    let groupSum = 0;
+    let generalCount = 0;
+    let generalSum = 0;
+
+    baseTransactions.forEach(t => {
+      const isGrp = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0);
+      const isGen = t.donorType === 'general';
+      if (isGrp) {
+        groupCount++;
+        groupSum += t.amount;
+      } else if (isGen) {
+        generalCount++;
+        generalSum += t.amount;
+      } else {
+        memberCount++;
+        memberSum += t.amount;
+      }
+    });
+
+    return {
+      allCount: baseTransactions.length,
+      allSum: baseTransactions.reduce((s, t) => s + t.amount, 0),
+      memberCount,
+      memberSum,
+      groupCount,
+      groupSum,
+      generalCount,
+      generalSum
+    };
+  }, [baseTransactions]);
+
+  // Filter transactions with Record Type Filter applied
+  const filteredTransactions = useMemo(() => {
+    if (recordTypeFilter === 'all') return baseTransactions;
+
+    return baseTransactions.filter(t => {
+      const isGrp = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0);
+      const isGen = t.donorType === 'general';
+      const isMem = !isGrp && !isGen;
+
+      if (recordTypeFilter === 'member') return isMem;
+      if (recordTypeFilter === 'group') return isGrp;
+      if (recordTypeFilter === 'general') return isGen;
+      return true;
+    });
+  }, [baseTransactions, recordTypeFilter]);
+
+  // Available unique Groups and General collections for dropdown scoping
+  const availableGroups = useMemo<GroupRecordItem[]>(() => {
+    const map = new Map<string, GroupRecordItem>();
+    baseTransactions.forEach(t => {
+      if (t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0)) {
+        const gName = (t.groupName || t.donorName || 'Group').trim();
+        if (gName && !map.has(gName)) {
+          map.set(gName, {
+            name: gName,
+            section: t.donorVeng,
+            phone: t.donorPhone,
+            leader: t.donorName !== gName ? t.donorName : undefined
+          });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [baseTransactions]);
+
+  const availableGenerals = useMemo<GeneralRecordItem[]>(() => {
+    const map = new Map<string, GeneralRecordItem>();
+    baseTransactions.forEach(t => {
+      if (t.donorType === 'general') {
+        const title = (t.donorName || t.subCategory || 'General Offering').trim();
+        if (title && !map.has(title)) {
+          map.set(title, {
+            title,
+            section: t.donorVeng,
+            collector: t.remark?.includes('Collector:') ? t.remark.split('Collector:')[1].trim() : undefined,
+            phone: t.donorPhone
+          });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [baseTransactions]);
 
   // Sorted Transactions based on sortOrder (Alphabetical Name, Date, Amount)
   const sortedTransactions = useMemo(() => {
@@ -477,9 +578,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     const resolvedLocation = headerLocation;
 
     if (reportPrintStyle === 'master_ledger') {
+      // Strict Isolation: Member Ledger ONLY includes individual members
+      const memberOnlyTxns = baseTransactions.filter(t => 
+        t.donorType !== 'group' && t.donorType !== 'general' && (!t.groupName || t.groupName.trim().length === 0)
+      );
       exportMasterLedgerPrint(
         targetMembers, 
-        filteredTransactions, 
+        memberOnlyTxns, 
         selectedCampaignObj?.title || headerTitle, 
         resolvedOrgName,
         resolvedLogoUrl,
@@ -487,25 +592,104 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         masterLedgerSortOrder
       );
       const sortText = masterLedgerSortOrder === 'name_asc' ? 'A-Z' : masterLedgerSortOrder.toUpperCase();
-      showExportSuccessToast(`Format 2: Kohhran / Pawl Master Ledger (${sortText})`, targetMembers.length);
+      showExportSuccessToast(`Format 2a: Mimal Master Ledger (${sortText})`, targetMembers.length);
       return;
     }
 
+    if (reportPrintStyle === 'group_ledger') {
+      if (availableGroups.length === 0) {
+        alert('⚠️ He Bawm-ah hian Group / Pawl record hmuh tur a la awm lo.');
+        return;
+      }
+      exportGroupMasterLedgerPrint(
+        availableGroups,
+        baseTransactions,
+        selectedCampaignObj?.title || headerTitle,
+        resolvedOrgName,
+        resolvedLogoUrl,
+        resolvedLocation,
+        masterLedgerSortOrder
+      );
+      showExportSuccessToast(`Format 2b: Group & Unit Master Ledger (${availableGroups.length} groups)`, availableGroups.length);
+      return;
+    }
+
+    if (reportPrintStyle === 'general_ledger') {
+      if (availableGenerals.length === 0) {
+        alert('⚠️ He Bawm-ah hian General / Inkhawm Thawhlawm record hmuh tur a la awm lo.');
+        return;
+      }
+      exportGeneralMasterLedgerPrint(
+        availableGenerals,
+        baseTransactions,
+        selectedCampaignObj?.title || headerTitle,
+        resolvedOrgName,
+        resolvedLogoUrl,
+        resolvedLocation,
+        masterLedgerSortOrder
+      );
+      showExportSuccessToast(`Format 2c: General & Inkhawm Thawhlawm Ledger (${availableGenerals.length} heads)`, availableGenerals.length);
+      return;
+    }
+
+    const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
+      ? selectedCampaignObj.subCategories
+      : ['BMP Fund'];
+
     if (reportPrintStyle === 'member_matrix') {
+      if (matrixScopeType === 'group') {
+        const grpName = selectedGroupId || (availableGroups[0]?.name || '');
+        if (!grpName) {
+          alert('Khawngaihin Group thlang rawh le.');
+          return;
+        }
+        const grp = availableGroups.find(g => g.name === grpName) || availableGroups[0];
+        exportGroupCategoryMatrixPrint(
+          grp.name,
+          defaultCategories,
+          baseTransactions,
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation,
+          grp.section,
+          grp.leader
+        );
+        showExportSuccessToast(`Format 3: Group Category Matrix (${grp.name})`, 1);
+        return;
+      }
+
+      if (matrixScopeType === 'general') {
+        const genTitle = selectedGeneralId || (availableGenerals[0]?.title || '');
+        if (!genTitle) {
+          alert('Khawngaihin General Thawhlawm thlang rawh le.');
+          return;
+        }
+        const gen = availableGenerals.find(g => g.title === genTitle) || availableGenerals[0];
+        exportGeneralCategoryMatrixPrint(
+          gen.title,
+          defaultCategories,
+          baseTransactions,
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation,
+          gen.collector
+        );
+        showExportSuccessToast(`Format 3: General Thawhlawm Matrix (${gen.title})`, 1);
+        return;
+      }
+
+      // Member Matrix
       const targetMemberId = reportMemberId || (targetMembers.length > 0 ? targetMembers[0].id : '');
       if (!targetMemberId) {
         alert('Khawngaihin Member hming i register hmasa rawh le.');
         return;
       }
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
-      const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
-        ? selectedCampaignObj.subCategories
-        : ['BMP Fund'];
       if (m) {
         exportMemberCategoryMatrixPrint(
           m, 
           defaultCategories, 
-          filteredTransactions, 
+          baseTransactions, 
           resolvedOrgName,
           resolvedLogoUrl,
           resolvedLocation
@@ -516,20 +700,59 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     }
 
     if (reportPrintStyle === 'member_passbook') {
+      if (matrixScopeType === 'group') {
+        const grpName = selectedGroupId || (availableGroups[0]?.name || '');
+        if (!grpName) {
+          alert('Khawngaihin Group thlang rawh le.');
+          return;
+        }
+        const grp = availableGroups.find(g => g.name === grpName) || availableGroups[0];
+        exportGroupPassbookPrint(
+          grp.name,
+          defaultCategories,
+          baseTransactions,
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation,
+          grp.section,
+          grp.leader
+        );
+        showExportSuccessToast(`Format 4: Group Passbook (${grp.name})`, 1);
+        return;
+      }
+
+      if (matrixScopeType === 'general') {
+        const genTitle = selectedGeneralId || (availableGenerals[0]?.title || '');
+        if (!genTitle) {
+          alert('Khawngaihin General Thawhlawm thlang rawh le.');
+          return;
+        }
+        const gen = availableGenerals.find(g => g.title === genTitle) || availableGenerals[0];
+        exportGeneralPassbookPrint(
+          gen.title,
+          defaultCategories,
+          baseTransactions,
+          resolvedOrgName,
+          resolvedLogoUrl,
+          resolvedLocation,
+          gen.collector
+        );
+        showExportSuccessToast(`Format 4: General Thawhlawm Passbook (${gen.title})`, 1);
+        return;
+      }
+
+      // Member Passbook
       const targetMemberId = reportMemberId || (targetMembers.length > 0 ? targetMembers[0].id : '');
       if (!targetMemberId) {
         alert('Khawngaihin Member hming i register hmasa rawh le.');
         return;
       }
       const m = targetMembers.find(x => x.id === targetMemberId) || targetMembers[0];
-      const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
-        ? selectedCampaignObj.subCategories
-        : ['BMP Fund'];
       if (m) {
         exportMemberPassbookVerticalPrint(
           m, 
           defaultCategories, 
-          filteredTransactions, 
+          baseTransactions, 
           resolvedOrgName,
           resolvedLogoUrl,
           resolvedLocation
@@ -821,6 +1044,82 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     </>
                   )}
                 </select>
+              </div>
+            </div>
+
+            {/* Record Type Filter Tabs (Strict Separation: Mimal vs Group vs General) */}
+            <div className="bg-slate-100/90 p-2 rounded-2xl border border-slate-200/90 space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                  <span>📂 Record Type Thlanna (Filter):</span>
+                </span>
+                <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                  {recordTypeFilter === 'all' && 'All Records Engkim'}
+                  {recordTypeFilter === 'member' && 'Mimal Records Chiah'}
+                  {recordTypeFilter === 'group' && 'Group / Unit Chiah'}
+                  {recordTypeFilter === 'general' && 'General / Inkhawm Chiah'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('all')}
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                    recordTypeFilter === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <span className="truncate">🌟 All Records</span>
+                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'all' ? 'text-slate-300' : 'text-slate-500'}`}>
+                    {countsByRecordType.allCount} txns • ₹{countsByRecordType.allSum.toLocaleString('en-IN')}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('member')}
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                    recordTypeFilter === 'member'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <span className="truncate">👤 Mimal (Member)</span>
+                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'member' ? 'text-blue-200' : 'text-slate-500'}`}>
+                    {countsByRecordType.memberCount} txns • ₹{countsByRecordType.memberSum.toLocaleString('en-IN')}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('group')}
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                    recordTypeFilter === 'group'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <span className="truncate">👥 Group / Unit</span>
+                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'group' ? 'text-indigo-200' : 'text-slate-500'}`}>
+                    {countsByRecordType.groupCount} txns • ₹{countsByRecordType.groupSum.toLocaleString('en-IN')}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('general')}
+                  className={`py-2 px-2.5 rounded-xl font-black text-xs transition cursor-pointer flex flex-col items-center justify-center gap-0.5 border ${
+                    recordTypeFilter === 'general'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <span className="truncate">🏛️ General / Inkhawm</span>
+                  <span className={`text-[10px] font-bold ${recordTypeFilter === 'general' ? 'text-emerald-200' : 'text-slate-500'}`}>
+                    {countsByRecordType.generalCount} txns • ₹{countsByRecordType.generalSum.toLocaleString('en-IN')}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -1482,27 +1781,109 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       className="w-full bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl px-3 py-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-600 cursor-pointer shadow-2xs transition truncate"
                     >
                       <option value="standard_pdf">Format 1: Official Financial Statement (PDF + Chart + Signatures)</option>
-                      <option value="master_ledger">Format 2: Kohhran / Pawl Master Ledger (Thla 12 Grid)</option>
-                      <option value="member_matrix">Format 3: Mimal Record (Horizontal Category Matrix)</option>
-                      <option value="member_passbook">Format 4: Mimal Passbook (Vertical Card Slip)</option>
+                      <option value="master_ledger">Format 2a: Kohhran / Pawl Master Ledger (👤 Mimal - Thla 12 Grid)</option>
+                      <option value="group_ledger">Format 2b: Group & Unit Master Ledger (👥 Pawl / Unit - Thla 12 Grid)</option>
+                      <option value="general_ledger">Format 2c: General & Inkhawm Thawhlawm Ledger (🏛️ Thawhlawm - Thla 12 Grid)</option>
+                      <option value="member_matrix">Format 3: Category Matrix (Mimal / Group / General)</option>
+                      <option value="member_passbook">Format 4: Passbook Slip (Mimal / Group / General)</option>
                     </select>
                   </div>
                 </div>
 
-                {/* If personal member format selected, show Member selector */}
+                {/* If personal matrix or passbook format selected, show Record Scope & Target Selectors */}
                 {(reportPrintStyle === 'member_matrix' || reportPrintStyle === 'member_passbook') && (
-                  <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
-                    <span className="text-[11px] font-bold text-indigo-900 shrink-0">Member Thlang Rawh:</span>
-                    <select
-                      value={reportMemberId || (scopedMembers.length > 0 ? scopedMembers[0].id : '')}
-                      onChange={(e) => setReportMemberId(e.target.value)}
-                      className="flex-1 bg-white border border-indigo-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
-                    >
-                      {scopedMembers.length === 0 && <option value="">-- Member an la awm lo --</option>}
-                      {scopedMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
-                      ))}
-                    </select>
+                  <div className="pt-2 border-t border-indigo-200/60 space-y-2 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <span className="text-[11px] font-black text-indigo-950 shrink-0">
+                        Record Scope Thlang Rawh:
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setMatrixScopeType('member')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            matrixScopeType === 'member'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                          }`}
+                        >
+                          👤 Mimal Member
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMatrixScopeType('group')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            matrixScopeType === 'group'
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                          }`}
+                        >
+                          👥 Group / Unit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMatrixScopeType('general')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            matrixScopeType === 'general'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                          }`}
+                        >
+                          🏛️ General Thawhlawm
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Member Dropdown */}
+                    {matrixScopeType === 'member' && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span className="text-[10.5px] font-bold text-slate-700 shrink-0">Member Thlang Rawh:</span>
+                        <select
+                          value={reportMemberId || (scopedMembers.length > 0 ? scopedMembers[0].id : '')}
+                          onChange={(e) => setReportMemberId(e.target.value)}
+                          className="flex-1 bg-white border border-indigo-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                        >
+                          {scopedMembers.length === 0 && <option value="">-- Member an la awm lo --</option>}
+                          {scopedMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Group Dropdown */}
+                    {matrixScopeType === 'group' && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span className="text-[10.5px] font-bold text-indigo-900 shrink-0">Group / Unit Thlang Rawh:</span>
+                        <select
+                          value={selectedGroupId || (availableGroups.length > 0 ? availableGroups[0].name : '')}
+                          onChange={(e) => setSelectedGroupId(e.target.value)}
+                          className="flex-1 bg-white border border-indigo-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                        >
+                          {availableGroups.length === 0 && <option value="">-- Group record hmuh tur a awm rih lo --</option>}
+                          {availableGroups.map(g => (
+                            <option key={g.name} value={g.name}>👥 {g.name} {g.section ? `• ${g.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* General Collection Dropdown */}
+                    {matrixScopeType === 'general' && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <span className="text-[10.5px] font-bold text-emerald-900 shrink-0">General Thawhlawm Thlang Rawh:</span>
+                        <select
+                          value={selectedGeneralId || (availableGenerals.length > 0 ? availableGenerals[0].title : '')}
+                          onChange={(e) => setSelectedGeneralId(e.target.value)}
+                          className="flex-1 bg-white border border-emerald-300 rounded-xl p-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                        >
+                          {availableGenerals.length === 0 && <option value="">-- General Thawhlawm record a awm rih lo --</option>}
+                          {availableGenerals.map(it => (
+                            <option key={it.title} value={it.title}>🏛️ {it.title} {it.section ? `• ${it.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1511,7 +1892,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
                     <span className="text-[11px] font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
                       <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">A-Z</span>
-                      <span>Master Ledger Print Order:</span>
+                      <span>Mimal Ledger Order:</span>
                     </span>
                     <select
                       value={masterLedgerSortOrder}
@@ -1524,6 +1905,53 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       <option value="section">🏘️ Section / Bial Danin</option>
                       <option value="amount_desc">💰 Sum Thawh Tam Danin (Highest to Lowest)</option>
                     </select>
+                    <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-1 rounded-lg shrink-0">
+                      👤 Mimal Record Chiah
+                    </span>
+                  </div>
+                )}
+
+                {/* Group Ledger Sort Order Selector */}
+                {reportPrintStyle === 'group_ledger' && (
+                  <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
+                    <span className="text-[11px] font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-indigo-700 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">👥</span>
+                      <span>Group Ledger Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-indigo-300 hover:border-indigo-500 rounded-xl p-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Group Hming A-Z</option>
+                      <option value="name_desc">🔤 Group Hming Z-A</option>
+                      <option value="amount_desc">💰 Thawh Tam Danin</option>
+                    </select>
+                    <span className="text-[9.5px] font-bold text-indigo-800 bg-indigo-100 border border-indigo-300 px-2 py-1 rounded-lg shrink-0">
+                      👥 {availableGroups.length} Groups Enrolled
+                    </span>
+                  </div>
+                )}
+
+                {/* General Ledger Sort Order Selector */}
+                {reportPrintStyle === 'general_ledger' && (
+                  <div className="pt-2 border-t border-indigo-200/60 flex flex-col sm:flex-row sm:items-center gap-2 animate-fadeIn">
+                    <span className="text-[11px] font-black text-emerald-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">🏛️</span>
+                      <span>General Ledger Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-emerald-300 hover:border-emerald-500 rounded-xl p-2 text-xs font-black text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Thawhlawm Hming A-Z</option>
+                      <option value="name_desc">🔤 Thawhlawm Hming Z-A</option>
+                      <option value="amount_desc">💰 Thawh Tam Danin</option>
+                    </select>
+                    <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-1 rounded-lg shrink-0">
+                      🏛️ {availableGenerals.length} Collections
+                    </span>
                   </div>
                 )}
               </div>
@@ -1559,9 +1987,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   <Eye className="w-4 h-4 shrink-0 text-indigo-200" />
                   <span>
                     {reportPrintStyle === 'standard_pdf' && 'Preview & Print: PDF Statement'}
-                    {reportPrintStyle === 'master_ledger' && 'Preview & Print: Master Ledger'}
-                    {reportPrintStyle === 'member_matrix' && 'Preview & Print: Category Matrix'}
-                    {reportPrintStyle === 'member_passbook' && 'Preview & Print: Mimal Passbook'}
+                    {reportPrintStyle === 'master_ledger' && 'Preview & Print: Mimal Master Ledger'}
+                    {reportPrintStyle === 'group_ledger' && 'Preview & Print: Group & Unit Master Ledger'}
+                    {reportPrintStyle === 'general_ledger' && 'Preview & Print: General Thawhlawm Ledger'}
+                    {reportPrintStyle === 'member_matrix' && `Preview & Print: ${matrixScopeType === 'group' ? 'Group Matrix' : matrixScopeType === 'general' ? 'General Matrix' : 'Category Matrix'}`}
+                    {reportPrintStyle === 'member_passbook' && `Preview & Print: ${matrixScopeType === 'group' ? 'Group Passbook' : matrixScopeType === 'general' ? 'General Passbook' : 'Mimal Passbook'}`}
                   </span>
                 </button>
               </div>
@@ -1619,6 +2049,54 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                 </div>
               </div>
 
+              {/* Segregated Category Pills for Kumtluang Matrix */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer shrink-0 border ${
+                    recordTypeFilter === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                  }`}
+                >
+                  All Donors ({kumtluangMatrix.rows.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('member')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer shrink-0 border ${
+                    recordTypeFilter === 'member'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-200'
+                  }`}
+                >
+                  👤 Mimal Records ({kumtluangMatrix.memberRows.length}) • ₹{kumtluangMatrix.memberTotal.toLocaleString('en-IN')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('group')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer shrink-0 border ${
+                    recordTypeFilter === 'group'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                      : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border-indigo-200'
+                  }`}
+                >
+                  👥 Group / Unit Records ({kumtluangMatrix.groupRows.length}) • ₹{kumtluangMatrix.groupTotal.toLocaleString('en-IN')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecordTypeFilter('general')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10.5px] transition cursor-pointer shrink-0 border ${
+                    recordTypeFilter === 'general'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
+                  }`}
+                >
+                  🏛️ General / Inkhawm ({kumtluangMatrix.generalRows.length}) • ₹{kumtluangMatrix.generalTotal.toLocaleString('en-IN')}
+                </button>
+              </div>
+
               {kumtluangMatrix.rows.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 space-y-1">
                   <Receipt className="w-8 h-8 mx-auto text-slate-300" />
@@ -1666,7 +2144,30 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       {kumtluangMatrix.rows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200">
-                            {row.donorName}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{row.donorName}</span>
+                              {row.donorType === 'group' && (
+                                <span className="text-[8.5px] font-black px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                  👥 GROUP
+                                </span>
+                              )}
+                              {row.donorType === 'general' && (
+                                <span className="text-[8.5px] font-black px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  🏛️ GENERAL
+                                </span>
+                              )}
+                              {row.donorType === 'member' && (
+                                <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  👤 MIMAL
+                                </span>
+                              )}
+                            </div>
+                            {row.groupName && row.groupName !== row.donorName && (
+                              <div className="text-[9.5px] text-indigo-700 font-medium">Pawl: {row.groupName}</div>
+                            )}
+                            {row.section && (
+                              <div className="text-[9.5px] text-slate-400 font-medium">Sec: {row.section}</div>
+                            )}
                           </td>
                           <td className="py-2 px-2 text-center border-r border-slate-200 whitespace-nowrap">
                             {row.paymentMethodLabel === 'CASH' ? (

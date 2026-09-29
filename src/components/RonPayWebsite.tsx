@@ -55,7 +55,7 @@ import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { getPhonePeMercuryUrl } from '../utils/phonepeDirect';
 
 interface RonPayWebsiteProps {
-  onLaunchApp: (targetScreen?: string, targetCategory?: BawmCategory) => void;
+  onLaunchApp: (targetScreen?: string, targetCategoryOrCampId?: BawmCategory | string) => void;
   onOpenCreateQR?: () => void;
   onOpenRegister?: () => void;
   onOpenBBPS?: (serviceId?: string) => void;
@@ -1683,6 +1683,51 @@ export const RonPayWebsite: React.FC<RonPayWebsiteProps> = ({
                     <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" /> 1-Click Committee PDF/Excel Export
                   </li>
                 </ul>
+
+                {/* Live Active Kumtluang Bawms Showcase */}
+                <div className={`mt-3.5 pt-2.5 border-t ${eyeComfortMode ? 'border-blue-100 bg-blue-50/60' : 'border-blue-900/40 bg-blue-950/40'} p-2.5 rounded-xl space-y-2`}>
+                  <div className="text-[10.5px] font-bold text-blue-600 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      {isMizo ? 'Live Kumtluang Bawmte:' : 'Live Featured Bawms:'}
+                    </span>
+                    <span className="text-[9px] font-semibold text-slate-400">Verified</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onLaunchApp('checkout', 'cmp-1788107291420')}
+                      className={`p-2 rounded-xl border text-left flex items-center gap-2 transition ${eyeComfortMode ? 'bg-white hover:bg-blue-100/70 border-blue-200 text-slate-900' : 'bg-slate-800 hover:bg-slate-750 border-blue-800/80 text-white'} shadow-2xs cursor-pointer active:scale-98`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-2xs">
+                        B
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-black truncate flex items-center gap-1">
+                          <span>BMP Shillong</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        </div>
+                        <div className="text-[9.5px] text-slate-500 truncate">Shillong Unit</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onLaunchApp('checkout', 'cmp-kumtluang-1')}
+                      className={`p-2 rounded-xl border text-left flex items-center gap-2 transition ${eyeComfortMode ? 'bg-white hover:bg-blue-100/70 border-blue-200 text-slate-900' : 'bg-slate-800 hover:bg-slate-750 border-blue-800/80 text-white'} shadow-2xs cursor-pointer active:scale-98`}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-2xs">
+                        E
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-black truncate flex items-center gap-1">
+                          <span>BCM Ebenezer</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        </div>
+                        <div className="text-[9.5px] text-slate-500 truncate">Zobawk, Lunglei</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className={`pt-4 border-t ${eyeComfortMode ? 'border-slate-150' : 'border-slate-800/80'} space-y-2`}>

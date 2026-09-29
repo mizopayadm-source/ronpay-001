@@ -667,7 +667,7 @@ export const exportFormattedExcel = (
     `;
   } else {
     // Standard Itemized Sheet
-    const colCount = 7;
+    const colCount = 8;
     const dataRows = transactions.map((t, idx) => {
       let remarks = t.periodLabel || '';
       if (t.remark && t.remark.trim()) {
@@ -679,12 +679,18 @@ export const exportFormattedExcel = (
       }
 
       const modeText = t.paymentMethod === 'phonepe' ? '⚡ PHONEPE' : t.paymentMethod === 'cash' ? '💵 CASH' : '⚡ ONLINE';
+      const recType = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0)
+        ? 'GROUP'
+        : t.donorType === 'general'
+        ? 'GENERAL'
+        : 'MIMAL';
 
       return `
         <tr class="${idx % 2 === 0 ? 'row-even' : 'row-odd'}">
           <td class="cell-center cell-bold">${idx + 1}</td>
           <td class="cell-center cell-date">${formatDateTimeDDMMYYYY(t.timestamp)}</td>
           <td class="cell-left cell-bold">${t.isAnonymous ? 'Anonymous' : t.donorName}</td>
+          <td class="cell-center cell-mode ${recType === 'GROUP' ? 'mode-cash' : recType === 'GENERAL' ? 'mode-online' : ''}">${recType}</td>
           <td class="cell-center cell-mode ${t.paymentMethod === 'cash' ? 'mode-cash' : 'mode-online'}">${modeText}</td>
           <td class="cell-left">${remarks || '-'}</td>
           <td class="cell-center cell-hash">${t.txHash || t.id}</td>
@@ -765,6 +771,7 @@ export const exportFormattedExcel = (
             <th class="header-sl">SL NO.</th>
             <th class="header-date">DATE & TIME</th>
             <th class="header-name">HMING (DONOR)</th>
+            <th class="header-mode">RECORD TYPE</th>
             <th class="header-mode">PAYMENT MODE</th>
             <th class="header-remarks">REMARKS / NOTE</th>
             <th class="header-ref">TX HASH / ID</th>
@@ -776,7 +783,7 @@ export const exportFormattedExcel = (
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="6" class="cell-grand-label">GRAND TOTAL COLLECTION</td>
+            <td colspan="7" class="cell-grand-label">GRAND TOTAL COLLECTION</td>
             <td class="cell-grand-highlight">${totalAmount}</td>
           </tr>
         </tfoot>
@@ -953,13 +960,14 @@ export const exportDetailedTransactionsCSV = (
     `""`,
   ].filter(Boolean);
 
-  // Full headers including subcategory details
+  // Full headers including subcategory and record type details
   const headers = [
     'Transaction ID',
     'Date & Time',
     'Category / Bawm',
     'Campaign Title',
     'Donor Name',
+    'Record Type',
     'Amount (INR)',
     'Payment Mode',
     'Status',
@@ -977,12 +985,19 @@ export const exportDetailedTransactionsCSV = (
       breakdownStr = breakdownStr ? `${breakdownStr} | ${parts.join('; ')}` : parts.join('; ');
     }
 
+    const recType = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0)
+      ? 'GROUP'
+      : t.donorType === 'general'
+      ? 'GENERAL'
+      : 'MIMAL';
+
     return [
       `"${t.id}"`,
       `"${formatDateTimeDDMMYYYY(t.timestamp)}"`,
       `"${t.category.toUpperCase()}"`,
       `"${(t.campaignTitle || '').replace(/"/g, '""')}"`,
       `"${(t.isAnonymous ? 'Anonymous' : (t.donorName || '')).replace(/"/g, '""')}"`,
+      `"${recType}"`,
       t.amount.toFixed(2),
       `"${t.paymentMethod.toUpperCase()}"`,
       `"${t.status.toUpperCase()}"`,
@@ -997,6 +1012,7 @@ export const exportDetailedTransactionsCSV = (
     '""',
     '""',
     `"${transactions.length} Transactions"`,
+    '""',
     totalAmount.toFixed(2),
     '""',
     '""',
@@ -2390,4 +2406,1040 @@ export const exportMemberPassbookVerticalPrint = (
     .replace(/\s+/g, '_');
   printHtmlSafely(html, `Passbook Card • ${member.name} (${member.id})`, `RonPay_Report_${cleanName}.pdf`);
 };
+
+/**
+ * Helper to determine donor category type: 'member' | 'group' | 'general'
+ */
+export const getTransactionDonorType = (t: Transaction): 'member' | 'group' | 'general' => {
+  if (!t) return 'member';
+  if (t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0)) {
+    return 'group';
+  }
+  if (t.donorType === 'general') {
+    return 'general';
+  }
+  return 'member';
+};
+
+/**
+ * Checks if a transaction belongs to a given Group Name
+ */
+export const isTransactionForGroup = (t: Transaction, groupName: string): boolean => {
+  if (!t || !groupName) return false;
+  const target = groupName.trim().toLowerCase();
+  const isGrp = t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0);
+  if (!isGrp) return false;
+
+  if (t.groupName && t.groupName.trim().toLowerCase() === target) return true;
+  if (t.donorName && t.donorName.trim().toLowerCase() === target) return true;
+  if (t.remark && t.remark.toLowerCase().includes(target)) return true;
+  return false;
+};
+
+/**
+ * Checks if a transaction belongs to a General Collection title
+ */
+export const isTransactionForGeneral = (t: Transaction, generalTitle: string): boolean => {
+  if (!t || !generalTitle) return false;
+  const target = generalTitle.trim().toLowerCase();
+  if (t.donorType !== 'general') return false;
+
+  if (t.donorName && t.donorName.trim().toLowerCase() === target) return true;
+  if (t.subCategory && t.subCategory.trim().toLowerCase() === target) return true;
+  if (t.remark && t.remark.toLowerCase().includes(target)) return true;
+  return false;
+};
+
+export interface GroupRecordItem {
+  name: string;
+  section?: string;
+  leader?: string;
+  phone?: string;
+}
+
+export interface GeneralRecordItem {
+  title: string;
+  section?: string;
+  collector?: string;
+  phone?: string;
+}
+
+/**
+ * Format 2b: Group & Unit Master Ledger (12 Months Landscape Table)
+ * Displays all distinct groups/units with monthly contributions. Strictly isolated from individual members.
+ */
+export const generateGroupMasterLedgerPrintHtml = (
+  groups: GroupRecordItem[],
+  transactions: Transaction[],
+  campaignTitle: string,
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  sortOrder: 'name_asc' | 'name_desc' | 'amount_desc' | string = 'name_asc'
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  // Strict Isolation: Only group transactions
+  const groupTransactions = transactions.filter(t => 
+    t.donorType === 'group' || (Boolean(t.groupName) && t.groupName!.trim().length > 0)
+  );
+
+  // If no group list provided, dynamically derive unique groups from transactions
+  let groupList: GroupRecordItem[] = [...groups];
+  if (groupList.length === 0) {
+    const groupMap = new Map<string, GroupRecordItem>();
+    groupTransactions.forEach(t => {
+      const gName = (t.groupName || t.donorName || 'Unnamed Group').trim();
+      if (!groupMap.has(gName)) {
+        groupMap.set(gName, {
+          name: gName,
+          section: t.donorVeng,
+          phone: t.donorPhone,
+          leader: t.donorName !== gName ? t.donorName : undefined
+        });
+      }
+    });
+    groupList = Array.from(groupMap.values());
+  }
+
+  // Sort groups
+  if (sortOrder === 'name_desc') {
+    groupList.sort((a, b) => b.name.localeCompare(a.name, undefined, { sensitivity: 'base' }));
+  } else {
+    groupList.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }
+
+  // Allocate transactions to groups
+  const groupTxnsMap = new Map<string, Transaction[]>();
+  groupList.forEach(g => groupTxnsMap.set(g.name, []));
+
+  for (const t of groupTransactions) {
+    const tGName = (t.groupName || t.donorName || '').trim().toLowerCase();
+    const matched = groupList.find(g => 
+      g.name.toLowerCase() === tGName ||
+      (t.groupName && t.groupName.trim().toLowerCase() === g.name.toLowerCase()) ||
+      (t.donorName && t.donorName.trim().toLowerCase() === g.name.toLowerCase())
+    );
+    if (matched) {
+      groupTxnsMap.get(matched.name)!.push(t);
+    } else {
+      if (groupList.length > 0) {
+        groupTxnsMap.get(groupList[0].name)!.push(t);
+      }
+    }
+  }
+
+  // Sort by amount if requested
+  if (sortOrder === 'amount_desc') {
+    groupList.sort((a, b) => {
+      const sumA = (groupTxnsMap.get(a.name) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      const sumB = (groupTxnsMap.get(b.name) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      return sumB - sumA;
+    });
+  }
+
+  const rowsHtml = groupList.map((grp, idx) => {
+    const txns = groupTxnsMap.get(grp.name) || [];
+    let rowTotal = 0;
+
+    const monthCols = months.map(m => {
+      const mTxns = txns.filter(t => {
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
+      });
+      const sum = mTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px; color: #64748b;">${idx + 1}</td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-size: 11.5px; color: #1e3a8a;">
+          👥 ${grp.name}
+          ${grp.leader ? `<div style="font-size: 9.5px; color: #64748b; font-weight: normal;">Leader: ${grp.leader}</div>` : ''}
+        </td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; color: #475569; font-size: 10.5px;">${grp.section || grp.phone || '-'}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0e7ff; color: #3730a3; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const monthTotalCols = months.map(m => `
+    <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; font-family: monospace; font-size: 11px;">
+      ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+    </td>
+  `).join('');
+
+  const logoHeader = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1.5px solid #1e3a8a; margin-right: 12px;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Group & Unit Master Ledger • ${orgName}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 landscape; margin: 8mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background: #1e1b4b; color: white; padding: 8px 6px; font-size: 10px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4338ca; padding-bottom: 8px; }
+          .header-left { display: flex; align-items: center; }
+          .signatures { margin-top: 28px; display: flex; justify-content: space-between; padding: 0 20px; page-break-inside: avoid; }
+          .sig-box { text-align: center; width: 180px; }
+          .sig-line { border-top: 1px solid #0f172a; margin-top: 40px; padding-top: 4px; font-size: 10px; font-weight: bold; }
+          @media print {
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-left">
+            ${logoHeader}
+            <div>
+              <h1 style="margin: 0; font-size: 18px; color: #312e81; font-weight: 900; text-transform: uppercase;">${orgName}</h1>
+              <h2 style="margin: 2px 0 0 0; font-size: 12.5px; color: #4338ca;">${campaignTitle} — 👥 Group & Unit Master Ledger (Thla 12)</h2>
+              ${location ? `<div style="font-size: 10px; color: #b45309; font-weight: 700; margin-top: 2px;">📍 ${location}</div>` : ''}
+            </div>
+          </div>
+          <div style="text-align: right; font-size: 10px; color: #64748b;">
+            <div>Printed Date: <b>${formatDateDDMMYYYY(new Date())}</b></div>
+            <div>Enrolled Groups / Units: <b>${groupList.length}</b> • Transactions: <b>${groupTransactions.length}</b></div>
+            <div style="color: #4338ca; font-weight: 900; margin-top: 2px; font-size: 12px;">Grand Total: ₹${grandTotal.toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>GROUP / PAWL / UNIT NAME</th>
+              <th style="width: 110px;">SECTION / BIAL</th>
+              ${months.map(m => `<th style="width: 46px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 75px; background: #4338ca;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e0e7ff; font-weight: 900;">
+              <td colspan="3" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px; color: #1e1b4b;">
+                GROUP COLLECTION GRAND TOTAL:
+              </td>
+              ${monthTotalCols}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #4338ca; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="signatures">
+          <div class="sig-box">
+            <div class="sig-line">Prepared by (Recorder)</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line">Verified by (Treasurer)</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line">Approved by (Leader / Secretary)</div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGroupMasterLedgerPrint = (
+  groups: GroupRecordItem[],
+  transactions: Transaction[],
+  campaignTitle: string,
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  sortOrder: string = 'name_asc'
+) => {
+  const html = generateGroupMasterLedgerPrintHtml(groups, transactions, campaignTitle, orgName, logoUrl, location, sortOrder);
+  const cleanTarget = (campaignTitle || orgName || 'Group_Ledger')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Group Master Ledger • ${orgName}`, `RonPay_Group_Ledger_${cleanTarget}.pdf`);
+};
+
+/**
+ * Format 2c: General & Inkhawm Thawhlawm Ledger (12 Months Landscape Table)
+ * Displays general collections (e.g. Inkhawm Thawhlawm, Pathianni Zing, etc.) month by month. Strictly isolated.
+ */
+export const generateGeneralMasterLedgerPrintHtml = (
+  generalItems: GeneralRecordItem[],
+  transactions: Transaction[],
+  campaignTitle: string,
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  sortOrder: 'name_asc' | 'name_desc' | 'amount_desc' | string = 'name_asc'
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  // Strict Isolation: Only general transactions
+  const generalTransactions = transactions.filter(t => t.donorType === 'general');
+
+  // Derive unique general collection items if not passed
+  let itemsList: GeneralRecordItem[] = [...generalItems];
+  if (itemsList.length === 0) {
+    const itemMap = new Map<string, GeneralRecordItem>();
+    generalTransactions.forEach(t => {
+      const title = (t.donorName || t.subCategory || 'General Offering').trim();
+      if (!itemMap.has(title)) {
+        itemMap.set(title, {
+          title,
+          section: t.donorVeng,
+          collector: t.remark?.includes('Collector:') ? t.remark.split('Collector:')[1].trim() : undefined,
+          phone: t.donorPhone
+        });
+      }
+    });
+    itemsList = Array.from(itemMap.values());
+  }
+
+  // Sort general items
+  if (sortOrder === 'name_desc') {
+    itemsList.sort((a, b) => b.title.localeCompare(a.title, undefined, { sensitivity: 'base' }));
+  } else {
+    itemsList.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+  }
+
+  // Allocate transactions to general items
+  const itemTxnsMap = new Map<string, Transaction[]>();
+  itemsList.forEach(item => itemTxnsMap.set(item.title, []));
+
+  for (const t of generalTransactions) {
+    const tTitle = (t.donorName || t.subCategory || '').trim().toLowerCase();
+    const matched = itemsList.find(it => 
+      it.title.toLowerCase() === tTitle ||
+      (t.donorName && t.donorName.trim().toLowerCase() === it.title.toLowerCase()) ||
+      (t.subCategory && t.subCategory.trim().toLowerCase() === it.title.toLowerCase())
+    );
+    if (matched) {
+      itemTxnsMap.get(matched.title)!.push(t);
+    } else {
+      if (itemsList.length > 0) {
+        itemTxnsMap.get(itemsList[0].title)!.push(t);
+      }
+    }
+  }
+
+  // Sort by amount if requested
+  if (sortOrder === 'amount_desc') {
+    itemsList.sort((a, b) => {
+      const sumA = (itemTxnsMap.get(a.title) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      const sumB = (itemTxnsMap.get(b.title) || []).reduce((acc, t) => acc + (t.amount || 0), 0);
+      return sumB - sumA;
+    });
+  }
+
+  const rowsHtml = itemsList.map((item, idx) => {
+    const txns = itemTxnsMap.get(item.title) || [];
+    let rowTotal = 0;
+
+    const monthCols = months.map(m => {
+      const mTxns = txns.filter(t => {
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
+      });
+      const sum = mTxns.reduce((acc, t) => acc + (t.amount || 0), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px; color: #64748b;">${idx + 1}</td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; font-size: 11.5px; color: #047857;">
+          🏛️ ${item.title}
+          ${item.collector ? `<div style="font-size: 9.5px; color: #64748b; font-weight: normal;">Collector: ${item.collector}</div>` : ''}
+        </td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; color: #475569; font-size: 10.5px;">${item.section || item.phone || '-'}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #dcfce7; color: #065f46; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const monthTotalCols = months.map(m => `
+    <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; font-family: monospace; font-size: 11px;">
+      ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+    </td>
+  `).join('');
+
+  const logoHeader = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1.5px solid #047857; margin-right: 12px;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>General & Inkhawm Thawhlawm Ledger • ${orgName}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 landscape; margin: 8mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background: #064e3b; color: white; padding: 8px 6px; font-size: 10px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #047857; padding-bottom: 8px; }
+          .header-left { display: flex; align-items: center; }
+          .signatures { margin-top: 28px; display: flex; justify-content: space-between; padding: 0 20px; page-break-inside: avoid; }
+          .sig-box { text-align: center; width: 180px; }
+          .sig-line { border-top: 1px solid #0f172a; margin-top: 40px; padding-top: 4px; font-size: 10px; font-weight: bold; }
+          @media print {
+            thead { display: table-row-group !important; }
+            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-left">
+            ${logoHeader}
+            <div>
+              <h1 style="margin: 0; font-size: 18px; color: #064e3b; font-weight: 900; text-transform: uppercase;">${orgName}</h1>
+              <h2 style="margin: 2px 0 0 0; font-size: 12.5px; color: #047857;">${campaignTitle} — 🏛️ General & Inkhawm Thawhlawm Ledger (Thla 12)</h2>
+              ${location ? `<div style="font-size: 10px; color: #b45309; font-weight: 700; margin-top: 2px;">📍 ${location}</div>` : ''}
+            </div>
+          </div>
+          <div style="text-align: right; font-size: 10px; color: #64748b;">
+            <div>Printed Date: <b>${formatDateDDMMYYYY(new Date())}</b></div>
+            <div>Collection Heads: <b>${itemsList.length}</b> • Transactions: <b>${generalTransactions.length}</b></div>
+            <div style="color: #047857; font-weight: 900; margin-top: 2px; font-size: 12px;">Grand Total: ₹${grandTotal.toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>THAWHLAWM / COLLECTION NAME</th>
+              <th style="width: 120px;">LOCATION / SECTION</th>
+              ${months.map(m => `<th style="width: 46px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 75px; background: #047857;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #dcfce7; font-weight: 900;">
+              <td colspan="3" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px; color: #064e3b;">
+                GENERAL THAWHLAWM GRAND TOTAL:
+              </td>
+              ${monthTotalCols}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #047857; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="signatures">
+          <div class="sig-box">
+            <div class="sig-line">Prepared by (Collector / Recorder)</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line">Verified by (Treasurer)</div>
+          </div>
+          <div class="sig-box">
+            <div class="sig-line">Approved by (Secretary / Leader)</div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGeneralMasterLedgerPrint = (
+  generalItems: GeneralRecordItem[],
+  transactions: Transaction[],
+  campaignTitle: string,
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  sortOrder: string = 'name_asc'
+) => {
+  const html = generateGeneralMasterLedgerPrintHtml(generalItems, transactions, campaignTitle, orgName, logoUrl, location, sortOrder);
+  const cleanTarget = (campaignTitle || orgName || 'General_Ledger')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `General Thawhlawm Ledger • ${orgName}`, `RonPay_General_Ledger_${cleanTarget}.pdf`);
+};
+
+/**
+ * Format 3b: Group Category Matrix Print (Horizontal)
+ */
+export const generateGroupCategoryMatrixPrintHtml = (
+  groupName: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  section?: string,
+  leader?: string
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const grpTxns = transactions.filter(t => isTransactionForGroup(t, groupName));
+
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  const rowsHtml = categories.map((cat, idx) => {
+    let rowTotal = 0;
+    const monthCols = months.map(m => {
+      const monthTxns = grpTxns.filter(t => {
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
+      });
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #312e81;">${cat}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0e7ff; color: #3730a3; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 38px; height: 38px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 8px; border: 1px solid #cbd5e1;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Group Record • ${groupName}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #1e1b4b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 1.5px solid #4338ca; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; background: #eef2ff; }
+          @media print { thead { display: table-row-group !important; } tr { page-break-inside: avoid !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 60px; height: 60px; border-radius: 12px; background: #4338ca; display: flex; align-items: center; justify-content: center; color: white; font-size: 26px;">👥</div>
+              <div>
+                <div style="font-size: 11px; color: #4338ca; font-weight: bold; text-transform: uppercase;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 22px; color: #1e1b4b; font-weight: 900;">${groupName}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Record Type: <b>GROUP / UNIT</b> ${section ? `• Section: <b>${section}</b>` : ''} ${leader ? `• Leader/In-charge: <b>${leader}</b>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 9.5px; color: #4338ca; font-weight: bold; text-transform: uppercase;">CATEGORY MATRIX</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #3730a3; background: #e0e7ff; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; margin-top: 3px;">TOTAL: ₹${grandTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>HEAD / CATEGORY</th>
+              ${months.map(m => `<th style="width: 48px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 70px; background: #4338ca;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${months.map(m => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #4338ca; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGroupCategoryMatrixPrint = (
+  groupName: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  section?: string,
+  leader?: string
+) => {
+  const html = generateGroupCategoryMatrixPrintHtml(groupName, categories, transactions, orgName, logoUrl, location, section, leader);
+  const cleanName = groupName.replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_');
+  printHtmlSafely(html, `Group Matrix • ${groupName}`, `RonPay_Group_Matrix_${cleanName}.pdf`);
+};
+
+/**
+ * Format 4b: Group Passbook Vertical Card Print
+ */
+export const generateGroupPassbookPrintHtml = (
+  groupName: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  section?: string,
+  leader?: string
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const grpTxns = transactions.filter(t => isTransactionForGroup(t, groupName));
+
+  let grandTotal = 0;
+  const categoryTotals: { [cat: string]: number } = {};
+  categories.forEach(c => { categoryTotals[c] = 0; });
+
+  const rowsHtml = months.map((month, idx) => {
+    let monthTotal = 0;
+    const monthTxns = grpTxns.filter(t => {
+      const info = getTransactionMonthInfo(t);
+      return info.shortMonth.toLowerCase() === month.toLowerCase();
+    });
+
+    const catCols = categories.map(cat => {
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
+      monthTotal += sum;
+      categoryTotals[cat] += sum;
+      return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += monthTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #4338ca;">${month}</td>
+        ${catCols}
+        <td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #e0e7ff; color: #3730a3; font-family: monospace; font-size: 11px;">
+          ${monthTotal > 0 ? monthTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 38px; height: 38px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 8px; border: 1px solid #cbd5e1;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Group Passbook Card • ${groupName}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          th { background: #1e1b4b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 1.5px solid #4338ca; border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #eef2ff; }
+          @media print { thead { display: table-row-group !important; } tr { page-break-inside: avoid !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 60px; height: 60px; border-radius: 12px; background: #4338ca; display: flex; align-items: center; justify-content: center; color: white; font-size: 26px;">👥</div>
+              <div>
+                <div style="font-size: 11px; color: #4338ca; font-weight: bold; text-transform: uppercase;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 22px; color: #1e1b4b; font-weight: 900;">${groupName}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Type: <b>GROUP / UNIT PASSBOOK</b> ${section ? `• Section: <b>${section}</b>` : ''} ${leader ? `• In-charge: <b>${leader}</b>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 9.5px; color: #4338ca; font-weight: bold; text-transform: uppercase;">ANNUAL PASSBOOK</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #3730a3; background: #e0e7ff; padding: 4px 10px; border-radius: 6px; border: 1px solid #c7d2fe; margin-top: 3px;">TOTAL: ₹${grandTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px;">#</th>
+              <th style="width: 80px;">MONTH</th>
+              ${categories.map(c => `<th>${c.toUpperCase()}</th>`).join('')}
+              <th style="width: 85px; background: #4338ca;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${categories.map(c => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${categoryTotals[c] > 0 ? categoryTotals[c].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #4338ca; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGroupPassbookPrint = (
+  groupName: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  section?: string,
+  leader?: string
+) => {
+  const html = generateGroupPassbookPrintHtml(groupName, categories, transactions, orgName, logoUrl, location, section, leader);
+  const cleanName = groupName.replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_');
+  printHtmlSafely(html, `Group Passbook • ${groupName}`, `RonPay_Group_Passbook_${cleanName}.pdf`);
+};
+
+/**
+ * Format 3c: General Category Matrix Print (Horizontal)
+ */
+export const generateGeneralCategoryMatrixPrintHtml = (
+  generalTitle: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  collector?: string
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const genTxns = transactions.filter(t => isTransactionForGeneral(t, generalTitle));
+
+  const monthTotals: { [key: string]: number } = {};
+  months.forEach(m => { monthTotals[m] = 0; });
+  let grandTotal = 0;
+
+  const rowsHtml = categories.map((cat, idx) => {
+    let rowTotal = 0;
+    const monthCols = months.map(m => {
+      const monthTxns = genTxns.filter(t => {
+        const info = getTransactionMonthInfo(t);
+        return info.shortMonth.toLowerCase() === m.toLowerCase();
+      });
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
+      rowTotal += sum;
+      monthTotals[m] += sum;
+      return `<td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += rowTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #065f46;">${cat}</td>
+        ${monthCols}
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #dcfce7; color: #047857; font-family: monospace; font-size: 11px;">
+          ${rowTotal > 0 ? rowTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 38px; height: 38px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 8px; border: 1px solid #cbd5e1;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>General Record • ${generalTitle}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { background: #064e3b; color: white; padding: 8px; font-size: 10.5px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 1.5px solid #047857; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; background: #f0fdf4; }
+          @media print { thead { display: table-row-group !important; } tr { page-break-inside: avoid !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 60px; height: 60px; border-radius: 12px; background: #047857; display: flex; align-items: center; justify-content: center; color: white; font-size: 26px;">🏛️</div>
+              <div>
+                <div style="font-size: 11px; color: #047857; font-weight: bold; text-transform: uppercase;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 22px; color: #064e3b; font-weight: 900;">${generalTitle}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Record Type: <b>GENERAL / INKHAWM THAWHLAWM</b> ${collector ? `• Collector / Hriatpuitu: <b>${collector}</b>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 9.5px; color: #047857; font-weight: bold; text-transform: uppercase;">COLLECTION MATRIX</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac; margin-top: 3px;">TOTAL: ₹${grandTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>HEAD / CATEGORY</th>
+              ${months.map(m => `<th style="width: 48px;">${m.toUpperCase()}</th>`).join('')}
+              <th style="width: 70px; background: #047857;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${months.map(m => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${monthTotals[m] > 0 ? monthTotals[m].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #047857; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGeneralCategoryMatrixPrint = (
+  generalTitle: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  collector?: string
+) => {
+  const html = generateGeneralCategoryMatrixPrintHtml(generalTitle, categories, transactions, orgName, logoUrl, location, collector);
+  const cleanName = generalTitle.replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_');
+  printHtmlSafely(html, `General Matrix • ${generalTitle}`, `RonPay_General_Matrix_${cleanName}.pdf`);
+};
+
+/**
+ * Format 4c: General Passbook Vertical Card Print
+ */
+export const generateGeneralPassbookPrintHtml = (
+  generalTitle: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  collector?: string
+): string => {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const genTxns = transactions.filter(t => isTransactionForGeneral(t, generalTitle));
+
+  let grandTotal = 0;
+  const categoryTotals: { [cat: string]: number } = {};
+  categories.forEach(c => { categoryTotals[c] = 0; });
+
+  const rowsHtml = months.map((month, idx) => {
+    let monthTotal = 0;
+    const monthTxns = genTxns.filter(t => {
+      const info = getTransactionMonthInfo(t);
+      return info.shortMonth.toLowerCase() === month.toLowerCase();
+    });
+
+    const catCols = categories.map(cat => {
+      const sum = monthTxns.reduce((acc, t) => acc + getTransactionCategoryAmount(t, cat), 0);
+      monthTotal += sum;
+      categoryTotals[cat] += sum;
+      return `<td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-family: monospace; font-size: 11px;">${sum > 0 ? sum.toLocaleString('en-IN') : '-'}</td>`;
+    }).join('');
+
+    grandTotal += monthTotal;
+
+    return `
+      <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; text-align: center; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 11px; color: #047857;">${month}</td>
+        ${catCols}
+        <td style="text-align: right; padding: 7px 8px; border: 1px solid #cbd5e1; font-weight: 900; background: #dcfce7; color: #065f46; font-family: monospace; font-size: 11px;">
+          ${monthTotal > 0 ? monthTotal.toLocaleString('en-IN') : '-'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const orgLogoHtml = logoUrl 
+    ? `<img src="${logoUrl}" style="width: 38px; height: 38px; border-radius: 6px; object-fit: cover; vertical-align: middle; margin-right: 8px; border: 1px solid #cbd5e1;" />`
+    : '';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>General Passbook Card • ${generalTitle}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          th { background: #064e3b; color: white; padding: 8px; font-size: 11px; text-transform: uppercase; border: 1px solid #0f172a; }
+          .card { border: 1.5px solid #047857; border-radius: 12px; padding: 14px; margin-bottom: 14px; background: #f0fdf4; }
+          @media print { thead { display: table-row-group !important; } tr { page-break-inside: avoid !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 60px; height: 60px; border-radius: 12px; background: #047857; display: flex; align-items: center; justify-content: center; color: white; font-size: 26px;">🏛️</div>
+              <div>
+                <div style="font-size: 11px; color: #047857; font-weight: bold; text-transform: uppercase;">
+                  ${orgLogoHtml} ${orgName} ${location ? `• 📍 ${location}` : ''}
+                </div>
+                <h1 style="margin: 2px 0 0 0; font-size: 22px; color: #064e3b; font-weight: 900;">${generalTitle}</h1>
+                <div style="font-size: 11.5px; color: #334155; margin-top: 2px;">
+                  Type: <b>GENERAL THAWHLAWM PASSBOOK</b> ${collector ? `• Collector / Hriatpuitu: <b>${collector}</b>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 9.5px; color: #047857; font-weight: bold; text-transform: uppercase;">ANNUAL PASSBOOK</div>
+              <div style="font-size: 16px; font-weight: 900; font-family: monospace; color: #047857; background: #dcfce7; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac; margin-top: 3px;">TOTAL: ₹${grandTotal.toLocaleString('en-IN')}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Statement Date: ${formatDateDDMMYYYY(new Date())}</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px;">#</th>
+              <th style="width: 80px;">MONTH</th>
+              ${categories.map(c => `<th>${c.toUpperCase()}</th>`).join('')}
+              <th style="width: 85px; background: #047857;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #e2e8f0; font-weight: 900;">
+              <td colspan="2" style="padding: 8px; border: 1px solid #0f172a; text-align: right; font-size: 11px;">G TOTAL:</td>
+              ${categories.map(c => `
+                <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-family: monospace; font-size: 11px;">
+                  ${categoryTotals[c] > 0 ? categoryTotals[c].toLocaleString('en-IN') : '-'}
+                </td>
+              `).join('')}
+              <td style="text-align: right; padding: 8px; border: 1px solid #0f172a; font-weight: 900; background: #047857; color: white; font-family: monospace; font-size: 12px;">
+                ₹${grandTotal.toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+    </html>
+  `;
+};
+
+export const exportGeneralPassbookPrint = (
+  generalTitle: string,
+  categories: string[],
+  transactions: Transaction[],
+  orgName: string,
+  logoUrl?: string,
+  location?: string,
+  collector?: string
+) => {
+  const html = generateGeneralPassbookPrintHtml(generalTitle, categories, transactions, orgName, logoUrl, location, collector);
+  const cleanName = generalTitle.replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_');
+  printHtmlSafely(html, `General Passbook • ${generalTitle}`, `RonPay_General_Passbook_${cleanName}.pdf`);
+};
+
 

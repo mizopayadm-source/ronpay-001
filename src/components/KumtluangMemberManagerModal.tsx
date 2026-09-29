@@ -34,8 +34,14 @@ import { getMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaig
 import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
+  exportGroupMasterLedgerPrint,
+  exportGeneralMasterLedgerPrint,
   exportMemberCategoryMatrixPrint, 
+  exportGroupCategoryMatrixPrint,
+  exportGeneralCategoryMatrixPrint,
   exportMemberPassbookVerticalPrint,
+  exportGroupPassbookPrint,
+  exportGeneralPassbookPrint,
   printTransactionsPDF,
   exportFormattedExcel,
   exportKumtluangMatrixToCSV
@@ -253,8 +259,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Print Styles & Configuration State
   const [printOrgScope, setPrintOrgScope] = useState<string>('cmp-kumtluang-1');
-  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
+  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style1_group_master' | 'style1_general_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
+  const [printScopeType, setPrintScopeType] = useState<'member' | 'group' | 'general'>('member');
   const [printMemberId, setPrintMemberId] = useState<string>('');
+  const [printGroupId, setPrintGroupId] = useState<string>('');
+  const [printGeneralId, setPrintGeneralId] = useState<string>('');
   const [printYear, setPrintYear] = useState<string>('2026');
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
@@ -478,6 +487,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       campaignTitle: cleanCampTitle,
       category: 'kumtluang',
       donorName: payerName,
+      donorType: 'member',
       donorPhone: selectedMember.fullPhone || `****${selectedMember.phoneLast4}`,
       donorVeng: selectedMember.section || '',
       isAnonymous: false,
@@ -763,6 +773,40 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
     return getMembers(printOrgScope);
   }, [printOrgScope, allowedCampaigns, filterMembersForScope]);
+
+  // Available Groups for Group Ledger / Matrix / Passbook
+  const availableGroups = useMemo(() => {
+    const map = new Map<string, { name: string; section?: string; total: number }>();
+    printTargetTransactions.forEach(t => {
+      const isGroup = t.donorType === 'group' || (t.groupName && t.groupName.trim() !== '');
+      if (isGroup) {
+        const name = (t.groupName || t.donorName || '').trim();
+        if (name) {
+          const prev = map.get(name) || { name, section: t.donorVeng, total: 0 };
+          prev.total += (t.amount || 0);
+          if (t.donorVeng && !prev.section) prev.section = t.donorVeng;
+          map.set(name, prev);
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [printTargetTransactions]);
+
+  // Available General Collections for General Ledger / Matrix / Passbook
+  const availableGenerals = useMemo(() => {
+    const map = new Map<string, { title: string; section?: string; total: number }>();
+    printTargetTransactions.forEach(t => {
+      const isGen = t.donorType === 'general';
+      if (isGen) {
+        const title = ((t as any).generalCollectionTitle || t.donorName || 'General Thawhlawm').trim();
+        const prev = map.get(title) || { title, section: t.donorVeng, total: 0 };
+        prev.total += (t.amount || 0);
+        if (t.donorVeng && !prev.section) prev.section = t.donorVeng;
+        map.set(title, prev);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [printTargetTransactions]);
 
   if (!isOpen) return null;
 
@@ -1706,7 +1750,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </select>
                 </div>
 
-                {/* 2. Format Selection (4 Formats) */}
+                {/* 2. Format Selection (Expanded with Group and General options) */}
                 <div>
                   <label className="text-xs font-black text-slate-800 block mb-1.5 flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-indigo-600" />
@@ -1718,36 +1762,126 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     className="w-full p-3 bg-white border-2 border-indigo-500 rounded-2xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="style1_master">
-                      📋 Format 1: Kohhran / Pawl Master Ledger (Member zawng zawng Thla 12 Grid - Landscape)
+                      📋 Format 1a: Kohhran / Pawl Master Ledger (👤 Mimal - Thla 12 Grid)
+                    </option>
+                    <option value="style1_group_master">
+                      👥 Format 1b: Group & Unit Master Ledger (👥 Pawl / Unit - Thla 12 Grid)
+                    </option>
+                    <option value="style1_general_master">
+                      🏛️ Format 1c: General & Inkhawm Thawhlawm Ledger (🏛️ Thawhlawm - Thla 12 Grid)
                     </option>
                     <option value="style4_audit">
-                      📊 Format 2: Standard Financial Audit Statement (Official Letterhead, Online/Cash Badges & Signatures)
+                      📊 Format 2: Standard Financial Audit Statement (Official Letterhead & Signatures)
                     </option>
                     <option value="style2_matrix">
-                      📑 Format 3: Mimal Record (Horizontal Category Matrix - Thla 12)
+                      📑 Format 3: Category Matrix (Mimal / Group / General)
                     </option>
                     <option value="style3_passbook">
-                      💳 Format 4: Mimal Passbook Slip (Vertical Card Slip)
+                      💳 Format 4: Passbook Slip (Mimal / Group / General)
                     </option>
                   </select>
                 </div>
 
-                {/* If Mimal format, show Member selector */}
+                {/* If matrix or passbook format, show Record Scope & Target Selectors */}
                 {(printStyle === 'style2_matrix' || printStyle === 'style3_passbook') && (
-                  <div className="animate-fadeIn p-3 bg-white border border-indigo-200 rounded-2xl space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Member Thlang Rawh (Select Member for Personal Statement):
-                    </label>
-                    <select
-                      value={printMemberId}
-                      onChange={(e) => setPrintMemberId(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
-                    >
-                      <option value="">-- Member Thlang Rawh ({printTargetMembers.length} Available) --</option>
-                      {printTargetMembers.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
-                      ))}
-                    </select>
+                  <div className="animate-fadeIn p-3.5 bg-white border border-indigo-200 rounded-2xl space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <span className="text-xs font-bold text-slate-800">
+                        Record Scope Thlang Rawh (Scope Selection):
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPrintScopeType('member')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            printScopeType === 'member'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          👤 Mimal Member
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrintScopeType('group')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            printScopeType === 'group'
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          👥 Group / Unit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrintScopeType('general')}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
+                            printScopeType === 'general'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          🏛️ General Thawhlawm
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Member Dropdown */}
+                    {printScopeType === 'member' && (
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                          Member Thlang Rawh:
+                        </label>
+                        <select
+                          value={printMemberId}
+                          onChange={(e) => setPrintMemberId(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                        >
+                          <option value="">-- Member Thlang Rawh ({printTargetMembers.length} Available) --</option>
+                          {printTargetMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name} ({m.id}) {m.section ? `• ${m.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Group Dropdown */}
+                    {printScopeType === 'group' && (
+                      <div>
+                        <label className="text-[11px] font-bold text-indigo-900 block mb-1">
+                          Group / Unit Thlang Rawh ({availableGroups.length} available):
+                        </label>
+                        <select
+                          value={printGroupId || (availableGroups.length > 0 ? availableGroups[0].name : '')}
+                          onChange={(e) => setPrintGroupId(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                        >
+                          {availableGroups.length === 0 && <option value="">-- Group record hmuh tur a awm rih lo --</option>}
+                          {availableGroups.map(g => (
+                            <option key={g.name} value={g.name}>👥 {g.name} {g.section ? `• ${g.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* General Dropdown */}
+                    {printScopeType === 'general' && (
+                      <div>
+                        <label className="text-[11px] font-bold text-emerald-900 block mb-1">
+                          General Thawhlawm Thlang Rawh ({availableGenerals.length} available):
+                        </label>
+                        <select
+                          value={printGeneralId || (availableGenerals.length > 0 ? availableGenerals[0].title : '')}
+                          onChange={(e) => setPrintGeneralId(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
+                        >
+                          {availableGenerals.length === 0 && <option value="">-- General Thawhlawm record a awm rih lo --</option>}
+                          {availableGenerals.map(g => (
+                            <option key={g.title} value={g.title}>🏛️ {g.title} {g.section ? `• ${g.section}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1756,7 +1890,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   <div className="animate-fadeIn p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-2">
                     <span className="text-xs font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
                       <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">A-Z</span>
-                      <span>Master Ledger Print Order:</span>
+                      <span>Mimal Master Ledger Order:</span>
                     </span>
                     <select
                       value={masterLedgerSortOrder}
@@ -1769,6 +1903,53 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       <option value="section">🏘️ Section / Bial Danin</option>
                       <option value="amount_desc">💰 Sum Thawh Tam Danin (Highest to Lowest)</option>
                     </select>
+                    <span className="text-[9.5px] font-bold text-blue-800 bg-blue-100 border border-blue-200 px-2 py-1 rounded-lg shrink-0">
+                      👤 Mimal Chiah
+                    </span>
+                  </div>
+                )}
+
+                {/* Group Ledger Order Options */}
+                {printStyle === 'style1_group_master' && (
+                  <div className="animate-fadeIn p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-xs font-black text-indigo-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-indigo-700 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">👥</span>
+                      <span>Group Ledger Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-indigo-300 hover:border-indigo-500 rounded-xl p-2 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Group Hming A-Z</option>
+                      <option value="name_desc">🔤 Group Hming Z-A</option>
+                      <option value="amount_desc">💰 Thawh Tam Danin</option>
+                    </select>
+                    <span className="text-[9.5px] font-bold text-indigo-800 bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-lg shrink-0">
+                      👥 {availableGroups.length} Groups
+                    </span>
+                  </div>
+                )}
+
+                {/* General Ledger Order Options */}
+                {printStyle === 'style1_general_master' && (
+                  <div className="animate-fadeIn p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-xs font-black text-emerald-950 shrink-0 flex items-center gap-1.5">
+                      <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">🏛️</span>
+                      <span>General Ledger Order:</span>
+                    </span>
+                    <select
+                      value={masterLedgerSortOrder}
+                      onChange={(e) => setMasterLedgerSortOrder(e.target.value as any)}
+                      className="flex-1 bg-white border-2 border-emerald-300 hover:border-emerald-500 rounded-xl p-2 text-xs font-black text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-300 cursor-pointer shadow-2xs"
+                    >
+                      <option value="name_asc">🔤 Thawhlawm Hming A-Z</option>
+                      <option value="name_desc">🔤 Thawhlawm Hming Z-A</option>
+                      <option value="amount_desc">💰 Thawh Tam Danin</option>
+                    </select>
+                    <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg shrink-0">
+                      🏛️ {availableGenerals.length} Collections
+                    </span>
                   </div>
                 )}
 
@@ -1815,10 +1996,42 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     const locationDisplay = activeCamp?.location || creatorProfile.address;
 
                     if (printStyle === 'style1_master') {
+                      // Strict Isolation: Member Ledger only includes individual member transactions
+                      const memberOnlyTxns = printTargetTransactions.filter(t => 
+                        t.donorType !== 'group' && t.donorType !== 'general' && (!t.groupName || t.groupName.trim() === '')
+                      );
                       exportMasterLedgerPrint(
                         printTargetMembers, 
-                        printTargetTransactions, 
+                        memberOnlyTxns, 
                         activeCamp?.title || 'Consolidated Kumtluang Master Roll', 
+                        orgDisplay,
+                        logoDisplay,
+                        locationDisplay,
+                        masterLedgerSortOrder
+                      );
+                    } else if (printStyle === 'style1_group_master') {
+                      if (availableGroups.length === 0) {
+                        alert('Group / Unit record hmuh tur a awm rih lo.');
+                        return;
+                      }
+                      exportGroupMasterLedgerPrint(
+                        availableGroups,
+                        printTargetTransactions,
+                        activeCamp?.title || 'Group & Unit Master Ledger',
+                        orgDisplay,
+                        logoDisplay,
+                        locationDisplay,
+                        masterLedgerSortOrder
+                      );
+                    } else if (printStyle === 'style1_general_master') {
+                      if (availableGenerals.length === 0) {
+                        alert('General / Inkhawm Thawhlawm record a awm rih lo.');
+                        return;
+                      }
+                      exportGeneralMasterLedgerPrint(
+                        availableGenerals,
+                        printTargetTransactions,
+                        activeCamp?.title || 'General Thawhlawm Ledger',
                         orgDisplay,
                         logoDisplay,
                         locationDisplay,
@@ -1854,36 +2067,98 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         }
                       );
                     } else if (printStyle === 'style2_matrix') {
-                      if (!printMemberId) {
-                        alert('Khawngaihin member thlang hmasa rawh le.');
-                        return;
-                      }
-                      const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
-                      if (m) {
-                        exportMemberCategoryMatrixPrint(
-                          m, 
-                          campaignCategories, 
-                          printTargetTransactions, 
+                      if (printScopeType === 'group') {
+                        const targetGroup = availableGroups.find(g => g.name === printGroupId) || availableGroups[0];
+                        if (!targetGroup) {
+                          alert('Khawngaihin Group / Unit thlang hmasa rawh le.');
+                          return;
+                        }
+                        exportGroupCategoryMatrixPrint(
+                          targetGroup.name,
+                          campaignCategories,
+                          printTargetTransactions,
+                          orgDisplay,
+                          logoDisplay,
+                          locationDisplay,
+                          targetGroup.section
+                        );
+                      } else if (printScopeType === 'general') {
+                        const targetGeneral = availableGenerals.find(g => g.title === printGeneralId) || availableGenerals[0];
+                        if (!targetGeneral) {
+                          alert('Khawngaihin General Thawhlawm thlang hmasa rawh le.');
+                          return;
+                        }
+                        exportGeneralCategoryMatrixPrint(
+                          targetGeneral.title,
+                          campaignCategories,
+                          printTargetTransactions,
                           orgDisplay,
                           logoDisplay,
                           locationDisplay
                         );
+                      } else {
+                        if (!printMemberId) {
+                          alert('Khawngaihin member thlang hmasa rawh le.');
+                          return;
+                        }
+                        const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
+                        if (m) {
+                          exportMemberCategoryMatrixPrint(
+                            m, 
+                            campaignCategories, 
+                            printTargetTransactions, 
+                            orgDisplay,
+                            logoDisplay,
+                            locationDisplay
+                          );
+                        }
                       }
                     } else if (printStyle === 'style3_passbook') {
-                      if (!printMemberId) {
-                        alert('Khawngaihin member thlang hmasa rawh le.');
-                        return;
-                      }
-                      const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
-                      if (m) {
-                        exportMemberPassbookVerticalPrint(
-                          m, 
-                          campaignCategories, 
-                          printTargetTransactions, 
+                      if (printScopeType === 'group') {
+                        const targetGroup = availableGroups.find(g => g.name === printGroupId) || availableGroups[0];
+                        if (!targetGroup) {
+                          alert('Khawngaihin Group / Unit thlang hmasa rawh le.');
+                          return;
+                        }
+                        exportGroupPassbookPrint(
+                          targetGroup.name,
+                          campaignCategories,
+                          printTargetTransactions,
+                          orgDisplay,
+                          logoDisplay,
+                          locationDisplay,
+                          targetGroup.section
+                        );
+                      } else if (printScopeType === 'general') {
+                        const targetGeneral = availableGenerals.find(g => g.title === printGeneralId) || availableGenerals[0];
+                        if (!targetGeneral) {
+                          alert('Khawngaihin General Thawhlawm thlang hmasa rawh le.');
+                          return;
+                        }
+                        exportGeneralPassbookPrint(
+                          targetGeneral.title,
+                          campaignCategories,
+                          printTargetTransactions,
                           orgDisplay,
                           logoDisplay,
                           locationDisplay
                         );
+                      } else {
+                        if (!printMemberId) {
+                          alert('Khawngaihin member thlang hmasa rawh le.');
+                          return;
+                        }
+                        const m = printTargetMembers.find(x => x.id === printMemberId) || allMembersList.find(x => x.id === printMemberId);
+                        if (m) {
+                          exportMemberPassbookVerticalPrint(
+                            m, 
+                            campaignCategories, 
+                            printTargetTransactions, 
+                            orgDisplay,
+                            logoDisplay,
+                            locationDisplay
+                          );
+                        }
                       }
                     }
                   }}
@@ -1891,10 +2166,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 >
                   <Printer className="w-4 h-4" />
                   <span>
-                    {printStyle === 'style1_master' && 'Print Format 1: Master Ledger (Landscape Grid)'}
+                    {printStyle === 'style1_master' && 'Print Format 1a: Mimal Master Ledger (Landscape Grid)'}
+                    {printStyle === 'style1_group_master' && 'Print Format 1b: Group & Unit Master Ledger (Landscape Grid)'}
+                    {printStyle === 'style1_general_master' && 'Print Format 1c: General Thawhlawm Ledger (Landscape Grid)'}
                     {printStyle === 'style4_audit' && 'Print Format 2: Official Financial Audit Statement (PDF)'}
-                    {printStyle === 'style2_matrix' && 'Print Format 3: Mimal Category Matrix'}
-                    {printStyle === 'style3_passbook' && 'Print Format 4: Mimal Passbook Card Slip'}
+                    {printStyle === 'style2_matrix' && `Print Format 3: ${printScopeType === 'group' ? 'Group Matrix' : printScopeType === 'general' ? 'General Matrix' : 'Mimal Category Matrix'}`}
+                    {printStyle === 'style3_passbook' && `Print Format 4: ${printScopeType === 'group' ? 'Group Passbook' : printScopeType === 'general' ? 'General Passbook' : 'Mimal Passbook Card Slip'}`}
                   </span>
                 </button>
               </div>

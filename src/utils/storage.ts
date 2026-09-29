@@ -379,6 +379,9 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-1788107291420' || String(updated.title).toLowerCase().includes('bmp')) {
               updated.category = 'kumtluang';
+              if (updated.title) {
+                updated.title = updated.title.replace(/,+$/, '').trim();
+              }
               if (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0) {
                 updated.subCategories = ['BMP Fund'];
               }

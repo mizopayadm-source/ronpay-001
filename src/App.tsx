@@ -64,6 +64,7 @@ import {
   invalidateCacheOnAuthOrBoot
 } from './services/crossTabSync';
 import { syncAllWithServer } from './utils/syncEngine';
+import { INITIAL_CAMPAIGNS } from './data/initialData';
 
 // Components
 import { Header } from './components/Header';
@@ -1207,10 +1208,21 @@ export default function App() {
   };
 
   // Switch between Website view and App view
-  const handleLaunchApp = (targetScreen?: string, targetCategory?: BawmCategory) => {
+  const handleLaunchApp = (targetScreen?: string, targetCategoryOrCampId?: string) => {
     // Default to Guest User (Khualmi) if not logged in
     if (!creatorProfile || !creatorProfile.phone) {
       setCreatorProfile(GUEST_CREATOR_PROFILE);
+    }
+    if (targetScreen === 'checkout' && targetCategoryOrCampId) {
+      const camp = campaigns.find(c => c.id.toLowerCase() === targetCategoryOrCampId.toLowerCase()) || 
+                   INITIAL_CAMPAIGNS.find(c => c.id.toLowerCase() === targetCategoryOrCampId.toLowerCase());
+      if (camp) {
+        handleSelectCampaign(camp);
+        setShowSplash(false);
+        setAppView('app');
+        updateBrowserView('app', 'checkout');
+        return;
+      }
     }
     if (targetScreen) {
       const validScreens: ScreenId[] = ['home', 'explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'failed', 'cash_pending'];
@@ -1225,8 +1237,8 @@ export default function App() {
     } else {
       setCurrentScreen('home');
     }
-    if (targetCategory) {
-      setSelectedCategory(targetCategory);
+    if (targetCategoryOrCampId && ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'].includes(targetCategoryOrCampId)) {
+      setSelectedCategory(targetCategoryOrCampId as BawmCategory);
     }
     setShowSplash(false);
     setAppView('app');
