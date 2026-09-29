@@ -50,6 +50,7 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
   const initialCamp = kumtluangCamps.find(c => c.id === selectedCampaignId) || kumtluangCamps[0];
   
   const [targetCampId, setTargetCampId] = useState<string>(initialCamp?.id || '');
+  const [selectedImportYear, setSelectedImportYear] = useState<string>(() => String(new Date().getFullYear()));
   const [activeInputMode, setActiveInputMode] = useState<'file' | 'paste'>(initialMode);
   const [showSampleVisual, setShowSampleVisual] = useState<boolean>(false);
 
@@ -146,12 +147,13 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
         parsedRows,
         currentCamp.id,
         currentPrefix,
-        existing
+        existing,
+        selectedImportYear
       );
 
       const res = addBatchMembers(readyMembers, overwriteDuplicates);
       setSaveSuccessMessage(
-        `Members ${readyMembers.length} (Thar: ${res.added}, Update: ${res.updated}) chu "${currentCamp.title}" hnuaiah hlawhtling takin vawn fel a ni ta!`
+        `Members ${readyMembers.length} (Kum: ${selectedImportYear}, Thar: ${res.added}, Update: ${res.updated}) chu "${currentCamp.title}" hnuaiah hlawhtling takin vawn fel a ni ta!`
       );
 
       if (onImportComplete) {
@@ -217,24 +219,42 @@ export const KumtluangExcelImportModal: React.FC<KumtluangExcelImportModalProps>
 
         {/* Target Campaign Selector & Quick Action Bar */}
         <div className="bg-slate-50 border-b border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              Member Dah Luhna Tur Kumtluang Bawm:
-            </label>
-            <select
-              value={targetCampId}
-              onChange={(e) => {
-                setTargetCampId(e.target.value);
-                setSaveSuccessMessage(null);
-              }}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
-            >
-              {kumtluangCamps.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} ({c.orgName || 'Kumtluang'} • Prefix: {c.orgCode || 'BET'})
-                </option>
-              ))}
-            </select>
+          <div className="flex-1 min-w-[200px] grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="sm:col-span-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Member Dah Luhna Tur Kumtluang Bawm:
+              </label>
+              <select
+                value={targetCampId}
+                onChange={(e) => {
+                  setTargetCampId(e.target.value);
+                  setSaveSuccessMessage(null);
+                }}
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
+              >
+                {kumtluangCamps.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title} ({c.orgName || 'Kumtluang'} • Prefix: {c.orgCode || 'BET'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                📅 Kum bi (Year):
+              </label>
+              <select
+                value={selectedImportYear}
+                onChange={(e) => setSelectedImportYear(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
+              >
+                {['2027', '2026', '2025', '2024', '2023'].map((y) => (
+                  <option key={y} value={y}>
+                    Kum {y}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">

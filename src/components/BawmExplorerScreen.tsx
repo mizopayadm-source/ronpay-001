@@ -29,13 +29,15 @@ import {
   Receipt,
   Compass,
   Check,
-  TrendingUp
+  TrendingUp,
+  ArrowRightLeft
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
+import { CampaignTransferModal } from './CampaignTransferModal';
 
 interface BawmExplorerScreenProps {
   category: BawmCategory;
@@ -71,6 +73,8 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   const [filterLocation, setFilterLocation] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'az' | 'urgent'>('newest');
+  const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -865,6 +869,21 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         <Users className="w-3 h-3" /> Roll
                       </button>
                     )}
+                    {(isOwner || creatorProfile?.isAdmin) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTransferCampaign(camp);
+                          setIsTransferModalOpen(true);
+                        }}
+                        className="p-1 px-2 text-[9.5px] font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs shrink-0 active:scale-95"
+                        title="Bawm enkawlna hlan chhawng rawh (Creator Transfer)"
+                      >
+                        <ArrowRightLeft className="w-3 h-3 text-indigo-600" />
+                        <span>Transfer</span>
+                      </button>
+                    )}
                   </div>
 
                   {expired ? (
@@ -882,6 +901,20 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
           })
         )}
       </div>
+
+      <CampaignTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferCampaign(null);
+        }}
+        campaign={transferCampaign}
+        currentCreator={creatorProfile || null}
+        onTransferred={() => {
+          setIsTransferModalOpen(false);
+          setTransferCampaign(null);
+        }}
+      />
     </div>
   );
 };

@@ -432,7 +432,8 @@ export function convertToMemberRecords(
   rows: ParsedMemberRow[],
   campaignId: string,
   prefixCode: string,
-  existingMembers: MemberRecord[]
+  existingMembers: MemberRecord[],
+  year?: number | string
 ): MemberRecord[] {
   const cleanPrefix = (prefixCode || 'MEM').toUpperCase().trim();
   const campMembers = existingMembers.filter(m => m.campaignId === campaignId);
@@ -451,6 +452,10 @@ export function convertToMemberRecords(
 
   let nextSeq = maxSeq + 1;
   const now = new Date().toISOString();
+  const resolvedYearNum = year 
+    ? (typeof year === 'number' ? year : parseInt(year, 10) || new Date().getFullYear())
+    : new Date().getFullYear();
+  const resolvedYearStr = String(resolvedYearNum);
 
   return rows.map((r) => {
     // Generate sequential ID: e.g. BET-001, BET-002, or BET-105
@@ -496,6 +501,8 @@ export function convertToMemberRecords(
       isFamilyHead: true,
       dependents: deps.length > 0 ? deps : undefined,
       pledgeAmount: r.pledgeAmount,
+      enrollmentYear: resolvedYearNum,
+      activeYears: [resolvedYearStr],
       createdAt: now
     };
 

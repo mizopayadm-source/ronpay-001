@@ -40,10 +40,12 @@ import {
   Activity,
   X,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowRightLeft
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
+import { CampaignTransferModal } from './CampaignTransferModal';
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
@@ -104,6 +106,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
   const [currentAnnounceIdx, setCurrentAnnounceIdx] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
 
   // Active items for rotating announcement banner
   const bannerItems: AnnouncementItem[] = announcement?.items && announcement.items.length > 0
@@ -1021,6 +1025,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTransferCampaign(camp);
+                              setIsTransferModalOpen(true);
+                            }}
+                            className="text-[9px] font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                            title="Bawm enkawlna hlan chhawng rawh (Creator Transfer)"
+                          >
+                            <ArrowRightLeft className="w-2.5 h-2.5 text-indigo-600" />
+                            <span>Transfer</span>
+                          </button>
                           <span className="text-[9px] text-slate-600 font-bold bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded-md">
                             {campTransactions.length} {campTransactions.length === 1 ? 'txn' : 'txns'}
                           </span>
@@ -1037,6 +1054,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTransferCampaign(camp);
+                                setIsTransferModalOpen(true);
+                              }}
+                              className="text-[9px] font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                              title="Bawm enkawlna hlan chhawng rawh (Creator Transfer)"
+                            >
+                              <ArrowRightLeft className="w-2.5 h-2.5 text-indigo-600" />
+                              <span>Transfer</span>
+                            </button>
                             <span className="text-[9px] text-slate-400 font-medium">
                               {campTransactions.length} {campTransactions.length === 1 ? 'txn' : 'txns'}
                             </span>
@@ -1090,6 +1120,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         )}
       </div>
+
+      <CampaignTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferCampaign(null);
+        }}
+        campaign={transferCampaign}
+        currentCreator={creatorProfile}
+        onTransferred={() => {
+          setIsTransferModalOpen(false);
+          setTransferCampaign(null);
+        }}
+      />
     </div>
   );
 };

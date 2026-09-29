@@ -95,6 +95,25 @@ export interface Campaign {
   voidedBy?: string;
   isDynamicGateway?: boolean;
   gatewaySessionExpiresAt?: string;
+  allowPublicGroupDeposits?: boolean;
+  officerPasscode?: string;
+  authorizedOfficers?: Array<{
+    name: string;
+    phone: string;
+    role?: string;
+    pin?: string;
+  }>;
+  transferredAt?: string;
+  transferredFrom?: string;
+  transferredTo?: string;
+  transferHistory?: Array<{
+    fromName?: string;
+    fromPhone?: string;
+    toName: string;
+    toPhone: string;
+    transferredAt: string;
+    reason?: string;
+  }>;
   updatedAt?: string;
   lastEditedBy?: string;
   lastEditReason?: string;
@@ -132,6 +151,7 @@ export interface Transaction {
   subCategoryBreakdown?: Record<string, number>;
   timestamp: string;
   createdAt?: string;
+  date?: string;
   txHash?: string;
   transactionId?: string;
   referenceNo?: string;
@@ -403,6 +423,8 @@ export interface MemberRecord {
   pledgeAmount?: number;
   paidAmount?: number;
   status?: 'paid' | 'pending' | 'partial';
+  enrollmentYear?: number | string;
+  activeYears?: string[];
 }
 
 export interface WalletTransaction {

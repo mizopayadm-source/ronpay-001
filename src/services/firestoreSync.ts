@@ -215,36 +215,30 @@ export function resetCloudSessionGuards(): void {
 }
 
 /**
- * Check and seed Firestore with initial default data if empty on cold start (run once per device/browser)
+ * Check and seed Firestore with initial default data if empty.
+ * Fully bypasses automatic reads on cold start to preserve quota.
  */
 export async function seedInitialCloudDataIfEmpty() {
   if (hasSeededCloudThisSession || !isNetworkOnline) return;
   hasSeededCloudThisSession = true;
 
-  // Once checked/seeded in this browser environment, bypass completely to avoid wasteful Firestore reads
   try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_firestore_seeded_ok') === 'true') {
-      return;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('ronpay_firestore_seeded_ok', 'true');
     }
   } catch {}
+}
 
-  // Only super admin or admin should ever trigger seed checks; normal visitors bypass completely
-  const isAdmin = typeof localStorage !== 'undefined' && 
-    (localStorage.getItem('ronpay_admin_role_v1') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role_v1') === 'ADMIN');
-  if (!isAdmin) {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('ronpay_firestore_seeded_ok', 'true');
-      }
-    } catch {}
-    return;
+/**
+ * Explicit admin tool to seed cloud data if ever needed.
+ */
+export async function adminSeedFirestoreInitialData(): Promise<{ success: boolean; message: string }> {
+  if (!isNetworkOnline) {
+    return { success: false, message: 'Device is offline' };
   }
-
   try {
-    // 1. Campaigns seed check with limit(1) - consumes at most 1 read instead of reading entire collection
     const campaignsSnap = await getDocs(query(collection(db, 'campaigns'), limit(1)));
     if (campaignsSnap.empty) {
-      console.log('[Firestore] Seeding initial campaigns to Firestore...');
       const batch = writeBatch(db);
       for (const camp of INITIAL_CAMPAIGNS) {
         if (camp && camp.id) {
@@ -253,59 +247,11 @@ export async function seedInitialCloudDataIfEmpty() {
         }
       }
       await batch.commit();
+      return { success: true, message: 'Seeded initial campaigns' };
     }
-
-    // 2. Pricing config seed check
-    const pricingDoc = await getDoc(doc(db, 'systemConfig', 'pricing'));
-    if (!pricingDoc.exists()) {
-      await setDoc(doc(db, 'systemConfig', 'pricing'), sanitizeForFirestore({
-        ...DEFAULT_PRICING_CONFIG,
-        updatedAt: new Date().toISOString()
-      }), { merge: true });
-    }
-
-    // 3. Announcement seed check
-    const announcementDoc = await getDoc(doc(db, 'systemConfig', 'announcement'));
-    if (!announcementDoc.exists()) {
-      await setDoc(doc(db, 'systemConfig', 'announcement'), sanitizeForFirestore({
-        ...DEFAULT_ANNOUNCEMENT,
-        updatedAt: new Date().toISOString()
-      }), { merge: true });
-    }
-
-    // 4. Initial Creators seed check with limit(1) - consumes at most 1 read instead of reading entire collection
-    const creatorsSnap = await getDocs(query(collection(db, 'creators'), limit(1)));
-    if (creatorsSnap.empty) {
-      const batch = writeBatch(db);
-      for (const cr of INITIAL_REGISTERED_CREATORS) {
-        if (cr && cr.phone) {
-          const docRef = doc(db, 'creators', cr.phone);
-          batch.set(docRef, sanitizeForFirestore({ ...cr, updatedAt: new Date().toISOString() }), { merge: true });
-        }
-      }
-      await batch.commit();
-    }
-
-    // 5. Initial Members seed check with limit(1) - consumes at most 1 read instead of reading entire collection
-    const membersSnap = await getDocs(query(collection(db, 'members'), limit(1)));
-    if (membersSnap.empty) {
-      const batch = writeBatch(db);
-      for (const m of INITIAL_DEFAULT_MEMBERS) {
-        if (m && m.id) {
-          const docRef = doc(db, 'members', m.id);
-          batch.set(docRef, sanitizeForFirestore({ ...m, updatedAt: new Date().toISOString() }), { merge: true });
-        }
-      }
-      await batch.commit();
-    }
-
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('ronpay_firestore_seeded_ok', 'true');
-      }
-    } catch {}
-  } catch (err) {
-    logFirestoreNetworkNote('Seed cloud data check', err);
+    return { success: true, message: 'Cloud database already contains data' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Seed failed' };
   }
 }
 
@@ -350,10 +296,10 @@ const MY_TAB_ID = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 
   ? crypto.randomUUID() 
   : 'tab_' + Math.random().toString(36).substring(2, 10);
 
-/**
- * Cleanly unsubscribe and stop all active Firestore snapshot listeners across the app.
- */
-export function stopAllFirestoreListeners(): void {
+// Cleanly unsubscribe and stop all active Firestore snapshot listeners across the app.
+let stopListenersGraceTimer: any = null;
+
+function performStopAllFirestoreListeners(): void {
   if (activeFirestoreUnsubscribers.length > 0) {
     activeFirestoreUnsubscribers.forEach(unsub => {
       try {
@@ -367,6 +313,26 @@ export function stopAllFirestoreListeners(): void {
   isFirestoreListening = false;
   updateStatus('offline', 'Firestore listeners detached.');
   console.info('[RonPay Cloud Sync] Successfully stopped and cleaned up Firestore snapshot listeners.');
+}
+
+export function stopAllFirestoreListeners(forceImmediate: boolean = false): void {
+  if (stopListenersGraceTimer) {
+    clearTimeout(stopListenersGraceTimer);
+    stopListenersGraceTimer = null;
+  }
+
+  if (forceImmediate) {
+    performStopAllFirestoreListeners();
+    return;
+  }
+
+  // 15-second grace period: prevents React StrictMode or component remounts from thrashing Firestore connections
+  stopListenersGraceTimer = setTimeout(() => {
+    stopListenersGraceTimer = null;
+    if (activeSubscribers.size === 0) {
+      performStopAllFirestoreListeners();
+    }
+  }, 15000);
 }
 
 // Helper to safely broadcast to all active subscribers on this tab
@@ -383,78 +349,112 @@ const broadcast = <K extends keyof FirestoreSyncCallbacks>(key: K, ...args: any[
   });
 };
 
+let lastMembersFetchTime = 0;
+let membersFetchPromise: Promise<MemberRecord[]> | null = null;
+
 /**
- * On-demand fetch of Kumtluang members from Firestore.
- * Eliminates 24/7 background listener reads, fetching only when the Kumtluang Member Manager is opened.
+ * On-demand fetch of Kumtluang members from Firestore with 10-minute caching.
+ * Eliminates 24/7 background listener reads and prevents read spam when toggling modals.
  */
-export async function fetchMembersFromFirestore(campaignId?: string): Promise<MemberRecord[]> {
+export async function fetchMembersFromFirestore(campaignId?: string, force: boolean = false): Promise<MemberRecord[]> {
+  const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
   if (!isNetworkOnline) {
-    return getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
+    return localMembers;
   }
-  try {
-    const memQuery = query(collection(db, 'members'), limit(60));
-    const snapshot = await getDocs(memQuery);
-    const remoteMembers: MemberRecord[] = [];
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data() as MemberRecord;
-      if (data && data.id) {
-        remoteMembers.push(data);
+
+  const now = Date.now();
+  // 10-minute cache: Do not read Firestore again if fetched in the last 10 minutes unless forced
+  if (!force && now - lastMembersFetchTime < 10 * 60 * 1000 && localMembers.length > 0) {
+    return localMembers;
+  }
+
+  if (membersFetchPromise) {
+    return membersFetchPromise;
+  }
+
+  membersFetchPromise = (async () => {
+    try {
+      const memQuery = query(collection(db, 'members'), limit(100));
+      const snapshot = await getDocs(memQuery);
+      const remoteMembers: MemberRecord[] = [];
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as MemberRecord;
+        if (data && data.id) {
+          remoteMembers.push(data);
+        }
+      });
+      lastMembersFetchTime = Date.now();
+      if (remoteMembers.length > 0) {
+        const merged = smartMerge(localMembers, remoteMembers, 'id');
+        setLocalJson('ronpay_kumtluang_members_v1', merged);
+        broadcast('onMembersUpdate', merged);
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
+        } catch {}
+        return merged;
       }
-    });
-    if (remoteMembers.length > 0) {
-      const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
-      const merged = smartMerge(localMembers, remoteMembers, 'id');
-      setLocalJson('ronpay_kumtluang_members_v1', merged);
-      broadcast('onMembersUpdate', merged);
-      try {
-        window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
-        window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: merged }));
-      } catch {}
-      return merged;
+    } catch (err) {
+      logFirestoreNetworkNote('Fetch members on-demand', err);
+    } finally {
+      membersFetchPromise = null;
     }
-  } catch (err) {
-    logFirestoreNetworkNote('Fetch members on-demand', err);
-  }
-  return getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
+    return localMembers;
+  })();
+
+  return membersFetchPromise;
 }
 
 /**
- * Fetch static configs (pricing, announcement) once on cold start if not present in cache.
- * Avoids wasteful 24/7 onSnapshot listeners on static documents.
+ * Static configs (pricing, announcement) are loaded from initialData & server /api/data/sync.
+ * Bypassing direct Firestore getDoc queries on startup completely eliminates redundant reads.
  */
 async function fetchStaticConfigsOnce(): Promise<void> {
-  if (!isNetworkOnline) return;
+  return;
+}
+
+/**
+ * On-demand fetch of Audit Logs (only when opened in Admin Dashboard).
+ */
+export async function fetchAuditLogsFromFirestore(limitCount: number = 10): Promise<AuditLog[]> {
+  const localLogs = getLocalJson<AuditLog[]>('ronpay_audit_logs_v1', []);
+  if (!isNetworkOnline) return localLogs;
+
   try {
-    if (!localStorage.getItem('ronpay_announcement_v1')) {
-      const snap = await getDoc(doc(db, 'systemConfig', 'announcement'));
-      if (snap.exists()) {
-        const data = snap.data() as AnnouncementBanner;
-        setLocalJson('ronpay_announcement_v1', data);
-        broadcast('onAnnouncementUpdate', data);
+    const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(limitCount));
+    const snapshot = await getDocs(auditQuery);
+    const remoteLogs: AuditLog[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as AuditLog;
+      if (data && data.id) {
+        remoteLogs.push(data);
       }
-    }
-    if (!localStorage.getItem('ronpay_pricing_config_v1')) {
-      const snap = await getDoc(doc(db, 'systemConfig', 'pricing'));
-      if (snap.exists()) {
-        const data = snap.data() as SystemPricingConfig;
-        setLocalJson('ronpay_pricing_config_v1', data);
-        broadcast('onPricingConfigUpdate', data);
-      }
+    });
+    if (remoteLogs.length > 0) {
+      setLocalJson('ronpay_audit_logs_v1', remoteLogs);
+      broadcast('onAuditLogsUpdate', remoteLogs);
+      return remoteLogs;
     }
   } catch (err) {
-    logFirestoreNetworkNote('Static configs check', err);
+    logFirestoreNetworkNote('Fetch audit logs on-demand', err);
   }
+  return localLogs;
 }
 
 /**
  * Internal listener runner: Attached ONLY on the single elected Leader Tab.
- * Listens only to core high-value collections (campaigns limit 15, transactions limit 6)
- * to maximize speed and minimize billable document reads.
+ * Listens only to core high-value collections (campaigns limit 50, transactions limit 25)
+ * to maximize speed, guarantee reliable sync across devices, and minimize document reads.
  */
 function startLeaderFirestoreListeners(): void {
   if (isFirestoreListening) return;
   isFirestoreListening = true;
   updateStatus('connecting');
+
+  // Cancel any pending disconnect timer
+  if (stopListenersGraceTimer) {
+    clearTimeout(stopListenersGraceTimer);
+    stopListenersGraceTimer = null;
+  }
 
   // Seed check only once per session
   seedInitialCloudDataIfEmpty().catch(() => {});
@@ -463,9 +463,9 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (limit to 6 recent items)
+  // 1. Transactions Listener (limit to 25 recent items so all recent donations sync across devices)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(6));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(25));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -522,7 +522,6 @@ function startLeaderFirestoreListeners(): void {
         }
 
         try {
-          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
           window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
         } catch {}
       }
@@ -536,13 +535,12 @@ function startLeaderFirestoreListeners(): void {
     updateStatus('offline');
   }
 
-  // 2. Campaigns Listener (limit 15 items)
+  // 2. Campaigns Listener (supports up to 50 campaigns so all active & user-created campaigns sync reliably)
   try {
-    const campQuery = query(collection(db, 'campaigns'), limit(15));
-    const unsubCamp = onSnapshot(campQuery, (snapshot) => {
+    const handleCampaignsSnapshot = (snapshot: any) => {
       updateStatus('connected');
       const remoteCampaigns: Campaign[] = [];
-      snapshot.forEach(docSnap => {
+      snapshot.forEach((docSnap: any) => {
         const data = docSnap.data() as Campaign;
         if (data && data.id) {
           remoteCampaigns.push(data);
@@ -602,39 +600,16 @@ function startLeaderFirestoreListeners(): void {
           window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: sorted }));
         } catch {}
       }
-    }, (error) => {
-      logFirestoreNetworkNote('Campaigns listener', error);
+    };
+
+    // Attach with limit 50 so all campaigns sync cleanly
+    const campQuery = query(collection(db, 'campaigns'), limit(50));
+    const unsubCamp = onSnapshot(campQuery, handleCampaignsSnapshot, (error) => {
+      logFirestoreNetworkNote('Campaigns listener note', error);
     });
     newUnsubscribers.push(unsubCamp);
   } catch (err) {
     logFirestoreNetworkNote('Attach campaigns listener', err);
-  }
-
-  // 3. Audit Logs Listener (only for super admin/admin, limit 3)
-  try {
-    const isAdminUser = typeof localStorage !== 'undefined' && 
-      (localStorage.getItem('ronpay_admin_role_v1') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role_v1') === 'ADMIN');
-    if (isAdminUser) {
-      const auditQuery = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(3));
-      const unsubAudit = onSnapshot(auditQuery, (snapshot) => {
-        const logs: AuditLog[] = [];
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data() as AuditLog;
-          if (data && data.id) {
-            logs.push(data);
-          }
-        });
-        if (logs.length > 0) {
-          setLocalJson('ronpay_audit_logs_v1', logs);
-          broadcast('onAuditLogsUpdate', logs);
-        }
-      }, (err) => {
-        logFirestoreNetworkNote('Audit logs listener', err);
-      });
-      newUnsubscribers.push(unsubAudit);
-    }
-  } catch (err) {
-    logFirestoreNetworkNote('Attach audit logs listener', err);
   }
 
   activeFirestoreUnsubscribers = newUnsubscribers;
@@ -650,6 +625,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 
   if (callbacks.onStatusChange) {
     callbacks.onStatusChange(connectionStatus);
+  }
+
+  // Cancel any pending teardown timer when a subscriber connects
+  if (stopListenersGraceTimer) {
+    clearTimeout(stopListenersGraceTimer);
+    stopListenersGraceTimer = null;
   }
 
   // Multi-Tab Coordination via BroadcastChannel
@@ -669,7 +650,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
                 // Conflict resolution: lower tabId keeps leadership
                 if (msg.leaderId < MY_TAB_ID) {
                   isLeaderTab = false;
-                  stopAllFirestoreListeners();
+                  stopAllFirestoreListeners(true);
                 }
               }
             }
@@ -697,7 +678,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
               coordinatorChannel.postMessage({ type: 'leader_resigned', leaderId: MY_TAB_ID });
             } catch {}
           }
-          stopAllFirestoreListeners();
+          stopAllFirestoreListeners(true);
         });
       } catch (e) {
         console.warn('Coordinator channel setup note:', e);
@@ -724,7 +705,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
               coordinatorChannel.postMessage({ type: 'leader_heartbeat', leaderId: MY_TAB_ID });
             } catch {}
           }
-        }, 1800);
+        }, 4500);
       }
     };
 
@@ -733,19 +714,19 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
       leaderWatchdogInterval = setInterval(() => {
         if (!isLeaderTab) {
           const silenceDuration = Date.now() - lastLeaderHeartbeat;
-          if (silenceDuration > 3600) {
+          if (silenceDuration > 12000) {
             claimLeadership();
           }
         }
-      }, 2500);
+      }, 5000);
     }
 
     // Try claiming leadership after brief initial delay to discover any existing leader
     setTimeout(() => {
-      if (!currentLeaderId || (Date.now() - lastLeaderHeartbeat > 3000)) {
+      if (!currentLeaderId || (Date.now() - lastLeaderHeartbeat > 8000)) {
         claimLeadership();
       }
-    }, 200);
+    }, 300);
 
   } else {
     // Single-tab fallback or environments without BroadcastChannel
@@ -755,12 +736,7 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
   return () => {
     activeSubscribers.delete(callbacks);
     if (activeSubscribers.size === 0) {
-      if (isLeaderTab && coordinatorChannel) {
-        try {
-          coordinatorChannel.postMessage({ type: 'leader_resigned', leaderId: MY_TAB_ID });
-        } catch {}
-      }
-      stopAllFirestoreListeners();
+      stopAllFirestoreListeners(false);
     }
   };
 }
@@ -1054,15 +1030,32 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
   }
 }
 
+let lastForceRefreshTimestamp = 0;
+
 /**
- * Force an immediate read of all transactions from Firestore and sync to local storage & state.
+ * Force an immediate read of recent transactions from Firestore and sync to local storage & state.
+ * Debounced and optimized to avoid redundant document reads when real-time listeners are active.
  */
 export async function forceRefreshFirestore(): Promise<Transaction[]> {
+  const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
   if (!isNetworkOnline) {
-    return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+    return localTx;
   }
+
+  // 10-second debounce against rapid spam clicking
+  const now = Date.now();
+  if (now - lastForceRefreshTimestamp < 10000) {
+    return localTx;
+  }
+  lastForceRefreshTimestamp = now;
+
+  // If real-time listener is already actively connected, live snapshot already holds latest data!
+  if (isFirestoreListening && localTx.length > 0) {
+    return localTx;
+  }
+
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(30));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(20));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {
@@ -1076,7 +1069,6 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
       const deletedIds = getLocalDeletedTxIds();
       const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
       
-      const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
       const txMap = new Map<string, Transaction>();
       for (const t of cleanRemote) {
         if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
@@ -1098,7 +1090,6 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
 
       setLocalJson('ronpay_transactions_v2', merged);
       try {
-        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
         window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
       } catch {}
       return merged;
@@ -1106,6 +1097,6 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
   } catch (err) {
     logFirestoreNetworkNote('Force refresh Firestore', err);
   }
-  return getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+  return localTx;
 }
 

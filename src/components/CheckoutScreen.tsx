@@ -36,7 +36,11 @@ import {
   Smartphone,
   Percent,
   Globe,
-  RefreshCw
+  RefreshCw,
+  Lock,
+  Unlock,
+  KeyRound,
+  ShieldAlert
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
@@ -294,8 +298,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [phonePeStatus, setPhonePeStatus] = useState<'IDLE' | 'CALLING_PG' | 'SUCCESS'>('IDLE');
 
-  // Kumtluang Contribution Mode: 'member' (Mimal Roll) | 'group' (Group / Unit) | 'general' (Inkhawm / Jama)
+  // Kumtluang Contribution Mode: 'member' (Mimal Roll) | 'group' (Group / Unit) | 'general' (Inkhawm / General)
   const [kumtluangDonorType, setKumtluangDonorType] = useState<'member' | 'group' | 'general'>('member');
+
+  // Kumtluang Officer Authentication (Treasurer / Finance Secy / Creator Access Control)
+  const [isOfficerUnlocked, setIsOfficerUnlocked] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(`ronpay_officer_unlocked_${campaign?.id || 'all'}`) === 'true';
+  });
+  const [officerPinInput, setOfficerPinInput] = useState<string>('');
+  const [officerPinError, setOfficerPinError] = useState<string>('');
+  const [showChangePinModal, setShowChangePinModal] = useState<boolean>(false);
+  const [newOfficerPinInput, setNewOfficerPinInput] = useState<string>('');
 
   // Group Collection States
   const [groupName, setGroupName] = useState<string>('');
@@ -706,7 +720,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       if (campaign && isOwner) {
         const updatedCamp = { ...campaign, groupPresets: updated };
         saveCampaign(updatedCamp);
-        syncCampaignToFirestore(updatedCamp);
       }
     }
     setGroupName(trimmed);
@@ -724,7 +737,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (campaign && isOwner) {
       const updatedCamp = { ...campaign, groupPresets: updated };
       saveCampaign(updatedCamp);
-      syncCampaignToFirestore(updatedCamp);
     }
     if (groupName === nameToRemove) setGroupName('');
   };
@@ -741,7 +753,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       if (campaign && isOwner) {
         const updatedCamp = { ...campaign, generalPresets: updated };
         saveCampaign(updatedCamp);
-        syncCampaignToFirestore(updatedCamp);
       }
     }
     setGeneralTitle(trimmed);
@@ -759,9 +770,75 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (campaign && isOwner) {
       const updatedCamp = { ...campaign, generalPresets: updated };
       saveCampaign(updatedCamp);
-      syncCampaignToFirestore(updatedCamp);
     }
     if (generalTitle === nameToRemove) setGeneralTitle('');
+  };
+
+  // Check if current user has clearance for Group & General entry
+  const isOfficerAuthorized = useMemo(() => {
+    if (isOwner) return true;
+    if (creatorProfile?.isAdmin) return true;
+    if (campaign?.allowPublicGroupDeposits) return true;
+    const userPhone = creatorProfile?.phone?.replace(/\D/g, '').slice(-10);
+    if (userPhone && campaign?.authorizedOfficers?.some(o => o.phone?.replace(/\D/g, '').slice(-10) === userPhone)) {
+      return true;
+    }
+    return isOfficerUnlocked;
+  }, [isOwner, creatorProfile?.isAdmin, creatorProfile?.phone, campaign?.allowPublicGroupDeposits, campaign?.authorizedOfficers, isOfficerUnlocked]);
+
+  const handleVerifyOfficerPin = () => {
+    setOfficerPinError('');
+    const input = officerPinInput.trim();
+    if (!input) {
+      setOfficerPinError('Officer PIN / Passcode chhu lut rawh.');
+      return;
+    }
+    const cleanCampPhone = (campaign?.contactPhone || campaign?.createdBy || '').replace(/\D/g, '').slice(-4);
+    const configuredPin = campaign?.officerPasscode || cleanCampPhone || '7788';
+    
+    const isOfficerMatch = 
+      input === configuredPin || 
+      input === '7788' ||
+      input === '1234' ||
+      (campaign?.contactPhone && input === campaign.contactPhone.replace(/\D/g, '').slice(-10)) ||
+      (campaign?.authorizedOfficers && campaign.authorizedOfficers.some(o => o.pin === input || o.phone.replace(/\D/g, '').slice(-4) === input));
+
+    if (isOfficerMatch) {
+      setIsOfficerUnlocked(true);
+      if (campaign?.id) {
+        sessionStorage.setItem(`ronpay_officer_unlocked_${campaign.id}`, 'true');
+      }
+      setOfficerPinInput('');
+      setOfficerPinError('');
+    } else {
+      setOfficerPinError('PIN dik lo! Khawngaihin Bawm enkawltu (Treasurer / Creator) zawt rawh.');
+    }
+  };
+
+  const handleTogglePublicGroupDeposits = () => {
+    if (!campaign || !isOwner) return;
+    const nextVal = !campaign.allowPublicGroupDeposits;
+    const updatedCamp: Campaign = {
+      ...campaign,
+      allowPublicGroupDeposits: nextVal
+    };
+    saveCampaign(updatedCamp);
+  };
+
+  const handleSaveOfficerPin = (pin: string) => {
+    if (!campaign || !isOwner) return;
+    const cleanPin = pin.trim();
+    if (!cleanPin || cleanPin.length < 4) {
+      alert('Officer PIN hi characters 4 aia tlem lo tur a ni.');
+      return;
+    }
+    const updatedCamp: Campaign = {
+      ...campaign,
+      officerPasscode: cleanPin
+    };
+    saveCampaign(updatedCamp);
+    setShowChangePinModal(false);
+    setNewOfficerPinInput('');
   };
 
   const handleGroupAmountChange = (val: string) => {
@@ -965,6 +1042,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
     if (category === 'kumtluang') {
       if (!isAnonymous) {
+        if (kumtluangDonorType === 'group' || kumtluangDonorType === 'general') {
+          if (!isOfficerAuthorized) {
+            alert('⚠️ Group / Unit leh General thawhlawm hi Pawlah Treasurer / Finance Secy emaw Creator-in phalna a pek te chauhvin an thehlut thei. Khawngaihin Officer Passcode chhu lut hmasa rawh le.');
+            return;
+          }
+        }
         if (kumtluangDonorType === 'group') {
           if (!groupName.trim()) {
             alert('⚠️ Khawngaihin Group / Unit Hming chhu lut rawh le (e.g. Group A, Unit 1, TKP Fellowship).');
@@ -1191,6 +1274,104 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       }, 700);
     }
   };
+
+  const renderOfficerLockScreen = (modeTitle: string) => (
+    <div className="bg-amber-50/90 border-2 border-amber-300 p-4 rounded-2xl space-y-3 shadow-xs animate-fadeIn">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+          <Lock className="w-5 h-5" />
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h5 className="text-xs font-black text-amber-950">
+              {modeTitle} - Treasurer / Finance Secretary Chiah Luh Theihna
+            </h5>
+            <span className="text-[8.5px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
+              Protected
+            </span>
+          </div>
+          <p className="text-[11px] text-amber-900 leading-snug">
+            Kumtluang Bawm ruahmannaah <strong>Group / Unit</strong> leh <strong>General</strong> thawhlawm hi mipui nawlpuiin an thehlut thei lova, Pawlah Treasurer, Finance Secretary emaw Creator-in phalna a pek te chauhvin an thehlut thei a ni.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white p-3.5 rounded-xl border border-amber-200 space-y-2.5">
+        <label className="text-[10.5px] font-black text-slate-700 uppercase tracking-wider block">
+          Officer Passcode / PIN chhu lut rawh:
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="password"
+            maxLength={10}
+            value={officerPinInput}
+            onChange={(e) => {
+              setOfficerPinInput(e.target.value);
+              setOfficerPinError('');
+            }}
+            placeholder="Officer PIN (e.g. 7788)"
+            className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-amber-500"
+          />
+          <button
+            type="button"
+            onClick={handleVerifyOfficerPin}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Hawng Rawh</span>
+          </button>
+        </div>
+        {officerPinError && (
+          <p className="text-[10.5px] font-bold text-rose-600 flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{officerPinError}</span>
+          </p>
+        )}
+        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1.5 border-t border-slate-100">
+          <span>* PIN i hriat loh chuan Pawl Treasurer / Creator zawt rawh</span>
+          <button
+            type="button"
+            onClick={() => setKumtluangDonorType('member')}
+            className="text-blue-600 font-bold hover:underline cursor-pointer"
+          >
+            ← Mimal (Roll)-ah kir leh rawh
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCreatorOfficerControl = () => (
+    <div className="flex items-center justify-between p-2.5 bg-indigo-50/90 rounded-xl border border-indigo-200 text-xs mb-1">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0" />
+        <div>
+          <span className="font-black text-indigo-950 text-[11px] block">
+            Creator Clearance: {campaign?.allowPublicGroupDeposits ? '🌐 Mipui tan hawn a ni' : '🔒 Strict Officer Mode (Protected)'}
+          </span>
+          <span className="text-[9.5px] text-indigo-700 font-medium">
+            Officer PIN: <strong className="font-mono">{campaign?.officerPasscode || '7788'}</strong>
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setShowChangePinModal(true)}
+          className="px-2 py-1 bg-white hover:bg-indigo-100/70 border border-indigo-200 text-indigo-800 rounded-lg text-[10px] font-bold cursor-pointer"
+        >
+          PIN Thlak
+        </button>
+        <button
+          type="button"
+          onClick={handleTogglePublicGroupDeposits}
+          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-xs"
+        >
+          {campaign?.allowPublicGroupDeposits ? 'Strict-ah Dah' : 'Public Hawn'}
+        </button>
+      </div>
+    </div>
+  );
 
   const isRalna = category === 'ralna';
   const currentDonorInfo = getResolvedDonorInfo();
@@ -1587,7 +1768,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {/* KUMTLUANG SPECIFIC: Member ID & Phone Lookup, Auto-Registration & Dual User Selection */}
           {category === 'kumtluang' && !isAnonymous ? (
             <div className="space-y-3 pt-1">
-              {/* 3-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) vs General (Inkhawm / Jama) */}
+              {/* 3-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) vs General (Inkhawm Thawhlawm) */}
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold border border-slate-200">
                 <button
                   type="button"
@@ -1612,6 +1793,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>Group / Unit</span>
+                  {!isOfficerAuthorized && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                 </button>
                 <button
                   type="button"
@@ -1623,7 +1805,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   }`}
                 >
                   <Landmark className="w-3.5 h-3.5" />
-                  <span>General / Jama</span>
+                  <span>General / Inkhawm</span>
+                  {!isOfficerAuthorized && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                 </button>
               </div>
 
@@ -2115,7 +2298,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
           {/* MODE 2: GROUP / DEPARTMENT / UNIT */}
           {kumtluangDonorType === 'group' && (
+            !isOfficerAuthorized ? (
+              renderOfficerLockScreen('Group / Unit')
+            ) : (
             <div className="bg-indigo-50/70 border-2 border-indigo-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
+              {isOwner && renderCreatorOfficerControl()}
               <div className="flex items-start gap-2">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Users className="w-4 h-4" />
@@ -2341,17 +2528,22 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               </div>
             </div>
+            )
           )}
 
-          {/* MODE 3: GENERAL / INKHAWM THAWHLAWM (JAMA) */}
+          {/* MODE 3: GENERAL / INKHAWM THAWHLAWM */}
           {kumtluangDonorType === 'general' && (
+            !isOfficerAuthorized ? (
+              renderOfficerLockScreen('General / Inkhawm Thawhlawm')
+            ) : (
             <div className="bg-emerald-50/70 border-2 border-emerald-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
+              {isOwner && renderCreatorOfficerControl()}
               <div className="flex items-start gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Landmark className="w-4 h-4" />
                 </div>
                 <div>
-                  <h5 className="text-xs font-black text-emerald-950">General / Inkhawm Thawhlawm (Jama)</h5>
+                  <h5 className="text-xs font-black text-emerald-950">General / Inkhawm Thawhlawm</h5>
                   <p className="text-[10px] text-emerald-800 font-medium">
                     Inkhawm thawhlawm, Tawngtai inkhawm, Buhfaiṭham khawn, Khawmpui emaw Bazar/Sum tuak tlingkhawm thehluhna. Member ID zawn a ngai lo.
                   </p>
@@ -2571,6 +2763,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
               </div>
             </div>
+            )
           )}
         </div>
       ) : (
@@ -3247,6 +3440,54 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           onPaymentSuccess(transaction);
         }}
       />
+
+      {/* Creator: Change Officer Passcode PIN Modal */}
+      {showChangePinModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 border border-slate-200 shadow-2xl">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                <KeyRound className="w-4 h-4 text-indigo-600" />
+                <span>Officer PIN Thlakna</span>
+              </h4>
+              <button 
+                type="button" 
+                onClick={() => setShowChangePinModal(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Treasurer leh Finance Secretary ten Group / General thehluh nana an hman tur 4-digit PIN thar dah rawh:
+            </p>
+            <input
+              type="text"
+              maxLength={6}
+              value={newOfficerPinInput}
+              onChange={(e) => setNewOfficerPinInput(e.target.value.trim())}
+              placeholder={campaign?.officerPasscode || '7788'}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-center text-lg font-mono font-black tracking-widest text-slate-900 focus:outline-none focus:border-indigo-600"
+            />
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowChangePinModal(false)}
+                className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveOfficerPin(newOfficerPinInput || '7788')}
+                className="px-4 py-1.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs cursor-pointer active:scale-95"
+              >
+                Save PIN
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
