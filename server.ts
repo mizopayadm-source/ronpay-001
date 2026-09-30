@@ -4197,7 +4197,9 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       validityDate: '2027-12-31T23:59',
       status: 'active',
       createdAt: '2026-08-15T00:00:00Z',
-      createdBy: '9862000001'
+      createdBy: '9862000001',
+      officerPasscode: '1122',
+      allowPublicGroupDeposits: false
     });
     db.campaigns = Array.from(campMap.values());
     changed = true;
@@ -4205,6 +4207,21 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     const bmpCamp = campMap.get('cmp-1788107291420');
     if (bmpCamp && (!Array.isArray(bmpCamp.subCategories) || bmpCamp.subCategories.length !== 1 || bmpCamp.subCategories[0] !== 'BMP Fund')) {
       bmpCamp.subCategories = ['BMP Fund'];
+      changed = true;
+    }
+  }
+
+  // Clean up purged test members
+  const PURGED_MEMBERS = new Set(['bmpshl-9000', 'bmpshl-9001', 'bmpshl-1253']);
+  if (Array.isArray(db.members)) {
+    const beforeLen = db.members.length;
+    db.members = db.members.filter(m => !PURGED_MEMBERS.has(String(m.id || '').toLowerCase().trim()));
+    if (db.members.length !== beforeLen) changed = true;
+  }
+  if (!Array.isArray(db.deletedMemberIds)) db.deletedMemberIds = [];
+  for (const pid of PURGED_MEMBERS) {
+    if (!db.deletedMemberIds.includes(pid)) {
+      db.deletedMemberIds.push(pid);
       changed = true;
     }
   }
@@ -4229,12 +4246,13 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         t.campaignTitle = 'BMP Shillong';
         changed = true;
       }
-      if (t.subCategory !== 'BMP Fund') {
-        t.subCategory = 'BMP Fund';
+      if (!t.subCategory) {
+        t.subCategory = t.donorType === 'general' ? (t.remark || 'General Thawhlawm') : 'BMP Fund';
         changed = true;
       }
-      if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length !== 1 || !t.subCategoryBreakdown['BMP Fund']) {
-        t.subCategoryBreakdown = { 'BMP Fund': t.amount };
+      if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
+        const subKey = t.subCategory || 'BMP Fund';
+        t.subCategoryBreakdown = { [subKey]: t.amount };
         changed = true;
       }
       if (t.remark && t.remark.includes('[Pathian Ram Zauna]')) {
@@ -4798,8 +4816,13 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      tx.subCategory = 'BMP Fund';
-      tx.subCategoryBreakdown = { 'BMP Fund': tx.amount };
+      if (!tx.subCategory) {
+        tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
+      }
+      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+        const subKey = tx.subCategory || 'BMP Fund';
+        tx.subCategoryBreakdown = { [subKey]: tx.amount };
+      }
       if (tx.remark && tx.remark.includes('[Pathian Ram Zauna]')) {
         tx.remark = tx.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
       }

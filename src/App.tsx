@@ -328,11 +328,15 @@ export default function App() {
   useEffect(() => {
     const handleCampaignsSync = (e: Event) => {
       const customEvent = e as CustomEvent<Campaign[]>;
-      if (customEvent.detail && Array.isArray(customEvent.detail)) {
-        setCampaigns(customEvent.detail);
-      } else {
-        setCampaigns(getStoredCampaigns());
-      }
+      const freshList = (customEvent.detail && Array.isArray(customEvent.detail))
+        ? customEvent.detail
+        : getStoredCampaigns();
+      setCampaigns(freshList);
+      setSelectedCampaign(prev => {
+        if (!prev) return null;
+        const matched = freshList.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
+        return matched ? { ...prev, ...matched } : prev;
+      });
     };
 
     const handleTransactionsSync = (e: Event) => {
@@ -382,7 +386,13 @@ export default function App() {
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'ronpay_campaigns' || e.key === 'ronpay_campaigns_v2') {
-        setCampaigns(getStoredCampaigns());
+        const freshList = getStoredCampaigns();
+        setCampaigns(freshList);
+        setSelectedCampaign(prev => {
+          if (!prev) return null;
+          const matched = freshList.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
+          return matched ? { ...prev, ...matched } : prev;
+        });
       } else if (e.key === 'ronpay_transactions' || e.key === 'ronpay_transactions_v2') {
         setTransactions(getStoredTransactions());
       } else if (e.key === 'ronpay_creator_profile_v2' || e.key === 'ronpay_creator_profile') {
@@ -416,6 +426,11 @@ export default function App() {
         const fresh = getStoredCampaigns();
         campaignsRef.current = fresh;
         setCampaigns(fresh);
+        setSelectedCampaign(prev => {
+          if (!prev) return null;
+          const matched = fresh.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
+          return matched ? { ...prev, ...matched } : prev;
+        });
       } else if (msg.topic === 'transactions') {
         setTransactions(getStoredTransactions());
       } else if (msg.topic === 'creator_profile') {
@@ -1414,6 +1429,7 @@ export default function App() {
               category={selectedCategory || selectedCampaign?.category || 'others'}
               campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0]}
               pricingConfig={pricingConfig}
+              onUpdateCampaign={handleUpdateCampaign}
               onBack={() => {
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);

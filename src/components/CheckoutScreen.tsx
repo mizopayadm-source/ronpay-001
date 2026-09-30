@@ -79,6 +79,7 @@ interface CheckoutScreenProps {
   initialDonorName?: string;
   initialDonorSection?: string;
   initialIsAnonymous?: boolean;
+  onUpdateCampaign?: (campaign: Campaign) => void;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -97,7 +98,37 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   initialDonorName,
   initialDonorSection,
   initialIsAnonymous,
+  onUpdateCampaign,
 }) => {
+  const [currentCampaign, setCurrentCampaign] = useState<Campaign | undefined>(campaign);
+
+  // Keep currentCampaign in sync with campaign prop changes
+  useEffect(() => {
+    if (campaign) {
+      setCurrentCampaign(campaign);
+    }
+  }, [campaign]);
+
+  // Real-time synchronization when campaigns are updated in localStorage/server
+  useEffect(() => {
+    const handleCampaignSync = (e: Event) => {
+      const customEvent = e as CustomEvent<Campaign[]>;
+      const list = (customEvent.detail && Array.isArray(customEvent.detail))
+        ? customEvent.detail
+        : getStoredCampaigns();
+      const targetId = (currentCampaign?.id || campaign?.id || '').toLowerCase();
+      if (!targetId) return;
+      const fresh = list.find(c => c.id.toLowerCase() === targetId);
+      if (fresh) {
+        setCurrentCampaign(fresh);
+      }
+    };
+    window.addEventListener('ronpay_campaigns_updated', handleCampaignSync);
+    return () => window.removeEventListener('ronpay_campaigns_updated', handleCampaignSync);
+  }, [currentCampaign?.id, campaign?.id]);
+
+  const activeCampaign = currentCampaign || campaign;
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(false);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
@@ -105,8 +136,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   // Creator Ownership Verification for preset governance
   const creatorProfile = useMemo(() => getStoredCreatorProfile(), []);
   const isOwner = useMemo(() => {
-    return Boolean(campaign && isCampaignCreator(campaign, creatorProfile));
-  }, [campaign, creatorProfile]);
+    return Boolean(activeCampaign && isCampaignCreator(activeCampaign, creatorProfile));
+  }, [activeCampaign, creatorProfile]);
 
   // PhonePe PG New Tab Live State Synchronization
   const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
@@ -776,15 +807,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Check if current user has clearance for Group & General entry
   const isOfficerAuthorized = useMemo(() => {
-    if (isOwner) return true;
-    if (creatorProfile?.isAdmin) return true;
-    if (campaign?.allowPublicGroupDeposits) return true;
-    const userPhone = creatorProfile?.phone?.replace(/\D/g, '').slice(-10);
-    if (userPhone && campaign?.authorizedOfficers?.some(o => o.phone?.replace(/\D/g, '').slice(-10) === userPhone)) {
-      return true;
-    }
+    // If Creator has deliberately opened public deposits, allow direct entry
+    if (activeCampaign?.allowPublicGroupDeposits) return true;
+
+    // Strict Protection: Officer PIN is required to unlock Group & General for all users
     return isOfficerUnlocked;
-  }, [isOwner, creatorProfile?.isAdmin, creatorProfile?.phone, campaign?.allowPublicGroupDeposits, campaign?.authorizedOfficers, isOfficerUnlocked]);
+  }, [activeCampaign?.allowPublicGroupDeposits, isOfficerUnlocked]);
 
   const handleVerifyOfficerPin = () => {
     setOfficerPinError('');
@@ -793,20 +821,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       setOfficerPinError('Officer PIN / Passcode chhu lut rawh.');
       return;
     }
-    const cleanCampPhone = (campaign?.contactPhone || campaign?.createdBy || '').replace(/\D/g, '').slice(-4);
-    const configuredPin = campaign?.officerPasscode || cleanCampPhone || '7788';
+    const cleanCampPhone = (activeCampaign?.contactPhone || activeCampaign?.createdBy || '').replace(/\D/g, '').slice(-4);
+    const configuredPin = activeCampaign?.officerPasscode || cleanCampPhone || '7788';
     
     const isOfficerMatch = 
       input === configuredPin || 
-      input === '7788' ||
-      input === '1234' ||
-      (campaign?.contactPhone && input === campaign.contactPhone.replace(/\D/g, '').slice(-10)) ||
-      (campaign?.authorizedOfficers && campaign.authorizedOfficers.some(o => o.pin === input || o.phone.replace(/\D/g, '').slice(-4) === input));
+      (activeCampaign?.contactPhone && input === activeCampaign.contactPhone.replace(/\D/g, '').slice(-10)) ||
+      (activeCampaign?.authorizedOfficers && activeCampaign.authorizedOfficers.some(o => o.pin === input || o.phone.replace(/\D/g, '').slice(-4) === input)) ||
+      (!activeCampaign?.officerPasscode && (input === '7788' || input === '1234'));
 
     if (isOfficerMatch) {
       setIsOfficerUnlocked(true);
-      if (campaign?.id) {
-        sessionStorage.setItem(`ronpay_officer_unlocked_${campaign.id}`, 'true');
+      if (activeCampaign?.id) {
+        sessionStorage.setItem(`ronpay_officer_unlocked_${activeCampaign.id}`, 'true');
       }
       setOfficerPinInput('');
       setOfficerPinError('');
@@ -816,27 +843,52 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   };
 
   const handleTogglePublicGroupDeposits = () => {
-    if (!campaign || !isOwner) return;
-    const nextVal = !campaign.allowPublicGroupDeposits;
+    const target = activeCampaign;
+    if (!target || !isOwner) return;
+    const nextVal = !target.allowPublicGroupDeposits;
     const updatedCamp: Campaign = {
-      ...campaign,
-      allowPublicGroupDeposits: nextVal
+      ...target,
+      allowPublicGroupDeposits: nextVal,
+      updatedAt: new Date().toISOString()
     };
+    setCurrentCampaign(updatedCamp);
     saveCampaign(updatedCamp);
+    if (onUpdateCampaign) {
+      onUpdateCampaign(updatedCamp);
+    }
+    if (!nextVal) {
+      // Re-locking when switching back to strict mode
+      setIsOfficerUnlocked(false);
+      if (target.id) {
+        sessionStorage.removeItem(`ronpay_officer_unlocked_${target.id}`);
+      }
+    }
   };
 
   const handleSaveOfficerPin = (pin: string) => {
-    if (!campaign || !isOwner) return;
+    const target = activeCampaign;
+    if (!target || !isOwner) return;
     const cleanPin = pin.trim();
     if (!cleanPin || cleanPin.length < 4) {
       alert('Officer PIN hi characters 4 aia tlem lo tur a ni.');
       return;
     }
     const updatedCamp: Campaign = {
-      ...campaign,
-      officerPasscode: cleanPin
+      ...target,
+      officerPasscode: cleanPin,
+      allowPublicGroupDeposits: false, // Enforce strict officer protection upon setting PIN!
+      updatedAt: new Date().toISOString()
     };
+    setCurrentCampaign(updatedCamp);
     saveCampaign(updatedCamp);
+    if (onUpdateCampaign) {
+      onUpdateCampaign(updatedCamp);
+    }
+    // Re-lock so the new PIN is immediately active and tested
+    setIsOfficerUnlocked(false);
+    if (target.id) {
+      sessionStorage.removeItem(`ronpay_officer_unlocked_${target.id}`);
+    }
     setShowChangePinModal(false);
     setNewOfficerPinInput('');
   };
@@ -1327,6 +1379,34 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <span>{officerPinError}</span>
           </p>
         )}
+        {isOwner && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10.5px]">
+            <span className="text-indigo-950 font-semibold">
+              👑 Creator i nih avangin i Officer PIN chu: <strong className="font-mono font-black text-indigo-700 text-xs">{activeCampaign?.officerPasscode || '7788'}</strong>
+            </span>
+            <div className="flex items-center gap-1.5 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+                }}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[10px] cursor-pointer shadow-2xs"
+              >
+                Auto-fill PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+                  setShowChangePinModal(true);
+                }}
+                className="px-2 py-1 bg-white hover:bg-indigo-50 border border-indigo-300 text-indigo-800 rounded-lg font-bold text-[10px] cursor-pointer shadow-2xs"
+              >
+                PIN Thlak
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1.5 border-t border-slate-100">
           <span>* PIN i hriat loh chuan Pawl Treasurer / Creator zawt rawh</span>
           <button
@@ -1347,17 +1427,35 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0" />
         <div>
           <span className="font-black text-indigo-950 text-[11px] block">
-            Creator Clearance: {campaign?.allowPublicGroupDeposits ? '🌐 Mipui tan hawn a ni' : '🔒 Strict Officer Mode (Protected)'}
+            Creator Clearance: {activeCampaign?.allowPublicGroupDeposits ? '🌐 Mipui tan hawn a ni' : '🔒 Strict Officer Mode (Protected)'}
           </span>
           <span className="text-[9.5px] text-indigo-700 font-medium">
-            Officer PIN: <strong className="font-mono">{campaign?.officerPasscode || '7788'}</strong>
+            Officer PIN: <strong className="font-mono">{activeCampaign?.officerPasscode || '7788'}</strong>
           </span>
         </div>
       </div>
       <div className="flex items-center gap-1.5">
+        {isOfficerUnlocked && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsOfficerUnlocked(false);
+              if (activeCampaign?.id) {
+                sessionStorage.removeItem(`ronpay_officer_unlocked_${activeCampaign.id}`);
+              }
+            }}
+            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-[10px] font-black cursor-pointer shadow-2xs"
+            title="Lock back to test PIN entry"
+          >
+            🔒 Lock Leh Rawh
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setShowChangePinModal(true)}
+          onClick={() => {
+            setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+            setShowChangePinModal(true);
+          }}
           className="px-2 py-1 bg-white hover:bg-indigo-100/70 border border-indigo-200 text-indigo-800 rounded-lg text-[10px] font-bold cursor-pointer"
         >
           PIN Thlak
@@ -1367,7 +1465,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           onClick={handleTogglePublicGroupDeposits}
           className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-xs"
         >
-          {campaign?.allowPublicGroupDeposits ? 'Strict-ah Dah' : 'Public Hawn'}
+          {activeCampaign?.allowPublicGroupDeposits ? 'Strict-ah Dah' : 'Public Hawn'}
         </button>
       </div>
     </div>
@@ -3466,7 +3564,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               maxLength={6}
               value={newOfficerPinInput}
               onChange={(e) => setNewOfficerPinInput(e.target.value.trim())}
-              placeholder={campaign?.officerPasscode || '7788'}
+              placeholder={activeCampaign?.officerPasscode || '7788'}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-center text-lg font-mono font-black tracking-widest text-slate-900 focus:outline-none focus:border-indigo-600"
             />
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -3479,7 +3577,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveOfficerPin(newOfficerPinInput || '7788')}
+                onClick={() => handleSaveOfficerPin(newOfficerPinInput || activeCampaign?.officerPasscode || '7788')}
                 className="px-4 py-1.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs cursor-pointer active:scale-95"
               >
                 Save PIN

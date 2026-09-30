@@ -989,7 +989,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               onClick={onClose}
               className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
             >
-              Khirh Leh Rawh (Close)
+              Kir Leh Rawh (Close)
             </button>
           </div>
         </div>

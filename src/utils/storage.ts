@@ -406,10 +406,30 @@ export const getStoredCampaigns = (): Campaign[] => {
             return updated;
           });
 
-        // Smart merge: ensure all 25 canonical initial campaigns always exist
+        // Smart merge: ensure all canonical initial campaigns always exist and inherit canonical settings
         const existingIds = new Set(mapped.map(c => String(c.id).toLowerCase().trim()));
         let hasNew = false;
-        const merged = [...mapped];
+        const merged = mapped.map(camp => {
+          const initMatch = INITIAL_CAMPAIGNS.find(ic => String(ic.id).toLowerCase().trim() === String(camp.id).toLowerCase().trim());
+          if (initMatch) {
+            let changed = false;
+            const updated = { ...camp };
+            if (!updated.officerPasscode && initMatch.officerPasscode) {
+              updated.officerPasscode = initMatch.officerPasscode;
+              changed = true;
+            }
+            if (updated.allowPublicGroupDeposits === undefined && initMatch.allowPublicGroupDeposits !== undefined) {
+              updated.allowPublicGroupDeposits = initMatch.allowPublicGroupDeposits;
+              changed = true;
+            }
+            if (changed) {
+              hasNew = true;
+              return updated;
+            }
+          }
+          return camp;
+        });
+
         for (const initCamp of INITIAL_CAMPAIGNS) {
           const initCleanId = String(initCamp.id).toLowerCase().trim();
           if (!existingIds.has(initCleanId)) {
@@ -998,12 +1018,13 @@ export const getStoredTransactions = (): Transaction[] => {
                 t.campaignTitle = 'BMP Shillong';
                 hasFixed = true;
               }
-              if (t.subCategory !== 'BMP Fund') {
-                t.subCategory = 'BMP Fund';
+              if (!t.subCategory) {
+                t.subCategory = t.donorType === 'general' ? (t.remark || 'General Thawhlawm') : 'BMP Fund';
                 hasFixed = true;
               }
-              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length !== 1 || !t.subCategoryBreakdown['BMP Fund']) {
-                t.subCategoryBreakdown = { 'BMP Fund': t.amount };
+              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
+                const subKey = t.subCategory || 'BMP Fund';
+                t.subCategoryBreakdown = { [subKey]: t.amount };
                 hasFixed = true;
               }
               if (t.remark && t.remark.includes('[Pathian Ram Zauna]')) {
@@ -2497,24 +2518,31 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
 export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
     const deletedMemIds = getDeletedMemberIds();
+    const PERMANENTLY_PURGED_MEMBERS = new Set(['bmpshl-1253', 'bmpshl-9000', 'bmpshl-9001']);
+    const isExcluded = (id?: string) => {
+      if (!id) return true;
+      const clean = String(id).toLowerCase().trim();
+      return PERMANENTLY_PURGED_MEMBERS.has(clean) || deletedMemIds.has(clean);
+    };
+
     let storedMembers: MemberRecord[] = [];
     const raw = localStorage.getItem(MEMBERS_LIST_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        storedMembers = parsed.filter(m => m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+        storedMembers = parsed.filter(m => m && m.id && !isExcluded(m.id));
       }
     }
 
     // Merge default initial members with stored members (excluding deleted)
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+      if (m && m.id && !isExcluded(m.id)) {
         map.set(m.id.toLowerCase().trim(), m);
       }
     }
     for (const m of storedMembers) {
-      if (m && m.id && String(m.id).toLowerCase().trim() !== 'bmpshl-1253' && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+      if (m && m.id && !isExcluded(m.id)) {
         const k = m.id.toLowerCase().trim();
         const existing = map.get(k);
         const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
@@ -2769,8 +2797,13 @@ export const saveTransaction = (tx: Transaction): void => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      tx.subCategory = 'BMP Fund';
-      tx.subCategoryBreakdown = { 'BMP Fund': tx.amount };
+      if (!tx.subCategory) {
+        tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
+      }
+      if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+        const subKey = tx.subCategory || 'BMP Fund';
+        tx.subCategoryBreakdown = { [subKey]: tx.amount };
+      }
       if (tx.remark && tx.remark.includes('[Pathian Ram Zauna]')) {
         tx.remark = tx.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
       }
