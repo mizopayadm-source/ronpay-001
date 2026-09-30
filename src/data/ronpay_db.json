@@ -1301,6 +1301,34 @@
       "section": "Shillong Unit",
       "campaignId": "cmp-1788107291420",
       "orgCode": "BMPSHL"
+    },
+    {
+      "id": "YMAVT-7654",
+      "campaignId": "cmp-1787829303143",
+      "orgCode": "YMAVT",
+      "name": "Kailiana Biakthuama",
+      "phoneLast4": "7654",
+      "fullPhone": "9878987654",
+      "section": "Zampuimanga",
+      "isFamilyHead": true,
+      "dependents": [],
+      "createdAt": "2026-09-30T13:24:23.942Z",
+      "updatedAt": "2026-09-30T13:24:23.942Z",
+      "status": "paid"
+    },
+    {
+      "id": "YMAVT-3933",
+      "campaignId": "cmp-1787829303143",
+      "orgCode": "YMAVT",
+      "name": "Rinmawia Lalsiama",
+      "phoneLast4": "3933",
+      "fullPhone": "8768373933",
+      "section": "Chawngbawla",
+      "isFamilyHead": true,
+      "dependents": [],
+      "createdAt": "2026-09-30T13:24:23.942Z",
+      "updatedAt": "2026-09-30T13:24:23.942Z",
+      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -14737,5 +14765,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-09-30T13:09:54.663Z"
+  "lastUpdated": "2026-09-30T13:25:44.900Z"
 }

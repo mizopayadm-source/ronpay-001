@@ -2194,6 +2194,32 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     dependents: [],
     createdAt: '2026-08-25T00:00:00.000Z'
   },
+  {
+    id: 'YMAVT-7654',
+    campaignId: 'cmp-1787829303143',
+    name: 'Kailiana Biakthuama',
+    orgCode: 'YMAVT',
+    phoneLast4: '7654',
+    fullPhone: '9878987654',
+    section: 'Zampuimanga',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-26T00:00:00.000Z',
+    status: 'paid'
+  },
+  {
+    id: 'YMAVT-3933',
+    campaignId: 'cmp-1787829303143',
+    name: 'Rinmawia Lalsiama',
+    orgCode: 'YMAVT',
+    phoneLast4: '3933',
+    fullPhone: '8768373933',
+    section: 'Chawngbawla',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-08-26T00:00:00.000Z',
+    status: 'paid'
+  },
   // --- BMP Shillong (cmp-1788107291420) Member Roll ---
   {
     id: 'BMPSHL-1718',
@@ -2799,8 +2825,8 @@ export const saveTransaction = (tx: Transaction): void => {
     String(tx.id || '').startsWith('TXN-BILL-') || 
     String(tx.campaignId || '').startsWith('bill-');
   if (!isBill) {
-    // Canonical member name enforcement if memberId is set
-    if (tx.memberId) {
+    // Canonical member name enforcement if memberId is set and donorName is not provided
+    if (tx.memberId && !tx.donorName) {
       try {
         const mems = getMembers(tx.campaignId);
         const mem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());

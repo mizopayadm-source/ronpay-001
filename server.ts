@@ -4205,7 +4205,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     changed = true;
   } else {
     const bmpCamp = campMap.get('cmp-1788107291420');
-    if (bmpCamp && (!Array.isArray(bmpCamp.subCategories) || bmpCamp.subCategories.length !== 1 || bmpCamp.subCategories[0] !== 'BMP Fund')) {
+    if (bmpCamp && (!Array.isArray(bmpCamp.subCategories) || bmpCamp.subCategories.length === 0)) {
       bmpCamp.subCategories = ['BMP Fund'];
       changed = true;
     }
