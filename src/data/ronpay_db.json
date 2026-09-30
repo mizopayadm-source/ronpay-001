@@ -988,7 +988,7 @@
       "orgCode": "BMPSHL",
       "phoneLast4": "1548",
       "fullPhone": "",
-      "section": "Section A",
+      "section": "Shillong Unit",
       "isFamilyHead": true,
       "dependents": [],
       "createdAt": "2026-08-31T18:11:34.756Z",
@@ -1305,30 +1305,30 @@
     {
       "id": "YMAVT-7654",
       "campaignId": "cmp-1787829303143",
-      "orgCode": "YMAVT",
       "name": "Kailiana Biakthuama",
+      "orgCode": "YMAVT",
       "phoneLast4": "7654",
       "fullPhone": "9878987654",
       "section": "Zampuimanga",
       "isFamilyHead": true,
       "dependents": [],
       "createdAt": "2026-09-30T13:24:23.942Z",
-      "updatedAt": "2026-09-30T13:24:23.942Z",
-      "status": "paid"
+      "status": "paid",
+      "updatedAt": "2026-09-30T13:24:23.942Z"
     },
     {
       "id": "YMAVT-3933",
       "campaignId": "cmp-1787829303143",
-      "orgCode": "YMAVT",
       "name": "Rinmawia Lalsiama",
+      "orgCode": "YMAVT",
       "phoneLast4": "3933",
       "fullPhone": "8768373933",
       "section": "Chawngbawla",
       "isFamilyHead": true,
       "dependents": [],
       "createdAt": "2026-09-30T13:24:23.942Z",
-      "updatedAt": "2026-09-30T13:24:23.942Z",
-      "status": "paid"
+      "status": "paid",
+      "updatedAt": "2026-09-30T13:24:23.942Z"
     }
   ],
   "deletedMemberIds": [
@@ -1547,7 +1547,7 @@
       "platformFee": 0,
       "id": "RPAY-CASH-709121",
       "subCategory": "BMP Fund",
-      "donorVeng": "Shillong",
+      "donorVeng": "Shillong Unit",
       "campaignTitle": "BMP Shillong",
       "amount": 650,
       "subCategoryBreakdown": {
@@ -4822,7 +4822,8 @@
       "campaignTitle": "BMP Shillong",
       "subCategory": "BMP Fund",
       "verifiedAt": "2026-09-13T10:16:19.958Z",
-      "donorPhone": "9862300000"
+      "donorPhone": "9862300000",
+      "donorVeng": "Shillong Unit"
     },
     {
       "memberId": "BMPSHL-0562",
@@ -4846,7 +4847,7 @@
       "status": "completed",
       "updatedAt": "2026-09-17T08:54:11.918Z",
       "donorName": "Lalruatfela Zadeng",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "campaignNetReceived": 250,
       "utr": "UTR941983927966",
       "campaignId": "cmp-1788107291420",
@@ -4883,7 +4884,8 @@
       "isDependent": false,
       "paymentMethod": "phonepe",
       "campaignTitle": "BMP Shillong",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "id": "RPAY_TXN_1789232152711_533",
@@ -4912,7 +4914,8 @@
       "totalAmount": 1515,
       "campaignTitle": "BMP Shillong",
       "amount": 1500,
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "campaignTitle": "BCM Ebenezer, Zobawk",
@@ -5518,7 +5521,8 @@
       "paymentMethod": "phonepe",
       "isDependent": false,
       "campaignTitle": "BMP Shillong",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "campaignNetReceived": 500,
@@ -5619,7 +5623,8 @@
       "donorName": "Anonymous",
       "updatedAt": "2026-09-17T08:54:11.920Z",
       "isDependent": false,
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "campaignTitle": "Lalrinpuii Ralna",
@@ -5995,7 +6000,8 @@
       "subCategoryBreakdown": {
         "BMP Fund": 100
       },
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "subCategoryBreakdown": {
@@ -6554,7 +6560,8 @@
       "campaignId": "cmp-1788107291420",
       "paymentMethod": "phonepe",
       "category": "kumtluang",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "timestamp": "2026-09-11T10:22:46.585Z",
@@ -7489,7 +7496,8 @@
       "subCategoryBreakdown": {
         "BMP Fund": 100
       },
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "isAnonymous": true,
@@ -8172,7 +8180,8 @@
       "totalAmount": 100,
       "timestamp": "2026-09-08T14:10:01.449Z",
       "txHash": "UTR742098937044",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "donorVeng": "Shillong Unit"
     },
     {
       "timestamp": "2026-09-08T14:08:34.257Z",
@@ -9115,7 +9124,7 @@
     {
       "memberId": "BMPSHL-0562",
       "txHash": "UPIWOODF9KYGL",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "platformFee": 0,
       "category": "kumtluang",
       "donorName": "Lalruatfela Zadeng",
@@ -9144,7 +9153,7 @@
       "id": "RPAY-589803",
       "periodType": "monthly",
       "donorPhone": "7005338526",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "isDependent": false,
       "isAnonymous": false,
       "txHash": "UPIXTZPNECU6O",
@@ -9184,7 +9193,7 @@
       "donorName": "Richard L Jongte",
       "updatedAt": "2026-09-17T08:54:11.955Z",
       "campaignId": "cmp-1788107291420",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "subCategoryBreakdown": {
         "BMP Fund": 1000
       },
@@ -9207,7 +9216,7 @@
       "updatedAt": "2026-09-17T08:54:11.955Z",
       "donorName": "Lalnuntluanga Vanchhawng",
       "txHash": "UPIWY573OM8GF",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "subCategoryBreakdown": {
         "BMP Fund": 500
       },
@@ -9244,7 +9253,7 @@
       "status": "completed",
       "amount": 1500,
       "totalAmount": 1500,
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "campaignId": "cmp-1788107291420",
       "donorName": "Upa R Lalhmachhuana",
       "updatedAt": "2026-09-17T08:54:11.955Z",
@@ -9276,12 +9285,12 @@
       "amount": 700,
       "isDependent": false,
       "campaignId": "cmp-1788107291420",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "isAnonymous": false,
       "subCategory": "BMP Fund"
     },
     {
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "category": "kumtluang",
       "donorName": "Upa C Lalbiaktluanga",
       "updatedAt": "2026-09-17T08:54:11.955Z",
@@ -9319,7 +9328,7 @@
       "amount": 150,
       "periodMonth": "February",
       "periodLabel": "February 2026",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "updatedAt": "2026-09-17T08:54:11.955Z",
       "donorName": "Lalnuntluanga Vanchhawng",
       "campaignId": "cmp-1788107291420",
@@ -9346,7 +9355,7 @@
       "status": "SUCCESS",
       "periodMonth": "January",
       "periodLabel": "January 2026",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "id": "RPAY-CASH-631128",
       "txHash": "CASHZVH0Q4A2",
       "subCategoryBreakdown": {
@@ -9369,7 +9378,7 @@
       "periodType": "monthly",
       "amount": 150,
       "category": "kumtluang",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorPhone": "7128",
       "updatedAt": "2026-09-17T08:54:11.955Z",
       "donorName": "Lalnuntluanga Vanchhawng",
@@ -9394,7 +9403,7 @@
       "campaignId": "cmp-1788107291420",
       "txHash": "CASHOVKJM8ZT",
       "totalAmount": 150,
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "isAnonymous": false,
       "id": "RPAY-CASH-430837",
       "paymentMethod": "cash",
@@ -9429,7 +9438,7 @@
       "platformFee": 5,
       "campaignTitle": "BMP Shillong",
       "status": "completed",
-      "donorVeng": "Bial 1 (Vengchhak)",
+      "donorVeng": "Shillong Unit",
       "isAnonymous": false,
       "campaignId": "cmp-1788107291420",
       "subCategoryBreakdown": {
@@ -9454,7 +9463,7 @@
       "paymentMethod": "online",
       "isDependent": false,
       "updatedAt": "2026-09-20T08:02:27.310Z",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "totalAmount": 1010,
       "periodLabel": "August 2026",
       "platformFee": 10,
@@ -9492,7 +9501,7 @@
       "donorPhone": "9862712079",
       "status": "completed",
       "periodYear": "2026",
-      "donorVeng": "",
+      "donorVeng": "Shillong Unit",
       "txHash": "CASH-BMPSHL-2079-202383",
       "updatedAt": "2026-09-20T08:02:27.289Z",
       "subCategoryBreakdown": {
@@ -9516,7 +9525,7 @@
       "updatedAt": "2026-09-20T08:02:27.266Z",
       "txHash": "CASH-BMPSHL-6368-096823",
       "status": "completed",
-      "donorVeng": "",
+      "donorVeng": "Shillong Unit",
       "donorName": "Zoliansanga",
       "referenceNo": "CASH-BMPSHL-6368-096823",
       "paymentMethod": "cash",
@@ -9533,7 +9542,7 @@
       "isAnonymous": false,
       "category": "kumtluang",
       "updatedAt": "2026-09-20T08:02:27.245Z",
-      "donorVeng": "",
+      "donorVeng": "Shillong Unit",
       "campaignTitle": "BMP Shillong",
       "periodYear": "2026",
       "donorName": "Lalrinawma Hmar",
@@ -10573,7 +10582,7 @@
       "memberId": "BMPSHL-1718",
       "id": "TXN-810651",
       "campaignId": "cmp-1788107291420",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "periodLabel": "August 2026",
       "periodMonth": "August",
       "donorName": "J Lalsangliana",
@@ -10609,7 +10618,7 @@
       "periodLabel": "August 2026",
       "txHash": "RON-06SIECD8",
       "donorPhone": "1739",
-      "donorVeng": "Bial 1 (Vengchhak)",
+      "donorVeng": "Shillong Unit",
       "periodType": "monthly",
       "subCategory": "BMP Fund",
       "subCategoryBreakdown": {
@@ -10879,7 +10888,7 @@
     },
     {
       "platformFee": 2,
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorName": "Upa R Lalhmachhuana",
       "updatedAt": "2026-09-17T08:54:11.985Z",
       "amount": 200,
@@ -10912,7 +10921,7 @@
       "periodType": "monthly",
       "donorName": "RC Lalliana",
       "updatedAt": "2026-09-17T08:54:11.986Z",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "totalAmount": 505,
       "subCategory": "BMP Fund",
       "txHash": "CASHYS17L9X6",
@@ -10942,7 +10951,7 @@
       "campaignTitle": "BMP Shillong",
       "paymentMethod": "cash",
       "memberId": "BMPSHL-6368",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "txHash": "CASH5715H515",
       "campaignId": "cmp-1788107291420",
       "periodLabel": "March 2026",
@@ -10971,7 +10980,7 @@
       "id": "RPAY-CASH-624514",
       "isAnonymous": false,
       "periodYear": "2026",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "status": "SUCCESS",
       "subCategory": "BMP Fund",
       "donorName": "Richard L Jongte",
@@ -10996,7 +11005,7 @@
       },
       "subCategory": "BMP Fund",
       "donorPhone": "6709",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "isDependent": false,
       "periodType": "monthly",
       "isAnonymous": false,
@@ -11064,7 +11073,7 @@
       "donorName": "Eric C Lallawmpuia",
       "id": "TXN-185135",
       "updatedAt": "2026-09-17T08:54:11.986Z",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "status": "SUCCESS",
       "subCategory": "BMP Fund",
       "subCategoryBreakdown": {
@@ -11079,7 +11088,7 @@
       "amount": 200,
       "isAnonymous": false,
       "id": "TXN-139908",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorName": "J Lalsangliana",
       "campaignId": "cmp-1788107291420",
       "updatedAt": "2026-09-17T08:54:11.987Z",
@@ -11104,7 +11113,7 @@
       "status": "SUCCESS",
       "memberId": "BMPSHL-1739",
       "amount": 200,
-      "donorVeng": "Bial 1 (Vengchhak)",
+      "donorVeng": "Shillong Unit",
       "donorName": "Upa Thawngphena Tuallawt",
       "updatedAt": "2026-09-17T08:54:11.987Z",
       "periodMonth": "March",
@@ -11140,7 +11149,7 @@
       "memberId": "BMPSHL-6368",
       "id": "RPAY-CASH-955913",
       "category": "kumtluang",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "txHash": "CASHOZJLZN5L",
       "periodYear": "2026",
       "updatedAt": "2026-09-17T08:54:11.987Z",
@@ -11150,7 +11159,7 @@
       "subCategory": "BMP Fund"
     },
     {
-      "donorVeng": "Bial 1 (Vengchhak)",
+      "donorVeng": "Shillong Unit",
       "subCategoryBreakdown": {
         "BMP Fund": 200
       },
@@ -11185,7 +11194,7 @@
       "donorPhone": "3902",
       "id": "RPAY-CASH-234308",
       "platformFee": 0,
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorName": "RC Lalliana",
       "updatedAt": "2026-09-17T08:54:11.987Z",
       "amount": 150,
@@ -11216,7 +11225,7 @@
       "periodMonth": "February",
       "periodLabel": "February 2026",
       "txHash": "UPIAZ9N1XRND5",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "subCategoryBreakdown": {
         "BMP Fund": 150
       },
@@ -11236,7 +11245,7 @@
     {
       "periodMonth": "February",
       "periodLabel": "February 2026",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "id": "RPAY-575670",
       "amount": 100,
       "campaignId": "cmp-1788107291420",
@@ -11270,7 +11279,7 @@
       "paymentMethod": "cash",
       "donorName": "J Lalsangliana",
       "updatedAt": "2026-09-17T08:54:11.987Z",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "periodYear": "2026",
       "txHash": "RON-4DNUHOOU",
       "donorPhone": "1718",
@@ -11303,7 +11312,7 @@
       },
       "periodLabel": "February 2026",
       "periodMonth": "February",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "status": "SUCCESS",
       "donorName": "Upa R Lalhmachhuana",
       "updatedAt": "2026-09-17T08:54:11.987Z",
@@ -11318,7 +11327,7 @@
       "periodLabel": "February 2026",
       "periodMonth": "February",
       "txHash": "CASHKPFMZHDB",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorName": "Lalkhawmuana",
       "updatedAt": "2026-09-17T08:54:11.987Z",
       "memberId": "BMPSHL-6709",
@@ -11381,7 +11390,7 @@
       "updatedAt": "2026-09-17T08:54:11.988Z",
       "donorName": "Upa R Lalhmachhuana",
       "category": "kumtluang",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "periodType": "monthly",
       "memberId": "BMPSHL-4610",
       "donorPhone": "4610",
@@ -11400,7 +11409,7 @@
       "subCategory": "BMP Fund"
     },
     {
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "memberId": "BMPSHL-2079",
       "platformFee": 0,
       "donorName": "Richard L Jongte",
@@ -11430,7 +11439,7 @@
     {
       "id": "RPAY-CASH-883583",
       "periodYear": "2026",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "category": "kumtluang",
       "campaignId": "cmp-1788107291420",
       "totalAmount": 150,
@@ -11497,7 +11506,7 @@
       "platformFee": 0,
       "paymentMethod": "cash",
       "campaignTitle": "BMP Shillong",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "memberId": "BMPSHL-6368",
       "periodYear": "2026",
       "periodLabel": "January 2026",
@@ -11523,7 +11532,7 @@
       "totalAmount": 150,
       "memberId": "BMPSHL-4259",
       "campaignId": "cmp-1788107291420",
-      "donorVeng": "Section A",
+      "donorVeng": "Shillong Unit",
       "donorName": "Eric C Lallawmpuia",
       "updatedAt": "2026-09-17T08:54:11.988Z",
       "periodYear": "2026",
@@ -14765,5 +14774,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-09-30T13:25:44.900Z"
+  "lastUpdated": "2026-09-30T17:23:37.033Z"
 }

@@ -1039,6 +1039,10 @@ export const getStoredTransactions = (): Transaction[] => {
                 t.campaignTitle = 'BMP Shillong';
                 hasFixed = true;
               }
+              if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
+                t.donorVeng = 'Shillong Unit';
+                hasFixed = true;
+              }
               if (!t.subCategory) {
                 t.subCategory = t.donorType === 'general' ? (t.remark || 'General Thawhlawm') : 'BMP Fund';
                 hasFixed = true;
@@ -2228,7 +2232,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '1718',
     fullPhone: '',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-15T00:00:00.000Z',
@@ -2241,7 +2245,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '1739',
     fullPhone: '9366321739',
-    section: 'Bial 1 (Vengchhak)',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-15T00:00:00.000Z',
@@ -2254,7 +2258,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '4259',
     fullPhone: '8800904259',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-03-15T00:00:00.000Z',
@@ -2267,7 +2271,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '0562',
     fullPhone: '7642930562',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:21:49.989Z',
@@ -2280,7 +2284,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '0520',
     fullPhone: '8787560520',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:19:28.675Z',
@@ -2293,7 +2297,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '8871',
     fullPhone: '9615328871',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:18:40.740Z',
@@ -2306,7 +2310,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '1111',
     fullPhone: '2222211111',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:18:07.314Z',
@@ -2319,7 +2323,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '8526',
     fullPhone: '7005338526',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:15:26.267Z',
@@ -2332,7 +2336,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '3106',
     fullPhone: '9383193106',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:14:59.224Z',
@@ -2345,7 +2349,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '1548',
     fullPhone: '',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T18:11:34.756Z',
@@ -2358,7 +2362,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '5353',
     fullPhone: '3532535353',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T17:37:05.710Z',
@@ -2371,7 +2375,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '3333',
     fullPhone: '4534543333',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T17:36:40.078Z',
@@ -2384,7 +2388,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '2445',
     fullPhone: '2324552445',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T17:36:09.358Z',
@@ -2397,7 +2401,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '1133',
     fullPhone: '6323521133',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T12:06:48.589Z',
@@ -2410,7 +2414,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '2079',
     fullPhone: '9862712079',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T12:04:53.726Z',
@@ -2423,7 +2427,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '6368',
     fullPhone: '9436156368',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T12:03:27.271Z',
@@ -2436,7 +2440,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '7128',
     fullPhone: '8415967128',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T12:02:10.171Z',
@@ -2449,7 +2453,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '4610',
     fullPhone: '9436354610',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T12:01:27.790Z',
@@ -2462,7 +2466,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '8223',
     fullPhone: '9620998223',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:37:53.546Z',
@@ -2475,7 +2479,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '0258',
     fullPhone: '9436100258',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:37:28.837Z',
@@ -2488,7 +2492,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '8999',
     fullPhone: '2345678999',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:36:55.552Z',
@@ -2501,7 +2505,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '8465',
     fullPhone: '9436118465',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:36:07.910Z',
@@ -2514,7 +2518,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '7944',
     fullPhone: '9774487944',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:35:42.937Z',
@@ -2527,7 +2531,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '3902',
     fullPhone: '7005153902',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-08-31T11:33:22.166Z',
@@ -2540,7 +2544,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     orgCode: 'BMPSHL',
     phoneLast4: '6709',
     fullPhone: '',
-    section: 'Section A',
+    section: 'Shillong Unit',
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-03-22T00:00:00.000Z',
@@ -2634,6 +2638,15 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
     }
 
     const allMembers = Array.from(map.values()).filter(m => !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+
+    // Enforce Shillong Unit for all BMP Shillong members
+    allMembers.forEach(m => {
+      if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
+        if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
+          m.section = 'Shillong Unit';
+        }
+      }
+    });
 
     if (!campaignId || campaignId === 'all') {
       return allMembers;
@@ -2844,6 +2857,9 @@ export const saveTransaction = (tx: Transaction): void => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
+      if (!tx.donorVeng || tx.donorVeng === 'Section A' || tx.donorVeng === 'Section B' || tx.donorVeng === 'Section C' || tx.donorVeng === 'Section D' || tx.donorVeng === 'Bial 1 (Vengchhak)' || tx.donorVeng === 'Shillong') {
+        tx.donorVeng = 'Shillong Unit';
+      }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
       }

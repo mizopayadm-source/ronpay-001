@@ -4217,6 +4217,14 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     const beforeLen = db.members.length;
     db.members = db.members.filter(m => !PURGED_MEMBERS.has(String(m.id || '').toLowerCase().trim()));
     if (db.members.length !== beforeLen) changed = true;
+    db.members.forEach((m: any) => {
+      if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
+        if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
+          m.section = 'Shillong Unit';
+          changed = true;
+        }
+      }
+    });
   }
   if (!Array.isArray(db.deletedMemberIds)) db.deletedMemberIds = [];
   for (const pid of PURGED_MEMBERS) {
@@ -4244,6 +4252,10 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       }
       if (t.campaignTitle !== 'BMP Shillong') {
         t.campaignTitle = 'BMP Shillong';
+        changed = true;
+      }
+      if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
+        t.donorVeng = 'Shillong Unit';
         changed = true;
       }
       if (!t.subCategory) {
@@ -4561,6 +4573,13 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
     if (Array.isArray(members)) {
       db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);
+      (db.members || []).forEach((m: any) => {
+        if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
+          if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
+            m.section = 'Shillong Unit';
+          }
+        }
+      });
     }
     if (Array.isArray(transactions)) {
       const cleanTx = transactions.filter((t: any) => {
@@ -4571,6 +4590,17 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         return true;
       });
       db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);
+      (db.transactions || []).forEach((t: any) => {
+        const isBmp = t.campaignId === 'cmp-1788107291420' ||
+                      String(t.campaignTitle || '').toLowerCase().includes('bmp') ||
+                      String(t.campaignTitle || '').toLowerCase().includes('shillong') ||
+                      String(t.memberId || '').startsWith('BMPSHL-');
+        if (isBmp) {
+          if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
+            t.donorVeng = 'Shillong Unit';
+          }
+        }
+      });
       db.transactions.sort((a: any, b: any) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -4816,6 +4846,9 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
+      if (!tx.donorVeng || tx.donorVeng === 'Section A' || tx.donorVeng === 'Section B' || tx.donorVeng === 'Section C' || tx.donorVeng === 'Section D' || tx.donorVeng === 'Bial 1 (Vengchhak)' || tx.donorVeng === 'Shillong') {
+        tx.donorVeng = 'Shillong Unit';
+      }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
       }

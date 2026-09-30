@@ -267,13 +267,21 @@ export const buildKumtluangMatrix = (
 
   // Build canonical member name resolution map to merge any slight discrepancies or partial names
   const memberNameMap = new Map<string, string>();
+  const memberSectionMap = new Map<string, string>();
   const registeredMemberNames: string[] = [];
   try {
     const mems = getMembers(campaign?.id);
     mems.forEach(m => {
       if (m && m.name) {
-        if (m.id) memberNameMap.set(m.id.toLowerCase().trim(), m.name.trim());
-        registeredMemberNames.push(m.name.trim());
+        const cName = m.name.trim();
+        if (m.id) {
+          memberNameMap.set(m.id.toLowerCase().trim(), cName);
+          if (m.section) memberSectionMap.set(m.id.toLowerCase().trim(), m.section.trim());
+        }
+        if (m.section) {
+          memberSectionMap.set(cName.toLowerCase(), m.section.trim());
+        }
+        registeredMemberNames.push(cName);
       }
     });
   } catch (e) {}
@@ -319,8 +327,30 @@ export const buildKumtluangMatrix = (
     if (t.groupName && !donorGroupNameMap.has(donor)) {
       donorGroupNameMap.set(donor, t.groupName);
     }
-    if (t.donorVeng && !donorSectionMap.has(donor)) {
-      donorSectionMap.set(donor, t.donorVeng);
+    
+    // Resolve section or unit accurately
+    const isBmpTx = t.campaignId === 'cmp-1788107291420' || 
+      String(t.campaignTitle || '').toLowerCase().includes('bmp') || 
+      String(t.campaignTitle || '').toLowerCase().includes('shillong') || 
+      String(t.memberId || '').startsWith('BMPSHL-') ||
+      campaign?.id === 'cmp-1788107291420' ||
+      String(campaign?.title || '').toLowerCase().includes('bmp');
+
+    let resolvedSection = t.donorVeng;
+    if (t.memberId && memberSectionMap.has(t.memberId.toLowerCase().trim())) {
+      resolvedSection = memberSectionMap.get(t.memberId.toLowerCase().trim());
+    } else if (memberSectionMap.has(donor.toLowerCase().trim())) {
+      resolvedSection = memberSectionMap.get(donor.toLowerCase().trim());
+    }
+
+    if (isBmpTx) {
+      if (!resolvedSection || resolvedSection === 'Section A' || resolvedSection === 'Section B' || resolvedSection === 'Section C' || resolvedSection === 'Section D' || resolvedSection === 'Bial 1 (Vengchhak)' || resolvedSection === 'Shillong') {
+        resolvedSection = 'Shillong Unit';
+      }
+    }
+
+    if (resolvedSection && !donorSectionMap.has(donor)) {
+      donorSectionMap.set(donor, resolvedSection);
     }
 
     const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
@@ -1497,7 +1527,10 @@ export const generateTransactionsPDFHtml = (
       return `
       <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
         <td style="${isDense ? 'padding: 6px 3px;' : 'padding: 8px 12px;'} border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #64748b; text-align: center; width: ${isDense ? '36px' : '45px'};">${idx + 1}</td>
-        <td style="${isDense ? 'padding: 6px 5px; font-size: 10px;' : 'padding: 8px 12px; font-size: 11px;'} border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a; white-space: nowrap;">${r.donorName}</td>
+        <td style="${isDense ? 'padding: 6px 5px; font-size: 10px;' : 'padding: 8px 12px; font-size: 11px;'} border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #0f172a; white-space: nowrap;">
+          <div>${r.donorName}</div>
+          ${r.section ? `<div style="font-size: 8.5px; font-weight: 600; color: #64748b; margin-top: 1px;">${r.section.toLowerCase().includes('unit') ? r.section : `Sec: ${r.section}`}</div>` : ''}
+        </td>
         <td style="${isDense ? 'padding: 6px 3px;' : 'padding: 8px 12px;'} border-bottom: 1px solid #e2e8f0; text-align: center; width: ${isDense ? '70px' : '85px'};">${modeBadge}</td>
         ${matrix.categories.map(c => `
           <td style="${colPad} ${colFontSize} border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: ${r.categoryAmounts[c] > 0 ? '#0f172a' : '#94a3b8'};">
@@ -2073,7 +2106,7 @@ export const generateMasterLedgerPrintHtml = (
               <th style="width: 30px;">#</th>
               <th style="width: 75px;">ID</th>
               <th>NAME</th>
-              <th>SEC</th>
+              <th>${(orgName.toLowerCase().includes('bmp') || campaignTitle.toLowerCase().includes('bmp')) ? 'UNIT' : 'SEC'}</th>
               ${months.map(m => `<th style="width: 45px;">${m.toUpperCase()}</th>`).join('')}
               <th style="width: 65px; background: #0284c7;">TOTAL</th>
             </tr>

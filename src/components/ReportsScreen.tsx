@@ -2174,7 +2174,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               <div className="text-[9.5px] text-indigo-700 font-medium">Pawl: {row.groupName}</div>
                             )}
                             {row.section && (
-                              <div className="text-[9.5px] text-slate-400 font-medium">Sec: {row.section}</div>
+                              <div className="text-[9.5px] text-slate-400 font-medium">
+                                {row.section.toLowerCase().includes('unit') ? row.section : `Sec: ${row.section}`}
+                              </div>
                             )}
                           </td>
                           <td className="py-2 px-2 text-center border-r border-slate-200 whitespace-nowrap">
