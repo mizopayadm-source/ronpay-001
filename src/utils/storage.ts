@@ -817,35 +817,56 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
+export const PERMANENTLY_PURGED_TX_IDS = new Set(['rpay_txn_1790753980087_908']);
 
 export const getDeletedTransactionIds = (): Set<string> => {
+  const result = new Set<string>(PERMANENTLY_PURGED_TX_IDS);
   try {
-    const raw = localStorage.getItem(DELETED_TX_IDS_KEY);
+    const raw = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        return new Set(arr.map(id => String(id).toLowerCase().trim()));
+        arr.forEach(id => {
+          if (id) result.add(String(id).toLowerCase().trim());
+        });
       }
     }
   } catch (e) {}
-  return new Set<string>();
+  return result;
 };
 
 export const markTransactionAsDeleted = (txId: string): void => {
   if (!txId) return;
   try {
+    const clean = String(txId).toLowerCase().trim();
     const set = getDeletedTransactionIds();
-    set.add(String(txId).toLowerCase().trim());
+    set.add(clean);
     const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
+    localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
+
+    // Immediately remove from local transaction cache to instantly reflect deletion
+    const raw = localStorage.getItem(TRANSACTIONS_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter(t => t && String(t.id).toLowerCase().trim() !== clean);
+          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(filtered));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+          }
+        }
+      } catch {}
+    }
 
     // Asynchronously push deletion to backend server and Firestore for cross-window & mobile sync
     safeApiFetch('/api/data/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deletedTransactionIds: [txId] })
+      body: JSON.stringify({ deletedTransactionIds: [clean] })
     });
-    deleteTransactionFromFirestore(txId).catch(() => {});
+    deleteTransactionFromFirestore(clean).catch(() => {});
   } catch (e) {}
 };
 
@@ -870,7 +891,7 @@ export const getStoredTransactions = (): Transaction[] => {
         const cleaned = parsed.filter(t => {
           if (!t || !t.id) return false;
           const cleanId = String(t.id).toLowerCase().trim();
-          if (deletedIds.has(cleanId)) return false;
+          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
           if (legacyMismatchedIds.has(t.id)) return false;
           const numAmt = Number(t.amount);
           if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0 || numAmt > 500000) return false;

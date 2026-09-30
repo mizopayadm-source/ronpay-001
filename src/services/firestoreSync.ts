@@ -123,17 +123,20 @@ export function sanitizeForFirestore<T>(obj: T): T {
 }
 
 function getLocalDeletedTxIds(): Set<string> {
+  const result = new Set<string>(['rpay_txn_1790753980087_908']);
   try {
-    if (typeof window === 'undefined') return new Set();
+    if (typeof window === 'undefined') return result;
     const raw = localStorage.getItem('ronpay_deleted_tx_ids') || localStorage.getItem('ronpay_deleted_tx_ids_v1');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        return new Set(arr.map((id: any) => String(id).toLowerCase().trim()));
+        arr.forEach((id: any) => {
+          if (id) result.add(String(id).toLowerCase().trim());
+        });
       }
     }
   } catch {}
-  return new Set();
+  return result;
 }
 
 /**

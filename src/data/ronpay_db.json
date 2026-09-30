@@ -12229,7 +12229,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-09-29T15:57:14.606Z",
+    "lastUpdated": "2026-09-30T12:35:40.947Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -12458,7 +12458,7 @@
     "linkText": "Bawm Explorer En Rawh",
     "animationStyle": "slide",
     "type": "urgent",
-    "createdAt": "2026-09-29T15:57:14.618Z"
+    "createdAt": "2026-09-30T12:35:40.955Z"
   },
   "auditLogs": [
     {
@@ -12475,7 +12475,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-09-28T15:57:14.618Z"
+      "timestamp": "2026-09-29T12:35:40.955Z"
     },
     {
       "id": "log-2",
@@ -12484,7 +12484,7 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-09-29T03:57:14.618Z"
+      "timestamp": "2026-09-30T00:35:40.955Z"
     },
     {
       "id": "log-3",
@@ -12493,7 +12493,7 @@
       "targetType": "campaign",
       "targetId": "cmp-ralna-1",
       "performedBy": "Admin",
-      "timestamp": "2026-09-29T09:57:14.618Z"
+      "timestamp": "2026-09-30T06:35:40.955Z"
     },
     {
       "updatedAt": "2026-09-16T19:16:07.069Z",
@@ -14737,5 +14737,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-09-30T12:27:20.599Z"
+  "lastUpdated": "2026-09-30T13:09:54.663Z"
 }

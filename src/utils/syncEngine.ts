@@ -207,7 +207,9 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           }
         }
         if (Array.isArray(serverData.deletedTransactionIds)) {
-          // Transaction tombstones are preserved
+          for (const tId of serverData.deletedTransactionIds) {
+            markTransactionAsDeleted(tId);
+          }
         }
         if (Array.isArray(serverData.deletedStaffIds)) {
           for (const sId of serverData.deletedStaffIds) {
@@ -274,8 +276,13 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
         }
 
         // 4. Update transactions
-        if (Array.isArray(serverData.transactions) && serverData.transactions.length > 0) {
+        if (Array.isArray(serverData.transactions)) {
           const deletedIds = getDeletedTransactionIds();
+          if (Array.isArray(serverData.deletedTransactionIds)) {
+            for (const tId of serverData.deletedTransactionIds) {
+              deletedIds.add(String(tId).toLowerCase().trim());
+            }
+          }
           const currentTxs = getStoredTransactions();
           const serverTxIds = new Set(serverData.transactions.map((t: any) => String(t.id).toLowerCase().trim()));
           const txMap = new Map<string, any>();
@@ -298,20 +305,29 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           
           // Seed authoritative server transactions first
           for (const t of serverData.transactions) {
-            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
-              sanitizeTxTimestamp(t);
+            if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              txMap.set(k, t);
+              if (!deletedIds.has(k)) {
+                sanitizeTxTimestamp(t);
+                txMap.set(k, t);
+              }
             }
           }
 
-          // Merge any local transactions not yet on server (ensuring none are lost during offline periods)
+          // Merge any genuine recent local offline transactions (< 15 mins) not yet on server
           for (const t of currentTxs) {
-            if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
-              sanitizeTxTimestamp(t);
+            if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
+              if (deletedIds.has(k)) {
+                continue;
+              }
               if (!serverTxIds.has(k)) {
-                txMap.set(k, t);
+                const txAge = t.timestamp ? (nowMs - new Date(t.timestamp).getTime()) : 0;
+                const isPendingOrRecent = t.status === 'pending' || t.status === 'pending_verification' || txAge < (15 * 60 * 1000);
+                if (isPendingOrRecent) {
+                  sanitizeTxTimestamp(t);
+                  txMap.set(k, t);
+                }
               }
             }
           }
