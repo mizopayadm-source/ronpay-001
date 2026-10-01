@@ -331,6 +331,8 @@ export interface StaffAccount {
   assignedBy?: string;
   avatarUrl?: string;
   notes?: string;
+  mpin?: string;
+  password?: string;
   lastLogin?: string;
   lastLoginAt?: string;
   createdAt?: string;

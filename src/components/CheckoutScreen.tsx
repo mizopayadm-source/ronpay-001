@@ -40,7 +40,9 @@ import {
   Lock,
   Unlock,
   KeyRound,
-  ShieldAlert
+  ShieldAlert,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';

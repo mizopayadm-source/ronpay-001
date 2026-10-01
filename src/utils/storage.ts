@@ -48,8 +48,10 @@ export const getDeletedCampaignIds = (): Set<string> => {
 export const recordDeletedCampaignId = (campaignId: string): void => {
   if (!campaignId) return;
   try {
+    const clean = String(campaignId).toLowerCase().trim();
     const set = getDeletedCampaignIds();
-    set.add(String(campaignId).toLowerCase().trim());
+    if (set.has(clean)) return;
+    set.add(clean);
     const arr = Array.from(set).slice(-500);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(arr));
@@ -88,8 +90,10 @@ export const getDeletedMemberIds = (): Set<string> => {
 export const markMemberAsDeleted = (memberId: string): void => {
   if (!memberId) return;
   try {
+    const clean = String(memberId).toLowerCase().trim();
     const set = getDeletedMemberIds();
-    set.add(String(memberId).toLowerCase().trim());
+    if (set.has(clean)) return;
+    set.add(clean);
     const arr = Array.from(set).slice(-1000);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(DELETED_MEMBER_IDS_KEY, JSON.stringify(arr));
@@ -848,6 +852,7 @@ export const markTransactionAsDeleted = (txId: string): void => {
   try {
     const clean = String(txId).toLowerCase().trim();
     const set = getDeletedTransactionIds();
+    if (set.has(clean)) return; // Already recorded as deleted, do not re-process
     set.add(clean);
     const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
@@ -860,21 +865,15 @@ export const markTransactionAsDeleted = (txId: string): void => {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const filtered = parsed.filter(t => t && String(t.id).toLowerCase().trim() !== clean);
-          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(filtered));
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+          if (filtered.length !== parsed.length) {
+            localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(filtered));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+            }
           }
         }
       } catch {}
     }
-
-    // Asynchronously push deletion to backend server and Firestore for cross-window & mobile sync
-    safeApiFetch('/api/data/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deletedTransactionIds: [clean] })
-    });
-    deleteTransactionFromFirestore(clean).catch(() => {});
   } catch (e) {}
 };
 

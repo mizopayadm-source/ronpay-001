@@ -811,10 +811,14 @@ export async function syncMemberToFirestore(member: MemberRecord): Promise<void>
 /**
  * Direct delete: Delete member from Firestore
  */
+const sessionDeletedMembers = new Set<string>();
 export async function deleteMemberFromFirestore(memberId: string): Promise<void> {
   if (!isNetworkOnline || !memberId) return;
+  const cleanId = String(memberId).trim();
+  if (sessionDeletedMembers.has(cleanId.toLowerCase())) return;
+  sessionDeletedMembers.add(cleanId.toLowerCase());
   try {
-    const docRef = doc(db, 'members', memberId);
+    const docRef = doc(db, 'members', cleanId);
     await deleteDoc(docRef);
   } catch (err) {
     logFirestoreNetworkNote('Delete member', err);
@@ -824,10 +828,14 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
 /**
  * Direct delete: Delete campaign from Firestore
  */
+const sessionDeletedCampaigns = new Set<string>();
 export async function deleteCampaignFromFirestore(campaignId: string): Promise<void> {
   if (!isNetworkOnline || !campaignId) return;
+  const cleanId = String(campaignId).trim();
+  if (sessionDeletedCampaigns.has(cleanId.toLowerCase())) return;
+  sessionDeletedCampaigns.add(cleanId.toLowerCase());
   try {
-    const docRef = doc(db, 'campaigns', campaignId);
+    const docRef = doc(db, 'campaigns', cleanId);
     await deleteDoc(docRef);
   } catch (err) {
     logFirestoreNetworkNote('Delete campaign', err);
@@ -837,10 +845,14 @@ export async function deleteCampaignFromFirestore(campaignId: string): Promise<v
 /**
  * Direct delete: Delete transaction from Firestore
  */
+const sessionDeletedTransactions = new Set<string>();
 export async function deleteTransactionFromFirestore(transactionId: string): Promise<void> {
   if (!isNetworkOnline || !transactionId) return;
+  const cleanId = String(transactionId).trim();
+  if (sessionDeletedTransactions.has(cleanId.toLowerCase())) return;
+  sessionDeletedTransactions.add(cleanId.toLowerCase());
   try {
-    const docRef = doc(db, 'transactions', transactionId);
+    const docRef = doc(db, 'transactions', cleanId);
     await deleteDoc(docRef);
   } catch (err) {
     logFirestoreNetworkNote('Delete transaction', err);
