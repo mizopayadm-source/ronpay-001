@@ -1231,6 +1231,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         timestamp: new Date().toISOString(),
         remark: remark.trim() || undefined,
         feeOption: feeBearerOption,
+        subCategory: category === 'kumtluang' 
+          ? (resolvedDonorType === 'group'
+              ? (resolvedGroupName || 'Group Sum')
+              : resolvedDonorType === 'general'
+              ? (generalTitle.trim() || 'General Thawhlawm')
+              : (Object.keys(subcatAmounts || {})[0] || undefined))
+          : undefined,
         subCategoryBreakdown: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? { [resolvedGroupName || 'Group Sum']: subtotal }
@@ -1382,6 +1389,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         paymentMethod: 'cash',
         status: 'pending_verification',
         remark: remark.trim() || undefined,
+        subCategory: category === 'kumtluang' 
+          ? (resolvedDonorType === 'group'
+              ? (resolvedGroupName || 'Group Sum')
+              : resolvedDonorType === 'general'
+              ? (generalTitle.trim() || 'General Thawhlawm')
+              : (Object.keys(subcatAmounts || {})[0] || undefined))
+          : undefined,
         subCategoryBreakdown: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? { [resolvedGroupName || 'Group Sum']: subtotal }

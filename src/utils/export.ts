@@ -265,6 +265,20 @@ export const buildKumtluangMatrix = (
   let onlineTotal = 0;
   let cashTotal = 0;
 
+  // 1. Automatically register ALL Creator-configured Fund Heads & Offering Presets
+  if (Array.isArray(campaign?.subCategories)) {
+    campaign.subCategories.forEach(sc => {
+      const clean = sc?.trim();
+      if (clean) categorySet.add(clean);
+    });
+  }
+  if (Array.isArray(campaign?.generalPresets)) {
+    campaign.generalPresets.forEach(gp => {
+      const clean = gp?.trim();
+      if (clean) categorySet.add(clean);
+    });
+  }
+
   // Build canonical member name resolution map to merge any slight discrepancies or partial names
   const memberNameMap = new Map<string, string>();
   const memberSectionMap = new Map<string, string>();
@@ -382,11 +396,21 @@ export const buildKumtluangMatrix = (
     const donorCats = donorMap.get(donor)!;
 
     let hasBreakdown = false;
+    const donorLower = (t.donorName || '').toLowerCase().trim();
+    const isDonorInkhawm = 
+      donorLower.includes('inkhawm') || 
+      donorLower.includes('inkawm') || 
+      (t.subCategory && (t.subCategory.toLowerCase().includes('inkhawm') || t.subCategory.toLowerCase().includes('inkawm')));
+
     if (t.subCategoryBreakdown && Object.keys(t.subCategoryBreakdown).length > 0) {
       Object.entries(t.subCategoryBreakdown).forEach(([cat, amt]) => {
-        const cleanCat = cat.trim();
+        let cleanCat = cat.trim();
         const numAmt = Number(amt) || 0;
         if (numAmt > 0) {
+          // If transaction is an Inkhawm Thawhlawm contribution, always allocate it to the dedicated Inkhawm Thawhlawm column
+          if (isDonorInkhawm && (cleanCat.toLowerCase() === 'bmp fund' || cleanCat.toLowerCase() === 'bmp shillong' || cleanCat.toLowerCase() === 'kumtluang')) {
+            cleanCat = 'Inkhawm Thawhlawm';
+          }
           categorySet.add(cleanCat);
           donorCats[cleanCat] = (donorCats[cleanCat] || 0) + numAmt;
           hasBreakdown = true;
@@ -398,6 +422,11 @@ export const buildKumtluangMatrix = (
       // 1. Direct subCategory field on transaction
       let resolvedSubCat = t.subCategory?.trim();
 
+      // Check if donor or subcategory is Inkhawm Thawhlawm
+      if (isDonorInkhawm) {
+        resolvedSubCat = 'Inkhawm Thawhlawm';
+      }
+
       // 2. Check remark for [SubCategoryName] e.g. "March 2026 [BMP Fund]"
       if (!resolvedSubCat && t.remark) {
         const bracketMatch = t.remark.match(/\[(.*?)\]/);
@@ -406,19 +435,23 @@ export const buildKumtluangMatrix = (
         }
       }
 
-      // 3. Look for BMP Shillong or specific campaign subcategories
-      const titleLower = String(t.campaignTitle || '').toLowerCase();
-      if (!resolvedSubCat) {
-        if (t.campaignId === 'cmp-1788107291420' || titleLower.includes('bmp') || titleLower.includes('shillong')) {
-          resolvedSubCat = 'BMP Fund';
-        } else if (campaign?.subCategories && campaign.subCategories.length > 0) {
-          resolvedSubCat = campaign.subCategories[0];
-        }
+      // 3. If general donation, check if donorName matches any preset or head
+      if (!resolvedSubCat && t.donorType === 'general' && t.donorName) {
+        const dName = t.donorName.trim();
+        const matchedPreset = campaign?.generalPresets?.find(gp => dName.toLowerCase().startsWith(gp.toLowerCase()));
+        resolvedSubCat = matchedPreset || dName;
       }
 
-      // 4. Fallback: NEVER use campaign title (like "BMP Shillong, Shillong") as a category column!
+      // 4. Look for campaign subcategories or sensible fallback
+      const titleLower = String(t.campaignTitle || '').toLowerCase();
       if (!resolvedSubCat) {
-        resolvedSubCat = 'BMP Fund';
+        if (campaign?.subCategories && campaign.subCategories.length > 0) {
+          resolvedSubCat = campaign.subCategories[0];
+        } else if (t.campaignId === 'cmp-1788107291420' || titleLower.includes('bmp') || titleLower.includes('shillong')) {
+          resolvedSubCat = 'BMP Fund';
+        } else {
+          resolvedSubCat = 'Thawhlawm';
+        }
       }
 
       categorySet.add(resolvedSubCat);
@@ -426,22 +459,31 @@ export const buildKumtluangMatrix = (
     }
   });
 
-  // Ensure predefined subcategories appear in proper order if available
-  const predefined = campaign?.subCategories || (
-    transactions.some(t => t.campaignId === 'cmp-1788107291420' || String(t.campaignTitle).toLowerCase().includes('bmp'))
-      ? ['BMP Fund']
-      : []
-  );
+  // Priority order for matrix column headers:
+  // 1. Campaign subCategories in creator-defined order
+  // 2. Campaign generalPresets in creator-defined order
+  // 3. Fallbacks for known canonical campaigns
+  const predefinedSubCats = Array.isArray(campaign?.subCategories) ? campaign.subCategories : [];
+  const predefinedGeneral = Array.isArray(campaign?.generalPresets) ? campaign.generalPresets : [];
+  const canonicalHeads = (transactions.some(t => t.campaignId === 'cmp-1788107291420' || String(t.campaignTitle).toLowerCase().includes('bmp')) || campaign?.id === 'cmp-1788107291420')
+    ? ['BMP Fund', 'Inkhawm Thawhlawm']
+    : [];
+
+  const priorityHeads = Array.from(new Set([...predefinedSubCats, ...predefinedGeneral, ...canonicalHeads]));
 
   const categories: string[] = [];
-  predefined.forEach(c => {
-    if (categorySet.has(c) && !categories.includes(c)) {
-      categories.push(c);
+  // First, add all creator-configured heads in exact order
+  priorityHeads.forEach(head => {
+    const clean = head.trim();
+    if (clean && categorySet.has(clean) && !categories.includes(clean)) {
+      categories.push(clean);
     }
   });
-  categorySet.forEach(c => {
-    if (!categories.includes(c)) {
-      categories.push(c);
+  // Next, add any dynamic transaction heads created by Creator or donors
+  categorySet.forEach(head => {
+    const clean = head.trim();
+    if (clean && !categories.includes(clean)) {
+      categories.push(clean);
     }
   });
   const rows: MatrixRow[] = [];

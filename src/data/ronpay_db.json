@@ -584,7 +584,8 @@
       "updatedAt": "2026-10-01T14:46:02.793Z",
       "orgCode": "BMPSHL",
       "subCategories": [
-        "BMP Fund"
+        "BMP Fund",
+        "Inkhawm Thawhlawm"
       ],
       "upiId": "mizopay@axl",
       "createdAt": "2026-08-30T16:28:11.420Z",
@@ -1545,13 +1546,13 @@
       "status": "completed",
       "utr": "UTR369066664074",
       "campaignTitle": "BMP Shillong",
-      "donorName": "Inkawm Thawhlawm",
+      "donorName": "Inkhawm Thawhlawm",
       "txHash": "UTR369066664074",
       "donorVeng": "Shillong Unit",
       "id": "RPAY-CASH-709121",
       "paymentMethod": "cash",
       "platformFee": 0,
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "periodType": "monthly",
       "amount": 650,
       "donorType": "general",
@@ -1559,7 +1560,7 @@
       "isDependent": false,
       "periodLabel": "July 2026 (12/07/2026)",
       "subCategoryBreakdown": {
-        "BMP Fund": 650
+        "Inkhawm Thawhlawm": 650
       }
     },
     {
@@ -14830,5 +14831,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-01T15:19:17.216Z"
+  "lastUpdated": "2026-10-01T15:49:59.105Z"
 }

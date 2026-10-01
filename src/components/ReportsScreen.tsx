@@ -640,9 +640,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       return;
     }
 
-    const defaultCategories = selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
-      ? selectedCampaignObj.subCategories
-      : ['BMP Fund'];
+    const defaultCategories = (kumtluangMatrix.categories && kumtluangMatrix.categories.length > 0)
+      ? kumtluangMatrix.categories
+      : (selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
+          ? selectedCampaignObj.subCategories
+          : ['BMP Fund', 'Inkhawm Thawhlawm']);
 
     if (reportPrintStyle === 'member_matrix') {
       if (matrixScopeType === 'group') {

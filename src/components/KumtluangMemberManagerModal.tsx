@@ -32,10 +32,11 @@ import {
   UserMinus,
   RefreshCw,
   History,
-  CalendarDays
+  CalendarDays,
+  Plus
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, saveCampaign } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
 import { getUserRole } from '../utils/rbac';
 import { 
@@ -228,6 +229,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [selectedPayerType, setSelectedPayerType] = useState<string>('primary'); // 'primary' or subId
   const [quickEntryCampaignId, setQuickEntryCampaignId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [isAddingNewHead, setIsAddingNewHead] = useState<boolean>(false);
+  const [newHeadInput, setNewHeadInput] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthName);
   const [selectedYear, setSelectedYear] = useState<string>(getCurrentYearString);
   const [entryAmount, setEntryAmount] = useState<string>('500');
@@ -438,9 +441,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     ? allowedCampaigns.find(c => c.id === editCampaignId) 
     : null) || activeScopedCampaign;
 
-  const campaignCategories = (activeScopedCampaign?.subCategories && activeScopedCampaign.subCategories.length > 0)
-    ? activeScopedCampaign.subCategories
-    : defaultCategories;
+  const campaignCategories = useMemo(() => {
+    const subs = Array.isArray(activeScopedCampaign?.subCategories) ? activeScopedCampaign.subCategories : [];
+    const gens = Array.isArray(activeScopedCampaign?.generalPresets) ? activeScopedCampaign.generalPresets : [];
+    const combined = Array.from(new Set([...subs, ...gens])).map(s => s.trim()).filter(Boolean);
+    return combined.length > 0 ? combined : defaultCategories;
+  }, [activeScopedCampaign, defaultCategories]);
+
+  const handleAddNewHead = () => {
+    const trimmed = newHeadInput.trim();
+    if (!trimmed) return;
+    if (activeScopedCampaign) {
+      const currentSubs = Array.isArray(activeScopedCampaign.subCategories) ? activeScopedCampaign.subCategories : [];
+      if (!currentSubs.includes(trimmed)) {
+        const updatedSubs = [...currentSubs, trimmed];
+        const updatedCamp = { ...activeScopedCampaign, subCategories: updatedSubs };
+        saveCampaign(updatedCamp);
+      }
+    }
+    setSelectedCategory(trimmed);
+    setNewHeadInput('');
+    setIsAddingNewHead(false);
+  };
 
   // Auto-sync selected category with campaign's available categories
   useEffect(() => {
@@ -1442,7 +1464,42 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     {/* Category, Month & Year */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Fund Head / Category</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 block">Fund Head / Category</label>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingNewHead(!isAddingNewHead)}
+                            className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
+                            title="Add a new Fund Head for this Bawm"
+                          >
+                            <Plus className="w-3 h-3" /> + Head Thar
+                          </button>
+                        </div>
+                        {isAddingNewHead && (
+                          <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+                            <input
+                              type="text"
+                              value={newHeadInput}
+                              onChange={(e) => setNewHeadInput(e.target.value)}
+                              placeholder="e.g. Ramthar / Building Fund..."
+                              className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddNewHead}
+                              className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg hover:bg-indigo-700 transition cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setIsAddingNewHead(false); setNewHeadInput(''); }}
+                              className="text-slate-400 hover:text-slate-600 p-1"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <select
                           value={selectedCategory}
                           onChange={(e) => setSelectedCategory(e.target.value)}

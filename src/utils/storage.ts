@@ -434,6 +434,16 @@ export const getStoredCampaigns = (): Campaign[] => {
               updated.allowPublicGroupDeposits = initMatch.allowPublicGroupDeposits;
               changed = true;
             }
+            if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
+              if (!updated.subCategories || !updated.subCategories.includes('Inkhawm Thawhlawm')) {
+                updated.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
+                changed = true;
+              }
+              if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {
+                updated.generalPresets = ['Inkhawm Thawhlawm', 'General Hnathlang'];
+                changed = true;
+              }
+            }
             if (changed) {
               hasNew = true;
               return updated;
@@ -965,6 +975,16 @@ export const getStoredTransactions = (): Transaction[] => {
           if (String(t.memberId).toLowerCase().trim() === 'bmpshl-1739' && t.donorName !== 'Upa Thawngphena Tuallawt') {
             t.donorName = 'Upa Thawngphena Tuallawt';
             hasAttrChange = true;
+          }
+
+          // Ensure Inkhawm Thawhlawm donation has dedicated subCategory and subCategoryBreakdown
+          if (cleanId === 'rpay-cash-709121' || (t.donorName && (t.donorName.toLowerCase().includes('inkhawm') || t.donorName.toLowerCase().includes('inkawm')))) {
+            if (t.subCategory !== 'Inkhawm Thawhlawm' || !t.subCategoryBreakdown || !t.subCategoryBreakdown['Inkhawm Thawhlawm']) {
+              t.donorName = 'Inkhawm Thawhlawm';
+              t.subCategory = 'Inkhawm Thawhlawm';
+              t.subCategoryBreakdown = { 'Inkhawm Thawhlawm': t.amount };
+              hasAttrChange = true;
+            }
           }
 
           return t;
