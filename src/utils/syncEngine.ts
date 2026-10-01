@@ -1,4 +1,5 @@
 import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount } from '../types';
+import { resolveApiUrl } from './apiConfig';
 import { BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { 
   getStoredCampaigns, 
@@ -687,7 +688,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
   if (typeof window !== 'undefined' && 'EventSource' in window) {
     const connectSSE = () => {
       try {
-        eventSource = new EventSource('/api/data/events');
+        eventSource = new EventSource(resolveApiUrl('/api/data/events'));
         eventSource.onmessage = (event) => {
           try {
             const parsed = JSON.parse(event.data);
@@ -768,7 +769,7 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
   const connect = () => {
     if (isClosed) return;
     try {
-      eventSource = new EventSource('/api/data/events');
+      eventSource = new EventSource(resolveApiUrl('/api/data/events'));
 
       eventSource.onmessage = (event) => {
         try {

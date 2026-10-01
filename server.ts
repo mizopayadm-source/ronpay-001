@@ -26,6 +26,18 @@ function getGenAI(): GoogleGenAI | null {
 const app = express();
 const PORT = 3000;
 
+// Global CORS Middleware - Allows ronpay.app, custom domains, mobile browsers, and PWAs to sync seamlessly
+app.use((req: Request, res: Response, next: any) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-role, x-is-admin, Range, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
