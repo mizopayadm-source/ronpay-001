@@ -353,6 +353,11 @@ export const getStoredCampaigns = (): Campaign[] => {
             const orgLower = String(camp.orgName || '').toLowerCase();
             if (
               cleanId === 'cmp-kumtluang-ymavt' ||
+              cleanId === 'cmp-1787545326556' ||
+              cleanId === 'cmp-chk-mu6on2s6' ||
+              cleanId === 'cmp-chk-mu6ojr7t' ||
+              cleanId === 'cmp-chhungkaw-2' ||
+              cleanId === 'cmp-chhungkaw-1' ||
               cleanId === 'cmp-1790613933759' || 
               cleanId === 'cmp-1790611183923' || 
               cleanId === 'cmp-1790611018907' || 

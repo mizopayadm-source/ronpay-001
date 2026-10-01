@@ -4211,6 +4211,21 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // Clean up purged test/deleted campaigns
+  const PURGED_CAMPAIGNS = new Set(['cmp-1787545326556', 'cmp-chk-mu6on2s6', 'cmp-chk-mu6ojr7t', 'cmp-chhungkaw-2', 'cmp-chhungkaw-1', 'cmp-kumtluang-ymavt']);
+  if (Array.isArray(db.campaigns)) {
+    const beforeCampLen = db.campaigns.length;
+    db.campaigns = db.campaigns.filter(c => !PURGED_CAMPAIGNS.has(String(c.id || '').toLowerCase().trim()));
+    if (db.campaigns.length !== beforeCampLen) changed = true;
+  }
+  if (!Array.isArray(db.deletedCampaignIds)) db.deletedCampaignIds = [];
+  for (const pc of PURGED_CAMPAIGNS) {
+    if (!db.deletedCampaignIds.includes(pc)) {
+      db.deletedCampaignIds.push(pc);
+      changed = true;
+    }
+  }
+
   // Clean up purged test members
   const PURGED_MEMBERS = new Set(['bmpshl-9000', 'bmpshl-9001', 'bmpshl-1253']);
   if (Array.isArray(db.members)) {
@@ -4513,7 +4528,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     // Canonical dataset protection: Official 25 campaigns and 437 transactions can never be suppressed by client test tombstones
     const CANONICAL_CAMPAIGN_IDS = new Set([
       'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697', 'cmp-kumtluang-1', 'cmp-kumtluang-2',
-      'cmp-1788262396368', 'cmp-1788526889943', 'cmp-1787569484926', 'cmp-1787545326556', 'cmp-ralna-1',
+      'cmp-1788262396368', 'cmp-1788526889943', 'cmp-1787569484926', 'cmp-ralna-1',
       'cmp-ralna-2', 'cmp-rikrum-1', 'cmp-khawlsak-1', 'cmp-khawlsak-2', 'cmp-khawlsak-3',
       'cmp-1787917594696',
       'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
@@ -4563,13 +4578,14 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       ]));
     }
 
+    const serverDelCampSet = new Set((db.deletedCampaignIds || []).map((id: any) => String(id).toLowerCase().trim()));
     const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()));
     const serverDelMemSet = new Set((db.deletedMemberIds || []).map((id: any) => String(id).toLowerCase().trim()));
     const serverDelStaffSet = new Set((db.deletedStaffIds || []).map((id: any) => String(id).trim()));
 
     // Merge collections intelligently with deletion protection
     if (Array.isArray(campaigns)) {
-      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', delCampSet);
+      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', serverDelCampSet);
     }
     if (Array.isArray(members)) {
       db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);

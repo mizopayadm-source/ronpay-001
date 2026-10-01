@@ -460,12 +460,20 @@ export default function App() {
     // to sync the latest state whenever the user switches back to the tab or opens a new window.
     const unsubFocus = setupWindowFocusSync(() => {
       reloadLocalData();
+      syncAllWithServer().catch(() => {});
     });
+
+    const syncInterval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
+        syncAllWithServer().catch(() => {});
+      }
+    }, 30000);
 
     // Load local storage immediately on startup without background polling
     reloadLocalData();
 
     return () => {
+      clearInterval(syncInterval);
       unsubCrossTab();
       unsubFocus();
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
