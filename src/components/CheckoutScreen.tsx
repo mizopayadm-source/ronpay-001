@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, 
   Ribbon, 
@@ -505,10 +505,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   };
 
   // Kumtluang subcategory breakdown
-  const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number }>({
-    'Pathian Ram Zauna': 500,
-    'Mission': 300,
-    'Building Fund': 200,
+  const [subcatAmounts, setSubcatAmounts] = useState<{ [key: string]: number | '' }>({
+    'BMP Fund': 500
   });
 
   const config = BAWM_CONFIG[category];
@@ -546,7 +544,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     return clean.substring(0, 3) || 'MEM';
   };
 
-  // Initialize subcategories from campaign
+  // Initialize subcategories from campaign (ONLY once per campaignId)
+  const lastInitCampId = useRef<string | null>(null);
   useEffect(() => {
     const explicitAmt = (initialAmount && initialAmount > 0)
       ? initialAmount
@@ -558,15 +557,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
 
     if (category === 'kumtluang') {
-      if (campaign?.subCategories && campaign.subCategories.length > 0) {
-        const initialMap: { [key: string]: number } = {};
-        campaign.subCategories.forEach((cat) => {
-          initialMap[cat] = 0;
+      const campId = campaign?.id || 'default';
+      if (lastInitCampId.current !== campId) {
+        lastInitCampId.current = campId;
+        const initialMap: { [key: string]: number | '' } = {};
+        const cats = (campaign?.subCategories && campaign.subCategories.length > 0)
+          ? campaign.subCategories
+          : ['BMP Fund'];
+        cats.forEach((cat, idx) => {
+          initialMap[cat] = explicitAmt || (idx === 0 ? 500 : '');
         });
         setSubcatAmounts(initialMap);
       }
     }
-  }, [category, campaign, initialAmount]);
+  }, [category, campaign?.id, campaign?.customAmount, initialAmount]);
 
   const handlePhoneSearch = (query: string) => {
     setPhoneSearchQuery(query);
@@ -749,11 +753,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   };
 
   const handleSubcatChange = (catName: string, value: string) => {
-    const num = parseFloat(value) || 0;
-    setSubcatAmounts(prev => ({
-      ...prev,
-      [catName]: num,
-    }));
+    if (value === '') {
+      setSubcatAmounts(prev => ({
+        ...prev,
+        [catName]: '',
+      }));
+    } else {
+      const num = parseFloat(value);
+      setSubcatAmounts(prev => ({
+        ...prev,
+        [catName]: isNaN(num) ? '' : Math.max(0, num),
+      }));
+    }
   };
 
   const handleAddGroupPreset = (nameToAdd: string) => {
@@ -992,8 +1003,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         ? (typeof groupAmount === 'number' ? groupAmount : 0)
         : kumtluangDonorType === 'general'
         ? (typeof generalAmount === 'number' ? generalAmount : 0)
-        : (Object.values(subcatAmounts) as number[]).reduce((acc: number, curr: number) => acc + curr, 0))
+        : (Object.values(subcatAmounts) as (number | '')[]).reduce<number>((acc, curr) => acc + (typeof curr === 'number' ? curr : 0), 0))
     : (typeof standardAmount === 'number' ? standardAmount : 0);
+
+  const resolvedNumericSubcatAmounts = useMemo(() => {
+    const res: { [key: string]: number } = {};
+    Object.entries(subcatAmounts).forEach(([k, v]) => {
+      const num = typeof v === 'number' ? v : parseFloat(String(v));
+      if (!isNaN(num) && num > 0) {
+        res[k] = num;
+      }
+    });
+    return res;
+  }, [subcatAmounts]);
 
   // Dynamic Platform Fee based on Admin Pricing Config & Per-Creator Overrides
   const feeRule = pricingConfig?.categories[category] || DEFAULT_PRICING_CONFIG.categories[category];
@@ -1236,14 +1258,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ? (resolvedGroupName || 'Group Sum')
               : resolvedDonorType === 'general'
               ? (generalTitle.trim() || 'General Thawhlawm')
-              : (Object.keys(subcatAmounts || {})[0] || undefined))
+              : (Object.keys(resolvedNumericSubcatAmounts)[0] || Object.keys(subcatAmounts || {})[0] || undefined))
           : undefined,
         subCategoryBreakdown: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? { [resolvedGroupName || 'Group Sum']: subtotal }
               : resolvedDonorType === 'general'
               ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
-              : subcatAmounts)
+              : resolvedNumericSubcatAmounts)
           : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
         periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
@@ -1394,14 +1416,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ? (resolvedGroupName || 'Group Sum')
               : resolvedDonorType === 'general'
               ? (generalTitle.trim() || 'General Thawhlawm')
-              : (Object.keys(subcatAmounts || {})[0] || undefined))
+              : (Object.keys(resolvedNumericSubcatAmounts)[0] || Object.keys(subcatAmounts || {})[0] || undefined))
           : undefined,
         subCategoryBreakdown: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? { [resolvedGroupName || 'Group Sum']: subtotal }
               : resolvedDonorType === 'general'
               ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
-              : subcatAmounts)
+              : resolvedNumericSubcatAmounts)
           : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
         periodLabel: category === 'kumtluang' ? periodLabel : undefined,
@@ -3217,24 +3239,50 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Category Amounts (Pathian Ram Zauna, Mission, Building Fund, etc.) */}
-                <div className="space-y-2.5">
-                  {Object.keys(subcatAmounts).map((catName) => (
-                    <div key={catName} className="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                      <span className="text-xs font-bold text-slate-800 flex-1 truncate">{catName}</span>
-                      <div className="flex items-center gap-1 w-28 shrink-0">
-                        <span className="text-xs font-bold text-slate-400">₹</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={subcatAmounts[catName] === 0 ? '' : subcatAmounts[catName]}
-                          onChange={(e) => handleSubcatChange(catName, e.target.value)}
-                          placeholder="0"
-                          className="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-black text-right text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
-                        />
+                {/* Sub-Category Amounts (e.g. BMP Fund, Mission, Building Fund, etc.) */}
+                <div className="space-y-3">
+                  {Object.keys(subcatAmounts).map((catName) => {
+                    const currentVal = subcatAmounts[catName];
+                    const numVal = typeof currentVal === 'number' ? currentVal : (parseFloat(String(currentVal)) || 0);
+                    return (
+                      <div key={catName} className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="text-xs font-black text-slate-800 flex-1 truncate cursor-pointer">
+                            {catName}
+                          </label>
+                          <div className="relative w-36 shrink-0">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-black text-xs text-indigo-700">₹</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={currentVal === '' ? '' : currentVal}
+                              onChange={(e) => handleSubcatChange(catName, e.target.value)}
+                              placeholder="0"
+                              className="w-full bg-white border-2 border-indigo-200 focus:border-indigo-600 rounded-xl py-1.5 pl-6 pr-2.5 font-black text-right text-sm text-slate-900 focus:outline-none shadow-2xs"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick Amount Chips */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5 justify-end">
+                          {[100, 200, 500, 1000, 2000].map(amt => (
+                            <button
+                              key={amt}
+                              type="button"
+                              onClick={() => handleSubcatChange(catName, String(amt))}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer shrink-0 ${
+                                numVal === amt 
+                                  ? 'bg-indigo-600 text-white shadow-xs' 
+                                  : 'bg-white text-indigo-800 hover:bg-indigo-100/70 border border-indigo-200'
+                              }`}
+                            >
+                              ₹{amt.toLocaleString('en-IN')}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )
@@ -3621,7 +3669,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ? { [currentDonorInfo.groupName || 'Group Sum']: subtotal }
               : currentDonorInfo.donorType === 'general'
               ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
-              : subcatAmounts)
+              : resolvedNumericSubcatAmounts)
           : undefined}
         periodType={category === 'kumtluang' ? periodType : undefined}
         periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
@@ -3658,7 +3706,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               ? { [currentDonorInfo.groupName || 'Group Sum']: subtotal }
               : currentDonorInfo.donorType === 'general'
               ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
-              : subcatAmounts)
+              : resolvedNumericSubcatAmounts)
           : undefined}
         periodType={category === 'kumtluang' ? periodType : undefined}
         periodMonth={category === 'kumtluang' ? selectedMonth : undefined}
