@@ -4234,8 +4234,8 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     if (db.members.length !== beforeLen) changed = true;
     db.members.forEach((m: any) => {
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
-        if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
-          m.section = 'Shillong Unit';
+        if (!m.section) {
+          m.section = 'General';
           changed = true;
         }
       }
@@ -4275,8 +4275,8 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         t.campaignTitle = 'BMP Shillong';
         changed = true;
       }
-      if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
-        t.donorVeng = 'Shillong Unit';
+      if (!t.donorVeng) {
+        t.donorVeng = 'General';
         changed = true;
       }
       if (!t.subCategory) {
@@ -4463,8 +4463,8 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
           // Client reactivated to active: client wins
           map.set(k, { ...existing, ...clientItem });
         } else {
-          // Default to server as source of truth to avoid stale client cache stomping
-          map.set(k, { ...clientItem, ...existing });
+          // Default to latest client payload when timestamps are equal or missing
+          map.set(k, { ...existing, ...clientItem });
         }
       }
     }
@@ -4597,8 +4597,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);
       (db.members || []).forEach((m: any) => {
         if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
-          if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
-            m.section = 'Shillong Unit';
+          if (!m.section) {
+            m.section = 'General';
           }
         }
       });
@@ -4618,8 +4618,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
                       String(t.campaignTitle || '').toLowerCase().includes('shillong') ||
                       String(t.memberId || '').startsWith('BMPSHL-');
         if (isBmp) {
-          if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
-            t.donorVeng = 'Shillong Unit';
+          if (!t.donorVeng) {
+            t.donorVeng = 'General';
           }
         }
       });
@@ -4927,8 +4927,8 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      if (!tx.donorVeng || tx.donorVeng === 'Section A' || tx.donorVeng === 'Section B' || tx.donorVeng === 'Section C' || tx.donorVeng === 'Section D' || tx.donorVeng === 'Bial 1 (Vengchhak)' || tx.donorVeng === 'Shillong') {
-        tx.donorVeng = 'Shillong Unit';
+      if (!tx.donorVeng) {
+        tx.donorVeng = 'General';
       }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';

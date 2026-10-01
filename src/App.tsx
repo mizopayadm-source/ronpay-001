@@ -63,7 +63,7 @@ import {
   setupWindowFocusSync,
   invalidateCacheOnAuthOrBoot
 } from './services/crossTabSync';
-import { syncAllWithServer } from './utils/syncEngine';
+import { syncAllWithServer, subscribeServerEvents } from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS } from './data/initialData';
 
 // Components
@@ -463,11 +463,18 @@ export default function App() {
       syncAllWithServer().catch(() => {});
     });
 
+    // Real-time Server-Sent Events (SSE) for instant sub-second cross-device, phone, & multi-user sync
+    const unsubSSE = subscribeServerEvents(() => {
+      syncAllWithServer().then(() => {
+        reloadLocalData();
+      }).catch(() => {});
+    });
+
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
         syncAllWithServer().catch(() => {});
       }
-    }, 30000);
+    }, 15000);
 
     // Load local storage immediately on startup without background polling
     reloadLocalData();
@@ -476,6 +483,7 @@ export default function App() {
       clearInterval(syncInterval);
       unsubCrossTab();
       unsubFocus();
+      unsubSSE();
       window.removeEventListener('ronpay_campaigns_updated', handleCampaignsSync);
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);

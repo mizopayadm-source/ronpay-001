@@ -919,8 +919,11 @@ export const getStoredTransactions = (): Transaction[] => {
           // 2. Real user-created / completed / live transactions MUST BE KEPT!
           // Preserves all payments completed on web, mobile apps, QR scans, etc.
           const isRealTransaction = cleanId.startsWith('rpay_') || 
+                                    cleanId.startsWith('rpay-') || 
                                     cleanId.startsWith('txn_') || 
                                     cleanId.startsWith('txn-') || 
+                                    cleanId.startsWith('tx-') || 
+                                    cleanId.startsWith('tx_') || 
                                     cleanId.startsWith('bill-') || 
                                     cleanId.startsWith('cash-') || 
                                     cleanId.startsWith('pay_') ||
@@ -2812,25 +2815,35 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
 };
 
 export const addOrUpdateMember = (member: MemberRecord): void => {
+  const stamped: MemberRecord = {
+    ...member,
+    createdAt: member.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
   const allList = getMembers(); // Load all members across all Bawms
-  const targetId = (member.id || '').trim().toLowerCase();
+  const targetId = (stamped.id || '').trim().toLowerCase();
   const idx = allList.findIndex(m => 
     (m.id || '').trim().toLowerCase() === targetId && 
-    (!member.campaignId || !m.campaignId || m.campaignId === member.campaignId)
+    (!stamped.campaignId || !m.campaignId || m.campaignId === stamped.campaignId)
   );
   if (idx >= 0) {
-    allList[idx] = member;
+    allList[idx] = stamped;
   } else {
-    allList.unshift(member);
+    allList.unshift(stamped);
   }
   saveMembers(allList);
-  if (member && member.id) {
-    syncMemberToFirestore(member).catch(() => {});
+  if (stamped && stamped.id) {
+    syncMemberToFirestore(stamped).catch(() => {});
   }
   safeApiFetch('/api/members', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(member)
+    body: JSON.stringify(stamped)
+  });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ members: [stamped] })
   });
 };
 
@@ -2889,6 +2902,8 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 
 export const saveTransaction = (tx: Transaction): void => {
   if (!tx || !tx.id) return;
+  if (!tx.createdAt) tx.createdAt = new Date().toISOString();
+  if (!tx.updatedAt) tx.updatedAt = new Date().toISOString();
   const isBill = Boolean(tx.billServiceType || tx.billConsumerNumber || tx.billOperator) ||
     String(tx.id || '').startsWith('BILL-') || 
     String(tx.id || '').startsWith('TXN-BILL-') || 
@@ -2913,8 +2928,8 @@ export const saveTransaction = (tx: Transaction): void => {
       tx.category = 'kumtluang';
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
-      if (!tx.donorVeng || tx.donorVeng === 'Section A' || tx.donorVeng === 'Section B' || tx.donorVeng === 'Section C' || tx.donorVeng === 'Section D' || tx.donorVeng === 'Bial 1 (Vengchhak)' || tx.donorVeng === 'Shillong') {
-        tx.donorVeng = 'Shillong Unit';
+      if (!tx.donorVeng) {
+        tx.donorVeng = 'General';
       }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
@@ -2947,6 +2962,11 @@ export const saveTransaction = (tx: Transaction): void => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(tx)
+  });
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions: [tx] })
   });
 };
 

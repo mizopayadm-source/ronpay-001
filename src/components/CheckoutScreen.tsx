@@ -59,7 +59,7 @@ import {
   getStoredCampaigns
 } from '../utils/storage';
 import { syncCampaignToFirestore } from '../services/firestoreSync';
-import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
+import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';
 import { getPhonePeMercuryUrl, checkDirectPhonePeStatus } from '../utils/phonepeDirect';
@@ -1236,7 +1236,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         if (useCustomDate && selectedCustomDate) {
           paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
         } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
-          const mIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+          const mIdx = getMonthIndex(selectedMonth);
           const yNum = parseInt(selectedYear) || new Date().getFullYear();
           if (mIdx !== -1) {
             paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
@@ -1264,6 +1264,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         paymentMethod: 'phonepe',
         status: 'pending',
         timestamp: paymentTimestamp,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         date: paymentTimestamp.slice(0, 10),
         remark: remark.trim() || undefined,
         feeOption: feeBearerOption,
@@ -1409,7 +1411,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         if (useCustomDate && selectedCustomDate) {
           paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
         } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
-          const mIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+          const mIdx = getMonthIndex(selectedMonth);
           const yNum = parseInt(selectedYear) || new Date().getFullYear();
           if (mIdx !== -1) {
             paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
@@ -1457,6 +1459,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         periodYear: category === 'kumtluang' ? selectedYear : undefined,
         periodLabel: category === 'kumtluang' ? periodLabel : undefined,
         timestamp: paymentTimestamp,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         date: paymentTimestamp.slice(0, 10),
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
       };

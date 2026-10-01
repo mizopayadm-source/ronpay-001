@@ -54,7 +54,7 @@ import {
   exportKumtluangMatrixToCSV
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
-import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
+import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
 import { KumtluangExcelImportModal } from './KumtluangExcelImportModal';
 import { CampaignTransferModal } from './CampaignTransferModal';
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
@@ -543,7 +543,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const cleanCampTitle = (targetCampaign?.title || 'Kumtluang Bawm').replace(/,+$/, '').trim();
     const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
 
-    const monthIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+    const monthIdx = getMonthIndex(selectedMonth);
     const yrNum = parseInt(selectedYear) || new Date().getFullYear();
     const effectiveDateObj = monthIdx !== -1 
       ? new Date(Date.UTC(yrNum, monthIdx, 15, 12, 0, 0))
@@ -571,6 +571,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       remark: txRemark,
       isSynced: true,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       date: effectiveIso.slice(0, 10),
       subCategory: selectedCategory,
       subCategoryBreakdown: { [selectedCategory]: amt },
@@ -675,7 +676,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           updatedAt: new Date().toISOString()
         }
       },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     addOrUpdateMember(newM);
@@ -777,7 +779,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       avatarUrl: editAvatarUrl || undefined,
       isFamilyHead: true,
       dependents: updatedDeps,
-      createdAt: editingMember.createdAt,
+      createdAt: editingMember.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       enrollmentYear: editingMember.enrollmentYear || selectedRollYear,
       activeYears: editingMember.activeYears && editingMember.activeYears.length > 0 ? editingMember.activeYears : [selectedRollYear],
       yearStatus: editingMember.yearStatus

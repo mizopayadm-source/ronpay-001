@@ -229,32 +229,28 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             .filter((c: any) => c && c.id && (!deletedCampIds.has(String(c.id).toLowerCase().trim()) || String(c.id).toLowerCase().trim() === 'cmp-1788107291420'))
             .map((sc: any) => {
               const local = localMap.get(String(sc.id).toLowerCase().trim());
-              const updated = { ...sc };
+              if (!local) return sc;
+              const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+              const serverTime = sc.updatedAt ? new Date(sc.updatedAt).getTime() : 0;
+              const updated = localTime >= serverTime ? { ...sc, ...local } : { ...local, ...sc };
+
               // Protect officerPasscode, presets, and group protection settings from stale server overwrite
-              if (local) {
-                const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
-                const serverTime = updated.updatedAt ? new Date(updated.updatedAt).getTime() : 0;
-                if (local.officerPasscode && (!updated.officerPasscode || localTime >= serverTime)) {
-                  updated.officerPasscode = local.officerPasscode;
-                }
-                if (typeof local.allowPublicGroupDeposits === 'boolean' && localTime >= serverTime) {
-                  updated.allowPublicGroupDeposits = local.allowPublicGroupDeposits;
-                }
-                if (Array.isArray(local.groupPresets) && local.groupPresets.length > 0 && (!Array.isArray(updated.groupPresets) || updated.groupPresets.length === 0 || localTime >= serverTime)) {
-                  updated.groupPresets = local.groupPresets;
-                }
+              if (local.officerPasscode && (!updated.officerPasscode || localTime >= serverTime)) {
+                updated.officerPasscode = local.officerPasscode;
+              }
+              if (typeof local.allowPublicGroupDeposits === 'boolean' && localTime >= serverTime) {
+                updated.allowPublicGroupDeposits = local.allowPublicGroupDeposits;
+              }
+              if (Array.isArray(local.groupPresets) && local.groupPresets.length > 0 && (!Array.isArray(updated.groupPresets) || updated.groupPresets.length === 0 || localTime >= serverTime)) {
+                updated.groupPresets = local.groupPresets;
               }
               // Protect local custom uploaded logo from being overwritten by server unsplash or empty logo
-              if (local && isCustom(local.imageUrl) && !isCustom(updated.imageUrl)) {
+              if (isCustom(local.imageUrl) && !isCustom(updated.imageUrl)) {
                 updated.imageUrl = local.imageUrl;
               }
               // If local has newer timestamp and a custom logo, local keeps its image
-              if (local && local.updatedAt && updated.updatedAt) {
-                const localTime = new Date(local.updatedAt).getTime();
-                const serverTime = new Date(updated.updatedAt).getTime();
-                if (localTime > serverTime && isCustom(local.imageUrl)) {
-                  updated.imageUrl = local.imageUrl;
-                }
+              if (local.updatedAt && sc.updatedAt && localTime > serverTime && isCustom(local.imageUrl)) {
+                updated.imageUrl = local.imageUrl;
               }
               // Ensure BCM Ebenezer always has valid church photo
               if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
@@ -271,7 +267,7 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           }
         }
 
-        // 3. Update members
+        // 3. Update members with local edit protection
         if (Array.isArray(serverData.members) && serverData.members.length > 0) {
           const deletedMemIds = getDeletedMemberIds();
           const localMembers = getMembers('all');
@@ -284,7 +280,18 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
           for (const m of serverData.members) {
             if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
               const k = m.id.toLowerCase().trim();
-              memMap.set(k, { ...(memMap.get(k) || {}), ...m });
+              const localMem = memMap.get(k);
+              if (!localMem) {
+                memMap.set(k, m);
+              } else {
+                const localTime = new Date(localMem.updatedAt || localMem.createdAt || 0).getTime();
+                const serverTime = new Date(m.updatedAt || m.createdAt || 0).getTime();
+                if (localTime >= serverTime) {
+                  memMap.set(k, { ...m, ...localMem });
+                } else {
+                  memMap.set(k, { ...localMem, ...m });
+                }
+              }
             }
           }
           saveMembers(Array.from(memMap.values()), true);
@@ -299,7 +306,6 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             }
           }
           const currentTxs = getStoredTransactions();
-          const serverTxIds = new Set(serverData.transactions.map((t: any) => String(t.id).toLowerCase().trim()));
           const txMap = new Map<string, any>();
           const nowMs = Date.now();
 
@@ -329,23 +335,39 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             }
           }
 
-          // Merge any genuine recent local offline transactions (< 15 mins) not yet on server
+          // Merge ALL valid local transactions (never discard user manual entries or offline payments)
+          const newLocalTxsToPush: Transaction[] = [];
           for (const t of currentTxs) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
               if (deletedIds.has(k)) {
                 continue;
               }
-              if (!serverTxIds.has(k)) {
-                const txAge = t.timestamp ? (nowMs - new Date(t.timestamp).getTime()) : 0;
-                const isPendingOrRecent = t.status === 'pending' || t.status === 'pending_verification' || txAge < (15 * 60 * 1000);
-                if (isPendingOrRecent) {
-                  sanitizeTxTimestamp(t);
-                  txMap.set(k, t);
+              if (!txMap.has(k)) {
+                sanitizeTxTimestamp(t);
+                txMap.set(k, t);
+                newLocalTxsToPush.push(t);
+              } else {
+                const existing = txMap.get(k);
+                const localTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+                const serverTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+                if (localTime > serverTime) {
+                  txMap.set(k, { ...existing, ...t });
+                  newLocalTxsToPush.push(t);
                 }
               }
             }
           }
+
+          // If there are genuine local transactions not on server, push them to server now!
+          if (newLocalTxsToPush.length > 0) {
+            safeApiFetch('/api/data/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transactions: newLocalTxsToPush })
+            }).catch(() => {});
+          }
+
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {
             const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -727,5 +749,92 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
       clearTimeout(sseReconnectTimer);
       sseReconnectTimer = null;
     }
+  };
+}
+
+/**
+ * High-speed Server-Sent Events (SSE) listener for instant sub-second multi-device / multi-user data synchronization.
+ * Guarantees phones, browsers, and different user sessions stay in lockstep without delay.
+ */
+export function subscribeServerEvents(onChanged: () => void): () => void {
+  if (typeof window === 'undefined' || !('EventSource' in window)) {
+    return () => {};
+  }
+
+  let eventSource: EventSource | null = null;
+  let sseReconnectTimer: any = null;
+  let isClosed = false;
+
+  const connect = () => {
+    if (isClosed) return;
+    try {
+      eventSource = new EventSource('/api/data/events');
+
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
+            onChanged();
+          }
+        } catch {}
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (!isClosed && !sseReconnectTimer) {
+          sseReconnectTimer = setTimeout(() => {
+            sseReconnectTimer = null;
+            connect();
+          }, 3000);
+        }
+      };
+    } catch {
+      if (!isClosed && !sseReconnectTimer) {
+        sseReconnectTimer = setTimeout(() => {
+          sseReconnectTimer = null;
+          connect();
+        }, 5000);
+      }
+    }
+  };
+
+  connect();
+
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible' && !isClosed) {
+      if (!eventSource) {
+        connect();
+      }
+      onChanged();
+    }
+  };
+
+  const handleOnline = () => {
+    if (!isClosed) {
+      if (!eventSource) {
+        connect();
+      }
+      onChanged();
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibility);
+  window.addEventListener('online', handleOnline);
+
+  return () => {
+    isClosed = true;
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
+    }
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    document.removeEventListener('visibilitychange', handleVisibility);
+    window.removeEventListener('online', handleOnline);
   };
 }

@@ -151,6 +151,7 @@ export interface Transaction {
   subCategoryBreakdown?: Record<string, number>;
   timestamp: string;
   createdAt?: string;
+  updatedAt?: string;
   date?: string;
   txHash?: string;
   transactionId?: string;
@@ -426,6 +427,7 @@ export interface MemberRecord {
   isFamilyHead?: boolean;
   dependents?: MemberDependent[];
   createdAt?: string;
+  updatedAt?: string;
   notes?: string;
   avatarUrl?: string;
   pledgeAmount?: number;
