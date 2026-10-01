@@ -890,7 +890,10 @@ export default function App() {
         matched.status !== selectedCampaign.status ||
         matched.title !== selectedCampaign.title ||
         matched.targetAmount !== selectedCampaign.targetAmount ||
-        matched.upiId !== selectedCampaign.upiId
+        matched.upiId !== selectedCampaign.upiId ||
+        matched.officerPasscode !== selectedCampaign.officerPasscode ||
+        matched.allowPublicGroupDeposits !== selectedCampaign.allowPublicGroupDeposits ||
+        matched.updatedAt !== selectedCampaign.updatedAt
       )) {
         setSelectedCampaign(matched);
       }
@@ -1101,6 +1104,13 @@ export default function App() {
         return copy;
       }
       return [stamped, ...prev];
+    });
+    // Keep currently viewed checkout campaign in sync
+    setSelectedCampaign(prev => {
+      if (prev && String(prev.id).toLowerCase().trim() === String(stamped.id).toLowerCase().trim()) {
+        return stamped;
+      }
+      return prev;
     });
   };
 

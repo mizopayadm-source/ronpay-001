@@ -4704,6 +4704,64 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
   }
 });
 
+// Update Campaign Officer Passcode / PIN endpoint with instant multi-device sync
+app.post('/api/campaigns/:id/pin', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { pin, allowPublicGroupDeposits } = req.body || {};
+    if (!pin || typeof pin !== 'string' || pin.trim().length < 4) {
+      return res.status(400).json({ success: false, message: 'Officer PIN hi characters 4 aia tlem lo tur a ni.' });
+    }
+    const cleanId = String(id).toLowerCase().trim();
+    const cleanPin = pin.trim();
+    const db = getDatabase();
+    const camp = (db.campaigns || []).find((c: any) => String(c.id).toLowerCase().trim() === cleanId);
+    if (!camp) {
+      return res.status(404).json({ success: false, message: `Campaign ${id} hmuh a ni lo.` });
+    }
+    camp.officerPasscode = cleanPin;
+    if (typeof allowPublicGroupDeposits === 'boolean') {
+      camp.allowPublicGroupDeposits = allowPublicGroupDeposits;
+    }
+    camp.updatedAt = new Date().toISOString();
+    saveDatabase(db);
+    res.json({ success: true, message: 'Officer PIN hlawhtling takin thlak fel a ni e.', campaign: camp, pin: cleanPin });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Update Creator / User Security MPIN endpoint
+app.post('/api/creators/pin', (req: Request, res: Response) => {
+  try {
+    const { phone, pin, password } = req.body || {};
+    if (!phone || (!pin && !password)) {
+      return res.status(400).json({ success: false, message: 'Phone leh PIN/password dah tel a ngai e.' });
+    }
+    const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+    const newPin = String(pin || password || '').trim();
+    if (newPin.length < 4) {
+      return res.status(400).json({ success: false, message: 'Security PIN hi characters 4 aia tlem lo tur a ni.' });
+    }
+    const db = getDatabase();
+    let matched = (db.creators || []).find((c: any) => c && c.phone && c.phone.replace(/\D/g, '').slice(-10) === cleanPhone);
+    if (matched) {
+      matched.pin = newPin;
+      matched.password = newPin;
+      matched.updatedAt = new Date().toISOString();
+    }
+    let matchedStaff = (db.staffAccounts || []).find((s: any) => s && s.phone && s.phone.replace(/\D/g, '').slice(-10) === cleanPhone);
+    if (matchedStaff) {
+      matchedStaff.mpin = newPin;
+      matchedStaff.password = newPin;
+    }
+    saveDatabase(db);
+    res.json({ success: true, message: 'Security PIN thar hlawhtling takin vawn fel a ni e.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Delete Campaign endpoint with Zero-Balance Safety Net Check & Admin Force Override
 app.delete('/api/campaigns/:id', (req: Request, res: Response) => {
   try {

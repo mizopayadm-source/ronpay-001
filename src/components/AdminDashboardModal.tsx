@@ -4609,6 +4609,49 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {/* Officer PIN & Group / General Mode Governance */}
+                    <div className="bg-white p-3 rounded-2xl border border-indigo-200 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10.5px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>Officer Passcode / PIN & Mode Governance</span>
+                        </label>
+                        <span className="text-[9px] bg-amber-100 text-amber-900 font-mono font-bold px-2 py-0.5 rounded-md">
+                          PIN Protected
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                            Officer 4-Digit Passcode / PIN
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={8}
+                            value={editingCampaign.officerPasscode || ''}
+                            onChange={(e) => setEditingCampaign({ ...editingCampaign, officerPasscode: e.target.value.trim() })}
+                            placeholder="e.g. 7788 or 1122"
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-black text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                          />
+                        </div>
+
+                        <div className="flex flex-col justify-end">
+                          <label className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(editingCampaign.allowPublicGroupDeposits)}
+                              onChange={(e) => setEditingCampaign({ ...editingCampaign, allowPublicGroupDeposits: e.target.checked })}
+                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <span className="text-[10.5px] font-bold text-slate-800">
+                              Public Hawn (Allow Public Group/General Deposits without PIN)
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 

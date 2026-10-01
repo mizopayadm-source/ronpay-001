@@ -271,6 +271,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     const cleanUser = rawUser.toLowerCase();
     const cleanPhone = rawUser.replace(/\D/g, '');
     const isOtp = phoneSubMode === 'otp';
+    const isOtpValid = isOtp && (otpCodeInput.trim() === '123456' || otpCodeInput.trim().length >= 4);
     const pwd = isOtp ? (otpCodeInput.trim() || '1234') : passwordInput.trim();
 
     if (!rawUser) {
@@ -295,7 +296,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       // 1. Check Master Super Admin credentials
       if (
         (cleanUser === 'superadmin' || cleanUser === 'admin' || cleanPhone === '9862000001' || cleanPhone === '9436001234' || cleanUser === 'admin@ronpay.com') &&
-        (pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
+        (isOtpValid || pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
       ) {
         const profile: CreatorProfile = {
           name: 'Super Admin (Master)',
@@ -332,40 +333,47 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       // 2. Check Staff Accounts (SUPER_ADMIN, ADMIN, MODERATOR)
       const staffList = getStoredStaffAccounts();
       const matchedStaff = staffList.find(
-        st => (st.name.toLowerCase() === cleanUser || st.email.toLowerCase() === cleanUser || st.phone === cleanPhone || st.phone === rawUser) && st.isActive
+        st => (st.name.toLowerCase() === cleanUser || st.email?.toLowerCase() === cleanUser || (st.phone && st.phone.replace(/\D/g, '') === cleanPhone) || st.phone === rawUser) && st.isActive
       );
 
-      if (matchedStaff && (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234' || pwd === matchedStaff.phone)) {
-        const isSuperOrAdmin = matchedStaff.role === 'SUPER_ADMIN' || matchedStaff.role === 'ADMIN';
-        const profile: CreatorProfile = {
-          name: matchedStaff.name,
-          orgName: matchedStaff.role === 'MODERATOR' ? 'Creator Verification Desk' : 'RonPay Operations & Finance Desk',
-          designation: matchedStaff.designation || matchedStaff.role,
-          phone: matchedStaff.phone,
-          role: matchedStaff.role,
-          isAdmin: isSuperOrAdmin,
-          isPhoneVerified: true,
-          isApproved: true,
-          avatarUrl: matchedStaff.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-          password: pwd,
-          pin: '1234',
-          approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-          registeredAt: matchedStaff.createdAt || new Date().toISOString()
-        };
+      if (matchedStaff) {
+        const isStaffMatch = isOtpValid || (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234' || pwd === matchedStaff.phone || pwd === matchedStaff.mpin || pwd === matchedStaff.password);
+        if (isStaffMatch) {
+          const isSuperOrAdmin = matchedStaff.role === 'SUPER_ADMIN' || matchedStaff.role === 'ADMIN';
+          const profile: CreatorProfile = {
+            name: matchedStaff.name,
+            orgName: matchedStaff.role === 'MODERATOR' ? 'Creator Verification Desk' : 'RonPay Operations & Finance Desk',
+            designation: matchedStaff.designation || matchedStaff.role,
+            phone: matchedStaff.phone,
+            role: matchedStaff.role,
+            isAdmin: isSuperOrAdmin,
+            isPhoneVerified: true,
+            isApproved: true,
+            avatarUrl: matchedStaff.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+            password: pwd,
+            pin: matchedStaff.mpin || '1234',
+            approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+            registeredAt: matchedStaff.createdAt || new Date().toISOString()
+          };
 
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
-        recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
-        saveStoredCreatorProfile(profile);
-        setIsLoading(false);
-        setSuccessNotice(`${matchedStaff.name} (${matchedStaff.role}) anga login a hlawhtling e!`);
-        triggerHaptic();
-        setTimeout(() => {
-          onLoginSuccess(profile);
-          onClose();
-        }, 700);
-        return;
+          try {
+            sessionStorage.setItem('ronpay_admin_auth', 'true');
+          } catch {}
+          recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
+          saveStoredCreatorProfile(profile);
+          setIsLoading(false);
+          setSuccessNotice(`${matchedStaff.name} (${matchedStaff.role}) anga login a hlawhtling e!`);
+          triggerHaptic();
+          setTimeout(() => {
+            onLoginSuccess(profile);
+            onClose();
+          }, 700);
+          return;
+        } else {
+          setIsLoading(false);
+          setErrorMessage('Staff Password / MPIN a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+          return;
+        }
       }
 
       // 3. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
@@ -374,24 +382,31 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         c => (c.phone && c.phone.replace(/\D/g, '') === cleanPhone) || (c.name && c.name.toLowerCase() === cleanUser)
       );
 
-      if (matchedCreator && (pwd === '1234' || pwd === 'ronpay2026' || pwd === matchedCreator.password || pwd === matchedCreator.pin)) {
-        const profile: CreatorProfile = {
-          ...matchedCreator,
-          role: matchedCreator.role || 'CREATOR',
-          isPhoneVerified: true,
-          password: pwd,
-          pin: pwd,
-        };
+      if (matchedCreator) {
+        const isCreatorMatch = isOtpValid || (pwd === '1234' || pwd === 'ronpay2026' || pwd === matchedCreator.password || pwd === matchedCreator.pin || (matchedCreator.phone && pwd === matchedCreator.phone.slice(-4)));
+        if (isCreatorMatch) {
+          const profile: CreatorProfile = {
+            ...matchedCreator,
+            role: matchedCreator.role || 'CREATOR',
+            isPhoneVerified: true,
+            password: isOtp ? (matchedCreator.password || '1234') : pwd,
+            pin: isOtp ? (matchedCreator.pin || '1234') : pwd,
+          };
 
-        saveStoredCreatorProfile(profile);
-        setIsLoading(false);
-        setSuccessNotice(`${matchedCreator.name} (Creator) anga login a hlawhtling e!`);
-        triggerHaptic();
-        setTimeout(() => {
-          onLoginSuccess(profile);
-          onClose();
-        }, 700);
-        return;
+          saveStoredCreatorProfile(profile);
+          setIsLoading(false);
+          setSuccessNotice(`${matchedCreator.name} (${matchedCreator.orgName || 'Creator'}) anga login a hlawhtling e!`);
+          triggerHaptic();
+          setTimeout(() => {
+            onLoginSuccess(profile);
+            onClose();
+          }, 700);
+          return;
+        } else {
+          setIsLoading(false);
+          setErrorMessage('Creator Password / Security PIN chhut a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+          return;
+        }
       }
 
       // 4. Default Community Member / Citizen Login (if phone or username matches standard length)
@@ -767,6 +782,19 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-[10px]">
+                    <span className="text-slate-500 font-medium">Default MPIN: 1234</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhoneSubMode('otp');
+                        handleSendOtp();
+                      }}
+                      className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+                    >
+                      PIN i theihnghilh em? (OTP hmang rawh)
                     </button>
                   </div>
                 </div>

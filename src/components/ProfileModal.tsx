@@ -24,10 +24,15 @@ import {
   Upload,
   Image as ImageIcon,
   Trash2,
-  History
+  History,
+  KeyRound,
+  Eye,
+  EyeOff,
+  AlertCircle
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
+import { saveStoredCreatorProfile } from '../utils/storage';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -68,14 +73,87 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Security MPIN Change States
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [oldPinInput, setOldPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinSuccessNotice, setPinSuccessNotice] = useState('');
+  const [isSavingPin, setIsSavingPin] = useState(false);
+  const [showPinInputs, setShowPinInputs] = useState(false);
+
   useEffect(() => {
     setEditName(creatorProfile.name || '');
     setEditOrgName(creatorProfile.orgName || '');
     setEditDesignation(creatorProfile.designation || '');
     setEditAvatarUrl(creatorProfile.avatarUrl || '');
+    setIsChangingPin(false);
+    setPinError('');
+    setPinSuccessNotice('');
+    setOldPinInput('');
+    setNewPinInput('');
+    setConfirmPinInput('');
   }, [creatorProfile]);
 
   if (!isOpen) return null;
+
+  const handleSaveNewPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError('');
+    setPinSuccessNotice('');
+    const cleanNew = newPinInput.trim();
+    const cleanConfirm = confirmPinInput.trim();
+    const cleanOld = oldPinInput.trim();
+    const currentPin = creatorProfile.pin || creatorProfile.password || '1234';
+
+    if (cleanNew.length < 4) {
+      setPinError('PIN thar hi 4-digits aia tlem lo tur a ni.');
+      return;
+    }
+    if (cleanNew !== cleanConfirm) {
+      setPinError('PIN thar leh Confirm PIN a in-ang lo.');
+      return;
+    }
+    if (cleanOld && cleanOld !== currentPin && cleanOld !== '1234' && cleanOld !== 'ronpay2026') {
+      setPinError('PIN hlui (Old PIN) chhut a dik lo.');
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const updated: CreatorProfile = {
+        ...creatorProfile,
+        pin: cleanNew,
+        password: cleanNew,
+      };
+      saveStoredCreatorProfile(updated);
+      if (onUpdateProfile) {
+        onUpdateProfile(updated);
+      }
+      if (creatorProfile.phone) {
+        try {
+          await fetch('/api/creators/pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: creatorProfile.phone, pin: cleanNew })
+          });
+        } catch {}
+      }
+      setPinSuccessNotice('Security MPIN thar chu hlawhtling takin thlak fel a ni e!');
+      setTimeout(() => {
+        setIsChangingPin(false);
+        setOldPinInput('');
+        setNewPinInput('');
+        setConfirmPinInput('');
+        setPinSuccessNotice('');
+      }, 1500);
+    } catch (err: any) {
+      setPinError(err.message || 'PIN thlak a hlawhtling lo.');
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -388,6 +466,109 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             >
               <Lock className="w-3.5 h-3.5" /> Lock App / Reset Session
             </button>
+          )}
+        </div>
+
+        {/* Security MPIN / PIN Change Control Box */}
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/90 space-y-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-purple-600 shrink-0" />
+              <div>
+                <span className="font-black text-xs text-slate-900 block">Security MPIN / Passcode</span>
+                <span className="text-[10px] text-slate-500 font-medium">Device login leh identity venhimna PIN</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsChangingPin(!isChangingPin);
+                setPinError('');
+                setPinSuccessNotice('');
+              }}
+              className="px-2.5 py-1 bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10.5px] font-black transition cursor-pointer shadow-2xs"
+            >
+              {isChangingPin ? 'Cancel' : 'PIN Thlak'}
+            </button>
+          </div>
+
+          {/* Collapsible PIN Change Form */}
+          {isChangingPin && (
+            <form onSubmit={handleSaveNewPin} className="pt-2 border-t border-slate-200/70 space-y-2.5 animate-fadeIn">
+              {pinSuccessNotice && (
+                <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10.5px] font-bold rounded-xl flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>{pinSuccessNotice}</span>
+                </div>
+              )}
+              {pinError && (
+                <div className="p-2 bg-rose-50 border border-rose-200 text-rose-800 text-[10.5px] font-bold rounded-xl flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>{pinError}</span>
+                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                  Old PIN (Current PIN - Default: 1234)
+                </label>
+                <input
+                  type={showPinInputs ? 'text' : 'password'}
+                  value={oldPinInput}
+                  onChange={(e) => setOldPinInput(e.target.value)}
+                  placeholder="Old MPIN (e.g. 1234)"
+                  maxLength={8}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                    PIN Thar (4-6 digits)
+                  </label>
+                  <input
+                    type={showPinInputs ? 'text' : 'password'}
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value)}
+                    placeholder="New PIN"
+                    maxLength={6}
+                    required
+                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                    Confirm PIN
+                  </label>
+                  <input
+                    type={showPinInputs ? 'text' : 'password'}
+                    value={confirmPinInput}
+                    onChange={(e) => setConfirmPinInput(e.target.value)}
+                    placeholder="Confirm PIN"
+                    maxLength={6}
+                    required
+                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-600"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPinInputs(!showPinInputs)}
+                  className="text-[10px] text-slate-500 hover:text-slate-800 flex items-center gap-1 font-semibold cursor-pointer"
+                >
+                  {showPinInputs ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  <span>{showPinInputs ? 'Hide PIN' : 'Show PIN'}</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPin}
+                  className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingPin ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  <span>Save New PIN</span>
+                </button>
+              </div>
+            </form>
           )}
         </div>
 

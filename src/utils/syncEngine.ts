@@ -230,6 +230,20 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             .map((sc: any) => {
               const local = localMap.get(String(sc.id).toLowerCase().trim());
               const updated = { ...sc };
+              // Protect officerPasscode, presets, and group protection settings from stale server overwrite
+              if (local) {
+                const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+                const serverTime = updated.updatedAt ? new Date(updated.updatedAt).getTime() : 0;
+                if (local.officerPasscode && (!updated.officerPasscode || localTime >= serverTime)) {
+                  updated.officerPasscode = local.officerPasscode;
+                }
+                if (typeof local.allowPublicGroupDeposits === 'boolean' && localTime >= serverTime) {
+                  updated.allowPublicGroupDeposits = local.allowPublicGroupDeposits;
+                }
+                if (Array.isArray(local.groupPresets) && local.groupPresets.length > 0 && (!Array.isArray(updated.groupPresets) || updated.groupPresets.length === 0 || localTime >= serverTime)) {
+                  updated.groupPresets = local.groupPresets;
+                }
+              }
               // Protect local custom uploaded logo from being overwritten by server unsplash or empty logo
               if (local && isCustom(local.imageUrl) && !isCustom(updated.imageUrl)) {
                 updated.imageUrl = local.imageUrl;

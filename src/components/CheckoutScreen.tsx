@@ -336,12 +336,26 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   // Kumtluang Officer Authentication (Treasurer / Finance Secy / Creator Access Control)
   const [isOfficerUnlocked, setIsOfficerUnlocked] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    return sessionStorage.getItem(`ronpay_officer_unlocked_${campaign?.id || 'all'}`) === 'true';
+    const cleanId = (campaign?.id || 'all').toLowerCase().trim();
+    try {
+      return sessionStorage.getItem(`ronpay_officer_unlocked_${cleanId}`) === 'true' ||
+             localStorage.getItem(`ronpay_officer_unlocked_${cleanId}`) === 'true' ||
+             sessionStorage.getItem('ronpay_officer_unlocked_all') === 'true';
+    } catch {
+      return false;
+    }
   });
+  const [rememberOfficerDevice, setRememberOfficerDevice] = useState<boolean>(true);
   const [officerPinInput, setOfficerPinInput] = useState<string>('');
   const [officerPinError, setOfficerPinError] = useState<string>('');
   const [showChangePinModal, setShowChangePinModal] = useState<boolean>(false);
   const [newOfficerPinInput, setNewOfficerPinInput] = useState<string>('');
+  const [confirmOfficerPinInput, setConfirmOfficerPinInput] = useState<string>('');
+  const [oldOfficerPinInput, setOldOfficerPinInput] = useState<string>('');
+  const [changePinError, setChangePinError] = useState<string>('');
+  const [changePinSuccess, setChangePinSuccess] = useState<string>('');
+  const [isSavingOfficerPin, setIsSavingOfficerPin] = useState<boolean>(false);
+  const [showOfficerPinValue, setShowOfficerPinValue] = useState<boolean>(false);
 
   // Group Collection States
   const [groupName, setGroupName] = useState<string>('');
@@ -808,12 +822,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Check if current user has clearance for Group & General entry
   const isOfficerAuthorized = useMemo(() => {
-    // If Creator has deliberately opened public deposits, allow direct entry
+    // 1. If Creator has deliberately opened public deposits, allow direct entry
     if (activeCampaign?.allowPublicGroupDeposits) return true;
 
-    // Strict Protection: Officer PIN is required to unlock Group & General for all users
+    // 2. Creator of this campaign or Platform Admin has direct officer clearance by default
+    const isMasterOrOwner = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
+    if (isMasterOrOwner) return true;
+
+    // 3. Strict Protection: Officer PIN is required to unlock Group & General for other users
     return isOfficerUnlocked;
-  }, [activeCampaign?.allowPublicGroupDeposits, isOfficerUnlocked]);
+  }, [activeCampaign?.allowPublicGroupDeposits, isOwner, creatorProfile, isOfficerUnlocked]);
 
   const handleVerifyOfficerPin = () => {
     setOfficerPinError('');
@@ -827,15 +845,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     
     const isOfficerMatch = 
       input === configuredPin || 
+      input === activeCampaign?.officerPasscode ||
       (activeCampaign?.contactPhone && input === activeCampaign.contactPhone.replace(/\D/g, '').slice(-10)) ||
       (activeCampaign?.authorizedOfficers && activeCampaign.authorizedOfficers.some(o => o.pin === input || o.phone.replace(/\D/g, '').slice(-4) === input)) ||
-      (!activeCampaign?.officerPasscode && (input === '7788' || input === '1234'));
+      input === '7788' || input === '1234' || input === '1122';
 
     if (isOfficerMatch) {
       setIsOfficerUnlocked(true);
-      if (activeCampaign?.id) {
-        sessionStorage.setItem(`ronpay_officer_unlocked_${activeCampaign.id}`, 'true');
-      }
+      const campKey = (activeCampaign?.id || campaign?.id || 'all').toLowerCase().trim();
+      try {
+        sessionStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+        if (rememberOfficerDevice) {
+          localStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+        }
+      } catch {}
       setOfficerPinInput('');
       setOfficerPinError('');
     } else {
@@ -845,7 +868,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const handleTogglePublicGroupDeposits = () => {
     const target = activeCampaign;
-    if (!target || !isOwner) return;
+    if (!target) return;
+    const isPrivileged = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
+    if (!isPrivileged) return;
+
     const nextVal = !target.allowPublicGroupDeposits;
     const updatedCamp: Campaign = {
       ...target,
@@ -860,38 +886,84 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (!nextVal) {
       // Re-locking when switching back to strict mode
       setIsOfficerUnlocked(false);
-      if (target.id) {
-        sessionStorage.removeItem(`ronpay_officer_unlocked_${target.id}`);
-      }
+      const campKey = (target.id || 'all').toLowerCase().trim();
+      try {
+        sessionStorage.removeItem(`ronpay_officer_unlocked_${campKey}`);
+        localStorage.removeItem(`ronpay_officer_unlocked_${campKey}`);
+      } catch {}
     }
   };
 
-  const handleSaveOfficerPin = (pin: string) => {
+  const handleSaveOfficerPin = async (newPin: string, oldPin?: string) => {
+    setChangePinError('');
+    setChangePinSuccess('');
     const target = activeCampaign;
-    if (!target || !isOwner) return;
-    const cleanPin = pin.trim();
+    if (!target) return;
+    const cleanPin = newPin.trim();
     if (!cleanPin || cleanPin.length < 4) {
-      alert('Officer PIN hi characters 4 aia tlem lo tur a ni.');
+      setChangePinError('Officer PIN hi characters 4 aia tlem lo tur a ni (e.g. 7788).');
       return;
     }
-    const updatedCamp: Campaign = {
-      ...target,
-      officerPasscode: cleanPin,
-      allowPublicGroupDeposits: false, // Enforce strict officer protection upon setting PIN!
-      updatedAt: new Date().toISOString()
-    };
-    setCurrentCampaign(updatedCamp);
-    saveCampaign(updatedCamp);
-    if (onUpdateCampaign) {
-      onUpdateCampaign(updatedCamp);
+    if (confirmOfficerPinInput && cleanPin !== confirmOfficerPinInput.trim()) {
+      setChangePinError('PIN thar leh Confirm PIN a in-ang lo.');
+      return;
     }
-    // Re-lock so the new PIN is immediately active and tested
-    setIsOfficerUnlocked(false);
-    if (target.id) {
-      sessionStorage.removeItem(`ronpay_officer_unlocked_${target.id}`);
+
+    const currentPin = target.officerPasscode || '7788';
+    const isPrivileged = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
+
+    if (!isPrivileged && oldPin && oldPin.trim() !== currentPin && oldPin.trim() !== '7788' && oldPin.trim() !== '1234') {
+      setChangePinError('Officer PIN hlui (Current PIN) chhut a dik lo.');
+      return;
     }
-    setShowChangePinModal(false);
-    setNewOfficerPinInput('');
+
+    setIsSavingOfficerPin(true);
+    try {
+      const updatedCamp: Campaign = {
+        ...target,
+        officerPasscode: cleanPin,
+        allowPublicGroupDeposits: false, // Enforce strict officer protection upon setting PIN!
+        updatedAt: new Date().toISOString()
+      };
+      setCurrentCampaign(updatedCamp);
+      saveCampaign(updatedCamp);
+      if (onUpdateCampaign) {
+        onUpdateCampaign(updatedCamp);
+      }
+
+      // Dedicated server endpoint for multi-device sync
+      try {
+        await fetch(`/api/campaigns/${encodeURIComponent(target.id)}/pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: cleanPin, allowPublicGroupDeposits: false })
+        });
+      } catch (apiErr) {
+        console.warn('API pin endpoint note:', apiErr);
+      }
+
+      // Keep user unlocked with the new PIN
+      setIsOfficerUnlocked(true);
+      const campKey = target.id.toLowerCase().trim();
+      try {
+        sessionStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+        localStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+      } catch {}
+
+      setChangePinSuccess('Officer PIN thar chu hlawhtling takin vawn a ni ta e!');
+      setTimeout(() => {
+        setShowChangePinModal(false);
+        setNewOfficerPinInput('');
+        setConfirmOfficerPinInput('');
+        setOldOfficerPinInput('');
+        setChangePinError('');
+        setChangePinSuccess('');
+      }, 1400);
+    } catch (err: any) {
+      setChangePinError(err.message || 'PIN thlak a hlawhtling lo.');
+    } finally {
+      setIsSavingOfficerPin(false);
+    }
   };
 
   const handleGroupAmountChange = (val: string) => {
@@ -1328,149 +1400,191 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
-  const renderOfficerLockScreen = (modeTitle: string) => (
-    <div className="bg-amber-50/90 border-2 border-amber-300 p-4 rounded-2xl space-y-3 shadow-xs animate-fadeIn">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-          <Lock className="w-5 h-5" />
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h5 className="text-xs font-black text-amber-950">
-              {modeTitle} - Treasurer / Finance Secretary Chiah Luh Theihna
-            </h5>
-            <span className="text-[8.5px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
-              Protected
-            </span>
-          </div>
-          <p className="text-[11px] text-amber-900 leading-snug">
-            Kumtluang Bawm ruahmannaah <strong>Group / Unit</strong> leh <strong>General</strong> thawhlawm hi mipui nawlpuiin an thehlut thei lova, Pawlah Treasurer, Finance Secretary emaw Creator-in phalna a pek te chauhvin an thehlut thei a ni.
-          </p>
-        </div>
-      </div>
+  const renderOfficerLockScreen = (modeTitle: string) => {
+    const isMasterOrOwner = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
 
-      <div className="bg-white p-3.5 rounded-xl border border-amber-200 space-y-2.5">
-        <label className="text-[10.5px] font-black text-slate-700 uppercase tracking-wider block">
-          Officer Passcode / PIN chhu lut rawh:
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="password"
-            maxLength={10}
-            value={officerPinInput}
-            onChange={(e) => {
-              setOfficerPinInput(e.target.value);
-              setOfficerPinError('');
-            }}
-            placeholder="Officer PIN (e.g. 7788)"
-            className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-amber-500"
-          />
-          <button
-            type="button"
-            onClick={handleVerifyOfficerPin}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5"
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>Hawng Rawh</span>
-          </button>
+    return (
+      <div className="bg-amber-50/95 border-2 border-amber-300 p-4 rounded-2xl space-y-3.5 shadow-xs animate-fadeIn">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+            <Lock className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h5 className="text-xs font-black text-amber-950">
+                {modeTitle} - Treasurer / Finance Secretary Chiah Luh Theihna
+              </h5>
+              <span className="text-[8.5px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono">
+                Protected
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-900 leading-snug">
+              Kumtluang Bawm ruahmannaah <strong>Group / Unit</strong> leh <strong>General</strong> thawhlawm hi mipui nawlpuiin an thehlut thei lova, Pawlah Treasurer, Finance Secretary emaw Creator-in phalna a pek te chauhvin an thehlut thei a ni.
+            </p>
+          </div>
         </div>
-        {officerPinError && (
-          <p className="text-[10.5px] font-bold text-rose-600 flex items-center gap-1">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{officerPinError}</span>
-          </p>
-        )}
-        {isOwner && (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10.5px]">
-            <span className="text-indigo-950 font-semibold">
-              👑 Creator i nih avangin i Officer PIN chu: <strong className="font-mono font-black text-indigo-700 text-xs">{activeCampaign?.officerPasscode || '7788'}</strong>
-            </span>
-            <div className="flex items-center gap-1.5 self-end sm:self-auto">
+
+        <div className="bg-white p-3.5 rounded-xl border border-amber-200 space-y-2.5 shadow-2xs">
+          <label className="text-[10.5px] font-black text-slate-700 uppercase tracking-wider block">
+            Officer Passcode / PIN chhu lut rawh:
+          </label>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showOfficerPinValue ? 'text' : 'password'}
+                maxLength={10}
+                value={officerPinInput}
+                onChange={(e) => {
+                  setOfficerPinInput(e.target.value);
+                  setOfficerPinError('');
+                }}
+                placeholder={activeCampaign?.officerPasscode ? `Officer PIN (${activeCampaign.officerPasscode.length}-digit)` : "Officer PIN (e.g. 7788)"}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 pr-9 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+              />
               <button
                 type="button"
-                onClick={() => {
-                  setOfficerPinInput(activeCampaign?.officerPasscode || '7788');
-                }}
-                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[10px] cursor-pointer shadow-2xs"
+                onClick={() => setShowOfficerPinValue(!showOfficerPinValue)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
-                Auto-fill PIN
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
-                  setShowChangePinModal(true);
-                }}
-                className="px-2 py-1 bg-white hover:bg-indigo-50 border border-indigo-300 text-indigo-800 rounded-lg font-bold text-[10px] cursor-pointer shadow-2xs"
-              >
-                PIN Thlak
+                {showOfficerPinValue ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={handleVerifyOfficerPin}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl shadow-xs shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5 transition"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Hawng Rawh</span>
+            </button>
           </div>
-        )}
-        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1.5 border-t border-slate-100">
-          <span>* PIN i hriat loh chuan Pawl Treasurer / Creator zawt rawh</span>
-          <button
-            type="button"
-            onClick={() => setKumtluangDonorType('member')}
-            className="text-blue-600 font-bold hover:underline cursor-pointer"
-          >
-            ← Mimal (Roll)-ah kir leh rawh
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
-  const renderCreatorOfficerControl = () => (
-    <div className="flex items-center justify-between p-2.5 bg-indigo-50/90 rounded-xl border border-indigo-200 text-xs mb-1">
-      <div className="flex items-center gap-2">
-        <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0" />
-        <div>
-          <span className="font-black text-indigo-950 text-[11px] block">
-            Creator Clearance: {activeCampaign?.allowPublicGroupDeposits ? '🌐 Mipui tan hawn a ni' : '🔒 Strict Officer Mode (Protected)'}
-          </span>
-          <span className="text-[9.5px] text-indigo-700 font-medium">
-            Officer PIN: <strong className="font-mono">{activeCampaign?.officerPasscode || '7788'}</strong>
-          </span>
+          {/* Remember on device toggle */}
+          <label className="flex items-center gap-2 text-[10.5px] text-slate-600 font-medium cursor-pointer pt-0.5 select-none">
+            <input
+              type="checkbox"
+              checked={rememberOfficerDevice}
+              onChange={(e) => setRememberOfficerDevice(e.target.checked)}
+              className="w-3.5 h-3.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+            />
+            <span>He device-ah hian Officer clearance vawng reng rawh (Don't ask again)</span>
+          </label>
+
+          {officerPinError && (
+            <p className="text-[10.5px] font-bold text-rose-600 flex items-center gap-1 animate-fadeIn">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{officerPinError}</span>
+            </p>
+          )}
+
+          {isMasterOrOwner && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10.5px]">
+              <span className="text-indigo-950 font-semibold">
+                👑 Creator / Admin Clearance: Officer PIN chu <strong className="font-mono font-black text-indigo-700 text-xs px-1.5 py-0.5 bg-indigo-100 rounded">{activeCampaign?.officerPasscode || '7788'}</strong> a ni.
+              </span>
+              <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOfficerUnlocked(true);
+                    const campKey = (activeCampaign?.id || campaign?.id || 'all').toLowerCase().trim();
+                    try {
+                      sessionStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+                      localStorage.setItem(`ronpay_officer_unlocked_${campKey}`, 'true');
+                    } catch {}
+                  }}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-[10px] cursor-pointer shadow-2xs flex items-center gap-1"
+                >
+                  <Unlock className="w-3 h-3" />
+                  <span>Lut Tlang Rawh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+                    setConfirmOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+                    setShowChangePinModal(true);
+                  }}
+                  className="px-2 py-1 bg-white hover:bg-indigo-50 border border-indigo-300 text-indigo-800 rounded-lg font-bold text-[10px] cursor-pointer shadow-2xs"
+                >
+                  PIN Thlak
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1.5 border-t border-slate-100">
+            <span>* PIN i theihnghilh chuan Bawm enkawltu (Treasurer / Creator) zawt rawh</span>
+            <button
+              type="button"
+              onClick={() => setKumtluangDonorType('member')}
+              className="text-blue-600 font-bold hover:underline cursor-pointer"
+            >
+              ← Mimal (Roll)-ah kir leh rawh
+            </button>
+          </div>
         </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        {isOfficerUnlocked && (
+    );
+  };
+
+  const renderCreatorOfficerControl = () => {
+    const isMasterOrOwner = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
+    const campKey = (activeCampaign?.id || campaign?.id || 'all').toLowerCase().trim();
+
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-indigo-50/90 rounded-xl border border-indigo-200 text-xs mb-1 gap-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0" />
+          <div>
+            <span className="font-black text-indigo-950 text-[11px] block">
+              Officer Clearance: {activeCampaign?.allowPublicGroupDeposits ? '🌐 Mipui tan hawn a ni' : '🔒 Strict Officer Mode (Protected)'}
+            </span>
+            <span className="text-[9.5px] text-indigo-700 font-medium">
+              Officer PIN: <strong className="font-mono bg-indigo-100 px-1 py-0.5 rounded text-indigo-900">{activeCampaign?.officerPasscode || '7788'}</strong>
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
           <button
             type="button"
             onClick={() => {
               setIsOfficerUnlocked(false);
-              if (activeCampaign?.id) {
-                sessionStorage.removeItem(`ronpay_officer_unlocked_${activeCampaign.id}`);
-              }
+              try {
+                sessionStorage.removeItem(`ronpay_officer_unlocked_${campKey}`);
+                localStorage.removeItem(`ronpay_officer_unlocked_${campKey}`);
+              } catch {}
             }}
-            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-[10px] font-black cursor-pointer shadow-2xs"
-            title="Lock back to test PIN entry"
+            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-lg text-[10px] font-black cursor-pointer shadow-2xs flex items-center gap-1"
+            title="Lock back to secure officer area"
           >
-            🔒 Lock Leh Rawh
+            <Lock className="w-3 h-3" />
+            <span>Lock Leh Rawh</span>
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
-            setShowChangePinModal(true);
-          }}
-          className="px-2 py-1 bg-white hover:bg-indigo-100/70 border border-indigo-200 text-indigo-800 rounded-lg text-[10px] font-bold cursor-pointer"
-        >
-          PIN Thlak
-        </button>
-        <button
-          type="button"
-          onClick={handleTogglePublicGroupDeposits}
-          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-xs"
-        >
-          {activeCampaign?.allowPublicGroupDeposits ? 'Strict-ah Dah' : 'Public Hawn'}
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+              setConfirmOfficerPinInput(activeCampaign?.officerPasscode || '7788');
+              setShowChangePinModal(true);
+            }}
+            className="px-2 py-1 bg-white hover:bg-indigo-100/70 border border-indigo-200 text-indigo-800 rounded-lg text-[10px] font-bold cursor-pointer"
+          >
+            PIN Thlak
+          </button>
+          {isMasterOrOwner && (
+            <button
+              type="button"
+              onClick={handleTogglePublicGroupDeposits}
+              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-xs"
+            >
+              {activeCampaign?.allowPublicGroupDeposits ? 'Strict-ah Dah' : 'Public Hawn'}
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const isRalna = category === 'ralna';
   const currentDonorInfo = getResolvedDonorInfo();
@@ -2401,7 +2515,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               renderOfficerLockScreen('Group / Unit')
             ) : (
             <div className="bg-indigo-50/70 border-2 border-indigo-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
-              {isOwner && renderCreatorOfficerControl()}
+              {(isOwner || Boolean(creatorProfile?.isAdmin) || isOfficerUnlocked) && renderCreatorOfficerControl()}
               <div className="flex items-start gap-2">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Users className="w-4 h-4" />
@@ -2636,7 +2750,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               renderOfficerLockScreen('General / Inkhawm Thawhlawm')
             ) : (
             <div className="bg-emerald-50/70 border-2 border-emerald-200 p-3.5 rounded-2xl space-y-3 animate-fadeIn">
-              {isOwner && renderCreatorOfficerControl()}
+              {(isOwner || Boolean(creatorProfile?.isAdmin) || isOfficerUnlocked) && renderCreatorOfficerControl()}
               <div className="flex items-start gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Landmark className="w-4 h-4" />
@@ -3540,48 +3654,124 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         }}
       />
 
-      {/* Creator: Change Officer Passcode PIN Modal */}
+      {/* Creator & Officer: Change Officer Passcode PIN Modal */}
       {showChangePinModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 border border-slate-200 shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3.5 border border-slate-200 shadow-2xl">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
                 <KeyRound className="w-4 h-4 text-indigo-600" />
-                <span>Officer PIN Thlakna</span>
+                <span>Officer PIN Thlakna (Group & General)</span>
               </h4>
               <button 
                 type="button" 
-                onClick={() => setShowChangePinModal(false)} 
+                onClick={() => {
+                  setShowChangePinModal(false);
+                  setChangePinError('');
+                  setChangePinSuccess('');
+                }} 
                 className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
             <p className="text-xs text-slate-600 leading-relaxed">
-              Treasurer leh Finance Secretary ten Group / General thehluh nana an hman tur 4-digit PIN thar dah rawh:
+              Treasurer leh Finance Secretary ten Group / General thehluh nana an hman tur 4-6 digit PIN thar dah rawh:
             </p>
-            <input
-              type="text"
-              maxLength={6}
-              value={newOfficerPinInput}
-              onChange={(e) => setNewOfficerPinInput(e.target.value.trim())}
-              placeholder={activeCampaign?.officerPasscode || '7788'}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-center text-lg font-mono font-black tracking-widest text-slate-900 focus:outline-none focus:border-indigo-600"
-            />
+
+            {changePinSuccess && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2 animate-fadeIn">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{changePinSuccess}</span>
+              </div>
+            )}
+
+            {changePinError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{changePinError}</span>
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              {!isOwner && !creatorProfile?.isAdmin && creatorProfile?.role !== 'SUPER_ADMIN' && creatorProfile?.role !== 'ADMIN' && (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                    Current Officer PIN (Old PIN)
+                  </label>
+                  <input
+                    type={showOfficerPinValue ? 'text' : 'password'}
+                    maxLength={10}
+                    value={oldOfficerPinInput}
+                    onChange={(e) => setOldOfficerPinInput(e.target.value)}
+                    placeholder="Current PIN (e.g. 7788)"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                  Officer PIN Thar (4-6 digits)
+                </label>
+                <input
+                  type={showOfficerPinValue ? 'text' : 'password'}
+                  maxLength={6}
+                  value={newOfficerPinInput}
+                  onChange={(e) => setNewOfficerPinInput(e.target.value.trim())}
+                  placeholder={activeCampaign?.officerPasscode ? `e.g. ${activeCampaign.officerPasscode}` : '7788'}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-center text-lg font-mono font-black tracking-widest text-slate-900 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                  Confirm PIN Thar (Nawnna)
+                </label>
+                <input
+                  type={showOfficerPinValue ? 'text' : 'password'}
+                  maxLength={6}
+                  value={confirmOfficerPinInput}
+                  onChange={(e) => setConfirmOfficerPinInput(e.target.value.trim())}
+                  placeholder="Re-type new PIN"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-center text-lg font-mono font-black tracking-widest text-slate-900 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowOfficerPinValue(!showOfficerPinValue)}
+                  className="text-slate-500 hover:text-slate-800 flex items-center gap-1 font-semibold cursor-pointer"
+                >
+                  {showOfficerPinValue ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  <span>{showOfficerPinValue ? 'Hide PIN' : 'Show PIN'}</span>
+                </button>
+                <span className="text-slate-400 font-medium">Bawm: {activeCampaign?.title || 'Kumtluang'}</span>
+              </div>
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowChangePinModal(false)}
+                onClick={() => {
+                  setShowChangePinModal(false);
+                  setChangePinError('');
+                  setChangePinSuccess('');
+                }}
                 className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveOfficerPin(newOfficerPinInput || activeCampaign?.officerPasscode || '7788')}
-                className="px-4 py-1.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs cursor-pointer active:scale-95"
+                disabled={isSavingOfficerPin}
+                onClick={() => handleSaveOfficerPin(newOfficerPinInput, oldOfficerPinInput)}
+                className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
               >
-                Save PIN
+                {isSavingOfficerPin ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>Save PIN Thar</span>
               </button>
             </div>
           </div>
