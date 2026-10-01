@@ -435,8 +435,8 @@ export const getStoredCampaigns = (): Campaign[] => {
               changed = true;
             }
             if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
-              if (!updated.subCategories || !updated.subCategories.includes('Inkhawm Thawhlawm')) {
-                updated.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
+              if (updated.subCategories && updated.subCategories.includes('Inkhawm Thawhlawm')) {
+                updated.subCategories = updated.subCategories.filter(s => s !== 'Inkhawm Thawhlawm');
                 changed = true;
               }
               if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {

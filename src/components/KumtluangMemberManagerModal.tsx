@@ -442,10 +442,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     : null) || activeScopedCampaign;
 
   const campaignCategories = useMemo(() => {
-    const subs = Array.isArray(activeScopedCampaign?.subCategories) ? activeScopedCampaign.subCategories : [];
-    const gens = Array.isArray(activeScopedCampaign?.generalPresets) ? activeScopedCampaign.generalPresets : [];
-    const combined = Array.from(new Set([...subs, ...gens])).map(s => s.trim()).filter(Boolean);
-    return combined.length > 0 ? combined : defaultCategories;
+    const subs = Array.isArray(activeScopedCampaign?.subCategories) && activeScopedCampaign.subCategories.length > 0
+      ? activeScopedCampaign.subCategories
+      : defaultCategories;
+    return subs;
   }, [activeScopedCampaign, defaultCategories]);
 
   const handleAddNewHead = () => {
