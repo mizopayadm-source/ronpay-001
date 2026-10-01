@@ -35,9 +35,16 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
   isDismissible = true,
   onDismiss
 }) => {
+  const dismissKey = `ronpay_ann_dismissed_${announcement?.id || 'main'}`;
   const [currentIdx, setCurrentIdx] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [isDismissed, setIsDismissed] = useState<boolean>(false);
+  const [isDismissed, setIsDismissed] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && sessionStorage.getItem(dismissKey) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isMediaModalOpen, setIsMediaModalOpen] = useState<boolean>(false);
   const [activeMediaUrl, setActiveMediaUrl] = useState<string>('');
 
@@ -146,6 +153,11 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(dismissKey, 'true');
+      }
+    } catch {}
     if (onDismiss) onDismiss();
   };
 
@@ -166,9 +178,11 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
   };
 
   // Determine media layout: 'hero_top', 'side_thumb', or 'background_overlay'
-  const effectiveLayout = activeItem.mediaLayout || (parsedMedia?.isCanva ? 'hero_top' : 'hero_top');
+  const effectiveLayout = activeItem.mediaLayout || (parsedMedia?.isCanva ? 'hero_top' : 'side_thumb');
   const mediaFit = activeItem.mediaFit || announcement.globalMediaFit || 'cover';
   const mediaFitClass = mediaFit === 'contain' ? 'object-contain' : mediaFit === 'fill' ? 'object-fill' : 'object-cover';
+
+  const isSideThumb = effectiveLayout === 'side_thumb' && parsedMedia && !parsedMedia.isCanva;
 
   return (
     <>
@@ -176,9 +190,9 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         style={bgStyle}
-        className={`p-3.5 sm:p-4 rounded-2xl border shadow-sm relative overflow-hidden transition-all flex flex-col justify-between ${
+        className={`p-3 sm:p-3.5 rounded-2xl border shadow-sm relative overflow-hidden transition-all flex flex-col justify-between ${
           !isCustomBg ? `${themeDef.bgClass} ${themeDef.borderClass} ${themeDef.textClass}` : 'text-white border-white/20'
-        } ${heightDef.containerMinHeightClass} ${(animationStyle as string) === 'pulse' ? 'animate-pulse' : ''} ${className}`}
+        } ${!isSideThumb ? heightDef.containerMinHeightClass : ''} ${(animationStyle as string) === 'pulse' ? 'animate-pulse' : ''} ${className}`}
       >
         {/* BACKGROUND OVERLAY MODE (if layout is background_overlay) */}
         {parsedMedia && effectiveLayout === 'background_overlay' && !parsedMedia.isCanva && (
@@ -194,10 +208,10 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
 
         <div className="relative z-10 w-full flex flex-col flex-1 justify-between">
           {/* Top Control Bar: Type Badge, Item Count, Actions */}
-          <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="p-1 bg-white/20 rounded-lg shrink-0 backdrop-blur-xs shadow-2xs">
-                <Megaphone className="w-3.5 h-3.5" />
+              <span className="p-1 bg-white/15 rounded-md shrink-0 backdrop-blur-xs">
+                <Megaphone className="w-3 h-3 text-white/90" />
               </span>
               
               <span 
@@ -218,21 +232,9 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                 </span>
               )}
               
-              {parsedMedia?.type === 'gif' && (
-                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-pink-400 text-slate-950">
-                  GIF
-                </span>
-              )}
-              
               {bannerItems.length > 1 && (
-                <span className="text-[8.5px] font-mono font-bold bg-black/25 text-white px-1.5 py-0.5 rounded-full">
+                <span className="text-[8.5px] font-mono font-bold bg-black/30 text-white/90 px-1.5 py-0.5 rounded-full">
                   {currentIdx + 1}/{bannerItems.length}
-                </span>
-              )}
-
-              {animationStyle === 'marquee' && (
-                <span className="text-[8px] bg-amber-400 text-slate-950 font-black uppercase px-1 rounded-sm">
-                  Ticker
                 </span>
               )}
             </div>
@@ -240,30 +242,30 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
             {/* Controls: Prev/Pause/Next & Close */}
             <div className="flex items-center gap-1 shrink-0">
               {bannerItems.length > 1 && (
-                <div className="flex items-center bg-black/20 rounded-xl p-0.5 backdrop-blur-xs">
+                <div className="flex items-center bg-black/25 rounded-lg p-0.5 backdrop-blur-xs">
                   <button
                     type="button"
                     onClick={handlePrev}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
+                    className="p-1 rounded text-white/75 hover:text-white hover:bg-white/15 transition cursor-pointer"
                     title="Previous announcement"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <ChevronLeft className="w-3 h-3" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsPaused(!isPaused)}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
+                    className="p-1 rounded text-white/75 hover:text-white hover:bg-white/15 transition cursor-pointer"
                     title={isPaused ? "Play auto-rotation" : "Pause auto-rotation"}
                   >
-                    {isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                    {isPaused ? <Play className="w-2.5 h-2.5" /> : <Pause className="w-2.5 h-2.5" />}
                   </button>
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
+                    className="p-1 rounded text-white/75 hover:text-white hover:bg-white/15 transition cursor-pointer"
                     title="Next announcement"
                   >
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3 h-3" />
                   </button>
                 </div>
               )}
@@ -272,20 +274,20 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="p-1.5 rounded-xl bg-black/20 hover:bg-black/40 text-white/80 hover:text-white transition cursor-pointer"
+                  className="p-1 rounded-lg bg-black/25 hover:bg-black/45 text-white/75 hover:text-white transition cursor-pointer"
                   title="Dismiss announcement"
                 >
-                  <CloseIcon className="w-3.5 h-3.5" />
+                  <CloseIcon className="w-3 h-3" />
                 </button>
               )}
             </div>
           </div>
 
-          {/* HERO MEDIA BANNER (CANVA / IMAGE / ANIMATION) on Top if present and layout is hero_top or full_card */}
-          {parsedMedia && (effectiveLayout === 'hero_top' || effectiveLayout === 'full_card') && (
+          {/* HERO MEDIA BANNER (CANVA / IMAGE) on Top if present and layout is hero_top or full_card */}
+          {parsedMedia && !isSideThumb && (effectiveLayout === 'hero_top' || effectiveLayout === 'full_card') && (
             <div 
               style={mediaHeightStyle}
-              className={`mb-2.5 rounded-xl overflow-hidden bg-black/30 border border-white/20 shadow-md relative group ${
+              className={`mb-2 rounded-xl overflow-hidden bg-black/30 border border-white/20 shadow-xs relative group max-h-36 sm:max-h-44 ${
                 !mediaHeightStyle.height ? heightDef.mediaHeightClass : ''
               }`}
             >
@@ -299,7 +301,6 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                     className="w-full h-full border-0 absolute inset-0"
                     allow="fullscreen"
                   />
-                  {/* Canva Quick Action floating overlay */}
                   <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-10">
                     <a
                       href={parsedMedia.canvaViewUrl || parsedMedia.originalUrl}
@@ -313,7 +314,7 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                   </div>
                 </div>
               ) : (
-                // Image / GIF Banner
+                // Image Banner
                 <div 
                   onClick={() => handleOpenMedia(parsedMedia.embedUrl)}
                   className="relative w-full h-full overflow-hidden cursor-zoom-in group"
@@ -334,25 +335,8 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
             </div>
           )}
 
-          {/* Content Body */}
-          <div className="flex items-start gap-2.5 flex-1">
-            {/* SIDE THUMBNAIL (if layout is side_thumb) */}
-            {parsedMedia && effectiveLayout === 'side_thumb' && (
-              <div 
-                onClick={() => handleOpenMedia(parsedMedia.embedUrl)}
-                className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden bg-black/30 border border-white/20 shadow-xs cursor-pointer group relative mt-0.5"
-              >
-                <img 
-                  src={parsedMedia.embedUrl} 
-                  alt="Banner" 
-                  className={`w-full h-full ${mediaFitClass} group-hover:scale-110 transition-transform`} 
-                />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Maximize2 className="w-3 h-3 text-white" />
-                </div>
-              </div>
-            )}
-
+          {/* Content Body: Split Left Content & Right Thumbnail when isSideThumb */}
+          <div className="flex items-center justify-between gap-3">
             {/* Text Content */}
             <div className={`space-y-1 min-w-0 flex-1 ${textAlignClass}`}>
               {animationStyle === 'marquee' ? (
@@ -369,7 +353,7 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                 }`}>
                   <h4 
                     style={{ color: customTitleColor || undefined }}
-                    className={`font-black tracking-wide leading-tight drop-shadow-xs ${
+                    className={`font-black tracking-tight leading-snug drop-shadow-xs line-clamp-1 ${
                       fontSizePreset === 'small' ? 'text-xs' :
                       fontSizePreset === 'large' ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
                     }`}
@@ -378,10 +362,10 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                   </h4>
                   <p 
                     style={{ color: customTextColor || undefined }}
-                    className={`leading-snug mt-0.5 break-words ${
+                    className={`leading-snug mt-0.5 line-clamp-2 break-words ${
                       fontSizePreset === 'small' ? 'text-[10px] sm:text-[11px]' :
                       fontSizePreset === 'large' ? 'text-xs sm:text-sm' : 'text-[11px] sm:text-xs'
-                    } ${!customTextColor ? 'opacity-95' : ''}`}
+                    } ${!customTextColor ? 'opacity-85' : ''}`}
                   >
                     {activeItem.message}
                   </p>
@@ -396,13 +380,13 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                   <button
                     type="button"
                     onClick={() => handleActionClick(activeItem.linkAction)}
-                    className="inline-flex items-center gap-1 bg-white text-slate-900 hover:bg-amber-300 hover:text-slate-950 font-black text-[10.5px] px-2.5 py-1 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                    className="inline-flex items-center gap-1 bg-white/20 hover:bg-white text-white hover:text-slate-950 border border-white/25 font-black text-[10.5px] px-2.5 py-1 rounded-xl shadow-xs transition active:scale-95 cursor-pointer backdrop-blur-xs"
                   >
                     <span>{activeItem.linkText}</span>
                     {activeItem.linkAction?.startsWith('http') ? (
-                      <ExternalLink className="w-3 h-3 text-slate-700" />
+                      <ExternalLink className="w-3 h-3" />
                     ) : (
-                      <ArrowRight className="w-3 h-3 text-slate-700" />
+                      <ArrowRight className="w-3 h-3" />
                     )}
                   </button>
                 )}
@@ -420,18 +404,36 @@ export const AnnouncementBannerCard: React.FC<AnnouncementBannerCardProps> = ({
                 )}
               </div>
             </div>
+
+            {/* SIDE THUMBNAIL (Right Side, Compact Square) */}
+            {isSideThumb && parsedMedia && (
+              <div 
+                onClick={() => handleOpenMedia(parsedMedia.embedUrl)}
+                className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden bg-black/40 border border-white/25 shadow-sm cursor-pointer group relative"
+                title="En lian rawh"
+              >
+                <img 
+                  src={parsedMedia.embedUrl} 
+                  alt={activeItem.title} 
+                  className={`w-full h-full ${mediaFitClass} group-hover:scale-105 transition-transform duration-200`} 
+                />
+                <div className="absolute inset-0 bg-black/25 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Maximize2 className="w-3.5 h-3.5 text-white" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Dots Indicator for multiple items */}
           {bannerItems.length > 1 && (
-            <div className="flex items-center justify-center gap-1.5 pt-2 mt-1.5 border-t border-white/15">
+            <div className="flex items-center justify-center gap-1.5 pt-1.5 mt-1 border-t border-white/10">
               {bannerItems.map((_, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => setCurrentIdx(idx)}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    currentIdx === idx ? 'w-5 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
+                  className={`h-1 rounded-full transition-all cursor-pointer ${
+                    currentIdx === idx ? 'w-4 bg-white' : 'w-1 bg-white/35 hover:bg-white/60'
                   }`}
                   title={`Go to slide ${idx + 1}`}
                 />

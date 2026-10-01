@@ -53,7 +53,8 @@ import {
   recordUserPaidTxId,
   getStoredCreatorProfile,
   isCampaignCreator,
-  saveCampaign
+  saveCampaign,
+  getStoredCampaigns
 } from '../utils/storage';
 import { syncCampaignToFirestore } from '../services/firestoreSync';
 import { ALL_MONTH_NAMES_FULL, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';

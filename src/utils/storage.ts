@@ -221,42 +221,6 @@ export const safeApiFetch = async (url: string, options?: RequestInit): Promise<
 
 export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
   {
-    id: 'ann-1',
-    isActive: true,
-    type: 'urgent',
-    title: 'Mizoram State-wide Community Notice',
-    message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
-    linkText: 'Bawm Explorer En Rawh',
-    linkAction: 'explore_bawm',
-    badge: 'URGENT',
-    bannerMediaUrl: 'https://www.canva.com/design/DAHTTgdvhsU/77qJSQZdradri_piWLrIzw/view?embed',
-    mediaType: 'canva',
-    mediaLayout: 'hero_top'
-  },
-  {
-    id: 'ann-2',
-    isActive: true,
-    type: 'info',
-    title: 'Instant UPI & BBPS Live Integration',
-    message: 'PhonePe, Paytm, Google Pay leh BBPS hmangin Electric, FASTag, Water Bill leh Fees te awlsam takin pek fel nghal zung zung theih a ni e.',
-    linkText: 'Bill Payments En Rawh',
-    linkAction: 'open_bill_service',
-    badge: 'BBPS LIVE',
-    bannerMediaUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=800&auto=format&fit=crop',
-    mediaType: 'image',
-    mediaLayout: 'hero_top'
-  },
-  {
-    id: 'ann-3',
-    isActive: true,
-    type: 'notice',
-    title: 'YMA & Creator Verification Studio',
-    message: 'Branch YMA, NGO leh Kohhran tan Creator Studio-ah registration tiin Free QR Code siam a, donation awlsam takin tlingkhawm rawh le.',
-    linkText: 'Creator Studio-ah Lut Rawh',
-    linkAction: 'create_qr',
-    badge: 'CREATOR HUB'
-  },
-  {
     id: 'ann-4',
     isActive: true,
     type: 'event',
@@ -265,15 +229,54 @@ export const DEFAULT_ANNOUNCEMENT_ITEMS: AnnouncementItem[] = [
     linkText: 'Kumtluang Bawm En Rawh',
     linkAction: 'kumtluang_bawm',
     badge: 'EVENT',
-    bannerMediaUrl: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579?q=80&w=800&auto=format&fit=crop',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?q=80&w=800&auto=format&fit=crop',
     mediaType: 'image',
-    mediaLayout: 'hero_top'
+    mediaLayout: 'side_thumb'
+  },
+  {
+    id: 'ann-1',
+    isActive: true,
+    type: 'notice',
+    title: 'Mizoram State-wide Community Notice',
+    message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm verified QR-te chauh sum chhun nan hmang rawh le.',
+    linkText: 'Bawm Explorer En Rawh',
+    linkAction: 'explore_bawm',
+    badge: 'COMMUNITY',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?q=80&w=800&auto=format&fit=crop',
+    mediaType: 'image',
+    mediaLayout: 'side_thumb'
+  },
+  {
+    id: 'ann-2',
+    isActive: true,
+    type: 'info',
+    title: 'Instant UPI & BBPS Live Integration',
+    message: 'PhonePe, Paytm, Google Pay leh BBPS hmangin Electric, FASTag, Water Bill leh Fees te awlsam takin pek theih a ni e.',
+    linkText: 'Bill Payments En Rawh',
+    linkAction: 'open_bill_service',
+    badge: 'BBPS LIVE',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=800&auto=format&fit=crop',
+    mediaType: 'image',
+    mediaLayout: 'side_thumb'
+  },
+  {
+    id: 'ann-3',
+    isActive: true,
+    type: 'notice',
+    title: 'YMA & Creator Verification Studio',
+    message: 'Branch YMA, NGO leh Kohhran tan Creator Studio-ah registration tiin Free QR Code siam rawh le.',
+    linkText: 'Creator Studio-ah Lut Rawh',
+    linkAction: 'create_qr',
+    badge: 'CREATOR HUB',
+    bannerMediaUrl: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?q=80&w=800&auto=format&fit=crop',
+    mediaType: 'image',
+    mediaLayout: 'side_thumb'
   }
 ];
 
 export const DEFAULT_ANNOUNCEMENT: AnnouncementBanner = {
   id: 'ann-main-config',
-  isActive: true,
+  isActive: false, // Default to false so it stays hidden unless explicitly enabled
   type: 'urgent',
   title: 'Mizoram State-wide Community Notice',
   message: 'RonPay v2.5 live: Ralna, Khawlsak, Rikrum leh Kumtluang bawm zawng zawng QR Code verified-te chauh sum chhun nan hmang rawh le.',
@@ -1883,21 +1886,20 @@ export const getStoredAnnouncement = (): AnnouncementBanner => {
     const raw = localStorage.getItem(ANNOUNCEMENT_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.title) {
+      if (parsed && typeof parsed === 'object') {
         // Ensure default items exist if upgrading from older format
-        if (!parsed.items || parsed.items.length === 0) {
-          parsed.items = DEFAULT_ANNOUNCEMENT_ITEMS;
-        }
-        if (parsed.autoRotate === undefined) {
-          parsed.autoRotate = true;
-        }
-        if (!parsed.rotationSpeedSeconds) {
-          parsed.rotationSpeedSeconds = 4;
-        }
-        if (!parsed.animationStyle) {
-          parsed.animationStyle = 'slide';
-        }
-        return parsed;
+        const items = (Array.isArray(parsed.items) && parsed.items.length > 0)
+          ? parsed.items
+          : DEFAULT_ANNOUNCEMENT_ITEMS;
+        return {
+          ...DEFAULT_ANNOUNCEMENT,
+          ...parsed,
+          items,
+          isActive: Boolean(parsed.isActive), // Strictly respect false if turned off!
+          autoRotate: parsed.autoRotate !== undefined ? parsed.autoRotate : true,
+          rotationSpeedSeconds: parsed.rotationSpeedSeconds || 4,
+          animationStyle: parsed.animationStyle || 'slide'
+        };
       }
     }
   } catch (e) {

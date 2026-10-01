@@ -259,6 +259,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Sync preview timer
   useEffect(() => {
+    if (announcement) {
+      setLocalAnnouncement(prev => ({
+        ...prev,
+        ...announcement,
+        items: (announcement.items && announcement.items.length > 0) ? announcement.items : prev.items,
+        isActive: Boolean(announcement.isActive)
+      }));
+    }
+  }, [announcement]);
+
+  useEffect(() => {
     const items = localAnnouncement.items || [];
     if (!localAnnouncement.autoRotate || isPreviewPaused || items.length <= 1) return;
     const interval = setInterval(() => {
@@ -2345,15 +2356,58 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     {/* Interactive Live Banner Preview Card */}
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10.5px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <span>Live Banner Preview (HomeScreen Display)</span>
-                          {localAnnouncement.autoRotate && (
-                            <span className="text-[9px] font-mono bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
-                              Rotating ({localAnnouncement.rotationSpeedSeconds || 4}s)
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10.5px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <span>Live Banner Preview</span>
+                            {localAnnouncement.autoRotate && (
+                              <span className="text-[9px] font-mono bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
+                                Rotating ({localAnnouncement.rotationSpeedSeconds || 4}s)
+                              </span>
+                            )}
+                          </label>
+
+                          {/* Instant Status Switch */}
+                          <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-xl border border-slate-200">
+                            <span className={`text-[9.5px] font-bold ${localAnnouncement.isActive ? 'text-emerald-700' : 'text-slate-500'}`}>
+                              {localAnnouncement.isActive ? 'Active (Lan mek)' : 'Disabled (Dah bo)'}
                             </span>
-                          )}
-                        </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextActive = !localAnnouncement.isActive;
+                                const updated: AnnouncementBanner = {
+                                  ...localAnnouncement,
+                                  isActive: nextActive,
+                                  updatedAt: new Date().toISOString()
+                                };
+                                setLocalAnnouncement(updated);
+                                saveStoredAnnouncement(updated);
+                                if (onUpdateAnnouncement) {
+                                  onUpdateAnnouncement(updated);
+                                }
+                                recordAuditLog(
+                                  'Announcement Banner Status Changed',
+                                  `Admin changed banner status to: ${nextActive ? 'Active' : 'Disabled'}`,
+                                  'announcement'
+                                );
+                                setLogsList(getStoredAuditLogs());
+                                setAnnouncementSavedNotice(true);
+                                setTimeout(() => setAnnouncementSavedNotice(false), 2500);
+                              }}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                localAnnouncement.isActive ? 'bg-emerald-600' : 'bg-slate-300'
+                              }`}
+                              title={localAnnouncement.isActive ? "Click to Disable/Hide banner" : "Click to Enable/Show banner"}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                                  localAnnouncement.isActive ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </div>
 
                         {/* Interactive Preview Controls */}
                         {currentItems.length > 1 && (
@@ -2390,7 +2444,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
 
                       {localAnnouncement.isActive ? (
-                        <div className="rounded-2xl overflow-hidden border border-slate-200">
+                        <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
                           <AnnouncementBannerCard
                             announcement={{
                               ...localAnnouncement,
@@ -2400,8 +2454,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           />
                         </div>
                       ) : (
-                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 text-center text-slate-400 text-xs">
-                          Announcement banner is currently <strong>DISABLED</strong>.
+                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 text-center text-slate-500 text-xs bg-slate-50">
+                          Banner is currently <strong>DISABLED (DAH BO A NI)</strong>. Home screen-ah a lang lovang.
                         </div>
                       )}
                     </div>
@@ -2411,11 +2465,31 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                         <div>
                           <label className="text-xs font-black text-slate-800 block">Banner Display Status</label>
-                          <span className="text-[10px] text-slate-500">HomeScreen chunga banner lanna switch</span>
+                          <span className="text-[10px] text-slate-500">HomeScreen chunga banner lanna switch (Hmeh veleh a in-save nghal)</span>
                         </div>
                         <button
                           type="button"
-                          onClick={() => setLocalAnnouncement(prev => ({ ...prev, isActive: !prev.isActive }))}
+                          onClick={() => {
+                            const nextActive = !localAnnouncement.isActive;
+                            const updated: AnnouncementBanner = {
+                              ...localAnnouncement,
+                              isActive: nextActive,
+                              updatedAt: new Date().toISOString()
+                            };
+                            setLocalAnnouncement(updated);
+                            saveStoredAnnouncement(updated);
+                            if (onUpdateAnnouncement) {
+                              onUpdateAnnouncement(updated);
+                            }
+                            recordAuditLog(
+                              'Announcement Banner Status Changed',
+                              `Admin changed banner status to: ${nextActive ? 'Active' : 'Disabled'}`,
+                              'announcement'
+                            );
+                            setLogsList(getStoredAuditLogs());
+                            setAnnouncementSavedNotice(true);
+                            setTimeout(() => setAnnouncementSavedNotice(false), 2500);
+                          }}
                           className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                             localAnnouncement.isActive ? 'bg-indigo-600' : 'bg-slate-300'
                           }`}

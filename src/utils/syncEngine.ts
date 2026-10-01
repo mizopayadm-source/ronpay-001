@@ -18,6 +18,7 @@ import {
   getStoredStaffAccounts,
   saveStoredStaffAccounts,
   getDeletedTransactionIds,
+  markTransactionAsDeleted,
   getDeletedCampaignIds,
   recordDeletedCampaignId,
   getDeletedMemberIds,

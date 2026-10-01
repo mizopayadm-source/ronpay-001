@@ -25,55 +25,55 @@ export interface BgThemeDefinition {
 export const ANNOUNCEMENT_BG_THEMES: Record<string, BgThemeDefinition> = {
   red_urgent: {
     id: 'red_urgent',
-    name: 'Crimson Red / Urgent',
-    nameMizo: 'Sen Pawng (Urgent Alert)',
-    bgClass: 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700',
+    name: 'Crimson Slate / Urgent',
+    nameMizo: 'Sen Mawi (Urgent Alert)',
+    bgClass: 'bg-gradient-to-br from-rose-950 via-red-950 to-slate-950',
     textClass: 'text-white',
-    borderClass: 'border-red-500 shadow-red-200/50',
-    badgeBg: 'bg-white/25',
-    badgeText: 'text-white',
-    previewColor: '#dc2626'
+    borderClass: 'border-rose-500/40 shadow-md shadow-rose-950/20',
+    badgeBg: 'bg-rose-500/25 border border-rose-400/30',
+    badgeText: 'text-rose-200',
+    previewColor: '#9f1239'
   },
   indigo_royal: {
     id: 'indigo_royal',
-    name: 'Royal Indigo & Purple',
+    name: 'Royal Indigo & Slate',
     nameMizo: 'Pawl & Senduk (Royal Indigo)',
-    bgClass: 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800',
+    bgClass: 'bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950',
     textClass: 'text-white',
-    borderClass: 'border-indigo-500 shadow-indigo-200/50',
-    badgeBg: 'bg-white/25',
-    badgeText: 'text-white',
-    previewColor: '#4338ca'
+    borderClass: 'border-indigo-500/30 shadow-md shadow-indigo-950/20',
+    badgeBg: 'bg-indigo-500/25 border border-indigo-400/30',
+    badgeText: 'text-indigo-200',
+    previewColor: '#312e81'
   },
   emerald_forest: {
     id: 'emerald_forest',
-    name: 'Emerald Green & Teal',
+    name: 'Emerald Slate & Teal',
     nameMizo: 'Hring Mawi (Church & NGO)',
-    bgClass: 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700',
+    bgClass: 'bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-950',
     textClass: 'text-white',
-    borderClass: 'border-emerald-500 shadow-emerald-200/50',
-    badgeBg: 'bg-white/25',
-    badgeText: 'text-white',
-    previewColor: '#059669'
+    borderClass: 'border-emerald-500/30 shadow-md shadow-emerald-950/20',
+    badgeBg: 'bg-emerald-500/25 border border-emerald-400/30',
+    badgeText: 'text-emerald-200',
+    previewColor: '#064e3b'
   },
   amber_gold: {
     id: 'amber_gold',
-    name: 'Amber Orange & Gold',
-    nameMizo: 'Eng & Arawm (Notice / Alert)',
-    bgClass: 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700',
+    name: 'Amber Bronze & Slate',
+    nameMizo: 'Eng & Bronze (Notice / Alert)',
+    bgClass: 'bg-gradient-to-br from-amber-950 via-stone-900 to-slate-950',
     textClass: 'text-white',
-    borderClass: 'border-amber-500 shadow-amber-200/50',
-    badgeBg: 'bg-white/25',
-    badgeText: 'text-white',
-    previewColor: '#d97706'
+    borderClass: 'border-amber-500/30 shadow-md shadow-amber-950/20',
+    badgeBg: 'bg-amber-500/25 border border-amber-400/30',
+    badgeText: 'text-amber-200',
+    previewColor: '#78350f'
   },
   midnight_dark: {
     id: 'midnight_dark',
     name: 'Midnight Dark Cyber',
     nameMizo: 'Dum & Neon (Midnight Dark)',
-    bgClass: 'bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950',
+    bgClass: 'bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950',
     textClass: 'text-white',
-    borderClass: 'border-indigo-500/40 shadow-slate-900/60',
+    borderClass: 'border-indigo-500/30 shadow-md shadow-slate-900/60',
     badgeBg: 'bg-indigo-500/30',
     badgeText: 'text-indigo-200',
     previewColor: '#0f172a'

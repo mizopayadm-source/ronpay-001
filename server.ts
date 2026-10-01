@@ -4249,6 +4249,12 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // Ensure announcement banner is disabled by default unless explicitly turned on
+  if (db.announcement && db.announcement.isActive) {
+    db.announcement.isActive = false;
+    changed = true;
+  }
+
   // 3. Normalize transaction categories, campaign titles, and subcategory breakdowns
   for (const t of (db.transactions || [])) {
     if (!t) continue;
@@ -4635,7 +4641,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (pricingConfig && typeof pricingConfig === 'object') {
       db.pricingConfig = { ...(db.pricingConfig || {}), ...pricingConfig };
     }
-    if (announcement && typeof announcement === 'object') {
+    // Only update announcement via explicit /api/announcement endpoint, never blindly overwrite from regular client state sync
+    if (announcement && typeof announcement === 'object' && !db.announcement) {
       db.announcement = { ...(db.announcement || {}), ...announcement };
     }
 
