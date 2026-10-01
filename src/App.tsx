@@ -476,8 +476,13 @@ export default function App() {
       }
     }, 15000);
 
-    // Load local storage immediately on startup without background polling
+    // Load local storage immediately on startup
     reloadLocalData();
+
+    // Immediately fetch from server on boot/refresh so mobile apps & web browsers get fresh server data without waiting!
+    syncAllWithServer().then(() => {
+      reloadLocalData();
+    }).catch(() => {});
 
     return () => {
       clearInterval(syncInterval);

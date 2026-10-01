@@ -1,5 +1,5 @@
 // RonPay Service Worker for Offline Mode & Campaign Caching
-const CACHE_NAME = 'ronpay-cache-v1';
+const CACHE_NAME = 'ronpay-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -36,8 +36,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bypass API calls that mutate or need live phonepe status
-  if (event.request.url.includes('/api/phonepe/initiate-pay') || event.request.url.includes('/api/phonepe/webhook')) {
+  // Strictly bypass all API calls, database JSON, and SSE streams to always ensure fresh real-time sync
+  if (
+    event.request.url.includes('/api/') || 
+    event.request.url.includes('ronpay_db.json')
+  ) {
     return;
   }
 
