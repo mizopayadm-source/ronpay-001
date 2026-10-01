@@ -96,6 +96,44 @@ interface ReportsScreenProps {
   onRefreshCloud?: () => Promise<void> | void;
 }
 
+const MONTH_NAMES_LIST = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december'
+];
+
+export const getTxEffectiveDate = (t: Transaction): string => {
+  // 1. If explicit custom date or date in periodLabel e.g. "(15/01/2026)"
+  if (t.periodLabel) {
+    const dm = t.periodLabel.match(/\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/);
+    if (dm) {
+      return `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`;
+    }
+  }
+
+  // 2. If periodMonth and periodYear are defined (e.g. "January", "2026")
+  const pMonth = t.periodMonth || (t.periodLabel ? t.periodLabel.split(' ')[0] : '');
+  const pYear = t.periodYear || (t.periodLabel ? t.periodLabel.split(' ')[1] : '');
+  if (pMonth && pYear) {
+    const mIdx = MONTH_NAMES_LIST.indexOf(pMonth.toLowerCase().trim());
+    const yNum = parseInt(pYear);
+    if (mIdx !== -1 && !isNaN(yNum) && yNum >= 2020 && yNum <= 2035) {
+      const mm = String(mIdx + 1).padStart(2, '0');
+      let day = '15';
+      if (t.timestamp) {
+        const d = t.timestamp.slice(8, 10);
+        if (parseInt(d) >= 1 && parseInt(d) <= 28) day = d;
+      }
+      return `${yNum}-${mm}-${day}`;
+    }
+  }
+
+  // 3. Fallback to raw date or timestamp
+  if ((t as any).customDate) return String((t as any).customDate).slice(0, 10);
+  if (t.date) return t.date.slice(0, 10);
+  if (t.timestamp) return t.timestamp.slice(0, 10);
+  return '';
+};
+
 export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   transactions,
   campaigns,
@@ -243,10 +281,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         if (t.campaignId !== selectedCampaignId) return false;
       }
 
-      // 4. Date range filter
-      const txDate = (t.timestamp || t.date || '').slice(0, 10);
-      if (startDate && txDate < startDate) return false;
-      if (endDate && txDate > endDate) return false;
+      // 4. Date range filter (checks both effective period date and raw timestamp)
+      const txRawDate = (t.timestamp || t.date || '').slice(0, 10);
+      const txEffectiveDate = getTxEffectiveDate(t);
+      if (startDate) {
+        const matchEff = txEffectiveDate ? txEffectiveDate >= startDate : false;
+        const matchRaw = txRawDate ? txRawDate >= startDate : false;
+        if (!matchEff && !matchRaw) return false;
+      }
+      if (endDate) {
+        const matchEff = txEffectiveDate ? txEffectiveDate <= endDate : false;
+        const matchRaw = txRawDate ? txRawDate <= endDate : false;
+        if (!matchEff && !matchRaw) return false;
+      }
 
       // 5. Search query filter
       if (searchQuery.trim()) {

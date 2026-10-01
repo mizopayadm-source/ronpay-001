@@ -1231,6 +1231,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (paymentMethod === 'phonepe') {
       const merchantTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
 
+      let paymentTimestamp = new Date().toISOString();
+      if (category === 'kumtluang') {
+        if (useCustomDate && selectedCustomDate) {
+          paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
+        } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
+          const mIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+          const yNum = parseInt(selectedYear) || new Date().getFullYear();
+          if (mIdx !== -1) {
+            paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
+          }
+        }
+      }
+
       const pendingTx: Transaction = {
         id: merchantTxnId,
         campaignId: campaign?.id || `cmp-${category}-custom`,
@@ -1250,7 +1263,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         totalAmount: totalPayable,
         paymentMethod: 'phonepe',
         status: 'pending',
-        timestamp: new Date().toISOString(),
+        timestamp: paymentTimestamp,
+        date: paymentTimestamp.slice(0, 10),
         remark: remark.trim() || undefined,
         feeOption: feeBearerOption,
         subCategory: category === 'kumtluang' 
@@ -1390,6 +1404,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setIsProcessing(true);
 
     if (paymentMethod === 'cash') {
+      let paymentTimestamp = new Date().toISOString();
+      if (category === 'kumtluang') {
+        if (useCustomDate && selectedCustomDate) {
+          paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
+        } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
+          const mIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+          const yNum = parseInt(selectedYear) || new Date().getFullYear();
+          if (mIdx !== -1) {
+            paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
+          }
+        }
+      }
+
       // Cash payment
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
@@ -1426,8 +1453,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               : resolvedNumericSubcatAmounts)
           : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
+        periodMonth: category === 'kumtluang' ? selectedMonth : undefined,
+        periodYear: category === 'kumtluang' ? selectedYear : undefined,
         periodLabel: category === 'kumtluang' ? periodLabel : undefined,
-        timestamp: new Date().toISOString(),
+        timestamp: paymentTimestamp,
+        date: paymentTimestamp.slice(0, 10),
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
       };
 

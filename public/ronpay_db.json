@@ -1344,6 +1344,40 @@
   ],
   "transactions": [
     {
+      "platformFee": 0,
+      "periodMonth": "January",
+      "isAnonymous": false,
+      "donorType": "member",
+      "subCategoryBreakdown": {
+        "BMP Fund": 150
+      },
+      "status": "completed",
+      "isDependent": false,
+      "donorVeng": "Shillong Unit",
+      "donorPhone": "8800904259",
+      "feeOption": "ADD_ON",
+      "subCategory": "BMP Fund",
+      "memberId": "BMPSHL-4259",
+      "campaignId": "cmp-1788107291420",
+      "referenceNo": "OM2610012245205496465005",
+      "amount": 150,
+      "periodType": "monthly",
+      "updatedAt": "2026-10-01T17:15:40.180Z",
+      "utr": "UTR205496465005",
+      "donorName": "Eric C Lallawmpuia",
+      "totalAmount": 150,
+      "category": "kumtluang",
+      "periodYear": "2026",
+      "timestamp": "2026-01-15T12:00:00.000Z",
+      "verifiedAt": "2026-10-01T17:15:40.160Z",
+      "campaignNetReceived": 150,
+      "periodLabel": "January 2026",
+      "paymentMethod": "phonepe",
+      "id": "RPAY_TXN_1790874919399_965",
+      "campaignTitle": "BMP Shillong",
+      "date": "2026-01-15"
+    },
+    {
       "campaignNetReceived": 1,
       "amount": 1,
       "platformFee": 0,
@@ -1394,7 +1428,7 @@
       "updatedAt": "2026-09-29T18:06:55.369Z",
       "isAnonymous": false,
       "campaignTitle": "BMP Shillong",
-      "timestamp": "2026-09-29T15:24:37.016Z",
+      "timestamp": "2026-06-20T12:00:00.000Z",
       "periodMonth": "June",
       "periodYear": "2026",
       "verifiedAt": "2026-09-29T15:24:55.019Z",
@@ -1410,7 +1444,8 @@
       "id": "RPAY_TXN_1790695477016_303",
       "donorType": "general",
       "campaignId": "cmp-1788107291420",
-      "totalAmount": 3500
+      "totalAmount": 3500,
+      "date": "2026-06-20"
     },
     {
       "status": "completed",
@@ -1537,7 +1572,7 @@
       "campaignTitle": "Fingmawii Ralna"
     },
     {
-      "timestamp": "2026-09-28T18:31:57.350Z",
+      "timestamp": "2026-07-12T12:00:00.000Z",
       "category": "kumtluang",
       "totalAmount": 650,
       "isAnonymous": false,
@@ -1560,7 +1595,8 @@
       "periodLabel": "July 2026 (12/07/2026)",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 650
-      }
+      },
+      "date": "2026-07-12"
     },
     {
       "status": "pending_verification",
@@ -4362,7 +4398,8 @@
       },
       "periodYear": "2026",
       "id": "RPAY_TXN_1789313344016_974",
-      "timestamp": "2026-09-13T15:29:46.248Z"
+      "timestamp": "2026-08-15T12:00:00.000Z",
+      "date": "2026-08-15"
     },
     {
       "utr": "UTR447515238875",
@@ -6031,10 +6068,11 @@
       "periodLabel": "August 2026",
       "periodMonth": "August",
       "feeOption": "ADD_ON",
-      "timestamp": "2026-09-12T03:56:36.337Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "periodYear": "2026",
       "referenceNo": "OM2609120926385468240888",
-      "amount": 100
+      "amount": 100,
+      "date": "2026-08-15"
     },
     {
       "status": "completed",
@@ -6099,17 +6137,18 @@
       "subCategoryBreakdown": {
         "Chhiatni Fund": 100
       },
-      "timestamp": "2026-09-11T18:12:26.229Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "periodLabel": "August 2026",
       "periodMonth": "August",
       "category": "kumtluang",
-      "feeOption": "ADD_ON"
+      "feeOption": "ADD_ON",
+      "date": "2026-08-15"
     },
     {
       "campaignId": "cmp-kumtluang-2",
       "campaignTitle": "Khatla Presbyterian Kohhran",
       "paymentMethod": "phonepe",
-      "timestamp": "2026-09-11T18:08:59.116Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "subCategoryBreakdown": {
         "Kohhran Hmeichhia": 400,
         "Synod Mission": 300,
@@ -6134,7 +6173,8 @@
       "isDependent": false,
       "totalAmount": 1515,
       "campaignNetReceived": 1500,
-      "status": "completed"
+      "status": "completed",
+      "date": "2026-08-15"
     },
     {
       "paymentMethod": "phonepe",
@@ -6237,7 +6277,7 @@
       "referenceNo": "OM2609112316510738240760",
       "feeOption": "ADD_ON",
       "category": "kumtluang",
-      "timestamp": "2026-09-11T17:47:17.482Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "campaignId": "cmp-1787829303143",
       "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
       "status": "completed",
@@ -6247,7 +6287,8 @@
       "periodYear": "2026",
       "utr": "OM2609112316510738240760",
       "isDependent": false,
-      "totalAmount": 101
+      "totalAmount": 101,
+      "date": "2026-08-15"
     },
     {
       "isDependent": false,
@@ -6551,7 +6592,7 @@
       "txHash": "OM2609111555550848240363",
       "periodMonth": "August",
       "periodLabel": "August 2026",
-      "timestamp": "2026-09-11T10:26:06.349Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "campaignNetReceived": 100,
       "feeOption": "ADD_ON",
       "utr": "OM2609111555550848240363",
@@ -6567,7 +6608,8 @@
       "paymentMethod": "phonepe",
       "category": "kumtluang",
       "subCategory": "BMP Fund",
-      "donorVeng": "Shillong Unit"
+      "donorVeng": "Shillong Unit",
+      "date": "2026-08-15"
     },
     {
       "timestamp": "2026-09-11T10:22:46.585Z",
@@ -7484,7 +7526,7 @@
       "periodType": "monthly",
       "category": "kumtluang",
       "isDependent": false,
-      "timestamp": "2026-09-09T18:10:31.188Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "isAnonymous": true,
       "feeOption": "ADD_ON",
       "totalAmount": 100,
@@ -7503,7 +7545,8 @@
         "BMP Fund": 100
       },
       "subCategory": "BMP Fund",
-      "donorVeng": "Shillong Unit"
+      "donorVeng": "Shillong Unit",
+      "date": "2026-08-15"
     },
     {
       "isAnonymous": true,
@@ -7533,7 +7576,7 @@
       "periodYear": "2026",
       "paymentMethod": "phonepe",
       "totalAmount": 101,
-      "timestamp": "2026-09-09T16:12:30.254Z",
+      "timestamp": "2026-08-15T12:00:00.000Z",
       "isAnonymous": true,
       "isDependent": false,
       "periodType": "monthly",
@@ -7550,7 +7593,8 @@
       "periodLabel": "August 2026",
       "status": "completed",
       "donorName": "Anonymous",
-      "updatedAt": "2026-09-17T08:54:11.945Z"
+      "updatedAt": "2026-09-17T08:54:11.945Z",
+      "date": "2026-08-15"
     },
     {
       "txHash": "UTR781278904179",
@@ -9142,7 +9186,7 @@
       "donorPhone": "7642930562",
       "periodMonth": "January",
       "campaignTitle": "BMP Shillong",
-      "timestamp": "2026-08-31T18:21:49.989Z",
+      "timestamp": "2026-01-15T12:00:00.000Z",
       "amount": 150,
       "periodYear": "2026",
       "subCategoryBreakdown": {
@@ -9153,7 +9197,8 @@
       "isAnonymous": false,
       "totalAmount": 150,
       "campaignId": "cmp-1788107291420",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "date": "2026-01-15"
     },
     {
       "id": "RPAY-589803",
@@ -9173,7 +9218,7 @@
       "status": "completed",
       "campaignId": "cmp-1788107291420",
       "amount": 300,
-      "timestamp": "2026-08-31T18:15:26.267Z",
+      "timestamp": "2026-02-15T12:00:00.000Z",
       "paymentMethod": "online",
       "campaignTitle": "BMP Shillong",
       "memberId": "BMPSHL-8526",
@@ -9181,7 +9226,8 @@
       "periodMonth": "February",
       "category": "kumtluang",
       "periodYear": "2026",
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "date": "2026-02-15"
     },
     {
       "periodType": "monthly",
@@ -9323,7 +9369,7 @@
     },
     {
       "id": "RPAY-CASH-644510",
-      "timestamp": "2026-08-31T00:00:00.000Z",
+      "timestamp": "2026-02-15T12:00:00.000Z",
       "platformFee": 0,
       "periodType": "monthly",
       "status": "SUCCESS",
@@ -9347,7 +9393,8 @@
       "campaignTitle": "BMP Shillong",
       "memberId": "BMPSHL-7128",
       "totalAmount": 150,
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "date": "2026-02-15"
     },
     {
       "paymentMethod": "cash",
@@ -9374,8 +9421,9 @@
       "donorPhone": "7128",
       "category": "kumtluang",
       "totalAmount": 150,
-      "timestamp": "2026-08-31T00:00:00.000Z",
-      "subCategory": "BMP Fund"
+      "timestamp": "2026-01-15T12:00:00.000Z",
+      "subCategory": "BMP Fund",
+      "date": "2026-01-15"
     },
     {
       "periodLabel": "March 2026",
@@ -9398,12 +9446,13 @@
       "isDependent": false,
       "subCategory": "BMP Fund",
       "id": "RPAY-CASH-492262",
-      "timestamp": "2026-08-31T00:00:00.000Z",
+      "timestamp": "2026-03-15T12:00:00.000Z",
       "campaignId": "cmp-1788107291420",
       "subCategoryBreakdown": {
         "BMP Fund": 150
       },
-      "txHash": "CASH5ZLHEU12"
+      "txHash": "CASH5ZLHEU12",
+      "date": "2026-03-15"
     },
     {
       "campaignId": "cmp-1788107291420",
@@ -9423,7 +9472,7 @@
       "periodMonth": "January",
       "periodLabel": "January 2026",
       "periodType": "monthly",
-      "timestamp": "2026-08-31T00:00:00.000Z",
+      "timestamp": "2026-01-15T12:00:00.000Z",
       "category": "kumtluang",
       "amount": 150,
       "status": "SUCCESS",
@@ -9431,7 +9480,8 @@
         "BMP Fund": 150
       },
       "platformFee": 0,
-      "subCategory": "BMP Fund"
+      "subCategory": "BMP Fund",
+      "date": "2026-01-15"
     },
     {
       "donorPhone": "8635241253",
@@ -10997,12 +11047,13 @@
       "periodMonth": "February",
       "paymentMethod": "cash",
       "campaignTitle": "BMP Shillong",
-      "timestamp": "2026-03-22T00:00:00.000Z",
+      "timestamp": "2026-02-15T12:00:00.000Z",
       "category": "kumtluang",
       "memberId": "BMPSHL-2079",
       "periodType": "monthly",
       "platformFee": 5,
-      "donorPhone": "2079"
+      "donorPhone": "2079",
+      "date": "2026-02-15"
     },
     {
       "txHash": "CASH9J7SFAGH",
@@ -14830,5 +14881,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-01T16:46:16.385Z"
+  "lastUpdated": "2026-10-01T17:44:23.952Z"
 }

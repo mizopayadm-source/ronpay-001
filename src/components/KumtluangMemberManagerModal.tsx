@@ -543,6 +543,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const cleanCampTitle = (targetCampaign?.title || 'Kumtluang Bawm').replace(/,+$/, '').trim();
     const txRemark = `${selectedMonth} ${selectedYear} [${selectedCategory}] ${entryRemark ? `- ${entryRemark}` : ''} (ID: ${payerId})`;
 
+    const monthIdx = ALL_MONTH_NAMES_FULL.indexOf(selectedMonth);
+    const yrNum = parseInt(selectedYear) || new Date().getFullYear();
+    const effectiveDateObj = monthIdx !== -1 
+      ? new Date(Date.UTC(yrNum, monthIdx, 15, 12, 0, 0))
+      : new Date();
+    const effectiveIso = effectiveDateObj.toISOString();
+
     const newTx: Transaction = {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       campaignId: targetCampaign?.id || 'cmp-1788107291420',
@@ -556,7 +563,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       amount: amt,
       platformFee: 0,
       totalAmount: amt,
-      timestamp: new Date().toISOString(),
+      timestamp: effectiveIso,
       txHash: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
       status: 'completed',
       paymentMethod: 'cash',
@@ -564,10 +571,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       remark: txRemark,
       isSynced: true,
       createdAt: new Date().toISOString(),
+      date: effectiveIso.slice(0, 10),
       subCategory: selectedCategory,
       subCategoryBreakdown: { [selectedCategory]: amt },
       periodMonth: selectedMonth,
       periodYear: selectedYear,
+      periodLabel: `${selectedMonth} ${selectedYear}`,
       platformFeeBearer: 'org_paid'
     };
 
