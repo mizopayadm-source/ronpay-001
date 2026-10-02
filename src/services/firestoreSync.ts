@@ -466,9 +466,9 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (limit to 25 recent items so all recent donations sync across devices)
+  // 1. Transactions Listener (up to 1000 items so all donations sync seamlessly across devices)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(25));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -496,14 +496,19 @@ function startLeaderFirestoreListeners(): void {
         const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
+        // Remote Firestore transactions are authoritative
         for (const t of cleanRemote) {
           if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
         }
+        // Only keep genuine local transactions created recently (offline transactions)
         for (const t of localTx) {
           if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
             const k = String(t.id).toLowerCase().trim();
             if (!txMap.has(k)) {
-              txMap.set(k, t);
+              const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
+              if (nowMs - tTime < 2 * 3600 * 1000 && !k.startsWith('rpay_txn_')) {
+                txMap.set(k, t);
+              }
             }
           }
         }
@@ -1070,7 +1075,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
   }
 
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(20));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {
@@ -1092,7 +1097,10 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
         if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
           const k = String(t.id).toLowerCase().trim();
           if (!txMap.has(k)) {
-            txMap.set(k, t);
+            const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
+            if (Date.now() - tTime < 2 * 3600 * 1000 && !k.startsWith('rpay_txn_')) {
+              txMap.set(k, t);
+            }
           }
         }
       }

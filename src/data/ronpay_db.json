@@ -584,7 +584,10 @@
       "updatedAt": "2026-10-02T06:02:18.577Z",
       "orgCode": "BMPSHL",
       "subCategories": [
-        "BMP Fund"
+        "BMP Fund",
+        "General Hnathlang",
+        "BMP Meet Contribution",
+        "Bial BMP Rorel Ṭanpuina"
       ],
       "upiId": "mizopay@axl",
       "createdAt": "2026-08-30T16:28:11.420Z",
@@ -626,12 +629,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "reason": "Term inthlak / Annual Office Bearer Handover",
-          "toName": "RC Lalliana (Treasurer)",
-          "fromName": "Super Admin (Master)",
-          "transferredAt": "2026-10-01T15:45:45.524Z",
           "toPhone": "7005153902",
-          "fromPhone": "9862000001"
+          "fromPhone": "9862000001",
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
+          "fromName": "Super Admin (Master)",
+          "toName": "RC Lalliana (Treasurer)"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -640,9 +643,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
-          "phone": "9862000001",
+          "name": "Super Admin (Master)",
           "role": "Outgoing Officer / Co-Manager",
-          "name": "Super Admin (Master)"
+          "phone": "9862000001"
         }
       ],
       "transferredFrom": "9862000001"
@@ -10791,6 +10794,37 @@
       "periodMonth": "March"
     },
     {
+      "id": "RPAY-CASH-426904",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "BMP Meet Contribution (Bial BMP Meet)",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 5200,
+      "platformFee": 0,
+      "totalAmount": 5200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "subCategory": "BMP Meet Contribution",
+      "subCategoryBreakdown": {
+        "BMP Meet Contribution": 5200
+      },
+      "periodMonth": "March",
+      "periodYear": "2026",
+      "periodLabel": "March 2026 (21/03/2026)",
+      "periodType": "monthly",
+      "timestamp": "2026-03-21T12:00:00.000Z",
+      "date": "2026-03-21",
+      "txHash": "UTR277483231718",
+      "utr": "UTR277483231718",
+      "isSynced": true,
+      "createdAt": "2026-10-02T06:03:54.569Z",
+      "updatedAt": "2026-10-02T06:05:00.084Z"
+    },
+    {
       "isAnonymous": false,
       "updatedAt": "2026-10-01T18:02:52.000Z",
       "donorPhone": "2345678999",
@@ -15375,5 +15409,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-02T08:19:14.535Z"
+  "lastUpdated": "2026-10-02T09:32:48.286Z"
 }
