@@ -286,8 +286,12 @@ export default function App() {
         }
       },
       onMembersUpdate: (updatedMembers) => {
-        if (updatedMembers && updatedMembers.length > 0) {
+        if (Array.isArray(updatedMembers)) {
           setMembersState(updatedMembers);
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: updatedMembers }));
+            window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: updatedMembers }));
+          } catch {}
         }
       },
       onCreatorsUpdate: (updatedCreators) => {
@@ -444,7 +448,12 @@ export default function App() {
       } else if (msg.topic === 'creators') {
         setCreators(getStoredCreatorsList());
       } else if (msg.topic === 'members') {
-        setMembersState(getMembers());
+        const freshMembers = getMembers();
+        setMembersState(freshMembers);
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: freshMembers }));
+          window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: freshMembers }));
+        } catch {}
       } else if (msg.topic === 'pricing_config') {
         setPricingConfig(getStoredPricingConfig());
       } else if (msg.topic === 'announcement') {

@@ -2,14 +2,14 @@
 // Ensures external custom domains (ronpay.app, www.ronpay.app), mobile browsers, 
 // and standalone PWAs connect directly to the central Cloud Run server backend.
 
-export const CLOUD_BACKEND_URL = 'https://ais-pre-2vbcpvvtoaq2mvii6bkm5c-593837950298.asia-southeast1.run.app';
+export const CLOUD_BACKEND_URL = 'https://ais-pre-y2fdvwg2x6cpi5iequ7ugj-868993197140.asia-southeast1.run.app';
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
   const hostname = window.location.hostname;
   
-  // If we are already running on Cloud Run, use relative path
-  if (hostname.includes('run.app')) {
+  // If we are already running on Cloud Run or localhost, use relative path
+  if (hostname.includes('run.app') || hostname === 'localhost' || hostname === '127.0.0.1') {
     return '';
   }
   

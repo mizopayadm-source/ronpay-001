@@ -452,6 +452,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [newDependentName, setNewDependentName] = useState<string>('');
   const [newDependentRelation, setNewDependentRelation] = useState<string>('Nupui');
   const [showAddDependentInput, setShowAddDependentInput] = useState<boolean>(false);
+  const [memberSearchResults, setMemberSearchResults] = useState<MemberRecord[]>([]);
 
   // Inline Member Edit State (for updating member details right on checkout screen)
   const [isEditingMember, setIsEditingMember] = useState<boolean>(false);
@@ -572,50 +573,104 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   }, [category, campaign?.id, campaign?.customAmount, initialAmount]);
 
+  const selectMember = (m: MemberRecord) => {
+    setSelectedMember(m);
+    setDonorName(m.name);
+    setDonorPhone(m.fullPhone || (m.phoneLast4 ? `943600${m.phoneLast4}` : ''));
+    setDonorSection(m.section || 'General');
+    setSelectedPayerType('primary');
+    setIsNewMemberMode(false);
+    setMemberSearchResults([]);
+    setPhoneSearchQuery(m.phoneLast4 || m.id);
+  };
+
   const handlePhoneSearch = (query: string) => {
     setPhoneSearchQuery(query);
     const cleanQ = query.trim();
     if (!cleanQ) {
       setSelectedMember(null);
-      setIsNewMemberMode(false);
+      setMemberSearchResults([]);
       return;
     }
     // Search strictly within this campaign's members
     const bawmMembers = campaign?.id ? getMembers(campaign.id) : getMembers();
-    const match = bawmMembers.find(m => 
-      m.phoneLast4 === cleanQ || 
-      (m.fullPhone && m.fullPhone.endsWith(cleanQ)) ||
-      m.id.toLowerCase() === cleanQ.toLowerCase() ||
-      m.name.toLowerCase().includes(cleanQ.toLowerCase()) ||
-      (m.dependents && m.dependents.some(d => d.subId.toLowerCase() === cleanQ.toLowerCase() || d.name.toLowerCase().includes(cleanQ.toLowerCase())))
-    );
 
-    if (match) {
-      setSelectedMember(match);
-      setDonorName(match.name);
-      setDonorPhone(match.fullPhone || '');
-      setDonorSection(match.section || 'Section A');
-      setSelectedPayerType('primary');
-      setIsNewMemberMode(false);
+    // 1. Exact 4-digit phone search (e.g. "1460")
+    if (/^\d{4}$/.test(cleanQ)) {
+      const match = bawmMembers.find(m => m.phoneLast4 === cleanQ || (m.fullPhone && m.fullPhone.endsWith(cleanQ)));
+      if (match) {
+        selectMember(match);
+        return;
+      }
+    }
+
+    // 2. Exact 10-digit phone search (e.g. "9436123456")
+    if (/^\d{10}$/.test(cleanQ)) {
+      const match = bawmMembers.find(m => 
+        (m.fullPhone && m.fullPhone.replace(/\D/g, '') === cleanQ) || 
+        (m.phoneLast4 && cleanQ.endsWith(m.phoneLast4))
+      );
+      if (match) {
+        selectMember(match);
+        return;
+      }
+    }
+
+    // 3. Exact Member ID search (e.g. "BMPSHL-7998" or "EBE-1460")
+    const idMatch = bawmMembers.find(m => m.id.toLowerCase() === cleanQ.toLowerCase());
+    if (idMatch) {
+      selectMember(idMatch);
+      return;
+    }
+
+    // 4. Name or Sub-ID Search: Requires at least 3 characters before matching!
+    if (cleanQ.length >= 3) {
+      const qLower = cleanQ.toLowerCase();
+      const results = bawmMembers.filter(m => 
+        m.name.toLowerCase().includes(qLower) ||
+        (m.id && m.id.toLowerCase().includes(qLower)) ||
+        (m.dependents && m.dependents.some(d => d.name.toLowerCase().includes(qLower) || d.subId.toLowerCase().includes(qLower)))
+      );
+
+      // If exact 1 match on exact full name AND only 1 result: auto select
+      const exactNameMatch = results.find(m => m.name.toLowerCase().trim() === qLower);
+      if (exactNameMatch && results.length === 1) {
+        selectMember(exactNameMatch);
+      } else {
+        setSelectedMember(null);
+        setMemberSearchResults(results.slice(0, 8));
+      }
     } else {
       setSelectedMember(null);
-      if (cleanQ.length >= 2) {
-        setIsNewMemberMode(true);
-        if (/^\d+$/.test(cleanQ)) {
-          setNewRegPhone(cleanQ.length === 10 ? cleanQ : `943600${cleanQ}`);
-        }
-      }
+      setMemberSearchResults([]);
     }
   };
 
   const handleQuickRegisterSubmit = (e?: React.FormEvent): MemberRecord | null => {
     if (e) e.preventDefault();
-    if (!newRegName.trim()) {
-      alert('Khawngaihin Member Hming chhu lut rawh le.');
+    const cleanName = newRegName.trim();
+    if (!cleanName || cleanName.length < 3) {
+      alert('⚠️ Khawngaihin Member Hming pum (characters 3 aia tlem lo) chhu lut rawh le.');
       return null;
     }
     const cleanPhone = newRegPhone.replace(/\D/g, '');
-    const phoneLast4 = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : Math.floor(1000 + Math.random() * 9000).toString();
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      alert('⚠️ Khawngaihin Phone number dik tak (digits 10) chhu lut rawh le (e.g. 9436123456).');
+      return null;
+    }
+
+    const bawmMembers = campaign?.id ? getMembers(campaign.id) : getMembers();
+    const existing = bawmMembers.find(m => 
+      (m.fullPhone && m.fullPhone.replace(/\D/g, '') === cleanPhone) ||
+      (m.name.toLowerCase().trim() === cleanName.toLowerCase() && m.phoneLast4 === cleanPhone.slice(-4))
+    );
+    if (existing) {
+      alert(`He phone number (${cleanPhone}) hi "${existing.name}" (${existing.id}) hmingin a lo awm tawh e. Member a thlan nghal a ni e.`);
+      selectMember(existing);
+      return existing;
+    }
+
+    const phoneLast4 = cleanPhone.slice(-4);
     const orgCode = campaign?.orgCode || deriveOrgCode(campaign?.orgName, campaign?.title);
     const newId = `${orgCode}-${phoneLast4}`;
 
@@ -626,10 +681,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     const newMember: MemberRecord = {
       id: newId,
       campaignId: campaign?.id,
-      name: newRegName.trim(),
+      name: cleanName,
       orgCode: orgCode,
       phoneLast4: phoneLast4,
-      fullPhone: cleanPhone || (phoneLast4.length === 10 ? phoneLast4 : `943600${phoneLast4}`),
+      fullPhone: cleanPhone,
       section: sectionToUse,
       isFamilyHead: true,
       dependents: [],
@@ -637,14 +692,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     };
 
     addOrUpdateMember(newMember);
-    setSelectedMember(newMember);
-    setDonorName(newMember.name);
-    setDonorPhone(newMember.fullPhone || '');
-    setDonorSection(newMember.section || 'General');
-    setPhoneSearchQuery(phoneLast4);
-    setSelectedPayerType('primary');
-    setIsNewMemberMode(false);
+    selectMember(newMember);
     setNewRegName('');
+    setNewRegPhone('');
+    setIsNewMemberMode(false);
     return newMember;
   };
 
@@ -1110,7 +1161,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         } else {
           resolvedDonorType = 'member';
           let activeMember = selectedMember;
-          if (!activeMember && newRegName.trim()) {
+          if (!activeMember && isNewMemberMode && newRegName.trim().length >= 3 && newRegPhone.replace(/\D/g, '').length === 10) {
             activeMember = handleQuickRegisterSubmit();
           }
           if (activeMember) {
@@ -1210,13 +1261,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         } else {
           // Member mode
           let activeMember = selectedMember;
-          if (!activeMember && newRegName.trim()) {
+          if (!activeMember && isNewMemberMode && newRegName.trim().length >= 3 && newRegPhone.replace(/\D/g, '').length === 10) {
             activeMember = handleQuickRegisterSubmit();
           }
-          if (!activeMember && !resolvedDonorName) {
-            setIsNewMemberMode(true);
-            alert('⚠️ Kumtluang Bawm-ah hian Petu Hming leh Phone Number ziah luh ngei ngei tur a ni (emaw I Member ID/Phone zawng rawh le).\n\nHming thup i duh a nih chuan chung lama "Hming thup" checkbox kha tick rawh.');
-            return;
+          if (!activeMember) {
+            if (isNewMemberMode) {
+              alert('⚠️ Member ID la nei lo i nih chuan khawngaihin Hming pum (characters 3 aia tlem lo) leh Phone Number (digit 10) chhu lut la, "ID Siam & Hemi Page-ah Lut Nghal" tih kha hmet hmasa rawh le.');
+              return;
+            }
+            if (!resolvedDonorName) {
+              setIsNewMemberMode(true);
+              alert('⚠️ Kumtluang Bawm-ah hian Petu Hming leh Phone Number ziah luh ngei ngei tur a ni (emaw I Member ID/Phone zawng rawh le).\n\nHming thup i duh a nih chuan chung lama "Hming thup" checkbox kha tick rawh.');
+              return;
+            }
           }
         }
       }
@@ -2137,6 +2194,67 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Member Search Results Dropdown/List */}
+                {!selectedMember && memberSearchResults.length > 0 && (
+                  <div className="bg-white border-2 border-blue-300 rounded-2xl p-2 space-y-1.5 shadow-md max-h-56 overflow-y-auto animate-fadeIn mt-1.5">
+                    <div className="text-[10px] font-bold text-slate-500 px-1.5 flex items-center justify-between">
+                      <span>Zawn hmuh Member ({memberSearchResults.length}):</span>
+                      <span className="text-[9px] text-blue-600 font-semibold">I hming thlang rawh le</span>
+                    </div>
+                    {memberSearchResults.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => selectMember(m)}
+                        className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 transition flex items-center justify-between cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+                            {m.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-black text-slate-900 truncate flex items-center gap-1.5">
+                              <span>{m.name}</span>
+                              <span className="font-mono text-[9.5px] bg-blue-100 text-blue-800 px-1 rounded font-bold">
+                                {m.id}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate font-medium">
+                              {m.section || 'General'} • Ph: {m.fullPhone || m.phoneLast4}
+                            </div>
+                          </div>
+                        </div>
+                        <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Explicit prompt when search query is entered (>= 3 chars) but no member found */}
+                {!selectedMember && !isNewMemberMode && phoneSearchQuery.trim().length >= 3 && memberSearchResults.length === 0 && (
+                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 animate-fadeIn mt-1.5">
+                    <div className="text-xs text-amber-900 font-semibold">
+                      <span>"{phoneSearchQuery}" hming/ID-in Member hmuh a ni lo.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNewMemberMode(true);
+                        if (!/^\d+$/.test(phoneSearchQuery.trim())) {
+                          setNewRegName(phoneSearchQuery.trim());
+                          setDonorName(phoneSearchQuery.trim());
+                        } else if (phoneSearchQuery.trim().length <= 10) {
+                          setNewRegPhone(phoneSearchQuery.trim());
+                          setDonorPhone(phoneSearchQuery.trim());
+                        }
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> ID la nei lo tan Inziak Lut Rawh
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* 2. When Member is FOUND: Show Verified Card + Dual User / Dependent Selector */}
@@ -2439,21 +2557,32 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     )}
                   </div>
                 </div>
-              ) : isNewMemberMode || phoneSearchQuery.length >= 2 ? (
-                /* 3. When Member is NOT Found / ID la nei lo tan: Auto Instant Registration */
-                <div className="bg-amber-50/70 border border-amber-300/80 p-3.5 rounded-2xl space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1 bg-amber-500 text-white rounded-lg">
-                      <UserPlus className="w-3.5 h-3.5" />
-                    </span>
-                    <div>
-                      <h5 className="text-xs font-black text-amber-950">
-                        ID la nei lo tan (Instant Auto-Registration)
-                      </h5>
-                      <p className="text-[10px] text-amber-800 font-medium">
-                        I hming leh phone i ziah zawh veleh Member ID auto-siam a ni ang a, hemi page-ah hian i lut nghal ang.
-                      </p>
+              ) : isNewMemberMode ? (
+                /* 3. When Member is NOT Found / ID la nei lo tan: Registration Form */
+                <div className="bg-amber-50/70 border border-amber-300/80 p-3.5 rounded-2xl space-y-2.5 animate-fadeIn">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 bg-amber-500 text-white rounded-lg">
+                        <UserPlus className="w-3.5 h-3.5" />
+                      </span>
+                      <div>
+                        <h5 className="text-xs font-black text-amber-950">
+                          ID la nei lo tan Inziahluhna (New Member Registration)
+                        </h5>
+                        <p className="text-[10px] text-amber-800 font-medium">
+                          I Hming leh Phone Number chhu lut la, Member ID siamin hemi page-ah hian i lut nghal ang.
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNewMemberMode(false);
+                      }}
+                      className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition shrink-0 cursor-pointer"
+                    >
+                      Cancel / Let Rawh
+                    </button>
                   </div>
 
                   <div className="space-y-2 pt-1">
@@ -2464,6 +2593,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       <input
                         type="text"
                         value={newRegName}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.preventDefault();
+                        }}
                         onChange={(e) => {
                           setNewRegName(e.target.value);
                           setDonorName(e.target.value);
@@ -2471,6 +2603,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                         placeholder="e.g. Vanlalruati / C. Lalhmangaiha"
                         className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
                       />
+                      {newRegName.trim().length > 0 && newRegName.trim().length < 3 && (
+                        <p className="text-[9.5px] text-amber-600 font-semibold mt-0.5">
+                          Khawngaihin Hming pum (characters 3 aia tlem lo) chhu lut rawh le.
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -2482,13 +2619,22 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                           type="tel"
                           maxLength={10}
                           value={newRegPhone}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.preventDefault();
+                          }}
                           onChange={(e) => {
-                            setNewRegPhone(e.target.value);
-                            setDonorPhone(e.target.value);
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setNewRegPhone(val);
+                            setDonorPhone(val);
                           }}
                           placeholder="e.g. 9436123456"
                           className="w-full bg-white border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 transition"
                         />
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className={`text-[9.5px] font-medium ${newRegPhone.replace(/\D/g, '').length === 10 ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+                            {newRegPhone.replace(/\D/g, '').length === 10 ? '✅ Digit 10 a tling e' : `Digit: ${newRegPhone.replace(/\D/g, '').length}/10`}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
@@ -2528,6 +2674,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                         <input
                           type="text"
                           value={customSectionText}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.preventDefault();
+                          }}
                           onChange={(e) => {
                             setCustomSectionText(e.target.value);
                             setDonorSection(e.target.value);
@@ -2538,11 +2687,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       </div>
                     )}
 
-                    {newRegPhone.length >= 4 && (
+                    {newRegPhone.replace(/\D/g, '').length === 10 && (
                       <div className="text-[10px] font-bold text-blue-900 bg-blue-100/70 p-2 rounded-lg flex items-center justify-between border border-blue-200">
                         <span>I Member ID Tur:</span>
                         <span className="font-black text-blue-700 font-mono text-xs">
-                          {deriveOrgCode(campaign?.orgName, campaign?.title)}-{newRegPhone.slice(-4)}
+                          {deriveOrgCode(campaign?.orgName, campaign?.title)}-{newRegPhone.replace(/\D/g, '').slice(-4)}
                         </span>
                       </div>
                     )}
@@ -2550,8 +2699,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => handleQuickRegisterSubmit()}
-                      disabled={!newRegName.trim() || newRegPhone.length < 4}
-                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      disabled={newRegName.trim().length < 3 || newRegPhone.replace(/\D/g, '').length !== 10}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                       <span>ID Siam & Hemi Page-ah Lut Nghal</span>

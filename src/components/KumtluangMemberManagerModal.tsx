@@ -355,10 +355,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
 
-  // Fetch fresh members on demand when Kumtluang modal opens (eliminates 24/7 background listener reads)
+  // Fetch fresh members on demand when Kumtluang modal opens (force fresh state)
   useEffect(() => {
     if (isOpen) {
-      fetchMembersFromFirestore().catch(() => {});
+      fetchMembersFromFirestore(undefined, true).catch(() => {});
     }
   }, [isOpen]);
 
@@ -372,14 +372,32 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
 
     window.addEventListener('ronpay-members-updated', handleRemoteMembersUpdate);
+    window.addEventListener('ronpay_members_updated', handleRemoteMembersUpdate);
     window.addEventListener('ronpay-campaigns-updated', handleRemoteMembersUpdate);
+    window.addEventListener('ronpay_campaigns_updated', handleRemoteMembersUpdate);
+    window.addEventListener('ronpay_state_sync_event', handleRemoteMembersUpdate);
     window.addEventListener('storage', handleRemoteMembersUpdate);
 
     return () => {
       window.removeEventListener('ronpay-members-updated', handleRemoteMembersUpdate);
+      window.removeEventListener('ronpay_members_updated', handleRemoteMembersUpdate);
       window.removeEventListener('ronpay-campaigns-updated', handleRemoteMembersUpdate);
+      window.removeEventListener('ronpay_campaigns_updated', handleRemoteMembersUpdate);
+      window.removeEventListener('ronpay_state_sync_event', handleRemoteMembersUpdate);
       window.removeEventListener('storage', handleRemoteMembersUpdate);
     };
+  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
+
+  // Polling heartbeat while modal is open: guarantees instant multi-device alignment
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      if (selectedCampaignId) {
+        const refreshed = getScopedMembersForView(selectedCampaignId);
+        setMembers(refreshed);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
   }, [isOpen, selectedCampaignId, getScopedMembersForView]);
 
   // When selectedCampaignId changes, reload scoped members
@@ -654,8 +672,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const handleRegisterMember = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHming.trim()) {
-      alert(language === 'english' ? 'Please enter member name' : 'Member hming chhu lut rawh');
+    if (!newHming.trim() || newHming.trim().length < 3) {
+      alert(language === 'english' ? 'Please enter member full name (at least 3 characters)' : 'Member hming pum (characters 3 aia tlem lo) chhu lut rawh le');
       return;
     }
     if (!newPhone4 || newPhone4.length < 4) {
@@ -884,8 +902,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const handleDeleteMember = (memberId: string, memberName: string) => {
     if (window.confirm(`Member "${memberName}" (${memberId}) hi hlumhlut takin paih (delete permanently) i chiang em?`)) {
       deleteMember(memberId, selectedCampaignId);
-      const updated = getMembers(selectedCampaignId);
-      setMembers(updated);
+      // Instant optimistic UI update
+      setMembers(prev => prev.filter(m => m.id !== memberId));
       if (selectedMember?.id === memberId) {
         setSelectedMember(null);
       }
@@ -1389,7 +1407,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       );
                     })}
 
-                    {quickPhone4 && searchResults.length === 0 && (
+                    {quickPhone4.trim().length >= 3 && searchResults.length === 0 && (
                       <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2">
                         <p className="text-xs text-amber-800 font-bold">He Phone / Hming hi Roll-ah a la awm lo</p>
                         <button

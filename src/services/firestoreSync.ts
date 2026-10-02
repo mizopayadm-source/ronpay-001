@@ -27,7 +27,7 @@ import {
   DEFAULT_PRICING_CONFIG, 
   INITIAL_REGISTERED_CREATORS 
 } from '../data/initialData';
-import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT, getDeletedCampaignIds } from '../utils/storage';
+import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT, getDeletedCampaignIds, getDeletedMemberIds, markMemberAsDeleted, getMembers } from '../utils/storage';
 
 export type FirestoreConnectionStatus = 'connecting' | 'connected' | 'offline' | 'error';
 
@@ -360,8 +360,8 @@ let lastMembersFetchTime = 0;
 let membersFetchPromise: Promise<MemberRecord[]> | null = null;
 
 /**
- * On-demand fetch of Kumtluang members from Firestore with 10-minute caching.
- * Eliminates 24/7 background listener reads and prevents read spam when toggling modals.
+ * On-demand fetch of Kumtluang members from Firestore with tombstone synchronization.
+ * Immediately purges any deleted members and syncs fresh member state across devices.
  */
 export async function fetchMembersFromFirestore(campaignId?: string, force: boolean = false): Promise<MemberRecord[]> {
   const localMembers = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', INITIAL_DEFAULT_MEMBERS);
@@ -370,8 +370,8 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
   }
 
   const now = Date.now();
-  // 10-minute cache: Do not read Firestore again if fetched in the last 10 minutes unless forced
-  if (!force && now - lastMembersFetchTime < 10 * 60 * 1000 && localMembers.length > 0) {
+  // 5-second cache: Do not read Firestore again if fetched in the last 5 seconds unless forced
+  if (!force && now - lastMembersFetchTime < 5 * 1000 && localMembers.length > 0) {
     return localMembers;
   }
 
@@ -381,25 +381,60 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
 
   membersFetchPromise = (async () => {
     try {
-      const memQuery = query(collection(db, 'members'), limit(100));
+      // 1. Fetch deleted members tombstones from Firestore
+      try {
+        const delSnap = await getDocs(query(collection(db, 'deleted_members'), limit(500)));
+        delSnap.forEach(docSnap => {
+          const dId = docSnap.id || docSnap.data()?.id;
+          if (dId) {
+            markMemberAsDeleted(dId);
+          }
+        });
+      } catch {}
+
+      const deletedMemIds = getDeletedMemberIds();
+
+      // 2. Fetch current active members collection
+      const memQuery = query(collection(db, 'members'), limit(500));
       const snapshot = await getDocs(memQuery);
       const remoteMembers: MemberRecord[] = [];
       snapshot.forEach(docSnap => {
         const data = docSnap.data() as MemberRecord;
         if (data && data.id) {
-          remoteMembers.push(data);
+          const cleanId = String(data.id).toLowerCase().trim();
+          if (!deletedMemIds.has(cleanId)) {
+            remoteMembers.push(data);
+          }
         }
       });
       lastMembersFetchTime = Date.now();
-      if (remoteMembers.length > 0) {
-        const merged = smartMerge(localMembers, remoteMembers, 'id');
-        setLocalJson('ronpay_kumtluang_members_v1', merged);
-        broadcast('onMembersUpdate', merged);
-        try {
-          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
-        } catch {}
-        return merged;
+
+      // 3. Clean local members of any tombstones and merge
+      const cleanLocal = (localMembers || []).filter(m => m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+      const memMap = new Map<string, MemberRecord>();
+      for (const m of cleanLocal) {
+        memMap.set(String(m.id).toLowerCase().trim(), m);
       }
+      for (const rm of remoteMembers) {
+        const k = String(rm.id).toLowerCase().trim();
+        const existing = memMap.get(k);
+        if (!existing) {
+          memMap.set(k, rm);
+        } else {
+          const localTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const remoteTime = new Date(rm.updatedAt || rm.createdAt || 0).getTime();
+          memMap.set(k, remoteTime >= localTime ? { ...existing, ...rm } : { ...rm, ...existing });
+        }
+      }
+
+      const merged = Array.from(memMap.values());
+      setLocalJson('ronpay_kumtluang_members_v1', merged);
+      broadcast('onMembersUpdate', merged);
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
+        window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: merged }));
+      } catch {}
+      return merged;
     } catch (err) {
       logFirestoreNetworkNote('Fetch members on-demand', err);
     } finally {
@@ -625,6 +660,119 @@ function startLeaderFirestoreListeners(): void {
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
+  // 3. Kumtluang Members Real-Time Listener (instantly receives member additions, edits, and deletions)
+  try {
+    const handleMembersSnapshot = (snapshot: any) => {
+      updateStatus('connected');
+      const deletedMemIds = getDeletedMemberIds();
+
+      // Check document removals in Firestore snapshot
+      if (snapshot.docChanges) {
+        snapshot.docChanges().forEach((change: any) => {
+          if (change.type === 'removed') {
+            const removedId = change.doc.id || change.doc.data()?.id;
+            if (removedId) {
+              markMemberAsDeleted(removedId);
+              deletedMemIds.add(String(removedId).toLowerCase().trim());
+            }
+          }
+        });
+      }
+
+      const remoteMembers: MemberRecord[] = [];
+      snapshot.forEach((docSnap: any) => {
+        const data = docSnap.data() as MemberRecord;
+        if (data && data.id) {
+          const cleanId = String(data.id).toLowerCase().trim();
+          if (!deletedMemIds.has(cleanId)) {
+            remoteMembers.push(data);
+          }
+        }
+      });
+
+      const localMembers = getMembers('all');
+      const memMap = new Map<string, MemberRecord>();
+      
+      // Seed with clean local members
+      for (const m of localMembers) {
+        if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
+          memMap.set(String(m.id).toLowerCase().trim(), m);
+        }
+      }
+
+      // Merge remote members
+      for (const rm of remoteMembers) {
+        if (rm && rm.id && !deletedMemIds.has(String(rm.id).toLowerCase().trim())) {
+          const k = String(rm.id).toLowerCase().trim();
+          const existing = memMap.get(k);
+          if (!existing) {
+            memMap.set(k, rm);
+          } else {
+            const localTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+            const remoteTime = new Date(rm.updatedAt || rm.createdAt || 0).getTime();
+            memMap.set(k, remoteTime >= localTime ? { ...existing, ...rm } : { ...rm, ...existing });
+          }
+        }
+      }
+
+      const merged = Array.from(memMap.values());
+      setLocalJson('ronpay_kumtluang_members_v1', merged);
+      broadcast('onMembersUpdate', merged);
+
+      if (coordinatorChannel) {
+        try {
+          coordinatorChannel.postMessage({ type: 'sync_update', channel: 'members', payload: merged });
+        } catch {}
+      }
+
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: merged }));
+        window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: merged }));
+      } catch {}
+    };
+
+    const memQuery = query(collection(db, 'members'), limit(500));
+    const unsubMem = onSnapshot(memQuery, handleMembersSnapshot, (error) => {
+      logFirestoreNetworkNote('Members listener note', error);
+    });
+    newUnsubscribers.push(unsubMem);
+  } catch (err) {
+    logFirestoreNetworkNote('Attach members listener', err);
+  }
+
+  // 4. Deleted Members Tombstone Listener (purges deleted members on all devices in real-time)
+  try {
+    const handleDeletedMembersSnapshot = (snapshot: any) => {
+      let anyDeleted = false;
+      snapshot.forEach((docSnap: any) => {
+        const delId = docSnap.id || docSnap.data()?.id;
+        if (delId) {
+          const clean = String(delId).toLowerCase().trim();
+          markMemberAsDeleted(clean);
+          anyDeleted = true;
+        }
+      });
+      if (anyDeleted) {
+        const deletedMemIds = getDeletedMemberIds();
+        const currentLocal = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', []);
+        const filtered = currentLocal.filter(m => m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+        setLocalJson('ronpay_kumtluang_members_v1', filtered);
+        broadcast('onMembersUpdate', filtered);
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: filtered }));
+          window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: filtered }));
+        } catch {}
+      }
+    };
+    const delMemQuery = query(collection(db, 'deleted_members'), limit(200));
+    const unsubDelMembers = onSnapshot(delMemQuery, handleDeletedMembersSnapshot, (error) => {
+      logFirestoreNetworkNote('Deleted members listener note', error);
+    });
+    newUnsubscribers.push(unsubDelMembers);
+  } catch (err) {
+    logFirestoreNetworkNote('Attach deleted members listener', err);
+  }
+
   activeFirestoreUnsubscribers = newUnsubscribers;
 }
 
@@ -832,6 +980,15 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
     await deleteDoc(docRef);
   } catch (err) {
     logFirestoreNetworkNote('Delete member', err);
+  }
+  try {
+    const tombRef = doc(db, 'deleted_members', cleanId.toLowerCase());
+    await setDoc(tombRef, {
+      id: cleanId,
+      deletedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    logFirestoreNetworkNote('Set deleted_members tombstone', err);
   }
 }
 

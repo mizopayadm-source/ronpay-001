@@ -92,11 +92,26 @@ export const markMemberAsDeleted = (memberId: string): void => {
   try {
     const clean = String(memberId).toLowerCase().trim();
     const set = getDeletedMemberIds();
-    if (set.has(clean)) return;
     set.add(clean);
     const arr = Array.from(set).slice(-1000);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(DELETED_MEMBER_IDS_KEY, JSON.stringify(arr));
+      try {
+        const rawMems = localStorage.getItem(MEMBERS_LIST_KEY);
+        if (rawMems) {
+          const parsed = JSON.parse(rawMems);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(m => m && m.id && String(m.id).toLowerCase().trim() !== clean);
+            if (filtered.length !== parsed.length) {
+              localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(filtered));
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: filtered }));
+                window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: filtered }));
+              }
+            }
+          }
+        }
+      } catch {}
     }
   } catch (e) {}
 };

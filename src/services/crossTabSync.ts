@@ -110,6 +110,25 @@ function handleIncomingMessage(rawEventData: any) {
     return;
   }
 
+  // Cross-tab member deletion tombstone processing
+  if (normalizedMessage.topic === 'members') {
+    import('../utils/storage').then(({ markMemberAsDeleted }) => {
+      if (normalizedMessage.data?.deletedId) {
+        markMemberAsDeleted(normalizedMessage.data.deletedId);
+      }
+      if (Array.isArray(normalizedMessage.data?.deletedIds)) {
+        normalizedMessage.data.deletedIds.forEach((id: string) => markMemberAsDeleted(id));
+      }
+    }).catch(() => {});
+  }
+
+  // Dispatch custom local events on the receiving tab so open modals & components update instantly
+  try {
+    window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: normalizedMessage }));
+    window.dispatchEvent(new CustomEvent(`ronpay_${normalizedMessage.topic}_updated`, { detail: normalizedMessage.data }));
+    window.dispatchEvent(new CustomEvent(`ronpay-${normalizedMessage.topic.replace('_', '-')}-updated`, { detail: normalizedMessage.data }));
+  } catch (e) {}
+
   // Dispatch to all registered subscribers
   subscribers.forEach(listener => {
     try {
