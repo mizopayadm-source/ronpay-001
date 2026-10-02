@@ -4484,6 +4484,49 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
   return Array.from(map.values());
 }
 
+function reconcileAndDeduplicateTransactions(transactionsList: any[], serverDelTxSet: Set<string>): any[] {
+  const result: any[] = [];
+  const seenMemberPeriod = new Map<string, number>();
+
+  for (const t of transactionsList) {
+    if (!t || !t.id) continue;
+    const cleanId = String(t.id).toLowerCase().trim();
+    if (serverDelTxSet.has(cleanId)) continue;
+    const amt = Number(t.amount);
+    if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
+
+    const period = (t.periodMonth || t.periodLabel || '').toLowerCase().trim();
+    const donor = (t.donorName || t.memberId || '').toLowerCase().trim();
+    const camp = String(t.campaignId || '').toLowerCase().trim();
+    const cat = String(t.subCategory || 'bmp fund').toLowerCase().trim();
+    const isManual = (t.paymentMethod || '').toLowerCase() === 'cash' || cleanId.startsWith('tx-manual') || cleanId.startsWith('rpay-cash');
+
+    if (donor && period && isManual) {
+      const key = `${camp}::${donor}::${period}::${cat}`;
+      if (seenMemberPeriod.has(key)) {
+        const existingIdx = seenMemberPeriod.get(key)!;
+        const existing = result[existingIdx];
+        const existingTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+        const incomingTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+        if (incomingTime >= existingTime) {
+          result[existingIdx] = {
+            ...existing,
+            ...t,
+            id: existing.id
+          };
+        }
+        continue;
+      } else {
+        seenMemberPeriod.set(key, result.length);
+        result.push(t);
+      }
+    } else {
+      result.push(t);
+    }
+  }
+  return result;
+}
+
 // GET /api/data/events - Real-time Server-Sent Events (SSE) stream for instant multi-window & cross-device sync
 app.get('/api/data/events', (req: Request, res: Response) => {
   res.writeHead(200, {
@@ -4623,7 +4666,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
         return true;
       });
-      db.transactions = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);
+      const merged = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);
+      db.transactions = reconcileAndDeduplicateTransactions(merged, serverDelTxSet);
       (db.transactions || []).forEach((t: any) => {
         const isBmp = t.campaignId === 'cmp-1788107291420' ||
                       String(t.campaignTitle || '').toLowerCase().includes('bmp') ||
@@ -4954,7 +4998,9 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       }
     }
 
-    db.transactions = mergeCollections(db.transactions, [tx], 'id');
+    const merged = mergeCollections(db.transactions, [tx], 'id');
+    const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+    db.transactions = reconcileAndDeduplicateTransactions(merged, delSet);
     saveDatabase(db);
     res.json({ success: true, transaction: tx, data: db });
   } catch (err: any) {

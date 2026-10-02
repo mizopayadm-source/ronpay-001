@@ -842,7 +842,23 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
-export const PERMANENTLY_PURGED_TX_IDS = new Set(['rpay_txn_1790753980087_908']);
+export const PERMANENTLY_PURGED_TX_IDS = new Set([
+  'rpay_txn_1790753980087_908',
+  'tx-manual-1790888181260-628',
+  'tx-manual-1790888224928-5',
+  'tx-manual-1790888268953-440',
+  'tx-manual-1790888425532-253',
+  'tx-manual-1790888513362-65',
+  'tx-manual-1790887619584-483',
+  'tx-manual-1790887692663-523',
+  'tx-manual-1790887914629-551',
+  'tx-manual-1790888034425-369',
+  'tx-manual-1790887450167-879',
+  'tx-manual-1790887177103-526',
+  'tx-manual-1790887107422-42',
+  'tx-manual-1790886883155-450',
+  'rpay_txn_1790875972483_197'
+]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
   const result = new Set<string>(PERMANENTLY_PURGED_TX_IDS);

@@ -138,6 +138,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
 
+      const deletedTxSet = getDeletedTransactionIds();
+      const unsyncedTransactions = localTransactions.filter(t => 
+        t && t.id && !deletedTxSet.has(String(t.id).toLowerCase().trim()) && (t.isSynced === false || (t as any).isOfflinePending)
+      );
+
       const response = await fetch('/api/data/sync', {
         method: 'POST',
         headers: {
@@ -149,8 +154,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           deletedCampaignIds: Array.from(getDeletedCampaignIds()),
           members: localMembers,
           deletedMemberIds: Array.from(getDeletedMemberIds()),
-          transactions: localTransactions,
-          deletedTransactionIds: Array.from(getDeletedTransactionIds()),
+          transactions: unsyncedTransactions,
+          deletedTransactionIds: Array.from(deletedTxSet),
           creators: localCreators,
           pricingConfig: localPricingConfig,
           announcement: localAnnouncement,

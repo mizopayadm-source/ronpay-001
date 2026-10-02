@@ -550,11 +550,33 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       : new Date();
     const effectiveIso = effectiveDateObj.toISOString();
 
-    const newTx: Transaction = {
+    // Check if an existing manual/cash transaction exists for this member, campaign, category, and month/year period
+    const existingTx = transactions.find(t => {
+      if (!t) return false;
+      const isSameMember = (t.memberId && t.memberId === payerId) || 
+                           (t.donorName && t.donorName.trim().toLowerCase() === payerName.trim().toLowerCase());
+      const isSameCampaign = t.campaignId === (targetCampaign?.id || 'cmp-1788107291420');
+      const isSameCategory = (t.subCategory || 'BMP Fund').toLowerCase() === selectedCategory.toLowerCase();
+      const isSamePeriod = (t.periodMonth && t.periodMonth.toLowerCase() === selectedMonth.toLowerCase()) ||
+                           (t.periodLabel && t.periodLabel.toLowerCase().includes(selectedMonth.toLowerCase()));
+      const isManual = (t.paymentMethod || '').toLowerCase() === 'cash' || String(t.id).startsWith('TX-MANUAL') || String(t.id).startsWith('RPAY-CASH');
+      return isSameMember && isSameCampaign && isSameCategory && isSamePeriod && isManual;
+    });
+
+    const txToSave: Transaction = existingTx ? {
+      ...existingTx,
+      amount: amt,
+      totalAmount: amt,
+      subCategoryBreakdown: { [selectedCategory]: amt },
+      updatedAt: new Date().toISOString(),
+      remark: txRemark,
+      status: 'completed'
+    } : {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       campaignId: targetCampaign?.id || 'cmp-1788107291420',
       campaignTitle: cleanCampTitle,
       category: 'kumtluang',
+      memberId: payerId,
       donorName: payerName,
       donorType: 'member',
       donorPhone: selectedMember.fullPhone || `****${selectedMember.phoneLast4}`,
@@ -581,7 +603,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       platformFeeBearer: 'org_paid'
     };
 
-    saveTransaction(newTx);
+    saveTransaction(txToSave);
     setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin record fel a ni ta!`);
     onDataUpdated();
     setTimeout(() => {
@@ -794,7 +816,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
     setEditingMember(null);
     onDataUpdated();
-    alert(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
+    setRegSuccess(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
   };
 
   // Rollover members from previous year to new year (Annual Roll Rollover)
