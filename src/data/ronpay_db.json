@@ -9924,6 +9924,33 @@
       "date": "2026-08-15"
     },
     {
+      "id": "TX-MANUAL-JH-AUG-500",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "JH Lallianbika",
+      "donorType": "member",
+      "donorPhone": "2345678999",
+      "donorVeng": "Shillong Unit",
+      "memberId": "BMPSHL-8999",
+      "amount": 500,
+      "totalAmount": 500,
+      "platformFee": 0,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "BMP Fund": 500
+      },
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "timestamp": "2026-08-15T12:00:00.000Z",
+      "isSynced": true,
+      "createdAt": "2026-08-15T12:00:00.000Z",
+      "updatedAt": "2026-08-15T12:00:00.000Z"
+    },
+    {
       "paymentMethod": "cash",
       "campaignTitle": "BMP Shillong",
       "campaignId": "cmp-1788107291420",
@@ -10625,7 +10652,7 @@
       "status": "completed"
     },
     {
-      "id": "RPAY-CASH-553088",
+      "id": "RPAY-CASH-553089",
       "campaignId": "cmp-1788107291420",
       "campaignTitle": "BMP Shillong",
       "category": "kumtluang",
@@ -10643,16 +10670,11 @@
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 600
       },
-      "periodType": "monthly",
-      "periodMonth": "March",
-      "periodYear": "2026",
-      "periodLabel": "March 2026 (31/03/2026)",
+      "donorPhone": "",
       "timestamp": "2026-03-31T00:00:00.000Z",
-      "createdAt": "2026-10-02T07:24:55.530Z",
-      "updatedAt": "2026-10-02T07:24:55.530Z",
-      "date": "2026-03-31",
-      "txHash": "UTR380703421931",
-      "utr": "UTR380703421931"
+      "remark": "Inkhawm Thawhlawm - March 31, 2026",
+      "createdAt": "2026-03-31T00:00:00.000Z",
+      "updatedAt": "2026-10-01T20:40:22.601Z"
     },
     {
       "platformFee": 2,
@@ -10869,6 +10891,33 @@
       "periodLabel": "March 2026",
       "periodType": "monthly",
       "memberId": "BMPSHL-5353"
+    },
+    {
+      "id": "TX-MANUAL-LN-MAR-150",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalnuntluanga Vanchhawng",
+      "donorType": "member",
+      "donorPhone": "8415967128",
+      "donorVeng": "Shillong Unit",
+      "memberId": "BMPSHL-7128",
+      "amount": 150,
+      "totalAmount": 150,
+      "platformFee": 0,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "BMP Fund": 150
+      },
+      "periodMonth": "March",
+      "periodYear": "2026",
+      "periodLabel": "March 2026",
+      "timestamp": "2026-03-15T12:00:00.000Z",
+      "isSynced": true,
+      "createdAt": "2026-03-15T12:00:00.000Z",
+      "updatedAt": "2026-03-15T12:00:00.000Z"
     },
     {
       "campaignId": "cmp-kumtluang-1",
@@ -11160,36 +11209,7 @@
       "updatedAt": "2026-10-01T20:40:22.601Z"
     },
     {
-      "paymentMethod": "cash",
-      "status": "pending_verification",
-      "platformFee": 0,
-      "subCategory": "BMP Fund",
-      "timestamp": "2026-03-01T00:00:00.000Z",
-      "updatedAt": "2026-10-02T07:24:55.560Z",
-      "amount": 750,
-      "totalAmount": 750,
-      "donorName": "Inkhawm Thawhlawm",
-      "isDependent": false,
-      "txHash": "CASHVB3FS2YG",
-      "category": "kumtluang",
-      "donorVeng": "Shillong Unit",
-      "periodType": "monthly",
-      "campaignTitle": "BMP Shillong",
-      "subCategoryBreakdown": {
-        "Inkhawm Thawhlawm": 750
-      },
-      "campaignId": "cmp-1788107291420",
-      "donorType": "general",
-      "isAnonymous": false,
-      "periodLabel": "March 2026 (01/03/2026)",
-      "id": "RPAY-CASH-359988",
-      "date": "2026-03-01",
-      "periodMonth": "March",
-      "periodYear": "2026",
-      "createdAt": "2026-10-02T07:24:55.560Z"
-    },
-    {
-      "id": "RPAY-CASH-177836",
+      "id": "RPAY-CASH-553088",
       "campaignId": "cmp-1788107291420",
       "campaignTitle": "BMP Shillong",
       "category": "kumtluang",
@@ -11364,7 +11384,7 @@
       "isAnonymous": false,
       "periodYear": "2026",
       "isSynced": true,
-      "amount": 500,
+      "amount": 100,
       "donorVeng": "Shillong Unit",
       "paymentMethod": "cash",
       "subCategoryBreakdown": {
@@ -11799,32 +11819,6 @@
       "createdAt": "2026-10-01T20:26:14.500Z"
     },
     {
-      "donorPhone": "9862712079",
-      "periodLabel": "January 2026",
-      "isAnonymous": false,
-      "status": "SUCCESS",
-      "donorVeng": "Shillong Unit",
-      "paymentMethod": "online",
-      "periodMonth": "January",
-      "amount": 150,
-      "timestamp": "2026-01-15T12:00:00.000Z",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
-      },
-      "memberId": "BMPSHL-2079",
-      "updatedAt": "2026-10-01T18:05:41.516Z",
-      "id": "RPAY_TXN_1790875694316_631",
-      "category": "kumtluang",
-      "campaignId": "cmp-1788107291420",
-      "txHash": "RON-KZKVONBL",
-      "periodType": "monthly",
-      "subCategory": "BMP Fund",
-      "periodYear": "2026",
-      "campaignTitle": "BMP Shillong",
-      "donorName": "Richard L Jongte",
-      "date": "2026-01-15"
-    },
-    {
       "campaignId": "cmp-1788107291420",
       "timestamp": "2026-01-15T00:00:00.000Z",
       "txHash": "RON-RV3V4MZG",
@@ -12176,12 +12170,10 @@
     "TX-MANUAL-1790888181260-628",
     "TX-MANUAL-1790888224928-5",
     "TX-MANUAL-1790888268953-440",
-    "TX-MANUAL-1790888425532-253",
     "TX-MANUAL-1790888513362-65",
     "TX-MANUAL-1790887619584-483",
     "TX-MANUAL-1790887692663-523",
     "TX-MANUAL-1790887914629-551",
-    "TX-MANUAL-1790888034425-369",
     "TX-MANUAL-1790887450167-879",
     "TX-MANUAL-1790887177103-526",
     "TX-MANUAL-1790887107422-42",
@@ -12190,17 +12182,17 @@
     "tx-manual-1790888181260-628",
     "tx-manual-1790888224928-5",
     "tx-manual-1790888268953-440",
-    "tx-manual-1790888425532-253",
     "tx-manual-1790888513362-65",
     "tx-manual-1790887619584-483",
     "tx-manual-1790887692663-523",
     "tx-manual-1790887914629-551",
-    "tx-manual-1790888034425-369",
     "tx-manual-1790887450167-879",
     "tx-manual-1790887177103-526",
     "tx-manual-1790887107422-42",
     "tx-manual-1790886883155-450",
-    "rpay_txn_1790875972483_197"
+    "rpay_txn_1790875972483_197",
+    "tx-manual-1790888425532-253",
+    "tx-manual-1790888034425-369"
   ],
   "creators": [
     {
@@ -15383,5 +15375,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-02T07:40:47.404Z"
+  "lastUpdated": "2026-10-02T08:19:14.535Z"
 }

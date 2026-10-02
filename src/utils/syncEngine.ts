@@ -362,9 +362,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
 
                 if (!txMap.has(k)) {
-                  // Only preserve genuine pending offline transactions created in last 2 hours
+                  // Only preserve genuine pending offline transactions created in last 24 hours
                   const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
-                  if (nowMs - tTime < 2 * 3600 * 1000) {
+                  if (nowMs - tTime < 24 * 3600 * 1000) {
                     sanitizeTxTimestamp(t);
                     txMap.set(k, t);
                     newLocalTxsToPush.push(t);

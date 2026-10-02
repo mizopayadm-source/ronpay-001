@@ -847,7 +847,6 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'tx-manual-1790888181260-628',
   'tx-manual-1790888224928-5',
   'tx-manual-1790888268953-440',
-  'tx-manual-1790888425532-253',
   'tx-manual-1790888513362-65',
   'tx-manual-1790887619584-483',
   'tx-manual-1790887692663-523',
@@ -1200,11 +1199,13 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
         if (_syncServerTxTimer) clearTimeout(_syncServerTxTimer);
         _syncServerTxTimer = setTimeout(() => {
           const deletedIds = Array.from(getDeletedTransactionIds());
+          const newOrModifiedTxs = transactions.filter(t => t && t.id && (t.isSynced === false || (t as any).isOfflinePending));
+          if (newOrModifiedTxs.length === 0 && deletedIds.length === 0) return;
           safeApiFetch('/api/data/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              transactions,
+              transactions: newOrModifiedTxs,
               deletedTransactionIds: deletedIds
             })
           })
@@ -3339,7 +3340,7 @@ export const approveCashTransaction = (
   };
 
   current[targetIndex] = updatedTx;
-  saveStoredTransactions(current);
+  saveTransaction(updatedTx);
   recordAuditLog(
     'Cash Approved',
     `Txn ${transactionId} (₹${target.amount}) chu ${verifierName}-in a pawm fel ta.`,
@@ -3372,7 +3373,7 @@ export const rejectCashTransaction = (
   };
 
   current[targetIndex] = updatedTx;
-  saveStoredTransactions(current);
+  saveTransaction(updatedTx);
   recordAuditLog(
     'Cash Rejected',
     `Txn ${transactionId} (₹${target.amount}) chu ${verifierName}-in a hnawl. Chhan: ${reason || 'Cash a thleng lo'}`,
