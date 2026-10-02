@@ -103,23 +103,23 @@ if (typeof window !== 'undefined') {
  * Trigger sync with server backend (/api/data/sync or /api/data/state)
  * Includes exponential backoff, offline checking, and fallback local cache
  */
-export async function syncAllWithServer(): Promise<SyncDataState | null> {
+export async function syncAllWithServer(forceAuthoritative: boolean = false): Promise<SyncDataState | null> {
   // 1. Check network connectivity: browser navigator + Firestore listener state
   const isOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true) && isOnlineState();
-  if (!isOnline) {
+  if (!isOnline && !forceAuthoritative) {
     // Return local cache immediately without making any network calls
     return getLocalFallbackState();
   }
 
-  // 2. Check exponential backoff wait period
+  // 2. Check exponential backoff wait period (bypassed if forceAuthoritative)
   const now = Date.now();
-  if (now < nextAllowedSyncTime) {
+  if (!forceAuthoritative && now < nextAllowedSyncTime) {
     // Connection recently dropped or reset; reuse local cached state
     return getLocalFallbackState();
   }
 
-  // 3. Deduplicate simultaneous sync requests
-  if (inFlightSyncPromise) {
+  // 3. Deduplicate simultaneous sync requests (bypassed if forceAuthoritative)
+  if (!forceAuthoritative && inFlightSyncPromise) {
     return inFlightSyncPromise;
   }
 
@@ -336,37 +336,46 @@ export async function syncAllWithServer(): Promise<SyncDataState | null> {
             }
           }
 
-          // Merge ALL valid local transactions (never discard user manual entries or offline payments)
-          const newLocalTxsToPush: Transaction[] = [];
-          for (const t of currentTxs) {
-            if (t && t.id) {
-              const k = String(t.id).toLowerCase().trim();
-              if (deletedIds.has(k)) {
-                continue;
-              }
-              if (!txMap.has(k)) {
-                sanitizeTxTimestamp(t);
-                txMap.set(k, t);
-                newLocalTxsToPush.push(t);
-              } else {
-                const existing = txMap.get(k);
-                const localTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
-                const serverTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-                if (localTime > serverTime) {
-                  txMap.set(k, { ...existing, ...t });
-                  newLocalTxsToPush.push(t);
+          // Check if local storage was corrupted / inflated (e.g. ₹13,00,950 vs server ₹2,77,875.9)
+          const localConfirmedSum = currentTxs
+            .filter(t => {
+              const s = (t.status || '').toLowerCase().trim();
+              return s === 'completed' || s === 'success' || s === 'verified';
+            })
+            .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+          
+          const isLocalInflated = localConfirmedSum > 500000;
+
+          // Merge local transactions only if not forcing authoritative and not corrupted
+          if (!forceAuthoritative && !isLocalInflated) {
+            const newLocalTxsToPush: Transaction[] = [];
+            for (const t of currentTxs) {
+              if (t && t.id) {
+                const k = String(t.id).toLowerCase().trim();
+                if (deletedIds.has(k)) continue;
+                const amt = Number(t.amount);
+                if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
+
+                if (!txMap.has(k)) {
+                  // Only preserve genuine pending offline transactions created in last 2 hours
+                  const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
+                  if (nowMs - tTime < 2 * 3600 * 1000) {
+                    sanitizeTxTimestamp(t);
+                    txMap.set(k, t);
+                    newLocalTxsToPush.push(t);
+                  }
                 }
               }
             }
-          }
 
-          // If there are genuine local transactions not on server, push them to server now!
-          if (newLocalTxsToPush.length > 0) {
-            safeApiFetch('/api/data/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: newLocalTxsToPush })
-            }).catch(() => {});
+            // If there are genuine recent local transactions, push them to server
+            if (newLocalTxsToPush.length > 0) {
+              safeApiFetch('/api/data/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transactions: newLocalTxsToPush })
+              }).catch(() => {});
+            }
           }
 
           const cleanTxs = Array.from(txMap.values());
@@ -693,7 +702,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
           try {
             const parsed = JSON.parse(event.data);
             if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
-              syncAllWithServer().then(res => {
+              syncAllWithServer(true).then(res => {
                 if (res && onSyncUpdate) onSyncUpdate(res);
               }).catch(() => {});
             }

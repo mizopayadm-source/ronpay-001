@@ -261,7 +261,13 @@ export default function App() {
   useEffect(() => {
     invalidateCacheOnAuthOrBoot('session_boot');
     reloadLocalData();
-    syncAllWithServer().then(() => {
+    syncAllWithServer(true).then((res) => {
+      if (res?.transactions && res.transactions.length > 0) {
+        setTransactions(res.transactions);
+      }
+      if (res?.campaigns && res.campaigns.length > 0) {
+        setCampaigns(res.campaigns);
+      }
       reloadLocalData();
     }).catch(() => {});
   }, [reloadLocalData]);
@@ -504,14 +510,10 @@ export default function App() {
     };
   }, [reloadLocalData]);
 
-  // Force cloud refresh across Firestore and Server Database
+  // Force cloud refresh directly from Authoritative Server Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
-      const firestoreTxs = await forceRefreshFirestore();
-      if (firestoreTxs && firestoreTxs.length > 0) {
-        setTransactions(firestoreTxs);
-      }
-      const syncResult = await syncAllWithServer();
+      const syncResult = await syncAllWithServer(true);
       if (syncResult?.transactions && syncResult.transactions.length > 0) {
         setTransactions(syncResult.transactions);
       }
