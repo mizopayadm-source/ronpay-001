@@ -581,13 +581,10 @@
       "definedSections": [
         "Shillong Unit"
       ],
-      "updatedAt": "2026-10-02T06:02:18.577Z",
+      "updatedAt": "2026-10-02T11:53:25.280Z",
       "orgCode": "BMPSHL",
       "subCategories": [
-        "BMP Fund",
-        "General Hnathlang",
-        "BMP Meet Contribution",
-        "Bial BMP Rorel Ṭanpuina"
+        "BMP Fund"
       ],
       "upiId": "mizopay@axl",
       "createdAt": "2026-08-30T16:28:11.420Z",
@@ -15409,5 +15406,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-02T10:17:24.090Z"
+  "lastUpdated": "2026-10-02T11:53:13.486Z"
 }
