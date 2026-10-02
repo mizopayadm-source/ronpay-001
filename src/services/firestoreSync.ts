@@ -531,6 +531,7 @@ function startLeaderFirestoreListeners(): void {
 
         try {
           window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: merged }));
+          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: merged }));
         } catch {}
       }
     }, (error) => {
@@ -1064,15 +1065,10 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
 
   // 10-second debounce against rapid spam clicking
   const now = Date.now();
-  if (now - lastForceRefreshTimestamp < 10000) {
+  if (now - lastForceRefreshTimestamp < 3000) {
     return localTx;
   }
   lastForceRefreshTimestamp = now;
-
-  // If real-time listener is already actively connected, live snapshot already holds latest data!
-  if (isFirestoreListening && localTx.length > 0) {
-    return localTx;
-  }
 
   try {
     const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
