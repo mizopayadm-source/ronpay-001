@@ -860,15 +860,35 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
 ]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
-  const result = new Set<string>(PERMANENTLY_PURGED_TX_IDS);
+  const canonicalKeys = new Set(INITIAL_TRANSACTIONS.map(it => String(it.id).toLowerCase().trim()));
+  const result = new Set<string>();
+  for (const id of PERMANENTLY_PURGED_TX_IDS) {
+    if (!canonicalKeys.has(id.toLowerCase().trim())) {
+      result.add(id.toLowerCase().trim());
+    }
+  }
   try {
     const raw = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
+        let hasStaleCanonical = false;
+        const cleanArr: string[] = [];
         arr.forEach(id => {
-          if (id) result.add(String(id).toLowerCase().trim());
+          if (!id) return;
+          const clean = String(id).toLowerCase().trim();
+          // Never suppress an authoritative canonical transaction from the database
+          if (!canonicalKeys.has(clean)) {
+            result.add(clean);
+            cleanArr.push(clean);
+          } else {
+            hasStaleCanonical = true;
+          }
         });
+        if (hasStaleCanonical) {
+          localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(cleanArr));
+          localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(cleanArr));
+        }
       }
     }
   } catch (e) {}
@@ -926,13 +946,14 @@ export const getStoredTransactions = (): Transaction[] => {
         const cleaned = parsed.filter(t => {
           if (!t || !t.id) return false;
           const cleanId = String(t.id).toLowerCase().trim();
+          
+          // 1. Authoritative ground truth: canonical database transactions are ALWAYS preserved
+          if (canonicalTxMap.has(cleanId)) return true;
+
           if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
           if (legacyMismatchedIds.has(t.id)) return false;
           const numAmt = Number(t.amount);
           if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0 || numAmt > 500000) return false;
-          
-          // 1. Authoritative ground truth: canonical initial transactions
-          if (canonicalTxMap.has(cleanId)) return true;
           
           // 2. Real user-created / completed / live transactions MUST BE KEPT!
           // Preserves all payments completed on web, mobile apps, QR scans, etc.
@@ -1047,7 +1068,7 @@ export const getStoredTransactions = (): Transaction[] => {
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
           const initKey = String(initTx.id).toLowerCase().trim();
-          if (!existingIds.has(initKey) && !deletedIds.has(initKey)) {
+          if (!existingIds.has(initKey)) {
             merged.push(initTx);
             hasNew = true;
           }

@@ -334,10 +334,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              if (!deletedIds.has(k)) {
-                sanitizeTxTimestamp(t);
-                txMap.set(k, t);
-              }
+              sanitizeTxTimestamp(t);
+              txMap.set(k, t);
             }
           }
 

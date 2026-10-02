@@ -123,7 +123,8 @@ export function sanitizeForFirestore<T>(obj: T): T {
 }
 
 function getLocalDeletedTxIds(): Set<string> {
-  const result = new Set<string>(['rpay_txn_1790753980087_908']);
+  const canonicalKeys = new Set(INITIAL_TRANSACTIONS.map(it => String(it.id).toLowerCase().trim()));
+  const result = new Set<string>();
   try {
     if (typeof window === 'undefined') return result;
     const raw = localStorage.getItem('ronpay_deleted_tx_ids') || localStorage.getItem('ronpay_deleted_tx_ids_v1');
@@ -131,7 +132,10 @@ function getLocalDeletedTxIds(): Set<string> {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
         arr.forEach((id: any) => {
-          if (id) result.add(String(id).toLowerCase().trim());
+          const clean = String(id || '').toLowerCase().trim();
+          if (clean && !canonicalKeys.has(clean)) {
+            result.add(clean);
+          }
         });
       }
     }
@@ -493,7 +497,7 @@ function startLeaderFirestoreListeners(): void {
 
       if (remoteTxList.length > 0) {
         const deletedIds = getLocalDeletedTxIds();
-        const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
+        const cleanRemote = remoteTxList.filter(t => t && t.id);
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
         // Remote Firestore transactions are authoritative
@@ -1083,7 +1087,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
 
     if (remoteTxList.length > 0) {
       const deletedIds = getLocalDeletedTxIds();
-      const cleanRemote = remoteTxList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()));
+      const cleanRemote = remoteTxList.filter(t => t && t.id);
       
       const txMap = new Map<string, Transaction>();
       for (const t of cleanRemote) {
