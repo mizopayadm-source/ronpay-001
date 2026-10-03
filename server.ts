@@ -4261,10 +4261,36 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // Ensure YMA Vengthar has strictly its own category (Chhiatni Fund) and zero foreign church presets
+  const ymaCamp = (db.campaigns || []).find(c => c.id === 'cmp-1787829303143' || c.orgCode === 'YMAVT');
+  if (ymaCamp) {
+    if (!Array.isArray(ymaCamp.subCategories) || ymaCamp.subCategories.length !== 1 || ymaCamp.subCategories[0] !== 'Chhiatni Fund') {
+      ymaCamp.subCategories = ['Chhiatni Fund'];
+      changed = true;
+    }
+    if (Array.isArray(ymaCamp.generalPresets) && ymaCamp.generalPresets.length > 0) {
+      ymaCamp.generalPresets = [];
+      changed = true;
+    }
+  }
+
   // Ensure announcement banner is disabled by default unless explicitly turned on
   if (db.announcement && db.announcement.isActive) {
     db.announcement.isActive = false;
     changed = true;
+  }
+
+  // Purge any single-character test members ("hawrawp mal khat")
+  if (Array.isArray(db.members)) {
+    const beforeMemLen = db.members.length;
+    db.members = db.members.filter((m: any) => {
+      if (!m || !m.id) return false;
+      const name = String(m.name || m.fullName || '').trim();
+      return name.length >= 2;
+    });
+    if (db.members.length !== beforeMemLen) {
+      changed = true;
+    }
   }
 
   // 3. Normalize transaction categories, campaign titles, and subcategory breakdowns
@@ -4649,7 +4675,18 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', serverDelCampSet);
     }
     if (Array.isArray(members)) {
-      db.members = mergeCollections(db.members, members, 'id', serverDelMemSet);
+      const validIncomingMembers = members.filter((m: any) => {
+        if (!m || !m.id) return false;
+        const name = String(m.name || m.fullName || '').trim();
+        return name.length >= 2;
+      });
+      db.members = mergeCollections(db.members, validIncomingMembers, 'id', serverDelMemSet);
+      db.members = (db.members || []).filter((m: any) => {
+        if (!m || !m.id) return false;
+        if (serverDelMemSet.has(String(m.id).toLowerCase().trim())) return false;
+        const name = String(m.name || m.fullName || '').trim();
+        return name.length >= 2;
+      });
       (db.members || []).forEach((m: any) => {
         if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
           if (!m.section) {

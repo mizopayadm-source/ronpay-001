@@ -273,33 +273,49 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
         }
 
-        // 3. Update members with local edit protection
+        // 3. Update members with authoritative server seeding & deletion protection
         if (Array.isArray(serverData.members) && serverData.members.length > 0) {
           const deletedMemIds = getDeletedMemberIds();
-          const localMembers = getMembers('all');
-          const memMap = new Map<string, any>();
-          for (const m of localMembers) {
-            if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
-              memMap.set(m.id.toLowerCase().trim(), m);
+          const cleanServerMembers = serverData.members.filter((m: any) => {
+            if (!m || !m.id) return false;
+            const name = String(m.name || m.fullName || '').trim();
+            return name.length >= 2 && !deletedMemIds.has(String(m.id).toLowerCase().trim());
+          });
+
+          const localMembers = getMembers('all').filter(m => {
+            if (!m || !m.id) return false;
+            const name = String(m.name || (m as any).fullName || '').trim();
+            if (name.length <= 1) {
+              markMemberAsDeleted(m.id);
+              return false;
             }
+            return !deletedMemIds.has(String(m.id).toLowerCase().trim());
+          });
+
+          const memMap = new Map<string, any>();
+          
+          // Seed authoritative server members first
+          for (const sm of cleanServerMembers) {
+            memMap.set(String(sm.id).toLowerCase().trim(), sm);
           }
-          for (const m of serverData.members) {
-            if (m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim())) {
-              const k = m.id.toLowerCase().trim();
-              const localMem = memMap.get(k);
-              if (!localMem) {
-                memMap.set(k, m);
-              } else {
-                const localTime = new Date(localMem.updatedAt || localMem.createdAt || 0).getTime();
-                const serverTime = new Date(m.updatedAt || m.createdAt || 0).getTime();
-                if (localTime >= serverTime) {
-                  memMap.set(k, { ...m, ...localMem });
-                } else {
-                  memMap.set(k, { ...localMem, ...m });
-                }
+
+          // Merge local members only if not forceAuthoritative or if genuine offline pending
+          for (const lm of localMembers) {
+            const k = String(lm.id).toLowerCase().trim();
+            if (!memMap.has(k)) {
+              if ((lm as any).isOfflinePending || (!forceAuthoritative && (Date.now() - new Date(lm.createdAt || 0).getTime() < 24 * 3600 * 1000))) {
+                memMap.set(k, lm);
+              }
+            } else {
+              const existing = memMap.get(k);
+              const localTime = new Date(lm.updatedAt || lm.createdAt || 0).getTime();
+              const serverTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+              if (localTime > serverTime) {
+                memMap.set(k, { ...existing, ...lm });
               }
             }
           }
+
           saveMembers(Array.from(memMap.values()), true);
         }
 

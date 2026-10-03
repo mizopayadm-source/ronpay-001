@@ -171,15 +171,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   ]);
   const [newGroupPresetInput, setNewGroupPresetInput] = useState<string>('');
 
-  const [kumtluangGeneralPresets, setKumtluangGeneralPresets] = useState<string[]>([
-    'Pathianni Chawhma Thawhlawm',
-    'Pathianni Chawhnu Thawhlawm',
-    'Pathianni Zan Thawhlawm',
-    'Nilai Zan Thawhlawm',
-    'Buhfaiṭham Thawhlawm',
-    'Inrinni Zan Thawhlawm',
-    'Bial Inkhawmpui Thawhlawm'
-  ]);
+  const [kumtluangGeneralPresets, setKumtluangGeneralPresets] = useState<string[]>([]);
   const [newGeneralPresetInput, setNewGeneralPresetInput] = useState<string>('');
   const [kumtluangTarget, setKumtluangTarget] = useState<string>('');
   const [kumtluangTargetPeriod, setKumtluangTargetPeriod] = useState<'monthly' | 'yearly' | 'total'>('monthly');

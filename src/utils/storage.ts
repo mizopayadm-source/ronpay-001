@@ -116,6 +116,48 @@ export const markMemberAsDeleted = (memberId: string): void => {
   } catch (e) {}
 };
 
+// Automatic cleanup of single-character test artifacts ("hawrawp mal khat") from client storage
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  try {
+    const rawMems = localStorage.getItem(MEMBERS_LIST_KEY);
+    if (rawMems) {
+      const parsed = JSON.parse(rawMems);
+      if (Array.isArray(parsed)) {
+        const cleanList = parsed.filter(m => {
+          if (!m || !m.id) return false;
+          const name = String(m.name || m.fullName || '').trim();
+          if (name.length <= 1) {
+            markMemberAsDeleted(m.id);
+            return false;
+          }
+          return true;
+        });
+        if (cleanList.length !== parsed.length) {
+          localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(cleanList));
+        }
+      }
+    }
+    const rawKumtluang = localStorage.getItem('ronpay_kumtluang_members_v1');
+    if (rawKumtluang) {
+      const parsed = JSON.parse(rawKumtluang);
+      if (Array.isArray(parsed)) {
+        const cleanList = parsed.filter((m: any) => {
+          if (!m || !m.id) return false;
+          const name = String(m.name || m.fullName || '').trim();
+          if (name.length <= 1) {
+            markMemberAsDeleted(m.id);
+            return false;
+          }
+          return true;
+        });
+        if (cleanList.length !== parsed.length) {
+          localStorage.setItem('ronpay_kumtluang_members_v1', JSON.stringify(cleanList));
+        }
+      }
+    }
+  } catch (e) {}
+}
+
 export const clearDeletedMemberId = (memberId: string): void => {
   if (!memberId) return;
   try {
@@ -2699,10 +2741,15 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
   try {
     const deletedMemIds = getDeletedMemberIds();
     const PERMANENTLY_PURGED_MEMBERS = new Set(['bmpshl-1253', 'bmpshl-9000', 'bmpshl-9001']);
-    const isExcluded = (id?: string) => {
+    const isExcluded = (id?: string, name?: string) => {
       if (!id) return true;
       const clean = String(id).toLowerCase().trim();
-      return PERMANENTLY_PURGED_MEMBERS.has(clean) || deletedMemIds.has(clean);
+      if (PERMANENTLY_PURGED_MEMBERS.has(clean) || deletedMemIds.has(clean)) return true;
+      if (name !== undefined) {
+        const cleanName = String(name || '').trim();
+        if (cleanName.length <= 1) return true;
+      }
+      return false;
     };
 
     let storedMembers: MemberRecord[] = [];
@@ -2710,19 +2757,27 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        storedMembers = parsed.filter(m => m && m.id && !isExcluded(m.id));
+        storedMembers = parsed.filter(m => {
+          if (!m || !m.id) return false;
+          const cleanName = String(m.name || m.fullName || '').trim();
+          if (cleanName.length <= 1) {
+            markMemberAsDeleted(m.id);
+            return false;
+          }
+          return !isExcluded(m.id, cleanName);
+        });
       }
     }
 
     // Merge default initial members with stored members (excluding deleted)
     const map = new Map<string, MemberRecord>();
     for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id && !isExcluded(m.id)) {
+      if (m && m.id && !isExcluded(m.id, m.name)) {
         map.set(m.id.toLowerCase().trim(), m);
       }
     }
     for (const m of storedMembers) {
-      if (m && m.id && !isExcluded(m.id)) {
+      if (m && m.id && !isExcluded(m.id, m.name)) {
         const k = m.id.toLowerCase().trim();
         const existing = map.get(k);
         const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
@@ -2739,6 +2794,9 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
           const mid = String(t.memberId).trim();
           const k = mid.toLowerCase();
           if (k === 'bmpshl-1253') continue;
+          const donorName = String(t.donorName || '').trim();
+          // Never resurrect single-character test names
+          if (donorName.length <= 1) continue;
           if (!deletedMemIds.has(k) && !map.has(k)) {
             const orgCode = mid.split('-')[0] || '';
             const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
@@ -2766,7 +2824,12 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       console.warn('Storage transaction self-healing check:', recoverErr);
     }
 
-    const allMembers = Array.from(map.values()).filter(m => !deletedMemIds.has(String(m.id).toLowerCase().trim()));
+    const allMembers = Array.from(map.values()).filter(m => {
+      if (!m || !m.id) return false;
+      const cleanName = String(m.name || (m as any).fullName || '').trim();
+      if (cleanName.length <= 1) return false;
+      return !deletedMemIds.has(String(m.id).toLowerCase().trim());
+    });
 
     // Enforce Shillong Unit for all BMP Shillong members
     allMembers.forEach(m => {

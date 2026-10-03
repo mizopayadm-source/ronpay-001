@@ -1,19 +1,27 @@
 // Central API Endpoint & Base URL Resolver
 // Ensures external custom domains (ronpay.app, www.ronpay.app), mobile browsers, 
-// and standalone PWAs connect directly to the central Cloud Run server backend.
+// Android WebViews, and standalone PWAs connect directly to the central backend.
 
-export const CLOUD_BACKEND_URL = 'https://ais-pre-y2fdvwg2x6cpi5iequ7ugj-868993197140.asia-southeast1.run.app';
+export const CLOUD_BACKEND_URL = 'https://ronpay.app';
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  const hostname = window.location.hostname;
+  const hostname = (window.location.hostname || '').toLowerCase();
   
-  // If we are already running on Cloud Run or localhost, use relative path
-  if (hostname.includes('run.app') || hostname === 'localhost' || hostname === '127.0.0.1') {
+  // 1. If running on ronpay.app, www.ronpay.app, Cloud Run (*.run.app), localhost, or 127.0.0.1:
+  // Always use relative path so API requests hit the exact same server hosting the app!
+  if (
+    hostname.includes('ronpay.app') ||
+    hostname.includes('run.app') ||
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === ''
+  ) {
     return '';
   }
   
-  // On custom domains (ronpay.app), PWAs, mobile browsers, or external hosts, route to central backend
+  // 2. On standalone native hybrid wrappers (e.g. capacitor://, file://, or external sandboxes),
+  // route to the production backend server https://ronpay.app
   return CLOUD_BACKEND_URL;
 }
 
