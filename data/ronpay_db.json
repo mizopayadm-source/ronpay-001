@@ -42,15 +42,7 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": [
-        "Pathianni Chawhma Thawhlawm",
-        "Pathianni Chawhnu Thawhlawm",
-        "Pathianni Zan Thawhlawm",
-        "Nilai Zan Thawhlawm",
-        "Buhfaiṭham Thawhlawm",
-        "Inrinni Zan Thawhlawm",
-        "Bial Inkhawmpui Thawhlawm"
-      ]
+      "generalPresets": []
     },
     {
       "subCategories": [
@@ -639,11 +631,11 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "transferredAt": "2026-10-01T15:45:45.524Z",
-          "fromPhone": "9862000001",
-          "fromName": "Super Admin (Master)",
           "toName": "RC Lalliana (Treasurer)",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
+          "fromName": "Super Admin (Master)",
           "toPhone": "7005153902",
+          "fromPhone": "9862000001",
           "reason": "Term inthlak / Annual Office Bearer Handover"
         }
       ],
@@ -1351,6 +1343,19 @@
       "activeYears": [
         "2026"
       ]
+    },
+    {
+      "id": "BMPSHL-1548",
+      "campaignId": "cmp-1788107291420",
+      "name": "Zothanzuala Hrahsel",
+      "orgCode": "BMPSHL",
+      "phoneLast4": "1548",
+      "fullPhone": "",
+      "section": "Shillong Unit",
+      "isFamilyHead": true,
+      "dependents": [],
+      "createdAt": "2026-08-15T00:00:00.000Z",
+      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -12884,7 +12889,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-03T15:56:56.585Z",
+    "lastUpdated": "2026-10-03T17:40:49.888Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13117,20 +13122,13 @@
   },
   "auditLogs": [
     {
-      "id": "audit-1790407981764-e64s5",
-      "action": "DELETE_CAMPAIGN",
-      "actor": "Admin",
-      "targetId": "cmp-chk-mu6on2s6, cmp-chk-mu6ojr7t, cmp-chhungkaw-2, cmp-chhungkaw-1",
-      "details": "Campaigns BIaka Lungphun, Rev. Dr. R. Zothansanga Inneih Lawmpuina, Rohlupuia Chhungkaw Lungphun & Ruai, Lalmuanpuia & Lalnunmawii Inneih Lawmpuina were removed until Chhungkaw bawm is created.",
-      "timestamp": "2026-09-26T07:33:01.764Z"
-    },
-    {
-      "id": "log-1",
-      "action": "System Initialized",
-      "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
-      "targetType": "system",
-      "performedBy": "System Administrator",
-      "timestamp": "2026-10-02T15:56:56.608Z"
+      "id": "log-3",
+      "action": "Campaign Approved",
+      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
+      "targetType": "campaign",
+      "targetId": "cmp-ralna-1",
+      "performedBy": "Admin",
+      "timestamp": "2026-10-03T11:40:49.915Z"
     },
     {
       "id": "log-2",
@@ -13139,16 +13137,1114 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-03T03:56:56.608Z"
+      "timestamp": "2026-10-03T05:40:49.915Z"
     },
     {
-      "id": "log-3",
-      "action": "Campaign Approved",
-      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
+      "id": "log-1",
+      "action": "System Initialized",
+      "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
+      "targetType": "system",
+      "performedBy": "System Administrator",
+      "timestamp": "2026-10-02T17:40:49.915Z"
+    },
+    {
+      "id": "log-1790883934929-dxan",
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T19:45:34.929Z"
+    },
+    {
+      "id": "log-1790843302929-tyfj",
+      "action": "Announcement Banner Status Changed",
+      "details": "Admin changed banner status to: Active",
+      "targetType": "announcement",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:28:22.929Z"
+    },
+    {
+      "id": "log-1790843242140-cdms",
+      "action": "Creator Application Declined",
+      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "targetType": "creator",
+      "targetId": "9862000000",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:27:22.140Z"
+    },
+    {
+      "id": "log-1790843230817-qrsm",
+      "action": "Creator Application Declined",
+      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "targetType": "creator",
+      "targetId": "9862000000",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:27:10.817Z"
+    },
+    {
+      "id": "log-1790843184677-t22a",
+      "action": "Announcement Banner Status Changed",
+      "details": "Admin changed banner status to: Active",
+      "targetType": "announcement",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:26:24.677Z"
+    },
+    {
+      "id": "log-1790843154415-vvpb",
+      "action": "Announcement Banner Status Changed",
+      "details": "Admin changed banner status to: Active",
+      "targetType": "announcement",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:25:54.415Z"
+    },
+    {
+      "id": "log-1790842379832-acor",
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-01T08:12:59.832Z"
+    },
+    {
+      "id": "log-1790704891782-zety",
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-29T18:01:31.782Z"
+    },
+    {
+      "timestamp": "2026-09-26T13:20:18.411Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "action": "Super Admin Login",
+      "id": "log-1790428818411-wgmy",
+      "targetType": "system",
+      "updatedAt": "2026-09-26T13:20:18.418Z"
+    },
+    {
+      "id": "audit-1790407981764-e64s5",
+      "action": "DELETE_CAMPAIGN",
+      "actor": "Admin",
+      "targetId": "cmp-chk-mu6on2s6, cmp-chk-mu6ojr7t, cmp-chhungkaw-2, cmp-chhungkaw-1",
+      "details": "Campaigns BIaka Lungphun, Rev. Dr. R. Zothansanga Inneih Lawmpuina, Rohlupuia Chhungkaw Lungphun & Ruai, Lalmuanpuia & Lalnunmawii Inneih Lawmpuina were removed until Chhungkaw bawm is created.",
+      "timestamp": "2026-09-26T07:33:01.764Z"
+    },
+    {
+      "action": "Campaign Deleted",
+      "id": "log-1790351214068-caq5",
+      "timestamp": "2026-09-25T15:46:54.068Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Gg. Performed by: Admin",
       "targetType": "campaign",
-      "targetId": "cmp-ralna-1",
-      "performedBy": "Admin",
-      "timestamp": "2026-10-03T09:56:56.608Z"
+      "targetId": "cmp-chhungkaw-2",
+      "updatedAt": "2026-09-25T15:46:54.068Z"
+    },
+    {
+      "action": "Campaign Deleted",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-25T15:46:46.841Z",
+      "targetId": "cmp-chhungkaw-1",
+      "id": "log-1790351206840-qn2p",
+      "targetType": "campaign",
+      "timestamp": "2026-09-25T15:46:46.840Z",
+      "details": "Campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) was deleted permanently. Reason: Hh. Performed by: Admin"
+    },
+    {
+      "targetId": "cmp-chhungkaw-2",
+      "id": "log-1790351199648-hrbc",
+      "targetType": "campaign",
+      "timestamp": "2026-09-25T15:46:39.648Z",
+      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Dik lo. Performed by: Admin",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-25T15:46:39.648Z",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) was deleted permanently. Reason: dik lo. Performed by: Admin",
+      "timestamp": "2026-09-25T15:46:27.502Z",
+      "id": "log-1790351187502-h95n",
+      "targetId": "cmp-chk-mu6on2s6",
+      "updatedAt": "2026-09-25T15:46:27.509Z"
+    },
+    {
+      "details": "Txn RPAY-CASH-774043 (₹100) chu Super Admin (Master)-in a hnawl. Chhan: Cash pawisa dawn a ni lo",
+      "targetId": "RPAY-CASH-774043",
+      "updatedAt": "2026-09-25T12:26:01.304Z",
+      "id": "log-1790339161301-fl3v",
+      "targetType": "transaction",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-25T12:26:01.301Z",
+      "action": "Cash Rejected"
+    },
+    {
+      "id": "log-1790241949048-9jug",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "action": "Super Admin Login",
+      "timestamp": "2026-09-24T09:25:49.048Z",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-24T09:25:49.054Z"
+    },
+    {
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "action": "Super Admin Login",
+      "id": "log-1790182031652-pjpt",
+      "targetType": "system",
+      "timestamp": "2026-09-23T16:47:11.652Z",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-23T16:47:11.660Z"
+    },
+    {
+      "action": "Super Admin Login",
+      "id": "log-1789990106307-sffj",
+      "targetType": "system",
+      "updatedAt": "2026-09-21T11:28:26.316Z",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-21T11:28:26.307Z",
+      "details": "Super Admin authenticated via Unified Login Modal."
+    },
+    {
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789988573797-9gkt",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-21T11:02:53.805Z",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "timestamp": "2026-09-21T11:02:53.797Z"
+    },
+    {
+      "timestamp": "2026-09-21T11:02:39.696Z",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-21T11:02:39.698Z",
+      "id": "log-1789988559696-w3rl",
+      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chhungkaw-1",
+      "targetType": "campaign"
+    },
+    {
+      "updatedAt": "2026-09-21T11:02:31.407Z",
+      "timestamp": "2026-09-21T11:02:31.398Z",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "id": "log-1789988551398-vqrs",
+      "targetId": "cmp-chhungkaw-2",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign"
+    },
+    {
+      "id": "log-1789988534270-5mzb",
+      "action": "Campaign Deleted",
+      "timestamp": "2026-09-21T11:02:14.270Z",
+      "targetId": "cmp-chhungkaw-2",
+      "updatedAt": "2026-09-21T11:02:14.273Z",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "action": "Admin Biometric Login",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system",
+      "details": "Administrator authenticated via Biometrics.",
+      "updatedAt": "2026-09-21T11:02:01.994Z",
+      "id": "log-1789988521986-1gie",
+      "timestamp": "2026-09-21T11:02:01.986Z"
+    },
+    {
+      "id": "log-1789988366102-6bfz",
+      "performedBy": "Admin (Biometric)",
+      "details": "Administrator authenticated via Biometrics.",
+      "timestamp": "2026-09-21T10:59:26.102Z",
+      "action": "Admin Biometric Login",
+      "targetType": "system",
+      "updatedAt": "2026-09-21T10:59:26.107Z"
+    },
+    {
+      "id": "log-1789891641936-sbb5",
+      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "action": "Creator Application Declined",
+      "targetId": "9862000000",
+      "timestamp": "2026-09-20T08:07:21.936Z",
+      "updatedAt": "2026-09-20T08:07:21.939Z",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "creator"
+    },
+    {
+      "targetType": "creator",
+      "id": "log-1789891638886-nn4l",
+      "details": "Declined application for RonPay User (0000) (9862000000). Reason: Duplicate application / Account a awm sa",
+      "targetId": "9862000000",
+      "action": "Creator Application Declined",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-20T08:07:18.895Z",
+      "updatedAt": "2026-09-20T08:07:18.899Z"
+    },
+    {
+      "targetType": "creator",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "action": "Creator Application Declined",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789891627717-wllx",
+      "timestamp": "2026-09-20T08:07:07.717Z",
+      "updatedAt": "2026-09-20T08:07:07.719Z",
+      "targetId": "1234567896"
+    },
+    {
+      "id": "log-1789891625862-bbkt",
+      "targetType": "creator",
+      "timestamp": "2026-09-20T08:07:05.862Z",
+      "updatedAt": "2026-09-20T08:07:05.863Z",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "targetId": "1234567896",
+      "performedBy": "Admin (Biometric)",
+      "action": "Creator Application Declined"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "timestamp": "2026-09-20T08:07:02.375Z",
+      "targetId": "1234567896",
+      "updatedAt": "2026-09-20T08:07:02.379Z",
+      "action": "Creator Application Declined",
+      "id": "log-1789891622375-4vg2",
+      "targetType": "creator"
+    },
+    {
+      "timestamp": "2026-09-20T08:06:54.060Z",
+      "id": "log-1789891614060-5sn5",
+      "action": "Creator Application Declined",
+      "updatedAt": "2026-09-20T08:06:54.062Z",
+      "targetId": "1234567896",
+      "performedBy": "Admin (Biometric)",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "targetType": "creator"
+    },
+    {
+      "targetType": "creator",
+      "targetId": "1234567896",
+      "id": "log-1789891610413-qrxi",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-20T08:06:50.418Z",
+      "timestamp": "2026-09-20T08:06:50.413Z",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "action": "Creator Application Declined"
+    },
+    {
+      "id": "log-1789891582758-xchi",
+      "targetType": "campaign",
+      "details": "Admin reactivated expired campaign 'Pi Lalhmingliani Ralna' (cmp-ralna-1) with +30 days validity.",
+      "timestamp": "2026-09-20T08:06:22.758Z",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-20T08:06:22.761Z",
+      "action": "Campaign Reactivated",
+      "targetId": "cmp-ralna-1"
+    },
+    {
+      "id": "log-1789891564473-noed",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chhungkaw-2",
+      "updatedAt": "2026-09-20T08:06:04.476Z",
+      "timestamp": "2026-09-20T08:06:04.473Z",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin"
+    },
+    {
+      "targetId": "cmp-chk-mu6ojr7t",
+      "details": "Campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
+      "id": "log-1789891554422-2osi",
+      "timestamp": "2026-09-20T08:05:54.422Z",
+      "updatedAt": "2026-09-20T08:05:54.423Z",
+      "targetType": "campaign",
+      "action": "Campaign Deleted",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "targetType": "campaign",
+      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
+      "action": "Campaign Reactivated",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-20T08:05:42.153Z",
+      "targetId": "cmp-rikrum-1",
+      "timestamp": "2026-09-20T08:05:42.148Z",
+      "id": "log-1789891542148-y34v"
+    },
+    {
+      "timestamp": "2026-09-20T08:05:32.865Z",
+      "targetId": "cmp-khawlsak-1",
+      "updatedAt": "2026-09-20T08:05:32.866Z",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Reactivated",
+      "targetType": "campaign",
+      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
+      "id": "log-1789891532865-s78p"
+    },
+    {
+      "updatedAt": "2026-09-20T08:05:28.201Z",
+      "timestamp": "2026-09-20T08:05:28.199Z",
+      "action": "Campaign Reactivated",
+      "performedBy": "Admin (Biometric)",
+      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
+      "targetId": "cmp-ralna-2",
+      "id": "log-1789891528199-tnz5",
+      "targetType": "campaign"
+    },
+    {
+      "targetId": "cmp-1788262396368",
+      "action": "Campaign Reactivated",
+      "updatedAt": "2026-09-20T08:05:23.772Z",
+      "timestamp": "2026-09-20T08:05:23.769Z",
+      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
+      "id": "log-1789891523769-tghb",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "timestamp": "2026-09-20T08:05:18.767Z",
+      "id": "log-1789891518767-g3kj",
+      "targetId": "cmp-chhungkaw-1",
+      "details": "Campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
+      "updatedAt": "2026-09-20T08:05:18.772Z",
+      "action": "Campaign Deleted",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "campaign"
+    },
+    {
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-20T08:05:08.418Z",
+      "targetType": "campaign",
+      "timestamp": "2026-09-20T08:05:08.413Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
+      "id": "log-1789891508413-412g",
+      "targetId": "cmp-chk-mu6on2s6"
+    },
+    {
+      "action": "Super Admin Login",
+      "performedBy": "Admin (Biometric)",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "id": "log-1789891483955-w2oc",
+      "targetType": "system",
+      "timestamp": "2026-09-20T08:04:43.955Z",
+      "updatedAt": "2026-09-20T08:04:43.956Z"
+    },
+    {
+      "targetId": "cmp-chhungkaw-1",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "id": "log-1789885657620-5kz4",
+      "updatedAt": "2026-09-20T06:27:37.621Z",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-20T06:27:37.620Z"
+    },
+    {
+      "timestamp": "2026-09-20T06:27:19.881Z",
+      "updatedAt": "2026-09-20T06:27:19.886Z",
+      "id": "log-1789885639881-fh7r",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chk-mu6on2s6"
+    },
+    {
+      "targetId": "cmp-chk-mu6on2s6",
+      "action": "Campaign Deleted",
+      "id": "log-1789885627865-apry",
+      "updatedAt": "2026-09-20T06:27:07.871Z",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "timestamp": "2026-09-20T06:27:07.865Z",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "targetId": "cmp-chk-mu6ojr7t",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789885620280-vnsk",
+      "timestamp": "2026-09-20T06:27:00.280Z",
+      "action": "Campaign Deleted",
+      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign",
+      "updatedAt": "2026-09-20T06:27:00.283Z"
+    },
+    {
+      "id": "log-1789885614466-u4ql",
+      "targetId": "cmp-chk-mu6on2s6",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "updatedAt": "2026-09-20T06:26:54.471Z",
+      "timestamp": "2026-09-20T06:26:54.466Z"
+    },
+    {
+      "timestamp": "2026-09-20T06:26:47.289Z",
+      "updatedAt": "2026-09-20T06:26:47.293Z",
+      "id": "log-1789885607289-hetg",
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chk-mu6ojr7t",
+      "targetType": "campaign"
+    },
+    {
+      "action": "Campaign Deleted",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-20T06:26:41.621Z",
+      "updatedAt": "2026-09-20T06:26:41.627Z",
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789885601621-cul8"
+    },
+    {
+      "updatedAt": "2026-09-20T06:25:51.921Z",
+      "timestamp": "2026-09-20T06:25:51.920Z",
+      "targetType": "campaign",
+      "action": "Campaign Reactivated",
+      "targetId": "cmp-khawlsak-2",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789885551920-ksod",
+      "details": "Admin reactivated expired campaign 'Zothan Damlo Enkawlna Tanpuina' (cmp-khawlsak-2) with +30 days validity."
+    },
+    {
+      "id": "log-1789885547596-hix9",
+      "updatedAt": "2026-09-20T06:25:47.599Z",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-20T06:25:47.596Z",
+      "targetType": "campaign",
+      "targetId": "cmp-ralna-2",
+      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
+      "action": "Campaign Reactivated"
+    },
+    {
+      "targetId": "cmp-chhungkaw-1",
+      "updatedAt": "2026-09-20T06:25:39.630Z",
+      "id": "log-1789885539628-rzol",
+      "action": "Campaign Deleted",
+      "timestamp": "2026-09-20T06:25:39.628Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign"
+    },
+    {
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetId": "cmp-chhungkaw-2",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "timestamp": "2026-09-20T06:25:28.146Z",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-20T06:25:28.148Z",
+      "id": "log-1789885528146-8gbd"
+    },
+    {
+      "targetId": "cmp-chk-mu6ojr7t",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-20T06:24:58.374Z",
+      "targetType": "campaign",
+      "timestamp": "2026-09-20T06:24:58.372Z",
+      "id": "log-1789885498371-2gg7",
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
+    },
+    {
+      "targetId": "cmp-chk-mu6on2s6",
+      "updatedAt": "2026-09-20T06:24:50.564Z",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-20T06:24:50.560Z",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "action": "Campaign Deleted",
+      "id": "log-1789885490560-tg71"
+    },
+    {
+      "targetType": "campaign",
+      "id": "log-1789723779383-aedr",
+      "details": "Approved QR Campaign 'Fingmawii Ralna' (cmp-1789722801941) in category ralna. QR is now LIVE.",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T09:29:39.383Z",
+      "updatedAt": "2026-09-18T09:29:39.384Z",
+      "action": "Campaign Approved & Activated",
+      "targetId": "cmp-1789722801941"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "targetType": "campaign",
+      "action": "Campaign Approved",
+      "updatedAt": "2026-09-18T09:29:39.382Z",
+      "targetId": "cmp-1789722801941",
+      "timestamp": "2026-09-18T09:29:39.381Z",
+      "details": "Campaign \"Fingmawii Ralna\" approved by Admin",
+      "id": "log-1789723779381-qqoj"
+    },
+    {
+      "targetId": "cmp-1789722668042",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "campaign",
+      "id": "log-1789723776945-90k4",
+      "action": "Campaign Approved & Activated",
+      "updatedAt": "2026-09-18T09:29:36.946Z",
+      "details": "Approved QR Campaign 'In hmun nghet lo' (cmp-1789722668042) in category rikrum. QR is now LIVE.",
+      "timestamp": "2026-09-18T09:29:36.945Z"
+    },
+    {
+      "timestamp": "2026-09-18T09:29:36.943Z",
+      "updatedAt": "2026-09-18T09:29:36.944Z",
+      "id": "log-1789723776943-kvb8",
+      "details": "Campaign \"In hmun nghet lo\" approved by Admin",
+      "targetType": "campaign",
+      "action": "Campaign Approved",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-1789722668042"
+    },
+    {
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789723774189-aiit",
+      "targetId": "cmp-1789722358527",
+      "timestamp": "2026-09-18T09:29:34.189Z",
+      "action": "Campaign Approved & Activated",
+      "updatedAt": "2026-09-18T09:29:34.190Z",
+      "details": "Approved QR Campaign 'Nunkima Ralna' (cmp-1789722358527) in category ralna. QR is now LIVE."
+    },
+    {
+      "timestamp": "2026-09-18T09:29:34.186Z",
+      "id": "log-1789723774186-28av",
+      "updatedAt": "2026-09-18T09:29:34.189Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Campaign \"Nunkima Ralna\" approved by Admin",
+      "targetType": "campaign",
+      "action": "Campaign Approved",
+      "targetId": "cmp-1789722358527"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789723770457-y5px",
+      "targetType": "campaign",
+      "timestamp": "2026-09-18T09:29:30.457Z",
+      "updatedAt": "2026-09-18T09:29:30.459Z",
+      "action": "Campaign Approved & Activated",
+      "details": "Approved QR Campaign 'Leimin Puihna' (cmp-1789722498375) in category rikrum. QR is now LIVE.",
+      "targetId": "cmp-1789722498375"
+    },
+    {
+      "timestamp": "2026-09-18T09:29:30.450Z",
+      "targetId": "cmp-1789722498375",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789723770450-37fp",
+      "details": "Campaign \"Leimin Puihna\" approved by Admin",
+      "updatedAt": "2026-09-18T09:29:30.457Z",
+      "targetType": "campaign",
+      "action": "Campaign Approved"
+    },
+    {
+      "updatedAt": "2026-09-18T09:29:13.594Z",
+      "timestamp": "2026-09-18T09:29:13.588Z",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789723753588-hp7p",
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal."
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-18T09:28:56.392Z",
+      "timestamp": "2026-09-18T09:28:56.388Z",
+      "targetType": "system",
+      "action": "MODERATOR Login",
+      "details": "Staff member \"Zonunmawii (KYC Desk)\" logged in via Unified Login.",
+      "id": "log-1789723736388-1ycn"
+    },
+    {
+      "timestamp": "2026-09-18T09:22:04.427Z",
+      "targetType": "campaign",
+      "updatedAt": "2026-09-18T09:22:04.430Z",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789723324427-nbdr",
+      "action": "Campaign Deleted"
+    },
+    {
+      "targetId": "cmp-chhungkaw-2",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "id": "log-1789723315342-vw9t",
+      "timestamp": "2026-09-18T09:21:55.342Z",
+      "updatedAt": "2026-09-18T09:21:55.346Z"
+    },
+    {
+      "details": "Approved QR Campaign 'In hmun nghet lo' (cmp-1789722668042) in category rikrum. QR is now LIVE.",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-1789722668042",
+      "action": "Campaign Approved & Activated",
+      "targetType": "campaign",
+      "updatedAt": "2026-09-18T09:21:42.716Z",
+      "id": "log-1789723302715-i2cl",
+      "timestamp": "2026-09-18T09:21:42.715Z"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "details": "Campaign \"In hmun nghet lo\" approved by Admin",
+      "id": "log-1789723302713-7wht",
+      "action": "Campaign Approved",
+      "updatedAt": "2026-09-18T09:21:42.714Z",
+      "targetType": "campaign",
+      "timestamp": "2026-09-18T09:21:42.713Z",
+      "targetId": "cmp-1789722668042"
+    },
+    {
+      "targetType": "campaign",
+      "id": "log-1789723298048-9rpt",
+      "details": "Approved QR Campaign 'Nunkima Ralna' (cmp-1789722358527) in category ralna. QR is now LIVE.",
+      "action": "Campaign Approved & Activated",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-1789722358527",
+      "updatedAt": "2026-09-18T09:21:38.049Z",
+      "timestamp": "2026-09-18T09:21:38.048Z"
+    },
+    {
+      "action": "Campaign Approved",
+      "details": "Campaign \"Nunkima Ralna\" approved by Admin",
+      "targetId": "cmp-1789722358527",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-18T09:21:38.048Z",
+      "id": "log-1789723298047-ibhm",
+      "timestamp": "2026-09-18T09:21:38.047Z"
+    },
+    {
+      "details": "Approved QR Campaign 'Fingmawii Ralna' (cmp-1789722801941) in category ralna. QR is now LIVE.",
+      "updatedAt": "2026-09-18T09:21:34.924Z",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T09:21:34.923Z",
+      "action": "Campaign Approved & Activated",
+      "targetType": "campaign",
+      "id": "log-1789723294922-l6yq",
+      "targetId": "cmp-1789722801941"
+    },
+    {
+      "details": "Campaign \"Fingmawii Ralna\" approved by Admin",
+      "targetType": "campaign",
+      "action": "Campaign Approved",
+      "updatedAt": "2026-09-18T09:21:34.922Z",
+      "timestamp": "2026-09-18T09:21:34.921Z",
+      "id": "log-1789723294921-agz0",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-1789722801941"
+    },
+    {
+      "timestamp": "2026-09-18T09:21:29.830Z",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-18T09:21:29.831Z",
+      "targetId": "cmp-1789722498375",
+      "id": "log-1789723289830-6bok",
+      "action": "Campaign Approved & Activated",
+      "targetType": "campaign",
+      "details": "Approved QR Campaign 'Leimin Puihna' (cmp-1789722498375) in category rikrum. QR is now LIVE."
+    },
+    {
+      "targetType": "campaign",
+      "id": "log-1789723289826-gl4f",
+      "action": "Campaign Approved",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-1789722498375",
+      "updatedAt": "2026-09-18T09:21:29.830Z",
+      "details": "Campaign \"Leimin Puihna\" approved by Admin",
+      "timestamp": "2026-09-18T09:21:29.826Z"
+    },
+    {
+      "id": "log-1789723283969-6sqa",
+      "targetType": "system",
+      "details": "Administrator authenticated via Biometrics.",
+      "performedBy": "Admin (Biometric)",
+      "action": "Admin Biometric Login",
+      "timestamp": "2026-09-18T09:21:23.970Z",
+      "updatedAt": "2026-09-18T09:21:23.980Z"
+    },
+    {
+      "id": "log-1789721929925-2gni",
+      "updatedAt": "2026-09-18T08:58:49.927Z",
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system",
+      "timestamp": "2026-09-18T08:58:49.925Z"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789721766965-1z37",
+      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "updatedAt": "2026-09-18T08:56:06.971Z",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "targetId": "cmp-chk-mu6ojr7t",
+      "timestamp": "2026-09-18T08:56:06.965Z"
+    },
+    {
+      "targetId": "cmp-chk-mu6on2s6",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:55:59.076Z",
+      "targetType": "campaign",
+      "id": "log-1789721759076-q7hf",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-18T08:55:59.078Z",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
+    },
+    {
+      "id": "log-1789721745886-l483",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "timestamp": "2026-09-18T08:55:45.886Z",
+      "updatedAt": "2026-09-18T08:55:45.889Z",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chhungkaw-1"
+    },
+    {
+      "updatedAt": "2026-09-18T08:55:34.577Z",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "id": "log-1789721734574-9kc2",
+      "action": "Campaign Deleted",
+      "timestamp": "2026-09-18T08:55:34.574Z",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chhungkaw-2",
+      "targetType": "campaign"
+    },
+    {
+      "timestamp": "2026-09-18T08:52:46.229Z",
+      "updatedAt": "2026-09-18T08:52:46.233Z",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chhungkaw-2",
+      "id": "log-1789721566229-30sb",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "updatedAt": "2026-09-18T08:52:33.311Z",
+      "id": "log-1789721553308-dpr7",
+      "targetId": "cmp-chhungkaw-2",
+      "timestamp": "2026-09-18T08:52:33.308Z"
+    },
+    {
+      "action": "Campaign Deleted",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:52:23.226Z",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "id": "log-1789721543226-2fh4",
+      "updatedAt": "2026-09-18T08:52:23.229Z",
+      "targetType": "campaign",
+      "targetId": "cmp-chhungkaw-2"
+    },
+    {
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789721533348-4dhm",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:52:13.348Z",
+      "updatedAt": "2026-09-18T08:52:13.354Z",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
+    },
+    {
+      "id": "log-1789721528472-my6s",
+      "timestamp": "2026-09-18T08:52:08.472Z",
+      "updatedAt": "2026-09-18T08:52:08.480Z",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system",
+      "action": "Admin Biometric Login",
+      "details": "Administrator authenticated via Biometrics."
+    },
+    {
+      "targetId": "cmp-chk-mu6on2s6",
+      "action": "Campaign Deleted",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-18T08:30:33.818Z",
+      "timestamp": "2026-09-18T08:30:33.817Z",
+      "targetType": "campaign",
+      "id": "log-1789720233817-hrdj",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
+    },
+    {
+      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-18T08:30:22.777Z",
+      "id": "log-1789720222775-5jwz",
+      "timestamp": "2026-09-18T08:30:22.775Z",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chk-mu6ojr7t"
+    },
+    {
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "updatedAt": "2026-09-18T08:30:14.601Z",
+      "timestamp": "2026-09-18T08:30:14.597Z",
+      "performedBy": "Admin (Biometric)",
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789720214597-naql",
+      "targetType": "campaign",
+      "action": "Campaign Deleted"
+    },
+    {
+      "timestamp": "2026-09-18T08:30:02.665Z",
+      "updatedAt": "2026-09-18T08:30:02.667Z",
+      "targetId": "cmp-chk-mu6on2s6",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetType": "campaign",
+      "id": "log-1789720202665-z15c"
+    },
+    {
+      "id": "log-1789720196102-h7su",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-18T08:29:56.104Z",
+      "timestamp": "2026-09-18T08:29:56.102Z",
+      "targetType": "campaign",
+      "targetId": "cmp-chhungkaw-2"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetId": "cmp-chk-mu6on2s6",
+      "id": "log-1789720192501-iubn",
+      "action": "Campaign Deleted",
+      "targetType": "campaign",
+      "updatedAt": "2026-09-18T08:29:52.505Z",
+      "timestamp": "2026-09-18T08:29:52.501Z"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "targetType": "campaign",
+      "id": "log-1789720188210-g14g",
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "updatedAt": "2026-09-18T08:29:48.212Z",
+      "timestamp": "2026-09-18T08:29:48.211Z",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chhungkaw-2"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "targetType": "campaign",
+      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "action": "Campaign Deleted",
+      "updatedAt": "2026-09-18T08:29:43.896Z",
+      "id": "log-1789720183894-onw3",
+      "timestamp": "2026-09-18T08:29:43.894Z",
+      "targetId": "cmp-chk-mu6on2s6"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:29:28.707Z",
+      "id": "log-1789720168707-jmts",
+      "updatedAt": "2026-09-18T08:29:28.709Z",
+      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "targetId": "cmp-chhungkaw-1",
+      "action": "Campaign Deleted",
+      "targetType": "campaign"
+    },
+    {
+      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
+      "updatedAt": "2026-09-18T08:29:24.982Z",
+      "action": "Campaign Deleted",
+      "targetId": "cmp-chhungkaw-2",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:29:24.978Z",
+      "id": "log-1789720164978-0ef3",
+      "targetType": "campaign"
+    },
+    {
+      "id": "log-1789720155780-5fvb",
+      "details": "Administrator authenticated via Biometrics.",
+      "action": "Admin Biometric Login",
+      "updatedAt": "2026-09-18T08:29:15.786Z",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-18T08:29:15.780Z",
+      "targetType": "system"
+    },
+    {
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
+      "id": "log-1789716302142-hx8p",
+      "timestamp": "2026-09-18T07:25:02.142Z",
+      "targetType": "announcement",
+      "updatedAt": "2026-09-18T07:25:02.143Z",
+      "action": "Announcement Updated",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "updatedAt": "2026-09-18T07:24:28.062Z",
+      "targetType": "system",
+      "id": "log-1789716268057-53vo",
+      "action": "Admin Biometric Login",
+      "details": "Administrator authenticated via Biometrics.",
+      "timestamp": "2026-09-18T07:24:28.057Z",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "timestamp": "2026-09-17T19:06:46.232Z",
+      "targetType": "campaign",
+      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1787545326556) with +30 days validity.",
+      "updatedAt": "2026-09-17T19:06:46.232Z",
+      "targetId": "cmp-1787545326556",
+      "action": "Campaign Reactivated",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789672006232-7viu"
+    },
+    {
+      "targetType": "campaign",
+      "targetId": "cmp-1788262396368",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789672001329-o7vu",
+      "timestamp": "2026-09-17T19:06:41.329Z",
+      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
+      "updatedAt": "2026-09-17T19:06:41.330Z",
+      "action": "Campaign Reactivated"
+    },
+    {
+      "updatedAt": "2026-09-17T19:06:33.852Z",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-17T19:06:33.850Z",
+      "action": "Admin Biometric Login",
+      "details": "Administrator authenticated via Biometrics.",
+      "id": "log-1789671993850-vfh8"
+    },
+    {
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789666898148-q3zv",
+      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
+      "updatedAt": "2026-09-17T17:41:38.150Z",
+      "timestamp": "2026-09-17T17:41:38.148Z",
+      "action": "Campaign Reactivated",
+      "targetId": "cmp-1788262396368"
+    },
+    {
+      "targetId": "cmp-khawlsak-1",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-17T17:41:31.050Z",
+      "updatedAt": "2026-09-17T17:41:31.051Z",
+      "action": "Campaign Reactivated",
+      "id": "log-1789666891050-5j1z",
+      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
+      "targetType": "campaign"
+    },
+    {
+      "action": "Campaign Reactivated",
+      "timestamp": "2026-09-17T17:41:04.884Z",
+      "targetType": "campaign",
+      "targetId": "cmp-rikrum-1",
+      "updatedAt": "2026-09-17T17:41:04.885Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
+      "id": "log-1789666864884-68yn"
+    },
+    {
+      "action": "Campaign Reactivated",
+      "timestamp": "2026-09-17T17:41:01.256Z",
+      "updatedAt": "2026-09-17T17:41:01.257Z",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1787545326556) with +30 days validity.",
+      "targetId": "cmp-1787545326556",
+      "id": "log-1789666861256-rrn1"
+    },
+    {
+      "timestamp": "2026-09-17T17:40:51.504Z",
+      "id": "log-1789666851504-u7i6",
+      "targetType": "announcement",
+      "updatedAt": "2026-09-17T17:40:51.505Z",
+      "performedBy": "Admin (Biometric)",
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)"
+    },
+    {
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-17T17:40:11.579Z",
+      "id": "log-1789666811577-wqwg",
+      "timestamp": "2026-09-17T17:40:11.577Z",
+      "action": "Super Admin Login",
+      "targetType": "system"
+    },
+    {
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
+      "id": "log-1789653875362-2omx",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "announcement",
+      "timestamp": "2026-09-17T14:04:35.362Z",
+      "updatedAt": "2026-09-17T14:04:35.364Z"
+    },
+    {
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "id": "log-1789653805972-6lwe",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system",
+      "timestamp": "2026-09-17T14:03:25.972Z",
+      "updatedAt": "2026-09-17T14:03:25.974Z"
+    },
+    {
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
+      "id": "log-1789645745530-1r6a",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "announcement",
+      "timestamp": "2026-09-17T11:49:05.530Z",
+      "updatedAt": "2026-09-17T11:49:05.531Z"
+    },
+    {
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
+      "id": "log-1789645712166-t4qr",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "announcement",
+      "timestamp": "2026-09-17T11:48:32.166Z",
+      "updatedAt": "2026-09-17T11:48:32.167Z"
+    },
+    {
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
+      "id": "log-1789645655347-cv1s",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "announcement",
+      "timestamp": "2026-09-17T11:47:35.347Z",
+      "updatedAt": "2026-09-17T11:47:35.348Z"
+    },
+    {
+      "action": "Announcement Updated",
+      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
+      "id": "log-1789645609299-9d2s",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "announcement",
+      "timestamp": "2026-09-17T11:46:49.300Z",
+      "updatedAt": "2026-09-17T11:46:49.300Z"
+    },
+    {
+      "action": "Super Admin Login",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "id": "log-1789645554268-po9c",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system",
+      "timestamp": "2026-09-17T11:45:54.268Z",
+      "updatedAt": "2026-09-17T11:45:54.270Z"
     },
     {
       "updatedAt": "2026-09-16T19:16:07.069Z",
@@ -13196,6 +14292,15 @@
       "details": "Administrator authenticated via Biometrics.",
       "action": "Admin Biometric Login",
       "timestamp": "2026-09-16T08:21:32.908Z"
+    },
+    {
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-15T10:38:18.474Z",
+      "id": "log-1789468698473-7onx",
+      "action": "Super Admin Login",
+      "targetType": "system",
+      "timestamp": "2026-09-15T10:38:18.473Z"
     },
     {
       "details": "Admin updated details of post/campaign 'BMP Shillong,' (cmp-1788107291420). Category: kumtluang, Prefix: BMPSHL, Status: active.",
@@ -13439,6 +14544,202 @@
       "targetType": "system",
       "id": "log-1789228974202-3lzi",
       "updatedAt": "2026-09-12T16:02:54.205Z"
+    },
+    {
+      "targetId": "2222222222",
+      "id": "log-1789223030735-8gha",
+      "details": "Declined application for Khualmi (Guest User) (2222222222). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "timestamp": "2026-09-12T14:23:50.735Z",
+      "performedBy": "Admin (Biometric)",
+      "action": "Creator Application Declined",
+      "targetType": "creator",
+      "updatedAt": "2026-09-12T14:23:50.736Z"
+    },
+    {
+      "action": "Creator Application Declined",
+      "timestamp": "2026-09-12T14:23:37.995Z",
+      "targetId": "2222222222",
+      "targetType": "creator",
+      "id": "log-1789223017995-zrm3",
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-12T14:23:37.998Z",
+      "details": "Declined application for Khualmi (Guest User) (2222222222). Reason: In-verify-na lehkha / details a chiang tawk lo"
+    },
+    {
+      "id": "log-1789222975828-oc93",
+      "updatedAt": "2026-09-12T14:22:55.829Z",
+      "details": "Updated profile & privileges for Rev. Dr. R. Zothansanga (1234567890): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
+      "timestamp": "2026-09-12T14:22:55.828Z",
+      "targetType": "creator",
+      "performedBy": "Admin (Biometric)",
+      "action": "Creator Application Approved & Verified",
+      "targetId": "1234567890"
+    },
+    {
+      "targetType": "creator",
+      "timestamp": "2026-09-12T14:21:59.639Z",
+      "updatedAt": "2026-09-12T14:21:59.639Z",
+      "targetId": "1234567890",
+      "id": "log-1789222919639-3jkm",
+      "action": "Creator Application Declined",
+      "performedBy": "Admin (Biometric)",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567890). Reason: In-verify-na lehkha / details a chiang tawk lo"
+    },
+    {
+      "timestamp": "2026-09-12T14:21:28.890Z",
+      "updatedAt": "2026-09-12T14:21:28.891Z",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "creator",
+      "id": "log-1789222888890-tynb",
+      "targetId": "1234567896",
+      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
+      "action": "Creator Application Declined"
+    },
+    {
+      "updatedAt": "2026-09-12T14:19:53.921Z",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "timestamp": "2026-09-12T14:19:53.920Z",
+      "id": "log-1789222793920-vvuw",
+      "action": "Super Admin Login",
+      "performedBy": "Admin (Biometric)",
+      "targetType": "system"
+    },
+    {
+      "targetId": "cmp-rikrum-1",
+      "targetType": "campaign",
+      "timestamp": "2026-09-12T13:48:16.820Z",
+      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
+      "id": "log-1789220896820-ispp",
+      "updatedAt": "2026-09-12T13:48:16.820Z",
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Reactivated"
+    },
+    {
+      "updatedAt": "2026-09-12T13:48:05.557Z",
+      "targetType": "campaign",
+      "targetId": "cmp-rikrum-1",
+      "action": "Campaign Expired",
+      "timestamp": "2026-09-12T13:48:05.552Z",
+      "details": "Admin marked campaign 'Kangmei Relief Support' as expired.",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789220885552-qumj"
+    },
+    {
+      "id": "log-1789220693361-xfll",
+      "performedBy": "Admin (Biometric)",
+      "details": "Updated profile & privileges for Nunpuia (9436001234): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
+      "action": "Creator Application Approved & Verified",
+      "timestamp": "2026-09-12T13:44:53.361Z",
+      "targetId": "9436001234",
+      "targetType": "creator",
+      "updatedAt": "2026-09-12T13:44:53.362Z"
+    },
+    {
+      "details": "Updated profile & privileges for Rev. Dr. R. Zothansanga (9862599881): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
+      "timestamp": "2026-09-12T13:43:56.859Z",
+      "targetId": "9862599881",
+      "updatedAt": "2026-09-12T13:43:56.860Z",
+      "action": "Creator Application Approved & Verified",
+      "id": "log-1789220636859-wxwh",
+      "targetType": "creator",
+      "performedBy": "Admin (Biometric)"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
+      "action": "Campaign Reactivated",
+      "targetType": "campaign",
+      "timestamp": "2026-09-12T13:42:12.817Z",
+      "updatedAt": "2026-09-12T13:42:12.818Z",
+      "targetId": "cmp-khawlsak-1",
+      "id": "log-1789220532817-8uvh"
+    },
+    {
+      "updatedAt": "2026-09-12T13:42:08.447Z",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789220528446-e5ak",
+      "targetType": "campaign",
+      "targetId": "cmp-rikrum-1",
+      "action": "Campaign Reactivated",
+      "timestamp": "2026-09-12T13:42:08.446Z",
+      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity."
+    },
+    {
+      "targetType": "campaign",
+      "id": "log-1789220525204-suuc",
+      "updatedAt": "2026-09-12T13:42:05.205Z",
+      "action": "Campaign Reactivated",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-12T13:42:05.204Z",
+      "details": "Admin reactivated expired campaign 'Pi Lalhmingliani Ralna' (cmp-ralna-1) with +30 days validity.",
+      "targetId": "cmp-ralna-1"
+    },
+    {
+      "id": "log-1789220521842-h2c4",
+      "targetId": "cmp-ralna-2",
+      "performedBy": "Admin (Biometric)",
+      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
+      "timestamp": "2026-09-12T13:42:01.842Z",
+      "updatedAt": "2026-09-12T13:42:01.843Z",
+      "targetType": "campaign",
+      "action": "Campaign Reactivated"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "action": "Campaign Reactivated",
+      "targetId": "cmp-1787917594696",
+      "details": "Admin reactivated expired campaign 'Biakmuana Ralna' (cmp-1787917594696) with +30 days validity.",
+      "timestamp": "2026-09-12T13:41:51.996Z",
+      "id": "log-1789220511996-gxsf",
+      "updatedAt": "2026-09-12T13:41:51.997Z",
+      "targetType": "campaign"
+    },
+    {
+      "id": "log-1789220494052-ug80",
+      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1788526889943) with +30 days validity.",
+      "targetId": "cmp-1788526889943",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-12T13:41:34.053Z",
+      "updatedAt": "2026-09-12T13:41:34.053Z",
+      "action": "Campaign Reactivated",
+      "targetType": "campaign"
+    },
+    {
+      "updatedAt": "2026-09-12T13:40:03.803Z",
+      "targetType": "campaign",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-09-12T13:40:03.801Z",
+      "action": "Campaign Cancelled & Archived",
+      "details": "Campaign \"Lalrinpuii Ralna\" (cmp-1788526889943) with 114 transactions was cancelled and safely archived. Reason: Siam sual / Creator cancelled (Ledger Retained)",
+      "id": "log-1789220403801-x45h",
+      "targetId": "cmp-1788526889943"
+    },
+    {
+      "targetType": "system",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "timestamp": "2026-09-12T13:39:26.728Z",
+      "action": "Super Admin Login",
+      "performedBy": "Admin (Biometric)",
+      "id": "log-1789220366728-oul8",
+      "updatedAt": "2026-09-12T13:39:26.731Z"
+    },
+    {
+      "performedBy": "Admin (Biometric)",
+      "updatedAt": "2026-09-12T13:38:40.075Z",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "timestamp": "2026-09-12T13:38:40.072Z",
+      "targetType": "system",
+      "id": "log-1789220320072-7v4o",
+      "action": "Super Admin Login"
+    },
+    {
+      "action": "Super Admin Login",
+      "timestamp": "2026-09-12T13:37:21.134Z",
+      "performedBy": "Admin (Biometric)",
+      "details": "Super Admin authenticated via Unified Login Modal.",
+      "targetType": "system",
+      "id": "log-1789220241134-s2pv",
+      "updatedAt": "2026-09-12T13:37:21.141Z"
     },
     {
       "id": "log-1789124715132-yucz",
@@ -14107,1302 +15408,6 @@
       "performedBy": "Admin (Biometric)",
       "updatedAt": "2026-08-27T11:15:51.824Z",
       "action": "Admin Password Login"
-    },
-    {
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "id": "log-1789645554268-po9c",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system",
-      "timestamp": "2026-09-17T11:45:54.268Z",
-      "updatedAt": "2026-09-17T11:45:54.270Z"
-    },
-    {
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
-      "id": "log-1789645609299-9d2s",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "announcement",
-      "timestamp": "2026-09-17T11:46:49.300Z",
-      "updatedAt": "2026-09-17T11:46:49.300Z"
-    },
-    {
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
-      "id": "log-1789645655347-cv1s",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "announcement",
-      "timestamp": "2026-09-17T11:47:35.347Z",
-      "updatedAt": "2026-09-17T11:47:35.348Z"
-    },
-    {
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: true)",
-      "id": "log-1789645712166-t4qr",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "announcement",
-      "timestamp": "2026-09-17T11:48:32.166Z",
-      "updatedAt": "2026-09-17T11:48:32.167Z"
-    },
-    {
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
-      "id": "log-1789645745530-1r6a",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "announcement",
-      "timestamp": "2026-09-17T11:49:05.530Z",
-      "updatedAt": "2026-09-17T11:49:05.531Z"
-    },
-    {
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "id": "log-1789653805972-6lwe",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system",
-      "timestamp": "2026-09-17T14:03:25.972Z",
-      "updatedAt": "2026-09-17T14:03:25.974Z"
-    },
-    {
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
-      "id": "log-1789653875362-2omx",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "announcement",
-      "timestamp": "2026-09-17T14:04:35.362Z",
-      "updatedAt": "2026-09-17T14:04:35.364Z"
-    },
-    {
-      "action": "Campaign Reactivated",
-      "timestamp": "2026-09-17T17:41:04.884Z",
-      "targetType": "campaign",
-      "targetId": "cmp-rikrum-1",
-      "updatedAt": "2026-09-17T17:41:04.885Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
-      "id": "log-1789666864884-68yn"
-    },
-    {
-      "action": "Campaign Reactivated",
-      "timestamp": "2026-09-17T17:41:01.256Z",
-      "updatedAt": "2026-09-17T17:41:01.257Z",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1787545326556) with +30 days validity.",
-      "targetId": "cmp-1787545326556",
-      "id": "log-1789666861256-rrn1"
-    },
-    {
-      "timestamp": "2026-09-17T17:40:51.504Z",
-      "id": "log-1789666851504-u7i6",
-      "targetType": "announcement",
-      "updatedAt": "2026-09-17T17:40:51.505Z",
-      "performedBy": "Admin (Biometric)",
-      "action": "Announcement Updated",
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)"
-    },
-    {
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-17T17:40:11.579Z",
-      "id": "log-1789666811577-wqwg",
-      "timestamp": "2026-09-17T17:40:11.577Z",
-      "action": "Super Admin Login",
-      "targetType": "system"
-    },
-    {
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789666898148-q3zv",
-      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
-      "updatedAt": "2026-09-17T17:41:38.150Z",
-      "timestamp": "2026-09-17T17:41:38.148Z",
-      "action": "Campaign Reactivated",
-      "targetId": "cmp-1788262396368"
-    },
-    {
-      "targetId": "cmp-khawlsak-1",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-17T17:41:31.050Z",
-      "updatedAt": "2026-09-17T17:41:31.051Z",
-      "action": "Campaign Reactivated",
-      "id": "log-1789666891050-5j1z",
-      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
-      "targetType": "campaign"
-    },
-    {
-      "id": "log-1789721929925-2gni",
-      "updatedAt": "2026-09-18T08:58:49.927Z",
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system",
-      "timestamp": "2026-09-18T08:58:49.925Z"
-    },
-    {
-      "details": "Updated community announcement: \"Mizoram State-wide Community Notice\" (Active: false)",
-      "id": "log-1789716302142-hx8p",
-      "timestamp": "2026-09-18T07:25:02.142Z",
-      "targetType": "announcement",
-      "updatedAt": "2026-09-18T07:25:02.143Z",
-      "action": "Announcement Updated",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "updatedAt": "2026-09-18T07:24:28.062Z",
-      "targetType": "system",
-      "id": "log-1789716268057-53vo",
-      "action": "Admin Biometric Login",
-      "details": "Administrator authenticated via Biometrics.",
-      "timestamp": "2026-09-18T07:24:28.057Z",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "timestamp": "2026-09-17T19:06:46.232Z",
-      "targetType": "campaign",
-      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1787545326556) with +30 days validity.",
-      "updatedAt": "2026-09-17T19:06:46.232Z",
-      "targetId": "cmp-1787545326556",
-      "action": "Campaign Reactivated",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789672006232-7viu"
-    },
-    {
-      "targetType": "campaign",
-      "targetId": "cmp-1788262396368",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789672001329-o7vu",
-      "timestamp": "2026-09-17T19:06:41.329Z",
-      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
-      "updatedAt": "2026-09-17T19:06:41.330Z",
-      "action": "Campaign Reactivated"
-    },
-    {
-      "updatedAt": "2026-09-17T19:06:33.852Z",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-17T19:06:33.850Z",
-      "action": "Admin Biometric Login",
-      "details": "Administrator authenticated via Biometrics.",
-      "id": "log-1789671993850-vfh8"
-    },
-    {
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-15T10:38:18.474Z",
-      "id": "log-1789468698473-7onx",
-      "action": "Super Admin Login",
-      "targetType": "system",
-      "timestamp": "2026-09-15T10:38:18.473Z"
-    },
-    {
-      "targetType": "system",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "timestamp": "2026-09-12T13:39:26.728Z",
-      "action": "Super Admin Login",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789220366728-oul8",
-      "updatedAt": "2026-09-12T13:39:26.731Z"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-12T13:38:40.075Z",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "timestamp": "2026-09-12T13:38:40.072Z",
-      "targetType": "system",
-      "id": "log-1789220320072-7v4o",
-      "action": "Super Admin Login"
-    },
-    {
-      "action": "Super Admin Login",
-      "timestamp": "2026-09-12T13:37:21.134Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "targetType": "system",
-      "id": "log-1789220241134-s2pv",
-      "updatedAt": "2026-09-12T13:37:21.141Z"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:29:28.707Z",
-      "id": "log-1789720168707-jmts",
-      "updatedAt": "2026-09-18T08:29:28.709Z",
-      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetId": "cmp-chhungkaw-1",
-      "action": "Campaign Deleted",
-      "targetType": "campaign"
-    },
-    {
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "updatedAt": "2026-09-18T08:29:24.982Z",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chhungkaw-2",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:29:24.978Z",
-      "id": "log-1789720164978-0ef3",
-      "targetType": "campaign"
-    },
-    {
-      "id": "log-1789720155780-5fvb",
-      "details": "Administrator authenticated via Biometrics.",
-      "action": "Admin Biometric Login",
-      "updatedAt": "2026-09-18T08:29:15.786Z",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:29:15.780Z",
-      "targetType": "system"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789721766965-1z37",
-      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "updatedAt": "2026-09-18T08:56:06.971Z",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "targetId": "cmp-chk-mu6ojr7t",
-      "timestamp": "2026-09-18T08:56:06.965Z"
-    },
-    {
-      "targetId": "cmp-chk-mu6on2s6",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:55:59.076Z",
-      "targetType": "campaign",
-      "id": "log-1789721759076-q7hf",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-18T08:55:59.078Z",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
-    },
-    {
-      "id": "log-1789721745886-l483",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "timestamp": "2026-09-18T08:55:45.886Z",
-      "updatedAt": "2026-09-18T08:55:45.889Z",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chhungkaw-1"
-    },
-    {
-      "updatedAt": "2026-09-18T08:55:34.577Z",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "id": "log-1789721734574-9kc2",
-      "action": "Campaign Deleted",
-      "timestamp": "2026-09-18T08:55:34.574Z",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chhungkaw-2",
-      "targetType": "campaign"
-    },
-    {
-      "timestamp": "2026-09-18T08:52:46.229Z",
-      "updatedAt": "2026-09-18T08:52:46.233Z",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chhungkaw-2",
-      "id": "log-1789721566229-30sb",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "updatedAt": "2026-09-18T08:52:33.311Z",
-      "id": "log-1789721553308-dpr7",
-      "targetId": "cmp-chhungkaw-2",
-      "timestamp": "2026-09-18T08:52:33.308Z"
-    },
-    {
-      "action": "Campaign Deleted",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:52:23.226Z",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "id": "log-1789721543226-2fh4",
-      "updatedAt": "2026-09-18T08:52:23.229Z",
-      "targetType": "campaign",
-      "targetId": "cmp-chhungkaw-2"
-    },
-    {
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789721533348-4dhm",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T08:52:13.348Z",
-      "updatedAt": "2026-09-18T08:52:13.354Z",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
-    },
-    {
-      "id": "log-1789721528472-my6s",
-      "timestamp": "2026-09-18T08:52:08.472Z",
-      "updatedAt": "2026-09-18T08:52:08.480Z",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system",
-      "action": "Admin Biometric Login",
-      "details": "Administrator authenticated via Biometrics."
-    },
-    {
-      "targetId": "cmp-chk-mu6on2s6",
-      "action": "Campaign Deleted",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-18T08:30:33.818Z",
-      "timestamp": "2026-09-18T08:30:33.817Z",
-      "targetType": "campaign",
-      "id": "log-1789720233817-hrdj",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
-    },
-    {
-      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-18T08:30:22.777Z",
-      "id": "log-1789720222775-5jwz",
-      "timestamp": "2026-09-18T08:30:22.775Z",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chk-mu6ojr7t"
-    },
-    {
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "updatedAt": "2026-09-18T08:30:14.601Z",
-      "timestamp": "2026-09-18T08:30:14.597Z",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789720214597-naql",
-      "targetType": "campaign",
-      "action": "Campaign Deleted"
-    },
-    {
-      "timestamp": "2026-09-18T08:30:02.665Z",
-      "updatedAt": "2026-09-18T08:30:02.667Z",
-      "targetId": "cmp-chk-mu6on2s6",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign",
-      "id": "log-1789720202665-z15c"
-    },
-    {
-      "id": "log-1789720196102-h7su",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-18T08:29:56.104Z",
-      "timestamp": "2026-09-18T08:29:56.102Z",
-      "targetType": "campaign",
-      "targetId": "cmp-chhungkaw-2"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789720192501-iubn",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "updatedAt": "2026-09-18T08:29:52.505Z",
-      "timestamp": "2026-09-18T08:29:52.501Z"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "targetType": "campaign",
-      "id": "log-1789720188210-g14g",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "updatedAt": "2026-09-18T08:29:48.212Z",
-      "timestamp": "2026-09-18T08:29:48.211Z",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chhungkaw-2"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-18T08:29:43.896Z",
-      "id": "log-1789720183894-onw3",
-      "timestamp": "2026-09-18T08:29:43.894Z",
-      "targetId": "cmp-chk-mu6on2s6"
-    },
-    {
-      "targetId": "cmp-chhungkaw-1",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "id": "log-1789885657620-5kz4",
-      "updatedAt": "2026-09-20T06:27:37.621Z",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-20T06:27:37.620Z"
-    },
-    {
-      "timestamp": "2026-09-20T06:27:19.881Z",
-      "updatedAt": "2026-09-20T06:27:19.886Z",
-      "id": "log-1789885639881-fh7r",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chk-mu6on2s6"
-    },
-    {
-      "targetId": "cmp-chk-mu6on2s6",
-      "action": "Campaign Deleted",
-      "id": "log-1789885627865-apry",
-      "updatedAt": "2026-09-20T06:27:07.871Z",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "timestamp": "2026-09-20T06:27:07.865Z",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "targetId": "cmp-chk-mu6ojr7t",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789885620280-vnsk",
-      "timestamp": "2026-09-20T06:27:00.280Z",
-      "action": "Campaign Deleted",
-      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign",
-      "updatedAt": "2026-09-20T06:27:00.283Z"
-    },
-    {
-      "id": "log-1789885614466-u4ql",
-      "targetId": "cmp-chk-mu6on2s6",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "updatedAt": "2026-09-20T06:26:54.471Z",
-      "timestamp": "2026-09-20T06:26:54.466Z"
-    },
-    {
-      "timestamp": "2026-09-20T06:26:47.289Z",
-      "updatedAt": "2026-09-20T06:26:47.293Z",
-      "id": "log-1789885607289-hetg",
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chk-mu6ojr7t",
-      "targetType": "campaign"
-    },
-    {
-      "action": "Campaign Deleted",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-20T06:26:41.621Z",
-      "updatedAt": "2026-09-20T06:26:41.627Z",
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789885601621-cul8"
-    },
-    {
-      "updatedAt": "2026-09-20T06:25:51.921Z",
-      "timestamp": "2026-09-20T06:25:51.920Z",
-      "targetType": "campaign",
-      "action": "Campaign Reactivated",
-      "targetId": "cmp-khawlsak-2",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789885551920-ksod",
-      "details": "Admin reactivated expired campaign 'Zothan Damlo Enkawlna Tanpuina' (cmp-khawlsak-2) with +30 days validity."
-    },
-    {
-      "id": "log-1789885547596-hix9",
-      "updatedAt": "2026-09-20T06:25:47.599Z",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-20T06:25:47.596Z",
-      "targetType": "campaign",
-      "targetId": "cmp-ralna-2",
-      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
-      "action": "Campaign Reactivated"
-    },
-    {
-      "targetId": "cmp-chhungkaw-1",
-      "updatedAt": "2026-09-20T06:25:39.630Z",
-      "id": "log-1789885539628-rzol",
-      "action": "Campaign Deleted",
-      "timestamp": "2026-09-20T06:25:39.628Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign"
-    },
-    {
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetId": "cmp-chhungkaw-2",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "timestamp": "2026-09-20T06:25:28.146Z",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-20T06:25:28.148Z",
-      "id": "log-1789885528146-8gbd"
-    },
-    {
-      "targetId": "cmp-chk-mu6ojr7t",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-20T06:24:58.374Z",
-      "targetType": "campaign",
-      "timestamp": "2026-09-20T06:24:58.372Z",
-      "id": "log-1789885498371-2gg7",
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) with ₹0 collections was deleted permanently. Reason: Siam sual palh"
-    },
-    {
-      "targetId": "cmp-chk-mu6on2s6",
-      "updatedAt": "2026-09-20T06:24:50.564Z",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-20T06:24:50.560Z",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "action": "Campaign Deleted",
-      "id": "log-1789885490560-tg71"
-    },
-    {
-      "timestamp": "2026-09-18T09:22:04.427Z",
-      "targetType": "campaign",
-      "updatedAt": "2026-09-18T09:22:04.430Z",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789723324427-nbdr",
-      "action": "Campaign Deleted"
-    },
-    {
-      "targetId": "cmp-chhungkaw-2",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "id": "log-1789723315342-vw9t",
-      "timestamp": "2026-09-18T09:21:55.342Z",
-      "updatedAt": "2026-09-18T09:21:55.346Z"
-    },
-    {
-      "details": "Approved QR Campaign 'In hmun nghet lo' (cmp-1789722668042) in category rikrum. QR is now LIVE.",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-1789722668042",
-      "action": "Campaign Approved & Activated",
-      "targetType": "campaign",
-      "updatedAt": "2026-09-18T09:21:42.716Z",
-      "id": "log-1789723302715-i2cl",
-      "timestamp": "2026-09-18T09:21:42.715Z"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "details": "Campaign \"In hmun nghet lo\" approved by Admin",
-      "id": "log-1789723302713-7wht",
-      "action": "Campaign Approved",
-      "updatedAt": "2026-09-18T09:21:42.714Z",
-      "targetType": "campaign",
-      "timestamp": "2026-09-18T09:21:42.713Z",
-      "targetId": "cmp-1789722668042"
-    },
-    {
-      "targetType": "campaign",
-      "id": "log-1789723298048-9rpt",
-      "details": "Approved QR Campaign 'Nunkima Ralna' (cmp-1789722358527) in category ralna. QR is now LIVE.",
-      "action": "Campaign Approved & Activated",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-1789722358527",
-      "updatedAt": "2026-09-18T09:21:38.049Z",
-      "timestamp": "2026-09-18T09:21:38.048Z"
-    },
-    {
-      "action": "Campaign Approved",
-      "details": "Campaign \"Nunkima Ralna\" approved by Admin",
-      "targetId": "cmp-1789722358527",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-18T09:21:38.048Z",
-      "id": "log-1789723298047-ibhm",
-      "timestamp": "2026-09-18T09:21:38.047Z"
-    },
-    {
-      "details": "Approved QR Campaign 'Fingmawii Ralna' (cmp-1789722801941) in category ralna. QR is now LIVE.",
-      "updatedAt": "2026-09-18T09:21:34.924Z",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T09:21:34.923Z",
-      "action": "Campaign Approved & Activated",
-      "targetType": "campaign",
-      "id": "log-1789723294922-l6yq",
-      "targetId": "cmp-1789722801941"
-    },
-    {
-      "details": "Campaign \"Fingmawii Ralna\" approved by Admin",
-      "targetType": "campaign",
-      "action": "Campaign Approved",
-      "updatedAt": "2026-09-18T09:21:34.922Z",
-      "timestamp": "2026-09-18T09:21:34.921Z",
-      "id": "log-1789723294921-agz0",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-1789722801941"
-    },
-    {
-      "timestamp": "2026-09-18T09:21:29.830Z",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-18T09:21:29.831Z",
-      "targetId": "cmp-1789722498375",
-      "id": "log-1789723289830-6bok",
-      "action": "Campaign Approved & Activated",
-      "targetType": "campaign",
-      "details": "Approved QR Campaign 'Leimin Puihna' (cmp-1789722498375) in category rikrum. QR is now LIVE."
-    },
-    {
-      "targetType": "campaign",
-      "id": "log-1789723289826-gl4f",
-      "action": "Campaign Approved",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-1789722498375",
-      "updatedAt": "2026-09-18T09:21:29.830Z",
-      "details": "Campaign \"Leimin Puihna\" approved by Admin",
-      "timestamp": "2026-09-18T09:21:29.826Z"
-    },
-    {
-      "id": "log-1789723283969-6sqa",
-      "targetType": "system",
-      "details": "Administrator authenticated via Biometrics.",
-      "performedBy": "Admin (Biometric)",
-      "action": "Admin Biometric Login",
-      "timestamp": "2026-09-18T09:21:23.970Z",
-      "updatedAt": "2026-09-18T09:21:23.980Z"
-    },
-    {
-      "targetId": "cmp-rikrum-1",
-      "targetType": "campaign",
-      "timestamp": "2026-09-12T13:48:16.820Z",
-      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
-      "id": "log-1789220896820-ispp",
-      "updatedAt": "2026-09-12T13:48:16.820Z",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Reactivated"
-    },
-    {
-      "updatedAt": "2026-09-12T13:48:05.557Z",
-      "targetType": "campaign",
-      "targetId": "cmp-rikrum-1",
-      "action": "Campaign Expired",
-      "timestamp": "2026-09-12T13:48:05.552Z",
-      "details": "Admin marked campaign 'Kangmei Relief Support' as expired.",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789220885552-qumj"
-    },
-    {
-      "id": "log-1789220693361-xfll",
-      "performedBy": "Admin (Biometric)",
-      "details": "Updated profile & privileges for Nunpuia (9436001234): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
-      "action": "Creator Application Approved & Verified",
-      "timestamp": "2026-09-12T13:44:53.361Z",
-      "targetId": "9436001234",
-      "targetType": "creator",
-      "updatedAt": "2026-09-12T13:44:53.362Z"
-    },
-    {
-      "details": "Updated profile & privileges for Rev. Dr. R. Zothansanga (9862599881): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
-      "timestamp": "2026-09-12T13:43:56.859Z",
-      "targetId": "9862599881",
-      "updatedAt": "2026-09-12T13:43:56.860Z",
-      "action": "Creator Application Approved & Verified",
-      "id": "log-1789220636859-wxwh",
-      "targetType": "creator",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
-      "action": "Campaign Reactivated",
-      "targetType": "campaign",
-      "timestamp": "2026-09-12T13:42:12.817Z",
-      "updatedAt": "2026-09-12T13:42:12.818Z",
-      "targetId": "cmp-khawlsak-1",
-      "id": "log-1789220532817-8uvh"
-    },
-    {
-      "updatedAt": "2026-09-12T13:42:08.447Z",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789220528446-e5ak",
-      "targetType": "campaign",
-      "targetId": "cmp-rikrum-1",
-      "action": "Campaign Reactivated",
-      "timestamp": "2026-09-12T13:42:08.446Z",
-      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity."
-    },
-    {
-      "targetType": "campaign",
-      "id": "log-1789220525204-suuc",
-      "updatedAt": "2026-09-12T13:42:05.205Z",
-      "action": "Campaign Reactivated",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-12T13:42:05.204Z",
-      "details": "Admin reactivated expired campaign 'Pi Lalhmingliani Ralna' (cmp-ralna-1) with +30 days validity.",
-      "targetId": "cmp-ralna-1"
-    },
-    {
-      "id": "log-1789220521842-h2c4",
-      "targetId": "cmp-ralna-2",
-      "performedBy": "Admin (Biometric)",
-      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
-      "timestamp": "2026-09-12T13:42:01.842Z",
-      "updatedAt": "2026-09-12T13:42:01.843Z",
-      "targetType": "campaign",
-      "action": "Campaign Reactivated"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Reactivated",
-      "targetId": "cmp-1787917594696",
-      "details": "Admin reactivated expired campaign 'Biakmuana Ralna' (cmp-1787917594696) with +30 days validity.",
-      "timestamp": "2026-09-12T13:41:51.996Z",
-      "id": "log-1789220511996-gxsf",
-      "updatedAt": "2026-09-12T13:41:51.997Z",
-      "targetType": "campaign"
-    },
-    {
-      "id": "log-1789220494052-ug80",
-      "details": "Admin reactivated expired campaign 'Lalrinpuii Ralna' (cmp-1788526889943) with +30 days validity.",
-      "targetId": "cmp-1788526889943",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-12T13:41:34.053Z",
-      "updatedAt": "2026-09-12T13:41:34.053Z",
-      "action": "Campaign Reactivated",
-      "targetType": "campaign"
-    },
-    {
-      "updatedAt": "2026-09-12T13:40:03.803Z",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-12T13:40:03.801Z",
-      "action": "Campaign Cancelled & Archived",
-      "details": "Campaign \"Lalrinpuii Ralna\" (cmp-1788526889943) with 114 transactions was cancelled and safely archived. Reason: Siam sual / Creator cancelled (Ledger Retained)",
-      "id": "log-1789220403801-x45h",
-      "targetId": "cmp-1788526889943"
-    },
-    {
-      "timestamp": "2026-09-12T14:21:28.890Z",
-      "updatedAt": "2026-09-12T14:21:28.891Z",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "creator",
-      "id": "log-1789222888890-tynb",
-      "targetId": "1234567896",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "action": "Creator Application Declined"
-    },
-    {
-      "updatedAt": "2026-09-12T14:19:53.921Z",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "timestamp": "2026-09-12T14:19:53.920Z",
-      "id": "log-1789222793920-vvuw",
-      "action": "Super Admin Login",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system"
-    },
-    {
-      "targetId": "2222222222",
-      "id": "log-1789223030735-8gha",
-      "details": "Declined application for Khualmi (Guest User) (2222222222). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "timestamp": "2026-09-12T14:23:50.735Z",
-      "performedBy": "Admin (Biometric)",
-      "action": "Creator Application Declined",
-      "targetType": "creator",
-      "updatedAt": "2026-09-12T14:23:50.736Z"
-    },
-    {
-      "action": "Creator Application Declined",
-      "timestamp": "2026-09-12T14:23:37.995Z",
-      "targetId": "2222222222",
-      "targetType": "creator",
-      "id": "log-1789223017995-zrm3",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-12T14:23:37.998Z",
-      "details": "Declined application for Khualmi (Guest User) (2222222222). Reason: In-verify-na lehkha / details a chiang tawk lo"
-    },
-    {
-      "id": "log-1789222975828-oc93",
-      "updatedAt": "2026-09-12T14:22:55.829Z",
-      "details": "Updated profile & privileges for Rev. Dr. R. Zothansanga (1234567890): Status: Approved, Trial: 180 days, 10 free posts quota, Photo/Logo updated.",
-      "timestamp": "2026-09-12T14:22:55.828Z",
-      "targetType": "creator",
-      "performedBy": "Admin (Biometric)",
-      "action": "Creator Application Approved & Verified",
-      "targetId": "1234567890"
-    },
-    {
-      "targetType": "creator",
-      "timestamp": "2026-09-12T14:21:59.639Z",
-      "updatedAt": "2026-09-12T14:21:59.639Z",
-      "targetId": "1234567890",
-      "id": "log-1789222919639-3jkm",
-      "action": "Creator Application Declined",
-      "performedBy": "Admin (Biometric)",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567890). Reason: In-verify-na lehkha / details a chiang tawk lo"
-    },
-    {
-      "action": "Super Admin Login",
-      "id": "log-1789990106307-sffj",
-      "targetType": "system",
-      "updatedAt": "2026-09-21T11:28:26.316Z",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-21T11:28:26.307Z",
-      "details": "Super Admin authenticated via Unified Login Modal."
-    },
-    {
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-chk-mu6on2s6",
-      "id": "log-1789988573797-9gkt",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-21T11:02:53.805Z",
-      "details": "Fresh campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "timestamp": "2026-09-21T11:02:53.797Z"
-    },
-    {
-      "timestamp": "2026-09-21T11:02:39.696Z",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-21T11:02:39.698Z",
-      "id": "log-1789988559696-w3rl",
-      "details": "Fresh campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chhungkaw-1",
-      "targetType": "campaign"
-    },
-    {
-      "updatedAt": "2026-09-21T11:02:31.407Z",
-      "timestamp": "2026-09-21T11:02:31.398Z",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "id": "log-1789988551398-vqrs",
-      "targetId": "cmp-chhungkaw-2",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "targetType": "campaign"
-    },
-    {
-      "id": "log-1789988534270-5mzb",
-      "action": "Campaign Deleted",
-      "timestamp": "2026-09-21T11:02:14.270Z",
-      "targetId": "cmp-chhungkaw-2",
-      "updatedAt": "2026-09-21T11:02:14.273Z",
-      "targetType": "campaign",
-      "details": "Fresh campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) with ₹0 collections was deleted permanently. Reason: Siam sual palh",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "action": "Admin Biometric Login",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "system",
-      "details": "Administrator authenticated via Biometrics.",
-      "updatedAt": "2026-09-21T11:02:01.994Z",
-      "id": "log-1789988521986-1gie",
-      "timestamp": "2026-09-21T11:02:01.986Z"
-    },
-    {
-      "id": "log-1789988366102-6bfz",
-      "performedBy": "Admin (Biometric)",
-      "details": "Administrator authenticated via Biometrics.",
-      "timestamp": "2026-09-21T10:59:26.102Z",
-      "action": "Admin Biometric Login",
-      "targetType": "system",
-      "updatedAt": "2026-09-21T10:59:26.107Z"
-    },
-    {
-      "id": "log-1789891641936-sbb5",
-      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "action": "Creator Application Declined",
-      "targetId": "9862000000",
-      "timestamp": "2026-09-20T08:07:21.936Z",
-      "updatedAt": "2026-09-20T08:07:21.939Z",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "creator"
-    },
-    {
-      "targetType": "creator",
-      "id": "log-1789891638886-nn4l",
-      "details": "Declined application for RonPay User (0000) (9862000000). Reason: Duplicate application / Account a awm sa",
-      "targetId": "9862000000",
-      "action": "Creator Application Declined",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-20T08:07:18.895Z",
-      "updatedAt": "2026-09-20T08:07:18.899Z"
-    },
-    {
-      "targetType": "creator",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "action": "Creator Application Declined",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789891627717-wllx",
-      "timestamp": "2026-09-20T08:07:07.717Z",
-      "updatedAt": "2026-09-20T08:07:07.719Z",
-      "targetId": "1234567896"
-    },
-    {
-      "id": "log-1789891625862-bbkt",
-      "targetType": "creator",
-      "timestamp": "2026-09-20T08:07:05.862Z",
-      "updatedAt": "2026-09-20T08:07:05.863Z",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "targetId": "1234567896",
-      "performedBy": "Admin (Biometric)",
-      "action": "Creator Application Declined"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "timestamp": "2026-09-20T08:07:02.375Z",
-      "targetId": "1234567896",
-      "updatedAt": "2026-09-20T08:07:02.379Z",
-      "action": "Creator Application Declined",
-      "id": "log-1789891622375-4vg2",
-      "targetType": "creator"
-    },
-    {
-      "timestamp": "2026-09-20T08:06:54.060Z",
-      "id": "log-1789891614060-5sn5",
-      "action": "Creator Application Declined",
-      "updatedAt": "2026-09-20T08:06:54.062Z",
-      "targetId": "1234567896",
-      "performedBy": "Admin (Biometric)",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "targetType": "creator"
-    },
-    {
-      "targetType": "creator",
-      "targetId": "1234567896",
-      "id": "log-1789891610413-qrxi",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-20T08:06:50.418Z",
-      "timestamp": "2026-09-20T08:06:50.413Z",
-      "details": "Declined application for Rev. Dr. R. Zothansanga (1234567896). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "action": "Creator Application Declined"
-    },
-    {
-      "id": "log-1789891582758-xchi",
-      "targetType": "campaign",
-      "details": "Admin reactivated expired campaign 'Pi Lalhmingliani Ralna' (cmp-ralna-1) with +30 days validity.",
-      "timestamp": "2026-09-20T08:06:22.758Z",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-20T08:06:22.761Z",
-      "action": "Campaign Reactivated",
-      "targetId": "cmp-ralna-1"
-    },
-    {
-      "id": "log-1789891564473-noed",
-      "action": "Campaign Deleted",
-      "targetId": "cmp-chhungkaw-2",
-      "updatedAt": "2026-09-20T08:06:04.476Z",
-      "timestamp": "2026-09-20T08:06:04.473Z",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin"
-    },
-    {
-      "targetId": "cmp-chk-mu6ojr7t",
-      "details": "Campaign \"Rev. Dr. R. Zothansanga Inneih Lawmpuina\" (cmp-chk-mu6ojr7t) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
-      "id": "log-1789891554422-2osi",
-      "timestamp": "2026-09-20T08:05:54.422Z",
-      "updatedAt": "2026-09-20T08:05:54.423Z",
-      "targetType": "campaign",
-      "action": "Campaign Deleted",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "targetType": "campaign",
-      "details": "Admin reactivated expired campaign 'Kangmei Relief Support' (cmp-rikrum-1) with +30 days validity.",
-      "action": "Campaign Reactivated",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-20T08:05:42.153Z",
-      "targetId": "cmp-rikrum-1",
-      "timestamp": "2026-09-20T08:05:42.148Z",
-      "id": "log-1789891542148-y34v"
-    },
-    {
-      "timestamp": "2026-09-20T08:05:32.865Z",
-      "targetId": "cmp-khawlsak-1",
-      "updatedAt": "2026-09-20T08:05:32.866Z",
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Reactivated",
-      "targetType": "campaign",
-      "details": "Admin reactivated expired campaign 'Hnuchham Pual Donation' (cmp-khawlsak-1) with +30 days validity.",
-      "id": "log-1789891532865-s78p"
-    },
-    {
-      "updatedAt": "2026-09-20T08:05:28.201Z",
-      "timestamp": "2026-09-20T08:05:28.199Z",
-      "action": "Campaign Reactivated",
-      "performedBy": "Admin (Biometric)",
-      "details": "Admin reactivated expired campaign 'Pu C. Vanlalruata Ralna' (cmp-ralna-2) with +30 days validity.",
-      "targetId": "cmp-ralna-2",
-      "id": "log-1789891528199-tnz5",
-      "targetType": "campaign"
-    },
-    {
-      "targetId": "cmp-1788262396368",
-      "action": "Campaign Reactivated",
-      "updatedAt": "2026-09-20T08:05:23.772Z",
-      "timestamp": "2026-09-20T08:05:23.769Z",
-      "details": "Admin reactivated expired campaign 'Pocket Money' (cmp-1788262396368) with +30 days validity.",
-      "id": "log-1789891523769-tghb",
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "timestamp": "2026-09-20T08:05:18.767Z",
-      "id": "log-1789891518767-g3kj",
-      "targetId": "cmp-chhungkaw-1",
-      "details": "Campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
-      "updatedAt": "2026-09-20T08:05:18.772Z",
-      "action": "Campaign Deleted",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "campaign"
-    },
-    {
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-20T08:05:08.418Z",
-      "targetType": "campaign",
-      "timestamp": "2026-09-20T08:05:08.413Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) was deleted permanently. Reason: Admin action / Delete bawm. Performed by: Admin",
-      "id": "log-1789891508413-412g",
-      "targetId": "cmp-chk-mu6on2s6"
-    },
-    {
-      "action": "Super Admin Login",
-      "performedBy": "Admin (Biometric)",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "id": "log-1789891483955-w2oc",
-      "targetType": "system",
-      "timestamp": "2026-09-20T08:04:43.955Z",
-      "updatedAt": "2026-09-20T08:04:43.956Z"
-    },
-    {
-      "targetType": "campaign",
-      "id": "log-1789723779383-aedr",
-      "details": "Approved QR Campaign 'Fingmawii Ralna' (cmp-1789722801941) in category ralna. QR is now LIVE.",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-18T09:29:39.383Z",
-      "updatedAt": "2026-09-18T09:29:39.384Z",
-      "action": "Campaign Approved & Activated",
-      "targetId": "cmp-1789722801941"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "targetType": "campaign",
-      "action": "Campaign Approved",
-      "updatedAt": "2026-09-18T09:29:39.382Z",
-      "targetId": "cmp-1789722801941",
-      "timestamp": "2026-09-18T09:29:39.381Z",
-      "details": "Campaign \"Fingmawii Ralna\" approved by Admin",
-      "id": "log-1789723779381-qqoj"
-    },
-    {
-      "targetId": "cmp-1789722668042",
-      "performedBy": "Admin (Biometric)",
-      "targetType": "campaign",
-      "id": "log-1789723776945-90k4",
-      "action": "Campaign Approved & Activated",
-      "updatedAt": "2026-09-18T09:29:36.946Z",
-      "details": "Approved QR Campaign 'In hmun nghet lo' (cmp-1789722668042) in category rikrum. QR is now LIVE.",
-      "timestamp": "2026-09-18T09:29:36.945Z"
-    },
-    {
-      "timestamp": "2026-09-18T09:29:36.943Z",
-      "updatedAt": "2026-09-18T09:29:36.944Z",
-      "id": "log-1789723776943-kvb8",
-      "details": "Campaign \"In hmun nghet lo\" approved by Admin",
-      "targetType": "campaign",
-      "action": "Campaign Approved",
-      "performedBy": "Admin (Biometric)",
-      "targetId": "cmp-1789722668042"
-    },
-    {
-      "targetType": "campaign",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789723774189-aiit",
-      "targetId": "cmp-1789722358527",
-      "timestamp": "2026-09-18T09:29:34.189Z",
-      "action": "Campaign Approved & Activated",
-      "updatedAt": "2026-09-18T09:29:34.190Z",
-      "details": "Approved QR Campaign 'Nunkima Ralna' (cmp-1789722358527) in category ralna. QR is now LIVE."
-    },
-    {
-      "timestamp": "2026-09-18T09:29:34.186Z",
-      "id": "log-1789723774186-28av",
-      "updatedAt": "2026-09-18T09:29:34.189Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Campaign \"Nunkima Ralna\" approved by Admin",
-      "targetType": "campaign",
-      "action": "Campaign Approved",
-      "targetId": "cmp-1789722358527"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789723770457-y5px",
-      "targetType": "campaign",
-      "timestamp": "2026-09-18T09:29:30.457Z",
-      "updatedAt": "2026-09-18T09:29:30.459Z",
-      "action": "Campaign Approved & Activated",
-      "details": "Approved QR Campaign 'Leimin Puihna' (cmp-1789722498375) in category rikrum. QR is now LIVE.",
-      "targetId": "cmp-1789722498375"
-    },
-    {
-      "timestamp": "2026-09-18T09:29:30.450Z",
-      "targetId": "cmp-1789722498375",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789723770450-37fp",
-      "details": "Campaign \"Leimin Puihna\" approved by Admin",
-      "updatedAt": "2026-09-18T09:29:30.457Z",
-      "targetType": "campaign",
-      "action": "Campaign Approved"
-    },
-    {
-      "updatedAt": "2026-09-18T09:29:13.594Z",
-      "timestamp": "2026-09-18T09:29:13.588Z",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "id": "log-1789723753588-hp7p",
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal."
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-18T09:28:56.392Z",
-      "timestamp": "2026-09-18T09:28:56.388Z",
-      "targetType": "system",
-      "action": "MODERATOR Login",
-      "details": "Staff member \"Zonunmawii (KYC Desk)\" logged in via Unified Login.",
-      "id": "log-1789723736388-1ycn"
-    },
-    {
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "action": "Super Admin Login",
-      "id": "log-1790182031652-pjpt",
-      "targetType": "system",
-      "timestamp": "2026-09-23T16:47:11.652Z",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-23T16:47:11.660Z"
-    },
-    {
-      "id": "log-1790241949048-9jug",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "action": "Super Admin Login",
-      "timestamp": "2026-09-24T09:25:49.048Z",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-24T09:25:49.054Z"
-    },
-    {
-      "action": "Campaign Deleted",
-      "id": "log-1790351214068-caq5",
-      "timestamp": "2026-09-25T15:46:54.068Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Gg. Performed by: Admin",
-      "targetType": "campaign",
-      "targetId": "cmp-chhungkaw-2",
-      "updatedAt": "2026-09-25T15:46:54.068Z"
-    },
-    {
-      "action": "Campaign Deleted",
-      "performedBy": "Admin (Biometric)",
-      "updatedAt": "2026-09-25T15:46:46.841Z",
-      "targetId": "cmp-chhungkaw-1",
-      "id": "log-1790351206840-qn2p",
-      "targetType": "campaign",
-      "timestamp": "2026-09-25T15:46:46.840Z",
-      "details": "Campaign \"Lalmuanpuia & Lalnunmawii Inneih Lawmpuina\" (cmp-chhungkaw-1) was deleted permanently. Reason: Hh. Performed by: Admin"
-    },
-    {
-      "targetId": "cmp-chhungkaw-2",
-      "id": "log-1790351199648-hrbc",
-      "targetType": "campaign",
-      "timestamp": "2026-09-25T15:46:39.648Z",
-      "details": "Campaign \"Rohlupuia Chhungkaw Lungphun & Ruai\" (cmp-chhungkaw-2) was deleted permanently. Reason: Dik lo. Performed by: Admin",
-      "action": "Campaign Deleted",
-      "updatedAt": "2026-09-25T15:46:39.648Z",
-      "performedBy": "Admin (Biometric)"
-    },
-    {
-      "performedBy": "Admin (Biometric)",
-      "action": "Campaign Deleted",
-      "targetType": "campaign",
-      "details": "Campaign \"BIaka Lungphun\" (cmp-chk-mu6on2s6) was deleted permanently. Reason: dik lo. Performed by: Admin",
-      "timestamp": "2026-09-25T15:46:27.502Z",
-      "id": "log-1790351187502-h95n",
-      "targetId": "cmp-chk-mu6on2s6",
-      "updatedAt": "2026-09-25T15:46:27.509Z"
-    },
-    {
-      "details": "Txn RPAY-CASH-774043 (₹100) chu Super Admin (Master)-in a hnawl. Chhan: Cash pawisa dawn a ni lo",
-      "targetId": "RPAY-CASH-774043",
-      "updatedAt": "2026-09-25T12:26:01.304Z",
-      "id": "log-1790339161301-fl3v",
-      "targetType": "transaction",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-25T12:26:01.301Z",
-      "action": "Cash Rejected"
-    },
-    {
-      "timestamp": "2026-09-26T13:20:18.411Z",
-      "performedBy": "Admin (Biometric)",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "action": "Super Admin Login",
-      "id": "log-1790428818411-wgmy",
-      "targetType": "system",
-      "updatedAt": "2026-09-26T13:20:18.418Z"
-    },
-    {
-      "id": "log-1790704891782-zety",
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-09-29T18:01:31.782Z"
-    },
-    {
-      "id": "log-1790842379832-acor",
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:12:59.832Z"
-    },
-    {
-      "id": "log-1790843154415-vvpb",
-      "action": "Announcement Banner Status Changed",
-      "details": "Admin changed banner status to: Active",
-      "targetType": "announcement",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:25:54.415Z"
-    },
-    {
-      "id": "log-1790843184677-t22a",
-      "action": "Announcement Banner Status Changed",
-      "details": "Admin changed banner status to: Active",
-      "targetType": "announcement",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:26:24.677Z"
-    },
-    {
-      "id": "log-1790843242140-cdms",
-      "action": "Creator Application Declined",
-      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "targetType": "creator",
-      "targetId": "9862000000",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:27:22.140Z"
-    },
-    {
-      "id": "log-1790843230817-qrsm",
-      "action": "Creator Application Declined",
-      "details": "Declined application for RonPay User (0000) (9862000000). Reason: In-verify-na lehkha / details a chiang tawk lo",
-      "targetType": "creator",
-      "targetId": "9862000000",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:27:10.817Z"
-    },
-    {
-      "id": "log-1790843302929-tyfj",
-      "action": "Announcement Banner Status Changed",
-      "details": "Admin changed banner status to: Active",
-      "targetType": "announcement",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T08:28:22.929Z"
-    },
-    {
-      "id": "log-1790883934929-dxan",
-      "action": "Super Admin Login",
-      "details": "Super Admin authenticated via Unified Login Modal.",
-      "targetType": "system",
-      "performedBy": "Admin (Biometric)",
-      "timestamp": "2026-10-01T19:45:34.929Z"
     }
   ],
   "staffAccounts": [
@@ -15417,7 +15422,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T15:56:57.872Z",
+      "lastLogin": "2026-10-03T17:40:52.484Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15431,7 +15436,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T11:56:57.872Z",
+      "lastLogin": "2026-10-03T13:40:52.484Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15445,10 +15450,10 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T13:56:57.872Z",
+      "lastLogin": "2026-10-03T15:40:52.484Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-03T17:02:52.398Z"
+  "lastUpdated": "2026-10-03T18:13:20.315Z"
 }

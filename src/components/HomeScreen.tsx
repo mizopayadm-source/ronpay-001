@@ -180,18 +180,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
-  // Compute dynamic live stats
-  const validTxs = safeTransactions.filter(t => {
-    if (!t || !t.id) return false;
-    const s = (t.status || '').toLowerCase().trim();
-    return s !== 'failed' && s !== 'rejected';
-  });
+  // Compute dynamic live stats (Strictly based on confirmed transactions for 100% pool accuracy)
   const confirmedTxs = safeTransactions.filter(isConfirmedTransaction);
   const totalRaised = confirmedTxs.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
-  const totalTxnsCount = validTxs.length > 0 ? validTxs.length : confirmedTxs.length;
+  const totalTxnsCount = confirmedTxs.length;
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayTxnsCount = validTxs.filter(t => {
+  const todayTxnsCount = confirmedTxs.filter(t => {
     const tDate = (t?.timestamp || t?.createdAt || t?.date || '').slice(0, 10);
     return tDate === todayStr;
   }).length;

@@ -356,6 +356,13 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           }
 
           // Check if local storage was corrupted / inflated (e.g. ₹13,00,950 vs server ₹2,77,875.9)
+          const serverConfirmedSum = serverData.transactions
+            .filter((t: any) => {
+              const s = (t.status || '').toLowerCase().trim();
+              return s === 'completed' || s === 'success' || s === 'verified';
+            })
+            .reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+
           const localConfirmedSum = currentTxs
             .filter(t => {
               const s = (t.status || '').toLowerCase().trim();
@@ -363,7 +370,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             })
             .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
           
-          const isLocalInflated = localConfirmedSum > 500000;
+          const isLocalInflated = localConfirmedSum > Math.max(1000000, serverConfirmedSum * 2);
 
           // Merge local transactions only if not forcing authoritative and not corrupted
           if (!forceAuthoritative && !isLocalInflated) {

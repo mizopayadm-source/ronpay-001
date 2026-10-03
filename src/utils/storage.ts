@@ -214,6 +214,21 @@ export const isStoredAdminAuthorized = (): boolean => {
   return false;
 };
 
+/**
+ * Robust Super Admin / Admin check that works seamlessly across Phone App,
+ * Android WebViews, PWAs, and Desktop Web browsers without relying on fragile sessionStorage.
+ */
+export const isSuperAdminOrAdminProfile = (creatorProfile?: CreatorProfile | null): boolean => {
+  if (creatorProfile?.isAdmin === true) return true;
+  if (creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') return true;
+  if (typeof window !== 'undefined') {
+    const role = localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role');
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN') return true;
+    if (isStoredAdminAuthorized()) return true;
+  }
+  return false;
+};
+
 export const saveAdminAuthState = (role: string = 'SUPER_ADMIN', profile?: CreatorProfile | null): void => {
   try {
     if (typeof window !== 'undefined') {
@@ -223,10 +238,11 @@ export const saveAdminAuthState = (role: string = 'SUPER_ADMIN', profile?: Creat
       sessionStorage.setItem('ronpay_admin_auth', 'true');
       sessionStorage.setItem(ADMIN_PASSWORD_VERIFIED_KEY, 'true');
       sessionStorage.setItem('ronpay_admin_role', role);
-      if (profile) {
-        saveStoredCreatorProfile({ ...profile, isAdmin: true });
+      const targetProfile = profile || getStoredCreatorProfile();
+      if (targetProfile) {
+        saveStoredCreatorProfile({ ...targetProfile, isAdmin: true, role });
       }
-      broadcastTabSync('admin_login', { role, profile });
+      broadcastTabSync('admin_login', { role, profile: targetProfile });
     }
   } catch (e) {}
 };
@@ -909,35 +925,20 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
 ]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
-  const canonicalKeys = new Set(INITIAL_TRANSACTIONS.map(it => String(it.id).toLowerCase().trim()));
   const result = new Set<string>();
   for (const id of PERMANENTLY_PURGED_TX_IDS) {
-    if (!canonicalKeys.has(id.toLowerCase().trim())) {
-      result.add(id.toLowerCase().trim());
-    }
+    if (id) result.add(id.toLowerCase().trim());
   }
   try {
     const raw = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        let hasStaleCanonical = false;
-        const cleanArr: string[] = [];
         arr.forEach(id => {
           if (!id) return;
           const clean = String(id).toLowerCase().trim();
-          // Never suppress an authoritative canonical transaction from the database
-          if (!canonicalKeys.has(clean)) {
-            result.add(clean);
-            cleanArr.push(clean);
-          } else {
-            hasStaleCanonical = true;
-          }
+          result.add(clean);
         });
-        if (hasStaleCanonical) {
-          localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(cleanArr));
-          localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(cleanArr));
-        }
       }
     }
   } catch (e) {}
@@ -996,11 +997,12 @@ export const getStoredTransactions = (): Transaction[] => {
           if (!t || !t.id) return false;
           const cleanId = String(t.id).toLowerCase().trim();
           
-          // 1. Authoritative ground truth: canonical database transactions are ALWAYS preserved
-          if (canonicalTxMap.has(cleanId)) return true;
-
+          // 1. If explicitly deleted or permanently purged, ALWAYS exclude!
           if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
           if (legacyMismatchedIds.has(t.id)) return false;
+
+          // 2. Authoritative baseline: active canonical database transactions are preserved
+          if (canonicalTxMap.has(cleanId)) return true;
           const numAmt = Number(t.amount);
           if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0 || numAmt > 500000) return false;
           
@@ -1260,7 +1262,13 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
-        if (parsed.isAdmin && (parsed.name === 'Smart Cabs Admin' || parsed.name === 'New RonPay User' || parsed.name === 'RonPay Member' || !parsed.phone || parsed.phone === '9436001234')) {
+        const isAuthorizedAdminSession = isStoredAdminAuthorized() || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role') === 'ADMIN'));
+        if (isAuthorizedAdminSession) {
+          parsed.isAdmin = true;
+          if (!parsed.role || parsed.role === 'GUEST' || parsed.role === 'MEMBER') {
+            parsed.role = (localStorage.getItem('ronpay_admin_role') as any) || 'SUPER_ADMIN';
+          }
+        } else if (parsed.isAdmin && (parsed.name === 'Smart Cabs Admin' || parsed.name === 'New RonPay User' || (parsed.name === 'RonPay Member' && !parsed.phone) || parsed.phone === '9436001234')) {
           parsed.isAdmin = false;
           parsed.role = 'MEMBER';
           saveStoredCreatorProfile(parsed);
@@ -1763,7 +1771,7 @@ export const isUserOrCreatorTransaction = (
   if (!tx) return false;
 
   // 1. Super Admin has unrestricted access
-  if (creatorProfile?.isAdmin) return true;
+  if (isSuperAdminOrAdminProfile(creatorProfile)) return true;
 
   // 2. Local device session payments
   if (Array.isArray(userPaidIds) && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
@@ -1848,7 +1856,7 @@ export const getUserOrCreatorVisibleTransactions = (
   if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
 
   // Super Admin gets all transactions
-  if (creatorProfile?.isAdmin) {
+  if (isSuperAdminOrAdminProfile(creatorProfile)) {
     return transactions.filter(Boolean);
   }
 
@@ -1894,9 +1902,16 @@ export const getStoredAuditLogs = (): AuditLog[] => {
   return INITIAL_AUDIT_LOGS;
 };
 
-export const saveStoredAuditLogs = (logs: AuditLog[]) => {
+export const saveStoredAuditLogs = (logs: AuditLog[], skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(logs));
+    if (!skipServerPush && Array.isArray(logs) && logs.length > 0) {
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auditLogs: logs })
+      }).catch(() => {});
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_audit_logs_updated', { detail: logs }));
       broadcastTabSync('audit_logs', logs);
@@ -1925,9 +1940,15 @@ export const recordAuditLog = (
 
   try {
     const current = getStoredAuditLogs();
-    const updated = [newLog, ...current.slice(0, 199)]; // Keep latest 200 logs
+    const updated = [newLog, ...current.filter(l => l.id !== newLog.id).slice(0, 499)]; // Keep latest 500 logs
     saveStoredAuditLogs(updated);
     syncAuditLogToFirestore(newLog).catch(() => {});
+    // Direct sync to central backend so Phone App and Web sync instantly
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auditLogs: [newLog] })
+    }).catch(() => {});
   } catch (e) {
     console.error('Failed to record audit log', e);
   }

@@ -34,8 +34,10 @@ import {
   saveTransaction, 
   deleteStoredTransaction, 
   deleteMultipleTransactions,
-  isConfirmedTransaction 
+  isConfirmedTransaction,
+  isSuperAdminOrAdminProfile
 } from '../utils/storage';
+import { syncAllWithServer } from '../utils/syncEngine';
 import { 
   getCampaignCauseTitle, 
   getEffectiveCategory, 
@@ -85,8 +87,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(new Set());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
 
-  const handleManualRefresh = () => {
+  const handleManualRefresh = async () => {
     setIsRefreshing(true);
+    try {
+      await syncAllWithServer(true);
+    } catch (e) {
+      console.warn('PeknaSulhnu manual refresh error:', e);
+    }
     if (onRefreshData) {
       onRefreshData();
     }
@@ -129,8 +136,10 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
   }, [safeCampaigns, creatorProfile]);
 
+  const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
+
   const isCreatorAccount = Boolean(
-    creatorProfile?.isAdmin || 
+    isSuperAdminUser || 
     creatorProfile?.isApproved || 
     ownedCampaignIds.size > 0
   );
@@ -193,7 +202,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       return 'sent';
     }
 
-    if (isOwned || creatorProfile?.isAdmin) {
+    if (isOwned || isSuperAdminUser) {
       return 'received';
     }
 
@@ -616,7 +625,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
                 <span className="text-[9px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                  {creatorProfile?.isAdmin ? 'ADMIN CONSOLE' : isCreatorAccount ? 'CREATOR SULHNU' : 'KA SULHNU'}
+                  {isSuperAdminUser ? 'ADMIN CONSOLE' : isCreatorAccount ? 'CREATOR SULHNU' : 'KA SULHNU'}
                 </span>
               </div>
               <p className="text-[10.5px] text-slate-500 font-medium truncate">

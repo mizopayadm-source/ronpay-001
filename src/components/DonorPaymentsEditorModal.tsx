@@ -255,9 +255,10 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
   const handleDeleteEntry = (tempId: string) => {
     const target = entries.find(e => e.tempId === tempId);
     if (target?.originalId) {
-      setDeletedIds(prev => [...prev, target.originalId!]);
+      setDeletedIds(prev => Array.from(new Set([...prev, target.originalId!])));
     }
     setEntries(prev => prev.filter(e => e.tempId !== tempId));
+    setStatusMessage(`Payment #${target?.periodLabel || 'record'} paih a ni ta. Khawngaihin hnuai bera "Save Siamthatna Zawng Zawng" hmet rawh le.`);
   };
 
   // Update field of specific entry
@@ -610,10 +611,11 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
                       <button
                         type="button"
                         onClick={() => handleDeleteEntry(entry.tempId)}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded-md transition-colors"
+                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-rose-200 dark:border-rose-900/60"
                         title="Paih (Delete this payment)"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                        <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">Paih</span>
                       </button>
                     </div>
 
@@ -808,10 +810,13 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
               type="button"
               id="save-all-donor-editor-btn"
               onClick={handleSaveAll}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all active:scale-95"
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>Save Siamthatna Zawng Zawng</span>
+              <span>
+                Save Siamthatna Zawng Zawng
+                {deletedIds.length > 0 ? ` (${deletedIds.length} paih telin)` : ''}
+              </span>
             </button>
           </div>
         </div>

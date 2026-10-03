@@ -441,6 +441,14 @@ export default function App() {
       }
     };
 
+    const handleAuditLogsSync = (e: any) => {
+      if (e && e.detail && Array.isArray(e.detail)) {
+        setAuditLogs(e.detail);
+      } else {
+        setAuditLogs(getStoredAuditLogs());
+      }
+    };
+
     window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
     window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
@@ -451,6 +459,7 @@ export default function App() {
     window.addEventListener('ronpay_creators_updated', handleCreatorsListSync);
     window.addEventListener('ronpay-members-updated', handleMembersSync);
     window.addEventListener('ronpay_members_updated', handleMembersSync);
+    window.addEventListener('ronpay_audit_logs_updated', handleAuditLogsSync);
     window.addEventListener('ronpay_data_synced', reloadLocalData);
     window.addEventListener('storage', handleStorageChange);
 
@@ -539,6 +548,7 @@ export default function App() {
       window.removeEventListener('ronpay_creators_updated', handleCreatorsListSync);
       window.removeEventListener('ronpay-members-updated', handleMembersSync);
       window.removeEventListener('ronpay_members_updated', handleMembersSync);
+      window.removeEventListener('ronpay_audit_logs_updated', handleAuditLogsSync);
       window.removeEventListener('ronpay_data_synced', reloadLocalData);
       window.removeEventListener('storage', handleStorageChange);
     };

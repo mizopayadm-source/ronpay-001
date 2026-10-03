@@ -68,7 +68,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { getMembers, isCampaignCreator, isConfirmedTransaction } from '../utils/storage';
+import { getMembers, isCampaignCreator, isConfirmedTransaction, deleteMultipleTransactions } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { 
   formatDateDDMMYYYY, 
@@ -879,14 +879,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    if (onUpdateTransaction) {
+    if (deletedIds && deletedIds.length > 0) {
+      deleteMultipleTransactions(deletedIds);
+      if (onDeleteTransaction) {
+        deletedIds.forEach(id => onDeleteTransaction(id));
+      }
+    }
+    if (onUpdateTransaction && updatedTxs.length > 0) {
       updatedTxs.forEach(tx => onUpdateTransaction(tx));
     }
-    if (onDeleteTransaction && deletedIds.length > 0) {
-      deletedIds.forEach(id => onDeleteTransaction(id));
-    }
     setEditingDonorGroup(null);
-    showExportSuccessToast(`${updatedTxs.length} records update fel a ni e!`, updatedTxs.length);
+    showExportSuccessToast(
+      deletedIds.length > 0 
+        ? `${updatedTxs.length} records update fel, ${deletedIds.length} paih a ni e!`
+        : `${updatedTxs.length} records update fel a ni e!`,
+      updatedTxs.length
+    );
   };
 
   const handleManualCloudSync = async () => {
@@ -2461,6 +2469,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           memberRecord={editingDonorGroup.memberRecord}
           onClose={() => setEditingDonorGroup(null)}
           onSaveAll={handleSaveDonorGroup}
+          onDeleteAll={() => {
+            const allIds = editingDonorGroup.donorTransactions.map(t => t.id).filter(Boolean);
+            if (allIds.length > 0) {
+              deleteMultipleTransactions(allIds);
+              if (onDeleteTransaction) {
+                allIds.forEach(id => onDeleteTransaction(id));
+              }
+              showExportSuccessToast(`He donor records ${allIds.length} zawng zawng paih fai a ni ta.`, allIds.length);
+            }
+            setEditingDonorGroup(null);
+          }}
         />
       )}
 

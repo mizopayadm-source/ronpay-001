@@ -195,6 +195,7 @@ export interface CreatorProfile {
   isPhoneVerified?: boolean;
   isVerified?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   plan?: 'trial' | 'standard' | 'premium' | 'kumtluang' | string;
   subscriptionPlan?: string;
   subscriptionExpiresAt?: string;

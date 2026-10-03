@@ -4729,7 +4729,15 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       db.creators = mergeCollections(db.creators, creators, 'phone');
     }
     if (Array.isArray(auditLogs)) {
-      db.auditLogs = mergeCollections(db.auditLogs, auditLogs, 'id');
+      db.auditLogs = mergeCollections(db.auditLogs || [], auditLogs, 'id');
+      db.auditLogs.sort((a: any, b: any) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return timeB - timeA;
+      });
+      if (db.auditLogs.length > 500) {
+        db.auditLogs = db.auditLogs.slice(0, 500);
+      }
     }
     if (pricingConfig && typeof pricingConfig === 'object') {
       db.pricingConfig = { ...(db.pricingConfig || {}), ...pricingConfig };
@@ -5000,6 +5008,48 @@ app.delete('/api/members/:id', (req: Request, res: Response) => {
 app.get('/api/transactions', (req: Request, res: Response) => {
   const db = getDatabase();
   res.json({ success: true, transactions: db.transactions });
+});
+
+// Audit Logs API for reliable Super Admin Sulhnu synchronization
+app.get('/api/audit-logs', (req: Request, res: Response) => {
+  const db = getDatabase();
+  const sorted = [...(db.auditLogs || [])].sort((a: any, b: any) => {
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeB - timeA;
+  });
+  res.json({ success: true, count: sorted.length, data: sorted });
+});
+
+app.post('/api/audit-logs', (req: Request, res: Response) => {
+  try {
+    const newLog = req.body;
+    if (!newLog || !newLog.action) {
+      return res.status(400).json({ success: false, message: 'Invalid audit log payload' });
+    }
+    const db = getDatabase();
+    const logItem = {
+      id: newLog.id || `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      action: newLog.action,
+      details: newLog.details || '',
+      targetType: newLog.targetType || 'system',
+      targetId: newLog.targetId,
+      performedBy: newLog.performedBy || 'Admin',
+      timestamp: newLog.timestamp || new Date().toISOString()
+    };
+    const current = (db.auditLogs || []).filter((l: any) => l.id !== logItem.id);
+    const updated = [logItem, ...current];
+    updated.sort((a: any, b: any) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+    db.auditLogs = updated.slice(0, 500);
+    saveDatabase(db);
+    res.json({ success: true, data: logItem });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 app.post('/api/transactions', (req: Request, res: Response) => {

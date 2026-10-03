@@ -283,6 +283,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     return auditLogs || getStoredAuditLogs();
   });
   const [auditFilter, setAuditFilter] = useState<string>('all');
+  const [isRefreshingLogs, setIsRefreshingLogs] = useState<boolean>(false);
 
   // Full Screen / Expanded Display Mode for Desktop & Web Browsers
   const [isFullScreen, setIsFullScreen] = useState<boolean>(() => {
@@ -421,7 +422,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     }
   };
 
-  // Sync pricing & announcements when props change
+  // Sync pricing, announcements, & audit logs when props change
   useEffect(() => {
     if (pricingConfig) setLocalPricing(pricingConfig);
   }, [pricingConfig]);
@@ -429,6 +430,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   useEffect(() => {
     if (announcement) setLocalAnnouncement(announcement);
   }, [announcement]);
+
+  useEffect(() => {
+    if (Array.isArray(auditLogs) && auditLogs.length > 0) {
+      setLogsList(auditLogs);
+    }
+  }, [auditLogs]);
 
   useEffect(() => {
     if (isOpen) {
@@ -453,11 +460,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       }
     };
     window.addEventListener('ronpay_staff_updated', handleRealtimeSync);
+    window.addEventListener('ronpay_audit_logs_updated', handleRealtimeSync);
     window.addEventListener('ronpay_realtime_sync_event', handleRealtimeSync);
     window.addEventListener('ronpay_data_synced', handleRealtimeSync);
     window.addEventListener('storage', handleRealtimeSync);
     return () => {
       window.removeEventListener('ronpay_staff_updated', handleRealtimeSync);
+      window.removeEventListener('ronpay_audit_logs_updated', handleRealtimeSync);
       window.removeEventListener('ronpay_realtime_sync_event', handleRealtimeSync);
       window.removeEventListener('ronpay_data_synced', handleRealtimeSync);
       window.removeEventListener('storage', handleRealtimeSync);
@@ -3290,12 +3299,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => {
+                        onClick={async () => {
+                          setIsRefreshingLogs(true);
+                          try {
+                            await syncAllWithServer(true);
+                          } catch {}
                           setLogsList(getStoredAuditLogs());
+                          setIsRefreshingLogs(false);
                         }}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                        disabled={isRefreshingLogs}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
-                        <RefreshCw className="w-3 h-3" /> Refresh
+                        <RefreshCw className={`w-3 h-3 ${isRefreshingLogs ? 'animate-spin' : ''}`} /> Refresh
                       </button>
                     </div>
                   </div>

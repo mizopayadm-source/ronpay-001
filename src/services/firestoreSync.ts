@@ -457,7 +457,7 @@ async function fetchStaticConfigsOnce(): Promise<void> {
 /**
  * On-demand fetch of Audit Logs (only when opened in Admin Dashboard).
  */
-export async function fetchAuditLogsFromFirestore(limitCount: number = 10): Promise<AuditLog[]> {
+export async function fetchAuditLogsFromFirestore(limitCount: number = 100): Promise<AuditLog[]> {
   const localLogs = getLocalJson<AuditLog[]>('ronpay_audit_logs_v1', []);
   if (!isNetworkOnline) return localLogs;
 
@@ -472,9 +472,14 @@ export async function fetchAuditLogsFromFirestore(limitCount: number = 10): Prom
       }
     });
     if (remoteLogs.length > 0) {
-      setLocalJson('ronpay_audit_logs_v1', remoteLogs);
-      broadcast('onAuditLogsUpdate', remoteLogs);
-      return remoteLogs;
+      const logMap = new Map<string, AuditLog>();
+      for (const l of remoteLogs) if (l && l.id) logMap.set(l.id, l);
+      for (const l of localLogs) if (l && l.id && !logMap.has(l.id)) logMap.set(l.id, l);
+      const mergedLogs = Array.from(logMap.values());
+      mergedLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setLocalJson('ronpay_audit_logs_v1', mergedLogs);
+      broadcast('onAuditLogsUpdate', mergedLogs);
+      return mergedLogs;
     }
   } catch (err) {
     logFirestoreNetworkNote('Fetch audit logs on-demand', err);
@@ -505,9 +510,9 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (up to 30 recent items for instant live donation alerts while keeping reads ultra-low)
+  // 1. Transactions Listener (up to 150 recent items for comprehensive multi-device sync)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(30));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(150));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -1217,8 +1222,8 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
       }
     }
 
-    // 4. Recent transactions (Limit to latest 30 to avoid blowing up writes on historical records)
-    const recentTxList = localTransactions.slice(0, 30);
+    // 4. Recent transactions (Limit to latest 100 to avoid blowing up writes while ensuring history is fully synced)
+    const recentTxList = localTransactions.slice(0, 100);
     for (const t of recentTxList) {
       if (t && t.id) {
         const clean = sanitizeForFirestore({ ...t, updatedAt: t.updatedAt || t.createdAt || t.timestamp || new Date().toISOString() });
@@ -1229,7 +1234,20 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
       }
     }
 
-    // 5. Configs
+    // 5. Recent audit logs for Super Admin Sulhnu consistency
+    const localLogs = getLocalJson<AuditLog[]>('ronpay_audit_logs_v1', []);
+    const recentLogs = localLogs.slice(0, 50);
+    for (const log of recentLogs) {
+      if (log && log.id) {
+        const clean = sanitizeForFirestore({ ...log, updatedAt: log.timestamp || new Date().toISOString() });
+        batch.set(doc(db, 'auditLogs', log.id), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
+      }
+    }
+
+    // 6. Configs
     if (localAnnouncement) {
       batch.set(doc(db, 'systemConfig', 'announcement'), sanitizeForFirestore({ ...localAnnouncement, updatedAt: new Date().toISOString() }), { merge: true });
       batchOps++;
@@ -1272,7 +1290,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
   lastForceRefreshTimestamp = now;
 
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(50));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(150));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {
