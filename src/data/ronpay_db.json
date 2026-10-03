@@ -639,12 +639,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "toName": "RC Lalliana (Treasurer)",
-          "fromName": "Super Admin (Master)",
-          "toPhone": "7005153902",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
           "fromPhone": "9862000001",
-          "reason": "Term inthlak / Annual Office Bearer Handover",
-          "transferredAt": "2026-10-01T15:45:45.524Z"
+          "fromName": "Super Admin (Master)",
+          "toName": "RC Lalliana (Treasurer)",
+          "toPhone": "7005153902",
+          "reason": "Term inthlak / Annual Office Bearer Handover"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -1369,25 +1369,25 @@
   ],
   "transactions": [
     {
-      "updatedAt": "2026-10-03T15:16:37.755Z",
+      "updatedAt": "2026-10-03T16:12:21.871Z",
       "periodYear": "2026",
       "category": "kumtluang",
-      "amount": 200,
-      "totalAmount": 200,
+      "amount": 500,
+      "totalAmount": 500,
       "isDependent": false,
       "paymentMethod": "cash",
       "donorVeng": "Khuangchera",
       "isAnonymous": false,
-      "txHash": "CASHBKASFJ7G",
+      "txHash": "CASHNR14DH0C",
       "memberId": "YMAVT-1212",
       "date": "2026-10-15",
       "subCategoryBreakdown": {
-        "Chhiatni Fund": 200
+        "Chhiatni Fund": 500
       },
       "timestamp": "2026-10-15T12:00:00.000Z",
       "subCategory": "Chhiatni Fund",
       "platformFee": 0,
-      "createdAt": "2026-10-03T15:16:36.939Z",
+      "createdAt": "2026-10-03T16:12:21.105Z",
       "periodType": "monthly",
       "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
       "campaignId": "cmp-1787829303143",
@@ -10458,6 +10458,37 @@
       "campaignId": "cmp-kumtluang-1"
     },
     {
+      "donorVeng": "Khuangchera",
+      "amount": 100,
+      "donorName": "Thanghmingliana",
+      "date": "2026-06-15",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "updatedAt": "2026-10-03T16:05:44.518Z",
+      "campaignId": "cmp-1787829303143",
+      "createdAt": "2026-10-03T16:05:43.754Z",
+      "donorType": "member",
+      "periodLabel": "June 2026",
+      "memberId": "YMAVT-1212",
+      "paymentMethod": "cash",
+      "status": "pending_verification",
+      "periodYear": "2026",
+      "platformFee": 0,
+      "periodType": "monthly",
+      "subCategoryBreakdown": {
+        "Chhiatni Fund": 100
+      },
+      "isAnonymous": false,
+      "timestamp": "2026-06-15T12:00:00.000Z",
+      "periodMonth": "June",
+      "subCategory": "Chhiatni Fund",
+      "donorPhone": "9865321212",
+      "category": "kumtluang",
+      "totalAmount": 100,
+      "txHash": "CASHQKBCS8D8",
+      "id": "RPAY-CASH-388672",
+      "isDependent": false
+    },
+    {
       "txHash": "RPAYEBE146006",
       "campaignId": "cmp-kumtluang-1",
       "isAnonymous": false,
@@ -12884,7 +12915,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-02T11:57:51.559Z",
+    "lastUpdated": "2026-10-03T15:56:56.585Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13130,7 +13161,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-01T11:57:51.573Z"
+      "timestamp": "2026-10-02T15:56:56.608Z"
     },
     {
       "id": "log-2",
@@ -13139,7 +13170,7 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-01T23:57:51.573Z"
+      "timestamp": "2026-10-03T03:56:56.608Z"
     },
     {
       "id": "log-3",
@@ -13148,7 +13179,7 @@
       "targetType": "campaign",
       "targetId": "cmp-ralna-1",
       "performedBy": "Admin",
-      "timestamp": "2026-10-02T05:57:51.573Z"
+      "timestamp": "2026-10-03T09:56:56.608Z"
     },
     {
       "updatedAt": "2026-09-16T19:16:07.069Z",
@@ -15417,7 +15448,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-02T11:57:53.050Z",
+      "lastLogin": "2026-10-03T15:56:57.872Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15431,7 +15462,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-02T07:57:53.050Z",
+      "lastLogin": "2026-10-03T11:56:57.872Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15445,10 +15476,10 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-02T09:57:53.050Z",
+      "lastLogin": "2026-10-03T13:56:57.872Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-03T15:48:58.714Z"
+  "lastUpdated": "2026-10-03T16:38:11.629Z"
 }

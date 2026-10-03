@@ -505,9 +505,9 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (up to 1000 items so all donations sync seamlessly across devices)
+  // 1. Transactions Listener (up to 30 recent items for instant live donation alerts while keeping reads ultra-low)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(30));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
       const remoteTxList: Transaction[] = [];
@@ -535,22 +535,47 @@ function startLeaderFirestoreListeners(): void {
         const cleanRemote = remoteTxList.filter(t => t && t.id);
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
-        // Remote Firestore transactions are authoritative
-        for (const t of cleanRemote) {
-          if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
+
+        // 1. Seed canonical baseline transactions so official records are NEVER purged
+        for (const it of INITIAL_TRANSACTIONS) {
+          if (it && it.id) {
+            const k = String(it.id).toLowerCase().trim();
+            if (!deletedIds.has(k)) {
+              txMap.set(k, it);
+            }
+          }
         }
-        // Only keep genuine local transactions created recently (offline transactions)
-        for (const t of localTx) {
-          if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
+
+        // 2. Remote Firestore transactions are authoritative for live status updates & new donations
+        for (const t of cleanRemote) {
+          if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
-            if (!txMap.has(k)) {
-              const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
-              if (nowMs - tTime < 2 * 3600 * 1000 && !k.startsWith('rpay_txn_')) {
+            if (!deletedIds.has(k)) {
+              const existing = txMap.get(k);
+              txMap.set(k, existing ? { ...existing, ...t } : t);
+            }
+          }
+        }
+
+        // 3. Preserve genuine local transactions that are not deleted
+        for (const t of localTx) {
+          if (t && t.id) {
+            const k = String(t.id).toLowerCase().trim();
+            if (!deletedIds.has(k)) {
+              const existing = txMap.get(k);
+              if (!existing) {
                 txMap.set(k, t);
+              } else {
+                const localTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
+                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                if (localTime > existingTime) {
+                  txMap.set(k, { ...existing, ...t });
+                }
               }
             }
           }
         }
+
         const merged = Array.from(txMap.values());
         merged.sort((a, b) => {
           const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -820,9 +845,24 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
             if (msg.channel === 'transactions' && Array.isArray(msg.payload)) {
               setLocalJson('ronpay_transactions_v2', msg.payload);
               broadcast('onTransactionsUpdate', msg.payload);
+              try {
+                window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: msg.payload }));
+                window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: msg.payload }));
+              } catch {}
             } else if (msg.channel === 'campaigns' && Array.isArray(msg.payload)) {
               setLocalJson('ronpay_campaigns_v2', msg.payload);
               broadcast('onCampaignsUpdate', msg.payload);
+              try {
+                window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: msg.payload }));
+                window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: msg.payload }));
+              } catch {}
+            } else if (msg.channel === 'members' && Array.isArray(msg.payload)) {
+              setLocalJson('ronpay_kumtluang_members_v1', msg.payload);
+              broadcast('onMembersUpdate', msg.payload);
+              try {
+                window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: msg.payload }));
+                window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: msg.payload }));
+              } catch {}
             }
           } else if (msg.type === 'leader_resigned') {
             if (currentLeaderId === msg.leaderId) {
@@ -1147,7 +1187,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // 1. Campaigns
     for (const c of localCampaigns) {
       if (c && c.id) {
-        const clean = sanitizeForFirestore({ ...c, updatedAt: new Date().toISOString() });
+        const clean = sanitizeForFirestore({ ...c, updatedAt: c.updatedAt || c.createdAt || new Date().toISOString() });
         batch.set(doc(db, 'campaigns', c.id), clean, { merge: true });
         batchOps++;
         totalCount++;
@@ -1158,7 +1198,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // 2. Members
     for (const m of localMembers) {
       if (m && m.id) {
-        const clean = sanitizeForFirestore({ ...m, updatedAt: new Date().toISOString() });
+        const clean = sanitizeForFirestore({ ...m, updatedAt: m.updatedAt || m.createdAt || new Date().toISOString() });
         batch.set(doc(db, 'members', m.id), clean, { merge: true });
         batchOps++;
         totalCount++;
@@ -1169,7 +1209,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     // 3. Creators
     for (const cr of localCreators) {
       if (cr && cr.phone) {
-        const clean = sanitizeForFirestore({ ...cr, updatedAt: new Date().toISOString() });
+        const clean = sanitizeForFirestore({ ...cr, updatedAt: cr.updatedAt || cr.createdAt || new Date().toISOString() });
         batch.set(doc(db, 'creators', cr.phone), clean, { merge: true });
         batchOps++;
         totalCount++;
@@ -1181,7 +1221,7 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
     const recentTxList = localTransactions.slice(0, 30);
     for (const t of recentTxList) {
       if (t && t.id) {
-        const clean = sanitizeForFirestore({ ...t, updatedAt: new Date().toISOString() });
+        const clean = sanitizeForFirestore({ ...t, updatedAt: t.updatedAt || t.createdAt || t.timestamp || new Date().toISOString() });
         batch.set(doc(db, 'transactions', t.id), clean, { merge: true });
         batchOps++;
         totalCount++;
@@ -1232,7 +1272,7 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
   lastForceRefreshTimestamp = now;
 
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(1000));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(50));
     const snapshot = await getDocs(txQuery);
     const remoteTxList: Transaction[] = [];
     snapshot.forEach(docSnap => {
@@ -1247,17 +1287,29 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
       const cleanRemote = remoteTxList.filter(t => t && t.id);
       
       const txMap = new Map<string, Transaction>();
-      for (const t of cleanRemote) {
-        if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
+      // 1. Seed canonical baseline
+      for (const it of INITIAL_TRANSACTIONS) {
+        if (it && it.id) {
+          const k = String(it.id).toLowerCase().trim();
+          if (!deletedIds.has(k)) txMap.set(k, it);
+        }
       }
+      // 2. Overlay remote Firestore transactions
+      for (const t of cleanRemote) {
+        if (t && t.id) {
+          const k = String(t.id).toLowerCase().trim();
+          if (!deletedIds.has(k)) {
+            const existing = txMap.get(k);
+            txMap.set(k, existing ? { ...existing, ...t } : t);
+          }
+        }
+      }
+      // 3. Preserve genuine local transactions
       for (const t of localTx) {
         if (t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim())) {
           const k = String(t.id).toLowerCase().trim();
           if (!txMap.has(k)) {
-            const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
-            if (Date.now() - tTime < 2 * 3600 * 1000 && !k.startsWith('rpay_txn_')) {
-              txMap.set(k, t);
-            }
+            txMap.set(k, t);
           }
         }
       }

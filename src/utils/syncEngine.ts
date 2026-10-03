@@ -1,6 +1,6 @@
 import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount } from '../types';
 import { resolveApiUrl } from './apiConfig';
-import { BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
+import { BCM_EBENEZER_DEFAULT_LOGO, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { 
   getStoredCampaigns, 
   saveStoredCampaigns, 
@@ -267,6 +267,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               return updated;
             });
           saveStoredCampaigns(cleanServerCampaigns, true);
+          serverData.campaigns = cleanServerCampaigns;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: cleanServerCampaigns }));
             window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: cleanServerCampaigns }));
@@ -316,7 +317,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          saveMembers(Array.from(memMap.values()), true);
+          const finalMembers = Array.from(memMap.values());
+          saveMembers(finalMembers, true);
+          serverData.members = finalMembers;
         }
 
         // 4. Update transactions
@@ -331,27 +334,24 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           const txMap = new Map<string, any>();
           const nowMs = Date.now();
 
-          const sanitizeTxTimestamp = (t: any) => {
-            if (!t) return;
-            const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
-            if (txTime > nowMs + 60000) {
-              const matchRpay = String(t.id).match(/^RPAY_TXN_(\d{13})/i);
-              if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
-                t.timestamp = new Date(Number(matchRpay[1])).toISOString();
-                t.createdAt = t.timestamp;
-              } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
-                t.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
-                t.createdAt = t.timestamp;
+          // 1. Seed canonical baseline transactions so official records are NEVER purged
+          for (const it of INITIAL_TRANSACTIONS) {
+            if (it && it.id) {
+              const k = String(it.id).toLowerCase().trim();
+              if (!deletedIds.has(k)) {
+                txMap.set(k, it);
               }
             }
-          };
-          
-          // Seed authoritative server transactions first
+          }
+
+          // 2. Overlay authoritative server transactions
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              sanitizeTxTimestamp(t);
-              txMap.set(k, t);
+              if (!deletedIds.has(k)) {
+                const existing = txMap.get(k);
+                txMap.set(k, existing ? { ...existing, ...t } : t);
+              }
             }
           }
 
@@ -379,7 +379,6 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                   // Only preserve genuine pending offline transactions created in last 24 hours
                   const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
                   if (nowMs - tTime < 24 * 3600 * 1000) {
-                    sanitizeTxTimestamp(t);
                     txMap.set(k, t);
                     newLocalTxsToPush.push(t);
                   }
@@ -404,6 +403,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             return timeB - timeA;
           });
           saveStoredTransactions(cleanTxs, true);
+          serverData.transactions = cleanTxs;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
           }

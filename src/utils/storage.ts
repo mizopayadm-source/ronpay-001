@@ -647,16 +647,9 @@ export const suggestAlternativePrefixes = (baseTextOrPrefix: string, excludeCamp
 
 export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boolean = false) => {
   try {
-    // Enforce unique prefix codes across all campaigns
-    const seenPrefixes = new Set<string>();
+    // Preserve campaign configuration without random automatic mutations
     const sanitized = campaigns.map(c => {
-      let code = (c.orgCode || derivePrefixFromText(c.orgName || c.title)).trim().toUpperCase();
-      if (seenPrefixes.has(code)) {
-        // Auto disambiguate collision if saving
-        const alts = suggestAlternativePrefixes(code, c.id);
-        code = alts[0] || `${code.substring(0, 2)}${Math.floor(Math.random() * 9 + 1)}`;
-      }
-      seenPrefixes.add(code);
+      const code = c.orgCode ? String(c.orgCode).trim().toUpperCase() : derivePrefixFromText(c.orgName || c.title).trim().toUpperCase();
       return { ...c, orgCode: code };
     });
 
@@ -742,16 +735,15 @@ export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> =>
         }
       }
 
-      // 2. Normalize and clean any svg data URI or broken unsplash URLs
-      if (camp.id === 'cmp-kumtluang-1' || String(camp.title).toLowerCase().includes('bcm ebenezer')) {
-        if (!camp.imageUrl || camp.imageUrl.includes('unsplash.com') || camp.imageUrl.includes('photo-1548625361-195feee10fce')) {
+      // 2. Only supply default image if image is completely missing
+      if (!camp.imageUrl) {
+        if (camp.id === 'cmp-1788107291420') {
+          camp.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
+          hasChanges = true;
+        } else if (camp.id === 'cmp-kumtluang-1') {
           camp.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
           hasChanges = true;
         }
-      }
-      if (camp.imageUrl && camp.imageUrl.startsWith('data:image/svg+xml')) {
-        camp.imageUrl = camp.id === 'cmp-1788107291420' ? BMP_SHILLONG_DEFAULT_LOGO : YMA_DEFAULT_LOGO;
-        hasChanges = true;
       }
 
       optimizedList.push(camp);
@@ -1147,104 +1139,6 @@ export const getStoredTransactions = (): Transaction[] => {
           console.warn(`[RonPay Auto-Heal] Detected inflated local transactions sum (₹${localConfirmedSum.toLocaleString()}). Resetting to verified canonical database.`);
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
           return INITIAL_TRANSACTIONS;
-        }
-
-        // Auto-correct any legacy campaign titles & categories cached in localStorage
-        let hasFixed = false;
-        for (const t of merged) {
-          const campTitle = String(t.campaignTitle || '').trim();
-          const campId = String(t.campaignId || '').trim();
-
-          // 1. Lalrinpuii Ralna normalization
-          if (campId === 'cmp-1787545326556' || (campTitle === 'Lalrinpuii Ralna' && !campId.startsWith('bill-')) || (t.category === 'ralna' && campTitle === 'BCM Ebenezer')) {
-            if (t.campaignId !== 'cmp-1788526889943' || t.campaignTitle !== 'Lalrinpuii Ralna') {
-              t.campaignId = 'cmp-1788526889943';
-              t.campaignTitle = 'Lalrinpuii Ralna';
-              t.category = 'ralna';
-              hasFixed = true;
-            }
-          }
-
-          // 2. BCM Ebenezer normalization
-          if (campTitle === 'BCM Ebenezer' || (campId === 'cmp-kumtluang-1' && campTitle !== 'BCM Ebenezer, Zobawk')) {
-            t.campaignId = 'cmp-kumtluang-1';
-            t.campaignTitle = 'BCM Ebenezer, Zobawk';
-            t.category = 'kumtluang';
-            hasFixed = true;
-          }
-
-          // 3. YMA Vengthar normalization
-          if (campId === 'cmp-kumtluang-ymavt' || campTitle === 'YMA Vengthar Branch' || campTitle === 'YMA Vengthar Br') {
-            t.campaignId = 'cmp-1787829303143';
-            t.campaignTitle = 'YMA Vengthar Br, Zobawk, Lunglei';
-            t.category = 'kumtluang';
-            hasFixed = true;
-          }
-
-          if (t.campaignId === 'cmp-1788527889945' && t.campaignTitle === 'BCM Ebenezer') {
-            t.campaignTitle = 'Pocket Money';
-            hasFixed = true;
-          }
-
-          // Ensure non-bill transactions are never mistakenly stored with category 'others' or empty
-          const isBill = Boolean(t.billServiceType || t.billConsumerNumber || t.billOperator) ||
-            String(t.id || '').startsWith('BILL-') || 
-            String(t.id || '').startsWith('TXN-BILL-') || 
-            String(t.campaignId || '').startsWith('bill-');
-          if (!isBill) {
-            const titleL = String(t.campaignTitle || '').toLowerCase();
-            const cleanTitle = titleL.replace(/,+$/, '').trim();
-            const isBmp = t.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (t.memberId && t.memberId.startsWith('BMPSHL'));
-            
-            if (isBmp) {
-              if (t.category !== 'kumtluang') {
-                t.category = 'kumtluang';
-                hasFixed = true;
-              }
-              if (t.campaignId !== 'cmp-1788107291420') {
-                t.campaignId = 'cmp-1788107291420';
-                hasFixed = true;
-              }
-              if (t.campaignTitle !== 'BMP Shillong') {
-                t.campaignTitle = 'BMP Shillong';
-                hasFixed = true;
-              }
-              if (!t.donorVeng || t.donorVeng === 'Section A' || t.donorVeng === 'Section B' || t.donorVeng === 'Section C' || t.donorVeng === 'Section D' || t.donorVeng === 'Bial 1 (Vengchhak)' || t.donorVeng === 'Shillong') {
-                t.donorVeng = 'Shillong Unit';
-                hasFixed = true;
-              }
-              if (!t.subCategory) {
-                t.subCategory = t.donorType === 'general' ? (t.remark || 'General Thawhlawm') : 'BMP Fund';
-                hasFixed = true;
-              }
-              if (!t.subCategoryBreakdown || Object.keys(t.subCategoryBreakdown).length === 0) {
-                const subKey = t.subCategory || 'BMP Fund';
-                t.subCategoryBreakdown = { [subKey]: t.amount };
-                hasFixed = true;
-              }
-              if (t.remark && t.remark.includes('[Pathian Ram Zauna]')) {
-                t.remark = t.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
-                hasFixed = true;
-              }
-            } else if (!t.category || t.category === 'others') {
-              if (titleL.includes('ralna') || t.campaignId === 'cmp-1788526889943') {
-                t.category = 'ralna';
-                hasFixed = true;
-              } else if (titleL.includes('rikrum') || t.campaignId === 'cmp-1788528889947') {
-                t.category = 'rikrum';
-                hasFixed = true;
-              } else if (titleL.includes('kumtluang') || t.campaignId === 'cmp-1788529889949' || t.campaignId === 'cmp-1787829303143') {
-                t.category = 'kumtluang';
-                hasFixed = true;
-              } else {
-                t.category = 'khawlsak';
-                hasFixed = true;
-              }
-            }
-          }
-        }
-        if (hasFixed) {
-          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
         }
 
         return merged;

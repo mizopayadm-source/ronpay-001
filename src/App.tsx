@@ -146,7 +146,32 @@ export default function App() {
   });
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory>(() => initialRoute?.category || 'ralna');
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(() => initialRoute?.campaign || null);
-  const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(null);
+  const [completedTransaction, setCompletedTransaction] = useState<Transaction | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        const screenP = url.searchParams.get('screen') || url.searchParams.get('page');
+        if (screenP === 'cash_pending') {
+          const savedLastCash = localStorage.getItem('RONPAY_LAST_CASH_TXN');
+          if (savedLastCash) {
+            const parsed = JSON.parse(savedLastCash);
+            if (parsed && typeof parsed === 'object' && (parsed.amount > 0 || parsed.donorName)) {
+              return parsed;
+            }
+          }
+          const storedTxs = getStoredTransactions();
+          const receiptP = url.searchParams.get('receipt') || url.searchParams.get('txnId') || url.searchParams.get('tx');
+          if (receiptP) {
+            const matched = storedTxs.find(t => t.id === receiptP);
+            if (matched) return matched;
+          }
+          const latestCash = storedTxs.filter(t => t.paymentMethod === 'cash').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+          if (latestCash) return latestCash;
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [failedTransaction, setFailedTransaction] = useState<Transaction | null>(null);
 
   const [failureReason, setFailureReason] = useState<string | undefined>(() => initialRoute?.failureReason);
@@ -606,6 +631,44 @@ export default function App() {
         return;
       }
       if (route.screen) {
+        if (route.screen === 'cash_pending') {
+          setCompletedTransaction(prev => {
+            if (prev && (prev.amount > 0 || prev.donorName)) return prev;
+            const txs = getStoredTransactions();
+            if (route.receiptId) {
+              const matched = txs.find(t => t.id.toLowerCase() === route.receiptId?.toLowerCase());
+              if (matched) return matched;
+            }
+            try {
+              const saved = localStorage.getItem('RONPAY_LAST_CASH_TXN');
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && (parsed.amount > 0 || parsed.donorName)) return parsed;
+              }
+            } catch {}
+            const latestCash = txs.filter(t => t.paymentMethod === 'cash').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+            if (latestCash) return latestCash;
+            if (route.receiptMeta?.amount) {
+              return {
+                id: route.receiptId || 'RPAYCASH2026',
+                campaignId: route.receiptMeta.campaignId || 'cmp-custom',
+                campaignTitle: route.receiptMeta.campaignTitle || 'RonPay Community Bawm',
+                category: route.receiptMeta.category || 'others',
+                donorName: route.receiptMeta.donorName || 'Valued Donor',
+                donorPhone: route.receiptMeta.donorPhone,
+                isAnonymous: Boolean(route.receiptMeta.isAnonymous),
+                amount: route.receiptMeta.amount,
+                totalAmount: route.receiptMeta.amount,
+                platformFee: 0,
+                paymentMethod: 'cash',
+                status: 'pending_verification',
+                timestamp: new Date().toISOString(),
+                txHash: 'CASH' + Date.now()
+              };
+            }
+            return prev;
+          });
+        }
         setCurrentScreen(route.screen);
       }
       return;
@@ -977,7 +1040,7 @@ export default function App() {
       setCurrentScreen('checkout');
       updateBrowserUrl('checkout', selectedCampaign, selectedCampaign.category, options);
     } else {
-      if (screen !== 'success') {
+      if (screen !== 'success' && screen !== 'cash_pending') {
         if (completedTransaction?.id) {
           markReceiptAsConsumed(completedTransaction.id);
         }
@@ -1088,8 +1151,12 @@ export default function App() {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
     setCompletedTransaction(transaction);
+    try {
+      localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
+    } catch {}
     reloadLocalData();
-    handleNavigate('cash_pending');
+    setCurrentScreen('cash_pending');
+    updateBrowserUrl('cash_pending', null, null, { replace: true, txn: transaction });
   };
 
   const handleGenerateQR = (campaign: Campaign) => {
@@ -1675,6 +1742,9 @@ export default function App() {
                 if (completedTransaction?.id) {
                   markReceiptAsConsumed(completedTransaction.id);
                 }
+                try {
+                  localStorage.removeItem('RONPAY_LAST_CASH_TXN');
+                } catch {}
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);

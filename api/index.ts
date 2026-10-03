@@ -122,6 +122,7 @@ function mergeCollections<T extends Record<string, any>>(existing: T[] = [], inc
 }
 
 async function parseJsonBody(req: any): Promise<any> {
+  if (req.method === 'GET' || req.method === 'HEAD') return {};
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string') {
     try { return JSON.parse(req.body); } catch { return {}; }

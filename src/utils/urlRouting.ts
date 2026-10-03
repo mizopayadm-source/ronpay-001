@@ -394,6 +394,35 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const validScreens: ScreenId[] = ['home', 'website', 'explorer', 'create_qr', 'creator_reg', 'reports', 'checkout', 'success', 'failed', 'cash_pending'];
       const matched = validScreens.find(s => s === screenParam.toLowerCase());
       if (matched) {
+        if (matched === 'cash_pending') {
+          const amtParam = searchParams.get('amt') || searchParams.get('amount');
+          const baseAmtParam = searchParams.get('baseAmt');
+          const cidParam = searchParams.get('cid') || searchParams.get('campaignId') || searchParams.get('campaign');
+          const ctitleParam = searchParams.get('ctitle') || searchParams.get('campaignTitle') || searchParams.get('title');
+          const catParamFromUrl = searchParams.get('cat') || searchParams.get('category');
+          const donorParam = searchParams.get('donor') || searchParams.get('donorName');
+          const donorPhoneParam = searchParams.get('donorPhone');
+          const anonParam = searchParams.get('anon');
+
+          const receiptMeta = (amtParam || cidParam || donorParam) ? {
+            amount: amtParam ? parseFloat(amtParam) : undefined,
+            baseAmount: baseAmtParam ? parseFloat(baseAmtParam) : undefined,
+            campaignId: cidParam ? decodeURIComponent(cidParam) : undefined,
+            campaignTitle: ctitleParam ? decodeURIComponent(ctitleParam) : undefined,
+            category: (catParamFromUrl as BawmCategory) || undefined,
+            donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
+            donorPhone: donorPhoneParam ? decodeURIComponent(donorPhoneParam) : undefined,
+            isAnonymous: anonParam === '1' || anonParam === 'true',
+          } : undefined;
+
+          return {
+            screen: 'cash_pending',
+            receiptId: explicitFailedTxId || searchParams.get('receipt') || searchParams.get('receiptId') || searchParams.get('txnId') || searchParams.get('tx') || undefined,
+            receiptMeta,
+            category: (catParam as BawmCategory) || undefined,
+            view: parsedView || 'app',
+          };
+        }
         return {
           screen: matched,
           category: (catParam as BawmCategory) || undefined,
@@ -588,7 +617,7 @@ export function updateBrowserUrl(
   screen: ScreenId, 
   campaign?: Campaign | null, 
   category?: BawmCategory | null,
-  options: { replace?: boolean } = { replace: false }
+  options: { replace?: boolean; txn?: Partial<Transaction> | null } = { replace: false }
 ) {
   if (typeof window === 'undefined') return;
 
@@ -631,6 +660,16 @@ export function updateBrowserUrl(
     } else if (screen === 'explorer') {
       url.searchParams.set('screen', 'explorer');
       if (category) url.searchParams.set('cat', category);
+    } else if (screen === 'cash_pending') {
+      url.searchParams.set('screen', 'cash_pending');
+      const t = options.txn;
+      if (t) {
+        if (t.id) url.searchParams.set('receipt', t.id);
+        if (t.amount !== undefined) url.searchParams.set('amt', String(t.amount));
+        if (t.donorName) url.searchParams.set('donor', t.donorName);
+        if (t.campaignId) url.searchParams.set('cid', t.campaignId);
+        if (t.campaignTitle) url.searchParams.set('ctitle', t.campaignTitle);
+      }
     } else if (screen !== 'home') {
       url.searchParams.set('screen', screen);
     }

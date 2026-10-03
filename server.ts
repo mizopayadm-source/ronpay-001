@@ -24,7 +24,7 @@ function getGenAI(): GoogleGenAI | null {
 
 // Initialize Express App
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Global CORS Middleware - Allows ronpay.app, custom domains, mobile browsers, and PWAs to sync seamlessly
 app.use((req: Request, res: Response, next: any) => {
