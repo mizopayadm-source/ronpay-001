@@ -1401,3 +1401,78 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
   return localTx;
 }
 
+export interface FirestoreDiagnosticData {
+  firestoreTransactions: Transaction[];
+  firestoreCampaigns: Campaign[];
+  deletedTransactionIds: string[];
+  deletedMemberIds: string[];
+  firestoreStatus: FirestoreConnectionStatus;
+  latencyMs: number;
+  timestamp: string;
+}
+
+/**
+ * On-demand diagnostic scan of Cloud Firestore for the Admin Sync Diagnostic tool.
+ * Reads transactions (up to limit), campaigns, and system tombstones to compare with Local & Server DB.
+ */
+export async function fetchFirestoreDiagnosticData(transactionLimit: number = 300): Promise<FirestoreDiagnosticData> {
+  const startTime = Date.now();
+  const result: FirestoreDiagnosticData = {
+    firestoreTransactions: [],
+    firestoreCampaigns: [],
+    deletedTransactionIds: [],
+    deletedMemberIds: [],
+    firestoreStatus: connectionStatus,
+    latencyMs: 0,
+    timestamp: new Date().toISOString()
+  };
+
+  if (!isNetworkOnline) {
+    result.firestoreStatus = 'offline';
+    return result;
+  }
+
+  try {
+    // 1. Fetch recent transactions from Firestore
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(transactionLimit));
+    const txSnap = await getDocs(txQuery);
+    txSnap.forEach(docSnap => {
+      const data = docSnap.data() as Transaction;
+      if (data && data.id) {
+        result.firestoreTransactions.push(data);
+      }
+    });
+
+    // 2. Fetch campaigns from Firestore
+    const campSnap = await getDocs(collection(db, 'campaigns'));
+    campSnap.forEach(docSnap => {
+      const data = docSnap.data() as Campaign;
+      if (data && data.id) {
+        result.firestoreCampaigns.push(data);
+      }
+    });
+
+    // 3. Fetch tombstones
+    try {
+      const tombSnap = await getDoc(doc(db, 'system_metadata', 'tombstones'));
+      if (tombSnap.exists()) {
+        const d = tombSnap.data();
+        if (Array.isArray(d?.deleted_transactions)) {
+          result.deletedTransactionIds = d.deleted_transactions.map(String);
+        }
+        if (Array.isArray(d?.deleted_members)) {
+          result.deletedMemberIds = d.deleted_members.map(String);
+        }
+      }
+    } catch {}
+
+    result.latencyMs = Date.now() - startTime;
+    result.firestoreStatus = 'connected';
+  } catch (err) {
+    result.firestoreStatus = 'error';
+    logFirestoreNetworkNote('Diagnostic scan', err);
+  }
+
+  return result;
+}
+

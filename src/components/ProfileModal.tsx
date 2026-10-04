@@ -28,7 +28,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  Activity
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -44,6 +45,7 @@ interface ProfileModalProps {
   onLogout?: () => void;
   onLoginClick?: () => void;
   onOpenAdmin?: () => void;
+  onOpenSyncDiagnostic?: () => void;
   biometricEnabled?: boolean;
   onToggleBiometric?: () => void;
   onLockNow?: () => void;
@@ -60,6 +62,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onLogout,
   onLoginClick,
   onOpenAdmin,
+  onOpenSyncDiagnostic,
   biometricEnabled = true,
   onToggleBiometric,
   onLockNow,
@@ -605,6 +608,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               PhonePe TSP & PG V2 Portal
             </span>
             <span className="text-[10.5px] bg-purple-200/80 text-purple-900 font-mono font-bold px-2 py-0.5 rounded-md">UAT</span>
+          </button>
+        )}
+
+        {/* Admin Sync Diagnostic Trigger */}
+        {onOpenSyncDiagnostic && (
+          <button
+            id="profile-sync-diagnostic-btn"
+            onClick={() => {
+              onClose();
+              onOpenSyncDiagnostic();
+            }}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-md border border-indigo-400/40 group"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                <Activity className="w-3.5 h-3.5 text-amber-300" />
+              </div>
+              <div className="text-left">
+                <p className="font-black text-white text-xs">Admin Sync Diagnostic</p>
+                <p className="text-[9.5px] text-slate-300">Compare Local vs Firestore • Fix Discrepancies</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-1 rounded-full font-black uppercase shadow-xs group-hover:scale-105 transition-transform">
+              Scan Now
+            </span>
           </button>
         )}
 

@@ -97,7 +97,8 @@ import { MemberRollPreviewModal, PreviewReportFormat } from './components/Member
 import { MismatchModal } from './components/MismatchModal';
 import { UpgradeModal } from './components/UpgradeModal';
 import { BiometricAuthModal } from './components/BiometricAuthModal';
-import { Fingerprint } from 'lucide-react';
+import { Fingerprint, Activity, X } from 'lucide-react';
+import { AdminSyncDiagnosticView } from './components/AdminSyncDiagnosticView';
 import { ExternalUPILandingModal } from './components/ExternalUPILandingModal';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { PrintPreviewModal } from './components/PrintPreviewModal';
@@ -216,6 +217,7 @@ export default function App() {
   const [isBillModalOpen, setIsBillModalOpen] = useState<boolean>(false);
   const [selectedBillService, setSelectedBillService] = useState<BillService | null>(null);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
+  const [isSyncDiagnosticOpen, setIsSyncDiagnosticOpen] = useState<boolean>(false);
   const [isAdminApprovalOpen, setIsAdminApprovalOpen] = useState<boolean>(false);
   const [adminApprovalCampaign, setAdminApprovalCampaign] = useState<Campaign | null>(null);
   const [isKumtluangManagerOpen, setIsKumtluangManagerOpen] = useState<boolean>(false);
@@ -603,6 +605,9 @@ export default function App() {
     }
     if (route.isAdminOpen) {
       setIsAdminDashboardOpen(true);
+    }
+    if (route.isSyncDiagnosticOpen) {
+      setIsSyncDiagnosticOpen(true);
     }
     if (route.isWalletOpen) {
       setIsWalletOpen(true);
@@ -1515,6 +1520,7 @@ export default function App() {
               onShowBalance={() => setIsWalletOpen(true)}
               onShowBankTransfer={() => setIsBankTransferOpen(true)}
               onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+              onOpenSyncDiagnostic={() => setIsSyncDiagnosticOpen(true)}
               onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
               onOpenPhonePeCheckout={handleOpenPhonePeCheckout}
               onPreviewImage={handlePreviewImage}
@@ -1857,6 +1863,10 @@ export default function App() {
             setIsProfileOpen(false);
             setIsAdminDashboardOpen(true);
           }}
+          onOpenSyncDiagnostic={() => {
+            setIsProfileOpen(false);
+            setIsSyncDiagnosticOpen(true);
+          }}
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
           onUpdateProfile={handleUpdateCreator}
@@ -1973,6 +1983,41 @@ export default function App() {
             setCurrentScreen('success');
           }}
         />
+
+        {/* Dedicated Admin Sync Diagnostic Modal Sheet */}
+        {isSyncDiagnosticOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white w-full max-w-4xl max-h-[92vh] rounded-3xl shadow-2xl border border-indigo-200 flex flex-col overflow-hidden text-slate-800">
+              <div className="p-3.5 bg-slate-900 text-white flex justify-between items-center shrink-0 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-amber-300 flex items-center justify-center font-bold text-xs">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-xs sm:text-sm text-white">RonPay Admin Sync Diagnostic</h3>
+                    <p className="text-[10px] text-slate-400">Cross-Layer Consistency Monitor (Local • Server • Firestore)</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSyncDiagnosticOpen(false)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+                <AdminSyncDiagnosticView
+                  localTransactions={transactions}
+                  localCampaigns={campaigns}
+                  onRefreshParent={handleResetData}
+                  onClose={() => setIsSyncDiagnosticOpen(false)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <AdminApprovalModal
           isOpen={isAdminApprovalOpen}

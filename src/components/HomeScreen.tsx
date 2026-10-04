@@ -74,6 +74,7 @@ interface HomeScreenProps {
   onOpenAIHriatpui?: () => void;
   onOpenLogin?: () => void;
   onOpenAdminDashboard?: () => void;
+  onOpenSyncDiagnostic?: () => void;
   onOpenWebsite?: () => void;
   onPreviewImage?: (url: string, title?: string) => void;
 }
@@ -99,6 +100,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onShareCampaign,
   onOpenAIHriatpui,
   onOpenLogin,
+  onOpenAdminDashboard,
+  onOpenSyncDiagnostic,
   onOpenWebsite,
 }) => {
 
@@ -343,6 +346,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </button>
         )}
       </div>
+
+      {/* Admin Sync Diagnostic Quick Action Banner */}
+      {onOpenSyncDiagnostic && (
+        <div 
+          onClick={onOpenSyncDiagnostic}
+          className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/40 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-xl bg-indigo-600 text-amber-300 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+              <Activity className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs text-white">Admin Sync Diagnostic</span>
+                <span className="text-[8px] font-black uppercase bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 px-1.5 py-0.2 rounded-full">
+                  Firestore vs Local
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 truncate">
+                Compare counts, detect ID discrepancies & one-click re-sync
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+          >
+            <span>Scan Now</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* 1. Money Transfer, Quick Actions & UPI */}
       <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-indigo-100/80">
@@ -887,13 +922,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             const isOwner = isCampaignCreator(camp, creatorProfile);
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
-            const target = camp.targetAmount || (
-              camp.category === 'ralna' ? 25000 :
-              camp.category === 'khawlsak' ? 50000 :
-              camp.category === 'rikrum' ? 100000 :
-              camp.category === 'kumtluang' ? 100000 : 50000
-            );
-            const percentage = target > 0 ? Math.round((totalRaised / target) * 100) : 0;
+            const hasTarget = typeof camp.targetAmount === 'number' && camp.targetAmount > 0;
+            const target = hasTarget ? camp.targetAmount : 0;
+            const percentage = hasTarget && target > 0 ? Math.round((totalRaised / target) * 100) : 0;
             const clampedPercentage = Math.min(percentage, 100);
 
             const progressColor = 
@@ -1015,7 +1046,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
                 {isOwner && (
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
-                    {camp.category === 'ralna' ? (
+                    {!hasTarget ? (
                       <div className="flex items-center justify-between text-[10px]">
                         <div className="flex items-center gap-1 font-bold text-slate-700">
                           <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>

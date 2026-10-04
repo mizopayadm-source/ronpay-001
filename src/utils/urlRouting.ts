@@ -26,6 +26,7 @@ export interface ParsedRoute {
   isMemberRollOpen?: boolean;
   memberRollCampaignId?: string;
   isAdminOpen?: boolean;
+  isSyncDiagnosticOpen?: boolean;
   isWalletOpen?: boolean;
   view?: 'website' | 'app';
   isPhonePeOpen?: boolean;
@@ -434,6 +435,13 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       return {
         screen: 'explorer',
         category: catParam as BawmCategory,
+      };
+    }
+
+    const syncParam = searchParams.get('sync') || searchParams.get('diagnostic');
+    if (syncParam === 'true' || syncParam === '1' || syncParam === 'diagnostic' || screenParam === 'sync' || screenParam === 'admin_sync' || adminParam === 'sync') {
+      return {
+        isSyncDiagnosticOpen: true,
       };
     }
 

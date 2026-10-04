@@ -42,15 +42,7 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": [
-        "Pathianni Chawhma Thawhlawm",
-        "Pathianni Chawhnu Thawhlawm",
-        "Pathianni Zan Thawhlawm",
-        "Nilai Zan Thawhlawm",
-        "Buhfaiṭham Thawhlawm",
-        "Inrinni Zan Thawhlawm",
-        "Bial Inkhawmpui Thawhlawm"
-      ]
+      "generalPresets": []
     },
     {
       "subCategories": [
@@ -1351,6 +1343,19 @@
       "activeYears": [
         "2026"
       ]
+    },
+    {
+      "id": "BMPSHL-1548",
+      "campaignId": "cmp-1788107291420",
+      "name": "Zothanzuala Hrahsel",
+      "orgCode": "BMPSHL",
+      "phoneLast4": "1548",
+      "fullPhone": "",
+      "section": "Shillong Unit",
+      "isFamilyHead": true,
+      "dependents": [],
+      "createdAt": "2026-08-15T00:00:00.000Z",
+      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -15420,5 +15425,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-03T20:10:51.438Z"
+  "lastUpdated": "2026-10-04T09:51:11.831Z"
 }

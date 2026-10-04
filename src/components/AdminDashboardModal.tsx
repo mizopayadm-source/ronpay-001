@@ -73,8 +73,10 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Activity
 } from 'lucide-react';
+import { AdminSyncDiagnosticView } from './AdminSyncDiagnosticView';
 import { 
   Campaign, 
   CreatorProfile, 
@@ -216,7 +218,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Creators sub-filter
@@ -1413,6 +1415,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   label: 'Backup & Restore', 
                   icon: Database,
                   minRole: 'SUPER_ADMIN' as UserRole
+                },
+                { 
+                  id: 'sync_diagnostic' as const, 
+                  label: 'Sync Diagnostic', 
+                  icon: Activity,
+                  minRole: 'ADMIN' as UserRole
                 },
                 { 
                   id: 'gateway' as const, 
@@ -4041,6 +4049,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </div>
                   </div>
                 </div>
+              )}
+
+              {activeTab === 'sync_diagnostic' && (
+                <AdminSyncDiagnosticView
+                  localTransactions={transactions}
+                  localCampaigns={campaigns}
+                  onRefreshParent={onResetData}
+                  onClose={onClose}
+                />
               )}
 
             </div>
