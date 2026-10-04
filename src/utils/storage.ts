@@ -909,6 +909,7 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay_txn_1790753980087_908',
+  'rpay-cash-738522',
   'tx-manual-1790888181260-628',
   'tx-manual-1790888224928-5',
   'tx-manual-1790888268953-440',
@@ -955,6 +956,9 @@ export const markTransactionAsDeleted = (txId: string): void => {
     const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
     localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
+
+    // Also notify Firestore tombstone in real-time
+    deleteTransactionFromFirestore(clean).catch(() => {});
 
     // Immediately remove from local transaction cache to instantly reflect deletion
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
@@ -1119,6 +1123,7 @@ export const getStoredTransactions = (): Transaction[] => {
         const merged = [...cleaned];
         for (const initTx of INITIAL_TRANSACTIONS) {
           const initKey = String(initTx.id).toLowerCase().trim();
+          if (deletedIds.has(initKey) || PERMANENTLY_PURGED_TX_IDS.has(initKey)) continue;
           if (!existingIds.has(initKey)) {
             merged.push(initTx);
             hasNew = true;

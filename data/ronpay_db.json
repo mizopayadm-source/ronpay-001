@@ -1374,37 +1374,6 @@
   ],
   "transactions": [
     {
-      "updatedAt": "2026-10-03T16:12:21.871Z",
-      "periodYear": "2026",
-      "category": "kumtluang",
-      "amount": 500,
-      "totalAmount": 500,
-      "isDependent": false,
-      "paymentMethod": "cash",
-      "donorVeng": "Khuangchera",
-      "isAnonymous": false,
-      "txHash": "CASHNR14DH0C",
-      "memberId": "YMAVT-1212",
-      "date": "2026-10-15",
-      "subCategoryBreakdown": {
-        "Chhiatni Fund": 500
-      },
-      "timestamp": "2026-10-15T12:00:00.000Z",
-      "subCategory": "Chhiatni Fund",
-      "platformFee": 0,
-      "createdAt": "2026-10-03T16:12:21.105Z",
-      "periodType": "monthly",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "campaignId": "cmp-1787829303143",
-      "donorName": "Thanghmingliana",
-      "status": "pending_verification",
-      "periodMonth": "October",
-      "id": "RPAY-CASH-738522",
-      "donorType": "member",
-      "periodLabel": "October 2026",
-      "donorPhone": "9865321212"
-    },
-    {
       "timestamp": "2026-10-01T19:13:57.108Z",
       "isDependent": false,
       "amount": 500,
@@ -12272,7 +12241,8 @@
     "tx-manual-1790886883155-450",
     "rpay_txn_1790875972483_197",
     "tx-manual-1790888425532-253",
-    "tx-manual-1790888034425-369"
+    "tx-manual-1790888034425-369",
+    "rpay-cash-738522"
   ],
   "creators": [
     {
@@ -15455,5 +15425,5 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-03T18:13:20.315Z"
+  "lastUpdated": "2026-10-03T20:10:49.895Z"
 }

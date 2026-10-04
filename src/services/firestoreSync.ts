@@ -9,7 +9,8 @@ import {
   query, 
   orderBy, 
   limit, 
-  writeBatch 
+  writeBatch,
+  arrayUnion 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -27,7 +28,17 @@ import {
   DEFAULT_PRICING_CONFIG, 
   INITIAL_REGISTERED_CREATORS 
 } from '../data/initialData';
-import { INITIAL_DEFAULT_MEMBERS, DEFAULT_ANNOUNCEMENT, getDeletedCampaignIds, getDeletedMemberIds, markMemberAsDeleted, getMembers } from '../utils/storage';
+import { 
+  INITIAL_DEFAULT_MEMBERS, 
+  DEFAULT_ANNOUNCEMENT, 
+  getDeletedCampaignIds, 
+  getDeletedMemberIds, 
+  markMemberAsDeleted, 
+  getMembers,
+  getDeletedTransactionIds,
+  markTransactionAsDeleted,
+  PERMANENTLY_PURGED_TX_IDS
+} from '../utils/storage';
 
 export type FirestoreConnectionStatus = 'connecting' | 'connected' | 'offline' | 'error';
 
@@ -123,23 +134,10 @@ export function sanitizeForFirestore<T>(obj: T): T {
 }
 
 function getLocalDeletedTxIds(): Set<string> {
-  const canonicalKeys = new Set(INITIAL_TRANSACTIONS.map(it => String(it.id).toLowerCase().trim()));
-  const result = new Set<string>();
-  try {
-    if (typeof window === 'undefined') return result;
-    const raw = localStorage.getItem('ronpay_deleted_tx_ids') || localStorage.getItem('ronpay_deleted_tx_ids_v1');
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        arr.forEach((id: any) => {
-          const clean = String(id || '').toLowerCase().trim();
-          if (clean && !canonicalKeys.has(clean)) {
-            result.add(clean);
-          }
-        });
-      }
-    }
-  } catch {}
+  const result = getDeletedTransactionIds();
+  for (const id of PERMANENTLY_PURGED_TX_IDS) {
+    if (id) result.add(id.toLowerCase().trim());
+  }
   return result;
 }
 
@@ -370,8 +368,8 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
   }
 
   const now = Date.now();
-  // 5-second cache: Do not read Firestore again if fetched in the last 5 seconds unless forced
-  if (!force && now - lastMembersFetchTime < 5 * 1000 && localMembers.length > 0) {
+  // 120-second cache: Do not read Firestore again if fetched recently to conserve quota
+  if (!force && now - lastMembersFetchTime < 120 * 1000 && localMembers.length > 0) {
     return localMembers;
   }
 
@@ -381,21 +379,23 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
 
   membersFetchPromise = (async () => {
     try {
-      // 1. Fetch deleted members tombstones from Firestore
+      // 1. Fetch deleted members tombstones from single metadata document (Costs ONLY 1 Read!)
       try {
-        const delSnap = await getDocs(query(collection(db, 'deleted_members'), limit(500)));
-        delSnap.forEach(docSnap => {
-          const dId = docSnap.id || docSnap.data()?.id;
-          if (dId) {
-            markMemberAsDeleted(dId);
+        const tombSnap = await getDoc(doc(db, 'system_metadata', 'tombstones'));
+        if (tombSnap.exists()) {
+          const data = tombSnap.data();
+          if (Array.isArray(data?.deleted_members)) {
+            data.deleted_members.forEach((dId: any) => {
+              if (dId) markMemberAsDeleted(dId);
+            });
           }
-        });
+        }
       } catch {}
 
       const deletedMemIds = getDeletedMemberIds();
 
-      // 2. Fetch current active members collection
-      const memQuery = query(collection(db, 'members'), limit(500));
+      // 2. Fetch current active members collection (limit 60 for low quota consumption)
+      const memQuery = query(collection(db, 'members'), limit(60));
       const snapshot = await getDocs(memQuery);
       const remoteMembers: MemberRecord[] = [];
       snapshot.forEach(docSnap => {
@@ -510,11 +510,22 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (up to 150 recent items for comprehensive multi-device sync)
+  // 1. Transactions Listener (up to 25 recent items for fast live sync with minimal quota)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(150));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(25));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
+
+      // Process any document removals directly
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'removed') {
+          const removedId = change.doc.id || (change.doc.data() as any)?.id;
+          if (removedId) {
+            markTransactionAsDeleted(String(removedId).toLowerCase().trim());
+          }
+        }
+      });
+
       const remoteTxList: Transaction[] = [];
       const nowMs = Date.now();
       snapshot.forEach(docSnap => {
@@ -545,7 +556,7 @@ function startLeaderFirestoreListeners(): void {
         for (const it of INITIAL_TRANSACTIONS) {
           if (it && it.id) {
             const k = String(it.id).toLowerCase().trim();
-            if (!deletedIds.has(k)) {
+            if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               txMap.set(k, it);
             }
           }
@@ -555,7 +566,7 @@ function startLeaderFirestoreListeners(): void {
         for (const t of cleanRemote) {
           if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
-            if (!deletedIds.has(k)) {
+            if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               const existing = txMap.get(k);
               txMap.set(k, existing ? { ...existing, ...t } : t);
             }
@@ -566,10 +577,15 @@ function startLeaderFirestoreListeners(): void {
         for (const t of localTx) {
           if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
-            if (!deletedIds.has(k)) {
+            if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               const existing = txMap.get(k);
               if (!existing) {
-                txMap.set(k, t);
+                // Do not resurrect pending transactions that are absent from remote Firestore
+                const status = (t.status || '').toLowerCase().trim();
+                const isPending = status === 'pending' || status === 'pending_verification';
+                if (!isPending) {
+                  txMap.set(k, t);
+                }
               } else {
                 const localTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
                 const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
@@ -680,8 +696,8 @@ function startLeaderFirestoreListeners(): void {
       }
     };
 
-    // Attach with limit 50 so all campaigns sync cleanly
-    const campQuery = query(collection(db, 'campaigns'), limit(50));
+    // Attach with limit 25 so all active campaigns sync cleanly with minimal quota
+    const campQuery = query(collection(db, 'campaigns'), limit(25));
     const unsubCamp = onSnapshot(campQuery, handleCampaignsSnapshot, (error) => {
       logFirestoreNetworkNote('Campaigns listener note', error);
     });
@@ -690,7 +706,7 @@ function startLeaderFirestoreListeners(): void {
     logFirestoreNetworkNote('Attach campaigns listener', err);
   }
 
-  // 3. Kumtluang Members Real-Time Listener (instantly receives member additions, edits, and deletions)
+  // 3. Kumtluang Members Real-Time Listener (limit 60 for low quota consumption)
   try {
     const handleMembersSnapshot = (snapshot: any) => {
       updateStatus('connected');
@@ -761,7 +777,7 @@ function startLeaderFirestoreListeners(): void {
       } catch {}
     };
 
-    const memQuery = query(collection(db, 'members'), limit(500));
+    const memQuery = query(collection(db, 'members'), limit(60));
     const unsubMem = onSnapshot(memQuery, handleMembersSnapshot, (error) => {
       logFirestoreNetworkNote('Members listener note', error);
     });
@@ -770,19 +786,47 @@ function startLeaderFirestoreListeners(): void {
     logFirestoreNetworkNote('Attach members listener', err);
   }
 
-  // 4. Deleted Members Tombstone Listener (purges deleted members on all devices in real-time)
+  // 4. Consolidated Real-Time Tombstones Listener (Single Document: Costs ONLY 1 READ!)
   try {
-    const handleDeletedMembersSnapshot = (snapshot: any) => {
-      let anyDeleted = false;
-      snapshot.forEach((docSnap: any) => {
-        const delId = docSnap.id || docSnap.data()?.id;
-        if (delId) {
-          const clean = String(delId).toLowerCase().trim();
-          markMemberAsDeleted(clean);
-          anyDeleted = true;
-        }
-      });
-      if (anyDeleted) {
+    const tombRef = doc(db, 'system_metadata', 'tombstones');
+    const unsubTombstones = onSnapshot(tombRef, (docSnap) => {
+      if (!docSnap.exists()) return;
+      const data = docSnap.data();
+      if (!data) return;
+
+      let txUpdated = false;
+      if (Array.isArray(data.deleted_transactions)) {
+        data.deleted_transactions.forEach((id: any) => {
+          if (id) {
+            const clean = String(id).toLowerCase().trim();
+            markTransactionAsDeleted(clean);
+            txUpdated = true;
+          }
+        });
+      }
+      if (txUpdated) {
+        const deletedTxIds = getDeletedTransactionIds();
+        const currentLocal = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+        const filtered = currentLocal.filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
+        setLocalJson('ronpay_transactions_v2', filtered);
+        broadcast('onTransactionsUpdate', filtered);
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: filtered }));
+          window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: filtered }));
+        } catch {}
+      }
+
+      let memUpdated = false;
+      if (Array.isArray(data.deleted_members)) {
+        data.deleted_members.forEach((id: any) => {
+          if (id) {
+            const clean = String(id).toLowerCase().trim();
+            markMemberAsDeleted(clean);
+            memUpdated = true;
+          }
+        });
+      }
+      if (memUpdated) {
         const deletedMemIds = getDeletedMemberIds();
         const currentLocal = getLocalJson<MemberRecord[]>('ronpay_kumtluang_members_v1', []);
         const filtered = currentLocal.filter(m => m && m.id && !deletedMemIds.has(String(m.id).toLowerCase().trim()));
@@ -793,14 +837,12 @@ function startLeaderFirestoreListeners(): void {
           window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: filtered }));
         } catch {}
       }
-    };
-    const delMemQuery = query(collection(db, 'deleted_members'), limit(200));
-    const unsubDelMembers = onSnapshot(delMemQuery, handleDeletedMembersSnapshot, (error) => {
-      logFirestoreNetworkNote('Deleted members listener note', error);
+    }, (error) => {
+      logFirestoreNetworkNote('Tombstones listener note', error);
     });
-    newUnsubscribers.push(unsubDelMembers);
+    newUnsubscribers.push(unsubTombstones);
   } catch (err) {
-    logFirestoreNetworkNote('Attach deleted members listener', err);
+    logFirestoreNetworkNote('Attach tombstones listener', err);
   }
 
   activeFirestoreUnsubscribers = newUnsubscribers;
@@ -1027,10 +1069,10 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
     logFirestoreNetworkNote('Delete member', err);
   }
   try {
-    const tombRef = doc(db, 'deleted_members', cleanId.toLowerCase());
+    const tombRef = doc(db, 'system_metadata', 'tombstones');
     await setDoc(tombRef, {
-      id: cleanId,
-      deletedAt: new Date().toISOString()
+      deleted_members: arrayUnion(cleanId.toLowerCase()),
+      updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
     logFirestoreNetworkNote('Set deleted_members tombstone', err);
@@ -1068,6 +1110,15 @@ export async function deleteTransactionFromFirestore(transactionId: string): Pro
     await deleteDoc(docRef);
   } catch (err) {
     logFirestoreNetworkNote('Delete transaction', err);
+  }
+  try {
+    const tombRef = doc(db, 'system_metadata', 'tombstones');
+    await setDoc(tombRef, {
+      deleted_transactions: arrayUnion(cleanId.toLowerCase()),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    logFirestoreNetworkNote('Set deleted_transactions tombstone', err);
   }
 }
 

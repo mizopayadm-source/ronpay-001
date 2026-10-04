@@ -355,10 +355,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
 
-  // Fetch fresh members on demand when Kumtluang modal opens (force fresh state)
+  // Fetch fresh members on demand when Kumtluang modal opens (debounced to avoid burning quota)
   useEffect(() => {
     if (isOpen) {
-      fetchMembersFromFirestore(undefined, true).catch(() => {});
+      fetchMembersFromFirestore(undefined, false).catch(() => {});
     }
   }, [isOpen]);
 

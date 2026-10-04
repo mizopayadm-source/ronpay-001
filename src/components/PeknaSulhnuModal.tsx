@@ -35,8 +35,11 @@ import {
   deleteStoredTransaction, 
   deleteMultipleTransactions,
   isConfirmedTransaction,
-  isSuperAdminOrAdminProfile
+  isSuperAdminOrAdminProfile,
+  getDeletedTransactionIds,
+  PERMANENTLY_PURGED_TX_IDS
 } from '../utils/storage';
+import { deleteTransactionFromFirestore } from '../services/firestoreSync';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { 
   getCampaignCauseTitle, 
@@ -84,11 +87,12 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [statusDialogTx, setStatusDialogTx] = useState<Transaction | null>(null);
   const [statusDialogResult, setStatusDialogResult] = useState<{ status: string; message: string } | null>(null);
   const [actionToast, setActionToast] = useState<string | null>(null);
-  const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(new Set());
+  const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(() => getDeletedTransactionIds());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
+    setDeletedTxIds(getDeletedTransactionIds());
     try {
       await syncAllWithServer(true);
     } catch (e) {
@@ -108,7 +112,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   // Defensive array checks
   const safeTransactions = useMemo(() => {
     const list = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-    return list.filter(t => t && t.id && !deletedTxIds.has(String(t.id).toLowerCase().trim()));
+    return list.filter(t => {
+      if (!t || !t.id) return false;
+      const clean = String(t.id).toLowerCase().trim();
+      return !deletedTxIds.has(clean) && !PERMANENTLY_PURGED_TX_IDS.has(clean);
+    });
   }, [transactions, deletedTxIds]);
 
   const safeCampaigns = useMemo(() => {
@@ -387,6 +395,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
     // 2. Persistent removal from Storage, Firestore & Server
     deleteStoredTransaction(cleanId);
+    deleteTransactionFromFirestore(cleanId).catch(() => {});
 
     // 3. Clear dialog
     setStatusDialogTx(null);
@@ -411,6 +420,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
     // 2. Batch delete across channels
     deleteMultipleTransactions(ids);
+    ids.forEach(id => deleteTransactionFromFirestore(id).catch(() => {}));
     setShowConfirmClearAll(false);
 
     if (onRefreshData) onRefreshData();
