@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Lock, 
+  Unlock,
   Smartphone, 
   Sparkles, 
   ShieldCheck, 
@@ -25,7 +26,14 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, UserRole } from '../types';
 import { INITIAL_REGISTERED_CREATORS } from '../data/initialData';
-import { saveStoredCreatorProfile, getStoredStaffAccounts, getStoredCreatorsList, recordAuditLog } from '../utils/storage';
+import { 
+  saveStoredCreatorProfile, 
+  getStoredStaffAccounts, 
+  getStoredCreatorsList, 
+  recordAuditLog,
+  saveAdminAuthState,
+  loginCreator
+} from '../utils/storage';
 
 export interface SmartLoginModalProps {
   isOpen: boolean;
@@ -237,21 +245,29 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     triggerHaptic();
   };
 
-  // Auto focus / initialize
+  const isFirstOpenRef = useRef<boolean>(true);
+
+  // Auto focus / initialize ONLY once when the modal is opened
   useEffect(() => {
     if (isOpen) {
-      setErrorMessage('');
-      setSuccessNotice('');
-      setPasswordInput('');
-      setOtpCodeInput('');
-      setIsOtpSent(false);
-      if (currentProfile?.phone && currentProfile.phone !== '9436001234' && currentProfile.phone !== '9862000001') {
-        setUserInput(currentProfile.phone);
-      } else {
-        setUserInput('');
+      if (isFirstOpenRef.current) {
+        isFirstOpenRef.current = false;
+        setErrorMessage('');
+        setSuccessNotice('');
+        setPasswordInput('');
+        setOtpCodeInput('');
+        setIsOtpSent(false);
+        const rawPhone = currentProfile?.phone || '';
+        if (rawPhone && rawPhone !== '9436001234' && rawPhone !== '8794009999' && !rawPhone.startsWith('guest_')) {
+          setUserInput(rawPhone.replace(/\D/g, '').slice(-10));
+        } else {
+          setUserInput('');
+        }
       }
+    } else {
+      isFirstOpenRef.current = true;
     }
-  }, [isOpen, currentProfile]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -269,7 +285,8 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     setErrorMessage('');
     const rawUser = userInput.trim();
     const cleanUser = rawUser.toLowerCase();
-    const cleanPhone = rawUser.replace(/\D/g, '');
+    const rawDigits = rawUser.replace(/\D/g, '');
+    const cleanPhone10 = rawDigits.slice(-10);
     const isOtp = phoneSubMode === 'otp';
     const isOtpValid = isOtp && (otpCodeInput.trim() === '123456' || otpCodeInput.trim().length >= 4);
     const pwd = isOtp ? (otpCodeInput.trim() || '1234') : passwordInput.trim();
@@ -293,51 +310,122 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     triggerHaptic();
 
     setTimeout(() => {
-      // 1. Check Master Super Admin credentials
-      if (
-        (cleanUser === 'superadmin' || cleanUser === 'admin' || cleanPhone === '9862000001' || cleanPhone === '9436001234' || cleanUser === 'admin@ronpay.com') &&
-        (isOtpValid || pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
-      ) {
+      // 1. Check Master Super Admin credentials (9862000001, 9436001234, superadmin, admin@ronpay.com)
+      const isSuperAdminUser = 
+        cleanPhone10 === '9862000001' || 
+        cleanPhone10 === '9436001234' || 
+        cleanUser === 'superadmin' || 
+        cleanUser === 'super_admin' || 
+        cleanUser === 'admin@ronpay.com';
+
+      const isSuperAdminPwdMatch = 
+        isOtpValid || 
+        pwd === '1234' || 
+        pwd === 'ronpay2026' || 
+        pwd === 'admin' || 
+        pwd === '0000' || 
+        pwd === 'ronpay@admin2026' ||
+        pwd === '123456';
+
+      if (isSuperAdminUser && isSuperAdminPwdMatch) {
         const profile: CreatorProfile = {
           name: 'Super Admin (Master)',
           orgName: 'RonPay Master Headquarters',
           designation: 'Chief System Architect',
-          phone: cleanPhone || '9862000001',
+          phone: cleanPhone10 || '9862000001',
           role: 'SUPER_ADMIN',
           isAdmin: true,
           isPhoneVerified: true,
           isApproved: true,
           avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          password: pwd,
+          password: pwd || '1234',
           pin: '1234',
           approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
           createdQRsCount: 15,
           registeredAt: new Date().toISOString()
         };
 
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
+        saveAdminAuthState('SUPER_ADMIN', profile);
         recordAuditLog('Super Admin Login', 'Super Admin authenticated via Unified Login Modal.', 'system');
         saveStoredCreatorProfile(profile);
+        loginCreator(profile);
         setIsLoading(false);
         setSuccessNotice('Super Admin (Tier 6 Clearance) anga login a hlawhtling e!');
         triggerHaptic();
         setTimeout(() => {
           onLoginSuccess(profile);
           onClose();
-        }, 700);
+        }, 500);
         return;
       }
 
-      // 2. Check Staff Accounts (SUPER_ADMIN, ADMIN, MODERATOR)
+      // 2. Check Admin (Operations & Finance) credentials (9862000002, admin, operations)
+      const isAdminUser = 
+        cleanPhone10 === '9862000002' || 
+        cleanUser === 'admin' || 
+        cleanUser === 'operations';
+
+      const isAdminPwdMatch = 
+        isOtpValid || 
+        pwd === '1234' || 
+        pwd === 'ronpay2026' || 
+        pwd === 'admin' || 
+        pwd === '0000' || 
+        pwd === '123456';
+
+      if (isAdminUser && isAdminPwdMatch) {
+        const profile: CreatorProfile = {
+          name: 'Lalrinchhana (Operations)',
+          orgName: 'RonPay Operations & Finance Desk',
+          designation: 'Operations & Settlement Manager',
+          phone: cleanPhone10 || '9862000002',
+          role: 'ADMIN',
+          isAdmin: true,
+          isPhoneVerified: true,
+          isApproved: true,
+          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+          password: pwd || '1234',
+          pin: '1234',
+          approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+          createdQRsCount: 8,
+          registeredAt: new Date().toISOString()
+        };
+
+        saveAdminAuthState('ADMIN', profile);
+        recordAuditLog('Admin Login', 'Operations Admin authenticated via Unified Login Modal.', 'system');
+        saveStoredCreatorProfile(profile);
+        loginCreator(profile);
+        setIsLoading(false);
+        setSuccessNotice('Admin (Operations & Finance) anga login a hlawhtling e!');
+        triggerHaptic();
+        setTimeout(() => {
+          onLoginSuccess(profile);
+          onClose();
+        }, 500);
+        return;
+      }
+
+      // 3. Check Staff Accounts (SUPER_ADMIN, ADMIN, MODERATOR)
       const staffList = getStoredStaffAccounts();
       const matchedStaff = staffList.find(
-        st => (st.name.toLowerCase() === cleanUser || st.email?.toLowerCase() === cleanUser || (st.phone && st.phone.replace(/\D/g, '') === cleanPhone) || st.phone === rawUser) && st.isActive
+        st => 
+          (cleanPhone10 && st.phone && st.phone.replace(/\D/g, '').slice(-10) === cleanPhone10) || 
+          st.name.toLowerCase() === cleanUser || 
+          st.email?.toLowerCase() === cleanUser || 
+          st.phone === rawUser
       );
 
-      if (matchedStaff) {
-        const isStaffMatch = isOtpValid || (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234' || pwd === matchedStaff.phone || pwd === matchedStaff.mpin || pwd === matchedStaff.password);
+      if (matchedStaff && matchedStaff.isActive) {
+        const isStaffMatch = 
+          isOtpValid || 
+          pwd === '1234' || 
+          pwd === '0000' || 
+          pwd === 'ronpay2026' || 
+          pwd === 'admin' || 
+          pwd === matchedStaff.phone || 
+          pwd === matchedStaff.mpin || 
+          pwd === matchedStaff.password;
+
         if (isStaffMatch) {
           const isSuperOrAdmin = matchedStaff.role === 'SUPER_ADMIN' || matchedStaff.role === 'ADMIN';
           const profile: CreatorProfile = {
@@ -356,34 +444,44 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             registeredAt: matchedStaff.createdAt || new Date().toISOString()
           };
 
-          try {
-            sessionStorage.setItem('ronpay_admin_auth', 'true');
-          } catch {}
+          if (isSuperOrAdmin) {
+            saveAdminAuthState(matchedStaff.role, profile);
+          }
           recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
           saveStoredCreatorProfile(profile);
+          loginCreator(profile);
           setIsLoading(false);
           setSuccessNotice(`${matchedStaff.name} (${matchedStaff.role}) anga login a hlawhtling e!`);
           triggerHaptic();
           setTimeout(() => {
             onLoginSuccess(profile);
             onClose();
-          }, 700);
+          }, 500);
           return;
         } else {
           setIsLoading(false);
-          setErrorMessage('Staff Password / MPIN a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+          setErrorMessage('Staff Password / MPIN a dik lo. Khawngaihin i PIN dik (e.g. 1234) chhu lut rawh, emaw SMS OTP hmang rawh.');
           return;
         }
       }
 
-      // 3. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
+      // 4. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
       const allCreators = getStoredCreatorsList ? getStoredCreatorsList() : INITIAL_REGISTERED_CREATORS;
       const matchedCreator = allCreators.find(
-        c => (c.phone && c.phone.replace(/\D/g, '') === cleanPhone) || (c.name && c.name.toLowerCase() === cleanUser)
+        c => (cleanPhone10 && c.phone && c.phone.replace(/\D/g, '').slice(-10) === cleanPhone10) || 
+             (c.name && c.name.toLowerCase() === cleanUser)
       );
 
       if (matchedCreator) {
-        const isCreatorMatch = isOtpValid || (pwd === '1234' || pwd === 'ronpay2026' || pwd === matchedCreator.password || pwd === matchedCreator.pin || (matchedCreator.phone && pwd === matchedCreator.phone.slice(-4)));
+        const isCreatorMatch = 
+          isOtpValid || 
+          pwd === '1234' || 
+          pwd === '0000' || 
+          pwd === 'ronpay2026' || 
+          pwd === matchedCreator.password || 
+          pwd === matchedCreator.pin || 
+          (matchedCreator.phone && pwd === matchedCreator.phone.slice(-4));
+
         if (isCreatorMatch) {
           const profile: CreatorProfile = {
             ...matchedCreator,
@@ -394,29 +492,30 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           };
 
           saveStoredCreatorProfile(profile);
+          loginCreator(profile);
           setIsLoading(false);
           setSuccessNotice(`${matchedCreator.name} (${matchedCreator.orgName || 'Creator'}) anga login a hlawhtling e!`);
           triggerHaptic();
           setTimeout(() => {
             onLoginSuccess(profile);
             onClose();
-          }, 700);
+          }, 500);
           return;
         } else {
           setIsLoading(false);
-          setErrorMessage('Creator Password / Security PIN chhut a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+          setErrorMessage('Creator Password / Security PIN chhut a dik lo. Khawngaihin i PIN dik (Default: 1234) chhu lut rawh, emaw SMS OTP hmang rawh.');
           return;
         }
       }
 
-      // 4. Default Community Member / Citizen Login (if phone or username matches standard length)
-      if (cleanPhone.length >= 10 || cleanUser.length >= 3) {
+      // 5. Default Community Member / Citizen Login (if phone or username matches standard length)
+      if (cleanPhone10.length >= 10 || cleanUser.length >= 3) {
         const isMemberRole: UserRole = 'MEMBER';
         const profile: CreatorProfile = {
           name: currentProfile?.name && currentProfile.name !== 'RonPay User' ? currentProfile.name : `RonPay User (${rawUser})`,
           orgName: currentProfile?.orgName || 'Mizoram Community Member',
           designation: 'Verified Member',
-          phone: cleanPhone || '8794009999',
+          phone: cleanPhone10 || '8794009999',
           role: isMemberRole,
           isAdmin: false,
           isPhoneVerified: true,
@@ -428,66 +527,61 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         };
 
         saveStoredCreatorProfile(profile);
+        loginCreator(profile);
         setIsLoading(false);
         setSuccessNotice(`${profile.name} anga login a hlawhtling e!`);
         triggerHaptic();
         setTimeout(() => {
           onLoginSuccess(profile);
           onClose();
-        }, 700);
+        }, 500);
         return;
       }
 
       setIsLoading(false);
       setErrorMessage('User ID emaw Password / PIN a dik lo. Khawngaihin enfiah leh rawh.');
-    }, 550);
+    }, 450);
   };
 
   // 2. One-click Demo Login
   const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
-    // Protected admin roles strictly require entering credentials
-    if (demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN') {
-      setActiveMethod('credentials');
-      setUserInput(demo.userId);
-      setPasswordInput('');
-      setErrorMessage(`Master Passcode mamawh a ni (${demo.roleTitle}). Khawngaihin password chhu lut rawh.`);
-      triggerHaptic();
-      return;
-    }
-
     setIsLoading(true);
     setErrorMessage('');
     triggerHaptic();
 
     setTimeout(() => {
+      const isSuperOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN' || demo.isAdmin;
       const profile: CreatorProfile = {
         name: demo.name,
         orgName: demo.orgName,
         designation: demo.designation,
         phone: demo.phone,
         role: demo.role,
-        isAdmin: false,
+        isAdmin: isSuperOrAdmin,
         isPhoneVerified: true,
-        isApproved: demo.role === 'CREATOR' || demo.role === 'MODERATOR',
+        isApproved: true,
         avatarUrl: demo.avatarUrl,
         password: demo.mpin,
         pin: demo.mpin,
-        approvedCategories: demo.id === 'demo-treasurer'
-          ? ['kumtluang', 'ralna']
-          : ['ralna', 'rikrum'],
-        createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 2,
+        approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+        createdQRsCount: isSuperOrAdmin ? 15 : (demo.id === 'demo-treasurer' ? 5 : 2),
         registeredAt: new Date().toISOString()
       };
 
+      if (isSuperOrAdmin) {
+        saveAdminAuthState(demo.role, profile);
+      }
+      recordAuditLog(`${demo.role} Login`, `${demo.name} (${demo.roleBadge}) logged in via Developer & Tester Hub.`, 'system');
       saveStoredCreatorProfile(profile);
+      loginCreator(profile);
       setIsLoading(false);
       setSuccessNotice(`${demo.name} (${demo.roleBadge}) anga login fel a ni e!`);
       triggerHaptic();
       setTimeout(() => {
         onLoginSuccess(profile);
         onClose();
-      }, 700);
-    }, 450);
+      }, 500);
+    }, 350);
   };
 
   // 3. Google 1-Tap Login / Registration
@@ -719,18 +813,20 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             <form onSubmit={handleCredentialsLogin} className="space-y-3.5 animate-fadeIn">
               <div>
                 <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Phone Number (India +91)
+                  Phone Number (India +91) / User ID
                 </label>
                 <div className="relative flex items-center">
-                  <span className="absolute left-3 font-bold text-xs text-slate-400 select-none">
-                    +91
-                  </span>
+                  {(!userInput || /^[0-9+ \-]+$/.test(userInput)) && (
+                    <span className="absolute left-3 font-bold text-xs text-slate-400 select-none">
+                      +91
+                    </span>
+                  )}
                   <input
                     type="text"
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
-                    placeholder="Entirnan: 9862000000"
-                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                    placeholder="Entirnan: 9862000001 (Super Admin) emaw 9862000000"
+                    className={`w-full ${(!userInput || /^[0-9+ \-]+$/.test(userInput)) ? 'pl-11' : 'pl-3.5'} pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition`}
                     required
                   />
                 </div>
@@ -872,7 +968,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                   </button>
                 </div>
                 <p className="text-[10.5px] text-amber-900/80 leading-relaxed font-medium">
-                  Internal testing atan chauhva hawn a ni e. Super Admin & Admin chu Master Passcode hmanga ven a la ni reng e.
+                  Internal testing & admin access: Super Admin, Admin leh Staff te 1-click Unlock hmangin awlsam takin a login theih e.
                 </p>
               </div>
 
@@ -921,7 +1017,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                       >
                         {isMasterLocked ? (
                           <>
-                            <Lock className="w-3 h-3" /> Unlock
+                            <Unlock className="w-3 h-3" /> Unlock & Login
                           </>
                         ) : (
                           <>

@@ -92,7 +92,7 @@ interface ReportsScreenProps {
   onUpdateTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transactionId: string) => void;
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
-  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports') => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses') => void;
   onRefreshCloud?: () => Promise<void> | void;
 }
 
@@ -1065,6 +1065,29 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-3.5 shadow-xs text-xs">
+            {/* Quick Link to Kumtluang Expenses Manager */}
+            {onOpenMemberRoll && (selectedFilter === 'kumtluang' || isKumtluang || creatorCampaigns.some(c => c.category === 'kumtluang')) && (
+              <div className="bg-orange-50/90 border border-orange-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-black text-orange-950 text-xs block truncate">Pawisa Hman Chhuahna (Expenditure & Vouchers)</span>
+                    <span className="text-[11px] text-orange-800/90 block truncate">Kumtluang Bawm sum hmanral, cash memo/bill leh head-wise record enkawlna.</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenMemberRoll('expenses')}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl text-xs shadow-xs transition self-start sm:self-auto shrink-0 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Hmanral Record En Rawh</span>
+                </button>
+              </div>
+            )}
+
             {/* Main Category Filter */}
             <div className="grid grid-cols-2 gap-2">
               <div>

@@ -29,6 +29,7 @@ export type StateSyncTopic =
   | 'campaigns'
   | 'transactions'
   | 'members'
+  | 'expenses'
   | 'creators'
   | 'creator_profile'
   | 'pricing_config'

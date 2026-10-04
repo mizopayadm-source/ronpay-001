@@ -33,11 +33,13 @@ import {
   RefreshCw,
   History,
   CalendarDays,
-  Plus
+  Plus,
+  Receipt
 } from 'lucide-react';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, saveCampaign } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
+import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
@@ -114,7 +116,7 @@ interface KumtluangMemberManagerModalProps {
   creatorProfile: CreatorProfile;
   campaigns: Campaign[];
   transactions: Transaction[];
-  initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports';
+  initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses';
   initialCampaignId?: string;
   onDataUpdated: () => void;
   onOpenCreateQR?: () => void;
@@ -132,7 +134,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   onDataUpdated,
   onOpenCreateQR
 }) => {
-  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>(initialTab || 'members_list');
+  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
 
   const userRole = getUserRole(creatorProfile);
@@ -1234,6 +1236,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>+ Add Member / Family</span>
+          </button>
+
+          <button
+            type="button"
+            id="tab-btn-expenses"
+            onClick={() => setActiveTab('expenses')}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+              activeTab === 'expenses'
+                ? 'border-orange-500 text-orange-600 bg-white rounded-t-xl shadow-xs'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5 text-orange-500" />
+            <span>Pawisa Hman Chhuahna</span>
+            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-[9px] rounded-full font-bold">Expenses</span>
           </button>
 
           <button
@@ -2475,6 +2492,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* TAB: PAWISA HMAN CHHUAHNA (EXPENDITURE & CASH VOUCHERS) */}
+          {activeTab === 'expenses' && (
+            <div className="space-y-4">
+              {activeScopedCampaign ? (
+                <KumtluangExpenseManager
+                  campaign={activeScopedCampaign}
+                  creatorProfile={creatorProfile}
+                  transactions={transactions}
+                  onExpensesChanged={onDataUpdated}
+                />
+              ) : (
+                <div className="p-12 text-center text-slate-500 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="text-base font-bold text-slate-800">Bawm Thlan Tur A Awm Lo</div>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Pawisa hman chhuahna en leh record turin a chung lam dropdown aṭang khian Kumtluang Bawm thlang hmasa rawh le.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

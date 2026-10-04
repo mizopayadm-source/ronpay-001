@@ -221,7 +221,7 @@ export default function App() {
   const [isAdminApprovalOpen, setIsAdminApprovalOpen] = useState<boolean>(false);
   const [adminApprovalCampaign, setAdminApprovalCampaign] = useState<Campaign | null>(null);
   const [isKumtluangManagerOpen, setIsKumtluangManagerOpen] = useState<boolean>(false);
-  const [kumtluangInitialTab, setKumtluangInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports'>('members_list');
+  const [kumtluangInitialTab, setKumtluangInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>('members_list');
   const [kumtluangInitialCampaignId, setKumtluangInitialCampaignId] = useState<string | undefined>(undefined);
   const [isMemberRollPreviewOpen, setIsMemberRollPreviewOpen] = useState<boolean>(false);
   const [memberRollPreviewParams, setMemberRollPreviewParams] = useState<{

@@ -4098,6 +4098,8 @@ interface DatabaseSchema {
   auditLogs: any[];
   staffAccounts?: any[];
   deletedStaffIds?: string[];
+  expenses?: any[];
+  deletedExpenseIds?: string[];
   lastUpdated: string;
 }
 
@@ -4129,6 +4131,8 @@ function getDefaultDatabase(): DatabaseSchema {
     auditLogs: [],
     staffAccounts: [],
     deletedStaffIds: [],
+    expenses: [],
+    deletedExpenseIds: [],
     lastUpdated: new Date().toISOString()
   };
 }
@@ -4361,6 +4365,62 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // 5. Ensure initial Kumtluang Pawl expenses are present if empty
+  if (!Array.isArray(db.expenses) || db.expenses.length === 0) {
+    const delExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
+    const initialExpenses = [
+      {
+        id: 'EXP-1789001',
+        campaignId: 'cmp-1788107291420',
+        campaignTitle: 'BMP Shillong',
+        head: 'Thingpui & Refreshment',
+        amount: 2800,
+        date: '2026-08-15',
+        paidTo: 'Bazar Canteen',
+        paidBy: 'Treasurer (BMP Shillong)',
+        paymentMethod: 'upi',
+        voucherNo: 'VOU-BMP-001',
+        purpose: 'Hruaitu Committee thingpui leh chhang man',
+        createdAt: '2026-08-15T10:30:00.000Z',
+        createdBy: '9862000001'
+      },
+      {
+        id: 'EXP-1789002',
+        campaignId: 'cmp-1788107291420',
+        campaignTitle: 'BMP Shillong',
+        head: 'Office & Stationery',
+        amount: 1650,
+        date: '2026-08-25',
+        paidTo: 'Lian Stationery, Police Bazar',
+        paidBy: 'Treasurer (BMP Shillong)',
+        paymentMethod: 'cash',
+        voucherNo: 'VOU-BMP-002',
+        purpose: 'Receipt bu thar, Register lehkha leh Pen',
+        createdAt: '2026-08-25T11:15:00.000Z',
+        createdBy: '9862000001'
+      },
+      {
+        id: 'EXP-1789003',
+        campaignId: 'cmp-1787829303143',
+        campaignTitle: 'YMA Vengthar Br, Zobawk, Lunglei',
+        head: 'Tanpuina & Relief',
+        amount: 5000,
+        date: '2026-08-28',
+        paidTo: 'Chhiatni tawk chhungkua',
+        paidBy: 'Finance Secretary (YMA Vengthar)',
+        paymentMethod: 'cash',
+        voucherNo: 'VOU-YMA-001',
+        purpose: 'Chhiatni ruang chhuah leh kuang senso tanpuina',
+        createdAt: '2026-08-28T09:00:00.000Z',
+        createdBy: '9862000001'
+      }
+    ].filter(e => !delExpSet.has(e.id.toLowerCase()));
+    if (initialExpenses.length > 0) {
+      db.expenses = initialExpenses;
+      changed = true;
+    }
+  }
+
   return changed;
 }
 
@@ -4387,6 +4447,8 @@ function getDatabase(): DatabaseSchema {
         auditLogs: Array.isArray(parsed?.auditLogs) ? parsed.auditLogs : [],
         staffAccounts: Array.isArray(parsed?.staffAccounts) ? parsed.staffAccounts : [],
         deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
+        expenses: Array.isArray(parsed?.expenses) ? parsed.expenses : [],
+        deletedExpenseIds: Array.isArray(parsed?.deletedExpenseIds) ? parsed.deletedExpenseIds : [],
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
       if (autoHealDatabase(currentDb)) {
@@ -4606,7 +4668,9 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       announcement,
       auditLogs,
       staffAccounts,
-      deletedStaffIds
+      deletedStaffIds,
+      expenses,
+      deletedExpenseIds
     } = req.body || {};
 
     const db = getDatabase();
@@ -4620,6 +4684,15 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       'cmp-1787917594696',
       'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
     ]);
+
+    if (Array.isArray(deletedExpenseIds) && deletedExpenseIds.length > 0) {
+      const delSet = new Set(deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
+      db.expenses = (db.expenses || []).filter((e: any) => !delSet.has(String(e.id).toLowerCase().trim()));
+      db.deletedExpenseIds = Array.from(new Set([
+        ...(db.deletedExpenseIds || []),
+        ...Array.from(delSet)
+      ]));
+    }
 
     if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
       // Never delete official canonical transaction RPAY_TXN_1790185923025_689 or other canonical records
@@ -4724,6 +4797,15 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
     if (Array.isArray(staffAccounts)) {
       db.staffAccounts = mergeCollections(db.staffAccounts || [], staffAccounts, 'id', serverDelStaffSet);
+    }
+    if (Array.isArray(expenses)) {
+      const serverDelExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
+      db.expenses = mergeCollections(db.expenses || [], expenses, 'id', serverDelExpSet);
+      db.expenses.sort((a: any, b: any) => {
+        const timeA = new Date(a.date || a.createdAt || 0).getTime();
+        const timeB = new Date(b.date || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
     }
     if (Array.isArray(creators)) {
       db.creators = mergeCollections(db.creators, creators, 'phone');
@@ -5140,6 +5222,52 @@ app.post('/api/announcement', (req: Request, res: Response) => {
     db.announcement = ann;
     saveDatabase(db);
     res.json({ success: true, announcement: ann });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Kumtluang Pawl / NGO Pawisa Hman Chhuahna (Expenses) APIs
+app.get('/api/expenses', (req: Request, res: Response) => {
+  try {
+    const { campaignId } = req.query;
+    const db = getDatabase();
+    const delExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
+    let result = (db.expenses || []).filter((e: any) => e && e.id && !delExpSet.has(String(e.id).toLowerCase().trim()));
+    if (campaignId && campaignId !== 'all') {
+      const cleanCampId = String(campaignId).toLowerCase().trim();
+      result = result.filter((e: any) => String(e.campaignId).toLowerCase().trim() === cleanCampId);
+    }
+    res.json({ success: true, expenses: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/expenses', (req: Request, res: Response) => {
+  try {
+    const expense = req.body;
+    if (!expense || !expense.id) {
+      return res.status(400).json({ success: false, message: 'Invalid expense payload' });
+    }
+    const db = getDatabase();
+    db.expenses = mergeCollections(db.expenses || [], [expense], 'id');
+    saveDatabase(db);
+    res.json({ success: true, expense, data: db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/expenses/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    const cleanId = String(id).toLowerCase().trim();
+    db.expenses = (db.expenses || []).filter((e: any) => String(e.id).toLowerCase().trim() !== cleanId);
+    db.deletedExpenseIds = Array.from(new Set([...(db.deletedExpenseIds || []), cleanId]));
+    saveDatabase(db);
+    res.json({ success: true, message: `Expense ${id} deleted successfully` });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

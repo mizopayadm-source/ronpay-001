@@ -117,6 +117,35 @@ export interface Campaign {
   updatedAt?: string;
   lastEditedBy?: string;
   lastEditReason?: string;
+  customExpenseHeads?: string[];
+}
+
+export interface ExpenseRecord {
+  id: string; // e.g. EXP-1789123456
+  campaignId: string;
+  campaignTitle?: string;
+  head: string; // Expense Head / Category e.g. "Office & Stationery", "Refreshment"
+  amount: number;
+  date: string; // YYYY-MM-DD
+  paidTo: string; // Recipient / Hnenah
+  paidBy?: string; // Disbursed by / Sanctioned by
+  paymentMethod: 'cash' | 'upi' | 'bank_transfer' | 'cheque' | string;
+  voucherNo?: string;
+  receiptUrl?: string; // Image proof / invoice photo
+  purpose?: string; // Purpose / Hmanna chhan
+  remark?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface ExpenseHeadPreset {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  description?: string;
 }
 
 export interface Transaction {
@@ -267,7 +296,7 @@ export interface AuditLog {
   id: string;
   action: string;
   details: string;
-  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement' | 'staff' | 'report';
+  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement' | 'staff' | 'report' | 'expense';
   targetId?: string;
   performedBy: string;
   timestamp: string;
@@ -288,6 +317,8 @@ export type PermissionKey =
   | 'REVIEW_REPORTS'
   | 'CREATE_CAMPAIGNS'
   | 'MANAGE_MEMBER_ROLLS'
+  | 'MANAGE_EXPENSES'
+  | 'VIEW_EXPENSES'
   | 'MAKE_DONATIONS'
   | 'VIEW_OWN_HISTORY'
   | 'BACKUP_RESTORE_DB'

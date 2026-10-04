@@ -41,7 +41,8 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Receipt
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
@@ -50,6 +51,7 @@ import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } f
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
+import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
 interface HomeScreenProps {
@@ -62,7 +64,7 @@ interface HomeScreenProps {
   creatorProfile: CreatorProfile;
   announcement?: AnnouncementBanner;
   onOpenReports: () => void;
-  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses', campaignId?: string) => void;
   onShowBalance: () => void;
   onShowBankTransfer: () => void;
   onOpenPhonePePortal?: () => void;
@@ -1008,6 +1010,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </button>
                     )}
 
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || canManageCampaignExpenses(camp, creatorProfile)) && onOpenMemberRoll && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenMemberRoll('expenses', camp.id);
+                        }}
+                        title="Pawisa Hman Chhuahna (Expenses & Vouchers)"
+                        className="p-1.5 px-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-[9px] hover:from-orange-600 hover:to-amber-600 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                      >
+                        <Receipt className="w-3 h-3" /> Hmanral
+                      </button>
+                    )}
+
                     {onShareCampaign && (
                       <button
                         onClick={(e) => {
@@ -1056,6 +1072,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenMemberRoll('expenses', camp.id);
+                              }}
+                              className="text-[9px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                              title="Pawisa hman chhuahna (Expenses) en rawh"
+                            >
+                              <Receipt className="w-2.5 h-2.5 text-orange-600" />
+                              <span>Hmanral</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1085,6 +1115,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
+                            {camp.category === 'kumtluang' && onOpenMemberRoll && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenMemberRoll('expenses', camp.id);
+                                }}
+                                className="text-[9px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                                title="Pawisa hman chhuahna (Expenses) en rawh"
+                              >
+                                <Receipt className="w-2.5 h-2.5 text-orange-600" />
+                                <span>Hmanral</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {

@@ -1,4 +1,4 @@
-import { UserRole, PermissionKey, StaffAccount } from '../types';
+import { UserRole, PermissionKey, StaffAccount, Campaign, CreatorProfile } from '../types';
 
 /**
  * 6-Tier Role Hierarchy & Rank Matrix
@@ -141,6 +141,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
     'REVIEW_REPORTS',
     'CREATE_CAMPAIGNS',
     'MANAGE_MEMBER_ROLLS',
+    'MANAGE_EXPENSES',
+    'VIEW_EXPENSES',
     'MAKE_DONATIONS',
     'VIEW_OWN_HISTORY',
     'BACKUP_RESTORE_DB',
@@ -155,6 +157,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
     'REVIEW_REPORTS',
     'CREATE_CAMPAIGNS',
     'MANAGE_MEMBER_ROLLS',
+    'MANAGE_EXPENSES',
+    'VIEW_EXPENSES',
     'MAKE_DONATIONS',
     'VIEW_OWN_HISTORY',
   ],
@@ -169,6 +173,8 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
   CREATOR: [
     'CREATE_CAMPAIGNS',
     'MANAGE_MEMBER_ROLLS',
+    'MANAGE_EXPENSES',
+    'VIEW_EXPENSES',
     'MAKE_DONATIONS',
     'VIEW_OWN_HISTORY',
   ],
@@ -301,6 +307,72 @@ export function canCreateCampaign(role: UserRole = 'GUEST', isApproved: boolean 
   if (role === 'CREATOR' && isApproved) return true;
   return false;
 }
+
+// 6. Kumtluang Pawl / NGO Pawisa Hman Chhuahna (Expense Management & Viewing Clearance)
+// Strict requirement: Only Campaign Creator, Super Admin, Admin, or authorized officers can handle & view expenses
+export function canManageCampaignExpenses(
+  camp?: Campaign | null,
+  creatorProfile?: CreatorProfile | null,
+  officerPin?: string
+): boolean {
+  if (!camp) return false;
+  const role = getUserRole(creatorProfile);
+  if (role === 'SUPER_ADMIN' || role === 'ADMIN' || creatorProfile?.isAdmin === true) {
+    return true;
+  }
+  if (!creatorProfile) return false;
+
+  // Check Officer Passcode / PIN if campaign has authorized officers
+  if (officerPin) {
+    const cleanPin = officerPin.trim();
+    if (camp.officerPasscode && camp.officerPasscode.trim() === cleanPin) {
+      return true;
+    }
+    if (camp.authorizedOfficers && camp.authorizedOfficers.some(o => o.pin && o.pin.trim() === cleanPin)) {
+      return true;
+    }
+  }
+
+  // Check strict creator ownership
+  const userPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const campCreatedByDigits = (camp.createdBy || '').trim().replace(/\D/g, '').slice(-10);
+  const campCreatorPhone = ((camp as any).creatorPhone || (camp as any).contactPhone || '').trim().replace(/\D/g, '').slice(-10);
+
+  if (userPhone && userPhone.length >= 8) {
+    if (campCreatedByDigits && campCreatedByDigits === userPhone) return true;
+    if (campCreatorPhone && campCreatorPhone === userPhone) return true;
+    if (camp.createdBy && camp.createdBy === (creatorProfile.phone || '').trim()) return true;
+  }
+
+  const userName = (creatorProfile.name || '').trim().toLowerCase();
+  const cleanUserName = userName.replace(/\s*\([^)]*\)/g, '').trim();
+  const genericNames = ['user', 'guest', 'ronpay user', 'ronpay', 'donor', 'citizen', 'valued donor', 'anonymous', ''];
+  if (cleanUserName && cleanUserName.length >= 3 && !genericNames.includes(cleanUserName)) {
+    const campCreatedBy = (camp.createdBy || '').trim().toLowerCase();
+    const campCreatorName = ((camp as any).creatorName || (camp as any).contactPerson || '').trim().toLowerCase();
+    if (campCreatedBy && (campCreatedBy === userName || campCreatedBy === cleanUserName)) return true;
+    if (campCreatorName && (campCreatorName === userName || campCreatorName === cleanUserName)) return true;
+  }
+
+  if (creatorProfile.orgName && (camp.orgName || camp.title)) {
+    const pOrg = creatorProfile.orgName.trim().toLowerCase();
+    const cOrg = (camp.orgName || camp.title).trim().toLowerCase();
+    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community', 'creator', 'user'];
+    if (!genericOrgs.includes(pOrg) && pOrg.length >= 4 && (pOrg === cOrg || cOrg.includes(pOrg) || pOrg.includes(cOrg))) {
+      return true;
+    }
+  }
+
+  // Alias match for standard demo accounts
+  if ((userPhone === '9862300000' || userPhone === '9862311223') && 
+      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
+    return true;
+  }
+
+  return false;
+}
+
+export const canViewCampaignExpenses = canManageCampaignExpenses;
 
 /**
  * Role badge and formatting helpers
