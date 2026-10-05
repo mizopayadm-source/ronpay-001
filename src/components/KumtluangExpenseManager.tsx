@@ -58,6 +58,7 @@ import {
   isTransactionForCampaign,
   saveCampaign
 } from '../utils/storage';
+import { fetchExpensesFromFirestore, syncAllLocalExpensesToFirestore } from '../services/firestoreSync';
 import { formatDateDDMMYYYY, getTodayDateTimeLocal } from '../utils/date';
 import { compressDataUrl } from '../utils/imageCompressor';
 
@@ -180,6 +181,34 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       setSelectedHead(heads[0] || 'Thil Dang / Miscellaneous');
     }
   }, [campaign.id, campaign.expenseHeads]);
+
+  // Cloud sync state
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+
+  const handleManualCloudSync = async () => {
+    setIsCloudSyncing(true);
+    try {
+      await syncAllLocalExpensesToFirestore();
+      const freshFromCloud = await fetchExpensesFromFirestore(true);
+      const campExpenses = freshFromCloud.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+      setExpenseList(campExpenses);
+      showToast('Cloud Firestore atangin live data sync fel a ni e!', 'success');
+    } catch {
+      showToast('Cloud sync timeout or offline', 'error');
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    // When opened, fetch from Firestore in background to ensure fresh cloud data across Web, Mobile & Preview
+    fetchExpensesFromFirestore(true).then((fresh) => {
+      if (Array.isArray(fresh) && !isUserInteractingRef.current) {
+        const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+        setExpenseList(campExpenses);
+      }
+    }).catch(() => {});
+  }, [campaign.id]);
 
   // Listen for storage updates, but DO NOT overwrite if user is actively editing a voucher or recording
   const isUserInteractingRef = useRef<boolean>(false);
@@ -819,10 +848,16 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
         {/* Sync Status & Role Badge */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <div className="px-2.5 py-1 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-300 flex items-center gap-1.5 text-[10px] font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Mobile App & Web Live Sync</span>
-          </div>
+          <button
+            type="button"
+            onClick={handleManualCloudSync}
+            disabled={isCloudSyncing}
+            className="px-2.5 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 border border-slate-700 text-slate-200 flex items-center gap-1.5 text-[10.5px] font-bold cursor-pointer transition shadow-2xs"
+            title="Hmet la, Mobile App, Web leh Preview atangin live data sync rawh"
+          >
+            <RotateCcw className={`w-3 h-3 text-emerald-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+            <span>{isCloudSyncing ? 'Syncing Cloud...' : 'Live Cloud Sync (Web & Mobile)'}</span>
+          </button>
 
           <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold ${
             permissionStatus.allowed 

@@ -348,6 +348,11 @@ export default function App() {
           setAuditLogs(updatedLogs);
         }
       },
+      onExpensesUpdate: (updatedExpenses) => {
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: updatedExpenses }));
+        } catch {}
+      },
     });
 
     const handleBeforeUnload = () => {

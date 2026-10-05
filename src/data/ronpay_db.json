@@ -42,7 +42,15 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": []
+      "generalPresets": [
+        "Pathianni Chawhma Thawhlawm",
+        "Pathianni Chawhnu Thawhlawm",
+        "Pathianni Zan Thawhlawm",
+        "Nilai Zan Thawhlawm",
+        "Buhfaiṭham Thawhlawm",
+        "Inrinni Zan Thawhlawm",
+        "Bial Inkhawmpui Thawhlawm"
+      ]
     },
     {
       "subCategories": [
@@ -586,7 +594,7 @@
       "definedSections": [
         "Shillong Unit"
       ],
-      "updatedAt": "2026-10-05T18:08:38.334Z",
+      "updatedAt": "2026-10-05T18:38:38.740Z",
       "orgCode": "BMPSHL",
       "subCategories": [
         "BMP Fund"
@@ -632,12 +640,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "transferredAt": "2026-10-01T15:45:45.524Z",
-          "reason": "Term inthlak / Annual Office Bearer Handover",
-          "fromName": "Super Admin (Master)",
+          "toName": "RC Lalliana (Treasurer)",
           "fromPhone": "9862000001",
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
           "toPhone": "7005153902",
-          "toName": "RC Lalliana (Treasurer)"
+          "fromName": "Super Admin (Master)"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -646,9 +654,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
-          "phone": "9862000001",
+          "name": "Super Admin (Master)",
           "role": "Outgoing Officer / Co-Manager",
-          "name": "Super Admin (Master)"
+          "phone": "9862000001"
         }
       ],
       "transferredFrom": "9862000001",
@@ -667,7 +675,16 @@
         "Damlo Kanna / Chhiatni",
         "BIal / MTKP"
       ],
-      "openingBalance": 7827
+      "openingBalance": 7827,
+      "expenseHeads": [
+        "Chhiatni / Thatni",
+        "Mizoram BMP",
+        "Ruai / Thingpui",
+        "Bial BMP",
+        "Lawmpuina",
+        "Sports & Games / Puanchei",
+        "Thil Dang / Miscellaneous"
+      ]
     }
   ],
   "deletedCampaignIds": [
@@ -1360,19 +1377,6 @@
       "activeYears": [
         "2026"
       ]
-    },
-    {
-      "id": "BMPSHL-1548",
-      "campaignId": "cmp-1788107291420",
-      "name": "Zothanzuala Hrahsel",
-      "orgCode": "BMPSHL",
-      "phoneLast4": "1548",
-      "fullPhone": "",
-      "section": "Shillong Unit",
-      "isFamilyHead": true,
-      "dependents": [],
-      "createdAt": "2026-08-15T00:00:00.000Z",
-      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -15494,5 +15498,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-05T18:24:39.730Z"
+  "lastUpdated": "2026-10-05T18:53:32.547Z"
 }

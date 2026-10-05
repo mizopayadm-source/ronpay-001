@@ -20,7 +20,8 @@ import {
   CreatorProfile, 
   SystemPricingConfig, 
   AnnouncementBanner, 
-  AuditLog 
+  AuditLog,
+  KumtluangExpense
 } from '../types';
 import { 
   INITIAL_CAMPAIGNS, 
@@ -37,7 +38,11 @@ import {
   getMembers,
   getDeletedTransactionIds,
   markTransactionAsDeleted,
-  PERMANENTLY_PURGED_TX_IDS
+  PERMANENTLY_PURGED_TX_IDS,
+  getDeletedExpenseIds,
+  markExpenseAsDeleted,
+  getStoredExpenses,
+  saveStoredExpenses
 } from '../utils/storage';
 
 export type FirestoreConnectionStatus = 'connecting' | 'connected' | 'offline' | 'error';
@@ -50,6 +55,7 @@ export interface FirestoreSyncCallbacks {
   onAnnouncementUpdate?: (announcement: AnnouncementBanner) => void;
   onPricingConfigUpdate?: (pricingConfig: SystemPricingConfig) => void;
   onAuditLogsUpdate?: (logs: AuditLog[]) => void;
+  onExpensesUpdate?: (expenses: KumtluangExpense[]) => void;
   onStatusChange?: (status: FirestoreConnectionStatus, message?: string) => void;
 }
 
@@ -786,7 +792,89 @@ function startLeaderFirestoreListeners(): void {
     logFirestoreNetworkNote('Attach members listener', err);
   }
 
-  // 4. Consolidated Real-Time Tombstones Listener (Single Document: Costs ONLY 1 READ!)
+  // 4. Expenses Listener (NGO / Kumtluang Expenditure real-time sync across Web, Preview & Mobile)
+  try {
+    const handleExpensesSnapshot = (snapshot: any) => {
+      updateStatus('connected');
+      const remoteExpenses: KumtluangExpense[] = [];
+      const deletedExpSet = getDeletedExpenseIds();
+
+      snapshot.docChanges().forEach((change: any) => {
+        if (change.type === 'removed') {
+          const removedId = change.doc.id || (change.doc.data() as any)?.id;
+          if (removedId) {
+            markExpenseAsDeleted(String(removedId).toLowerCase().trim());
+          }
+        }
+      });
+
+      snapshot.forEach((docSnap: any) => {
+        const data = docSnap.data() as KumtluangExpense;
+        if (data && data.id) {
+          const cleanId = String(data.id).toLowerCase().trim();
+          if (!deletedExpSet.has(cleanId)) {
+            remoteExpenses.push(data);
+          }
+        }
+      });
+
+      const localExpenses = getStoredExpenses().filter(e => e && e.id && !deletedExpSet.has(String(e.id).toLowerCase().trim()));
+      const expMap = new Map<string, KumtluangExpense>();
+      for (const re of remoteExpenses) {
+        if (re && re.id) {
+          expMap.set(String(re.id).toLowerCase().trim(), re);
+        }
+      }
+      for (const le of localExpenses) {
+        if (le && le.id) {
+          const k = String(le.id).toLowerCase().trim();
+          const existing = expMap.get(k);
+          if (!existing) {
+            expMap.set(k, le);
+            // Auto-upload local voucher entered on web or mobile up to Firestore!
+            syncExpenseToFirestore(le).catch(() => {});
+          } else {
+            const localTime = new Date(le.updatedAt || le.recordedAt || le.spentDate || 0).getTime();
+            const remoteTime = new Date(existing.updatedAt || existing.recordedAt || existing.spentDate || 0).getTime();
+            if (localTime > remoteTime) {
+              expMap.set(k, { ...existing, ...le });
+              syncExpenseToFirestore({ ...existing, ...le }).catch(() => {});
+            }
+          }
+        }
+      }
+
+      const merged = Array.from(expMap.values());
+      merged.sort((a, b) => {
+        const timeA = new Date(a.spentDate || a.recordedAt || 0).getTime();
+        const timeB = new Date(b.spentDate || b.recordedAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+      saveStoredExpenses(merged, true);
+      broadcast('onExpensesUpdate', merged);
+
+      if (coordinatorChannel) {
+        try {
+          coordinatorChannel.postMessage({ type: 'sync_update', channel: 'expenses', payload: merged });
+        } catch {}
+      }
+
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: merged }));
+      } catch {}
+    };
+
+    const expQuery = query(collection(db, 'expenses'), limit(150));
+    const unsubExp = onSnapshot(expQuery, handleExpensesSnapshot, (error) => {
+      logFirestoreNetworkNote('Expenses listener note', error);
+    });
+    newUnsubscribers.push(unsubExp);
+  } catch (err) {
+    logFirestoreNetworkNote('Attach expenses listener', err);
+  }
+
+  // 5. Consolidated Real-Time Tombstones Listener (Single Document: Costs ONLY 1 READ!)
   try {
     const tombRef = doc(db, 'system_metadata', 'tombstones');
     const unsubTombstones = onSnapshot(tombRef, (docSnap) => {
@@ -836,6 +924,14 @@ function startLeaderFirestoreListeners(): void {
           window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: filtered }));
           window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: filtered }));
         } catch {}
+      }
+
+      if (Array.isArray(data.deleted_expenses)) {
+        data.deleted_expenses.forEach((id: any) => {
+          if (id) {
+            markExpenseAsDeleted(String(id).toLowerCase().trim());
+          }
+        });
       }
     }, (error) => {
       logFirestoreNetworkNote('Tombstones listener note', error);
@@ -909,6 +1005,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
               try {
                 window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: msg.payload }));
                 window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: msg.payload }));
+              } catch {}
+            } else if (msg.channel === 'expenses' && Array.isArray(msg.payload)) {
+              saveStoredExpenses(msg.payload, true);
+              broadcast('onExpensesUpdate', msg.payload);
+              try {
+                window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: msg.payload }));
               } catch {}
             }
           } else if (msg.type === 'leader_resigned') {
@@ -1077,6 +1179,155 @@ export async function deleteMemberFromFirestore(memberId: string): Promise<void>
   } catch (err) {
     logFirestoreNetworkNote('Set deleted_members tombstone', err);
   }
+}
+
+/**
+ * Direct write: Save single expense voucher to Firebase Firestore (expenses collection)
+ */
+export async function syncExpenseToFirestore(expense: KumtluangExpense): Promise<void> {
+  if (!isNetworkOnline || !expense || !expense.id) return;
+  try {
+    let finalReceipt = expense.attachmentUrl || (expense as any).receiptUrl;
+    if (finalReceipt && finalReceipt.startsWith('data:') && finalReceipt.length > 50000) {
+      try {
+        finalReceipt = await compressDataUrl(finalReceipt, 800, 800, 0.7);
+      } catch (err) {
+        console.warn('[FirestoreSync] Expense receipt compression warning:', err);
+      }
+    }
+
+    const cleanExpense = sanitizeForFirestore({
+      ...expense,
+      attachmentUrl: finalReceipt || null,
+      updatedAt: expense.updatedAt || new Date().toISOString()
+    });
+    const docRef = doc(db, 'expenses', String(expense.id));
+    await setDoc(docRef, cleanExpense, { merge: true });
+    console.info(`[RonPay Cloud] Synced expense "${expense.voucherNo || expense.id}" to Firestore`);
+  } catch (err) {
+    logFirestoreNetworkNote('Expense sync', err);
+    console.warn(`[RonPay Cloud] Expense sync warning for "${expense.id}":`, err);
+  }
+}
+
+/**
+ * Direct delete: Delete expense voucher from Firestore
+ */
+const sessionDeletedExpenses = new Set<string>();
+export async function deleteExpenseFromFirestore(expenseId: string): Promise<void> {
+  if (!isNetworkOnline || !expenseId) return;
+  const cleanId = String(expenseId).trim();
+  if (sessionDeletedExpenses.has(cleanId.toLowerCase())) return;
+  sessionDeletedExpenses.add(cleanId.toLowerCase());
+  try {
+    const docRef = doc(db, 'expenses', cleanId);
+    await deleteDoc(docRef);
+    console.info(`[RonPay Cloud] Deleted expense "${cleanId}" from Firestore`);
+  } catch (err) {
+    logFirestoreNetworkNote('Delete expense', err);
+  }
+  try {
+    const tombRef = doc(db, 'system_metadata', 'tombstones');
+    await setDoc(tombRef, {
+      deleted_expenses: arrayUnion(cleanId.toLowerCase()),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    logFirestoreNetworkNote('Set deleted_expenses tombstone', err);
+  }
+}
+
+/**
+ * Push all local stored expenses that have not been marked deleted to Firestore.
+ * This guarantees any data entered on web (e.g. ronpay.app) or mobile app is uploaded to the cloud!
+ */
+export async function syncAllLocalExpensesToFirestore(): Promise<void> {
+  if (!isNetworkOnline) return;
+  try {
+    const localExpenses = getStoredExpenses();
+    const deletedSet = getDeletedExpenseIds();
+    const validExpenses = localExpenses.filter(e => e && e.id && !deletedSet.has(String(e.id).toLowerCase().trim()));
+    for (const exp of validExpenses) {
+      await syncExpenseToFirestore(exp);
+    }
+  } catch (err) {
+    logFirestoreNetworkNote('Batch sync local expenses', err);
+  }
+}
+
+let expensesFetchPromise: Promise<KumtluangExpense[]> | null = null;
+let lastExpensesFetchTime = 0;
+
+/**
+ * On-demand fetch of expenses from Firestore
+ */
+export async function fetchExpensesFromFirestore(forceRefresh?: boolean): Promise<KumtluangExpense[]> {
+  const localExpenses = getStoredExpenses();
+  if (!isNetworkOnline) return localExpenses;
+
+  const now = Date.now();
+  if (!forceRefresh && lastExpensesFetchTime && (now - lastExpensesFetchTime < 15000)) {
+    return localExpenses;
+  }
+
+  if (expensesFetchPromise) return expensesFetchPromise;
+
+  expensesFetchPromise = (async () => {
+    try {
+      const q = query(collection(db, 'expenses'), limit(200));
+      const snapshot = await getDocs(q);
+      const remoteExpenses: KumtluangExpense[] = [];
+      const deletedExpSet = getDeletedExpenseIds();
+
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as KumtluangExpense;
+        if (data && data.id) {
+          const cleanId = String(data.id).toLowerCase().trim();
+          if (!deletedExpSet.has(cleanId)) {
+            remoteExpenses.push(data);
+          }
+        }
+      });
+      lastExpensesFetchTime = Date.now();
+
+      const cleanLocal = (localExpenses || []).filter(e => e && e.id && !deletedExpSet.has(String(e.id).toLowerCase().trim()));
+      const expMap = new Map<string, KumtluangExpense>();
+      for (const re of remoteExpenses) {
+        expMap.set(String(re.id).toLowerCase().trim(), re);
+      }
+      for (const le of cleanLocal) {
+        const k = String(le.id).toLowerCase().trim();
+        const existing = expMap.get(k);
+        if (!existing) {
+          expMap.set(k, le);
+          syncExpenseToFirestore(le).catch(() => {});
+        } else {
+          const localTime = new Date(le.updatedAt || le.recordedAt || le.spentDate || 0).getTime();
+          const remoteTime = new Date(existing.updatedAt || existing.recordedAt || existing.spentDate || 0).getTime();
+          if (localTime > remoteTime) {
+            expMap.set(k, { ...existing, ...le });
+            syncExpenseToFirestore({ ...existing, ...le }).catch(() => {});
+          }
+        }
+      }
+
+      const merged = Array.from(expMap.values());
+      merged.sort((a, b) => new Date(b.spentDate || b.recordedAt || 0).getTime() - new Date(a.spentDate || a.recordedAt || 0).getTime());
+      saveStoredExpenses(merged, true);
+      broadcast('onExpensesUpdate', merged);
+      try {
+        window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: merged }));
+      } catch {}
+      return merged;
+    } catch (err) {
+      logFirestoreNetworkNote('Fetch expenses on-demand', err);
+    } finally {
+      expensesFetchPromise = null;
+    }
+    return localExpenses;
+  })();
+
+  return expensesFetchPromise;
 }
 
 /**
@@ -1308,6 +1559,23 @@ export async function pushAllLocalDataToFirestore(): Promise<{ success: boolean;
       batch.set(doc(db, 'systemConfig', 'pricing'), sanitizeForFirestore({ ...localPricing, updatedAt: new Date().toISOString() }), { merge: true });
       batchOps++;
       totalCount++;
+    }
+
+    // 7. Expenses (Kumtluang / NGO Expenditure vouchers)
+    const rawExpenses = localStorage.getItem('ronpay_kumtluang_expenses_v1');
+    const localExpenses: KumtluangExpense[] = rawExpenses ? JSON.parse(rawExpenses) : [];
+    const delExpSet = getDeletedExpenseIds();
+    for (const exp of localExpenses) {
+      if (exp && exp.id && !delExpSet.has(String(exp.id).toLowerCase().trim())) {
+        const clean = sanitizeForFirestore({
+          ...exp,
+          updatedAt: exp.updatedAt || exp.recordedAt || exp.spentDate || new Date().toISOString()
+        });
+        batch.set(doc(db, 'expenses', String(exp.id)), clean, { merge: true });
+        batchOps++;
+        totalCount++;
+        await commitBatchIfNeeded();
+      }
     }
 
     if (batchOps > 0) {

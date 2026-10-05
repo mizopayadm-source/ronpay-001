@@ -11,7 +11,10 @@ import {
   syncCreatorToFirestore,
   syncAnnouncementToFirestore,
   syncPricingConfigToFirestore,
-  syncAuditLogToFirestore
+  syncAuditLogToFirestore,
+  syncExpenseToFirestore,
+  deleteExpenseFromFirestore,
+  syncAllLocalExpensesToFirestore
 } from '../services/firestoreSync';
 import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
 
@@ -3547,6 +3550,8 @@ export const saveStoredExpenses = (expenses: KumtluangExpense[], skipServer: boo
           deletedExpenseIds: Array.from(delSet)
         })
       }).catch(() => {});
+      // Sync to cloud Firestore for cross-domain & cross-device live sync
+      syncAllLocalExpensesToFirestore().catch(() => {});
     }
   } catch (e) {
     console.error('Failed to save expenses', e);
@@ -3564,6 +3569,8 @@ export const saveExpense = (expense: KumtluangExpense): void => {
     updated = [expense, ...current];
   }
   saveStoredExpenses(updated);
+  // Instant real-time Firestore sync
+  syncExpenseToFirestore(expense).catch(() => {});
 };
 
 export const deleteStoredExpense = (expenseId: string): void => {
@@ -3572,7 +3579,8 @@ export const deleteStoredExpense = (expenseId: string): void => {
   const updated = current.filter(e => String(e.id).toLowerCase().trim() !== String(expenseId).toLowerCase().trim());
   saveStoredExpenses(updated);
 
-  // Directly notify server endpoint
+  // Directly notify Firestore and server endpoint
+  deleteExpenseFromFirestore(expenseId).catch(() => {});
   safeApiFetch(`/api/expenses/${encodeURIComponent(expenseId)}`, {
     method: 'DELETE'
   }).catch(() => {});
@@ -3583,7 +3591,10 @@ export const deleteAllCampaignExpenses = (campaignId: string): void => {
   const cleanCampId = String(campaignId).toLowerCase().trim();
   const current = getStoredExpenses();
   const targetExpenses = current.filter(e => String(e.campaignId).toLowerCase().trim() === cleanCampId);
-  targetExpenses.forEach(e => markExpenseAsDeleted(e.id));
+  targetExpenses.forEach(e => {
+    markExpenseAsDeleted(e.id);
+    deleteExpenseFromFirestore(e.id).catch(() => {});
+  });
   const remaining = current.filter(e => String(e.campaignId).toLowerCase().trim() !== cleanCampId);
   saveStoredExpenses(remaining);
 };
@@ -3605,6 +3616,7 @@ export const updateStoredExpense = (expense: KumtluangExpense): void => {
     updated = [expenseWithStamp, ...current];
   }
   saveStoredExpenses(updated);
+  syncExpenseToFirestore(expenseWithStamp).catch(() => {});
 };
 
 export const getCampaignExpenseHeads = (campaignId: string, customHeadsFromCampaign?: string[]): string[] => {
