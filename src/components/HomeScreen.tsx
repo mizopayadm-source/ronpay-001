@@ -1031,7 +1031,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') && onOpenMemberRoll && (
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || canManageCampaignExpenses(camp, creatorProfile)) && onOpenMemberRoll && (
                       <>
                         <button
                           type="button"
@@ -1052,25 +1052,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             onOpenMemberRoll('expenses', camp.id);
                           }}
                           title="Pawisa Hman Chhuahna (Expenses & Vouchers)"
-                          className="p-1.5 px-2 rounded-lg bg-rose-600 text-white font-extrabold text-[9px] hover:bg-rose-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                          className="p-1.5 px-2 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 text-white font-extrabold text-[9px] hover:from-rose-700 hover:to-amber-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
                         >
                           <Receipt className="w-3 h-3" /> Hmanna
                         </button>
                       </>
-                    )}
-
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || canManageCampaignExpenses(camp, creatorProfile)) && onOpenMemberRoll && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenMemberRoll('expenses', camp.id);
-                        }}
-                        title="Pawisa Hman Chhuahna (Expenses & Vouchers)"
-                        className="p-1.5 px-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-[9px] hover:from-orange-600 hover:to-amber-600 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                      >
-                        <Receipt className="w-3 h-3" /> Hmanral
-                      </button>
                     )}
 
                     {onShareCampaign && (

@@ -6251,8 +6251,7 @@ async function startServer() {
     return;
   }
   const distPath = path.join(process.cwd(), 'dist');
-  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
-  const isProduction = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV !== 'development' && hasDist);
+  const isProduction = process.env.NODE_ENV === 'production';
 
   // Vite middleware for development only
   if (!isProduction) {

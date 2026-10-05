@@ -15475,5 +15475,53 @@
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-05T09:04:09.060Z"
+  "expenses": [
+    {
+      "id": "EXP-1789001",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "head": "Thingpui & Refreshment",
+      "amount": 2800,
+      "date": "2026-08-15",
+      "paidTo": "Bazar Canteen",
+      "paidBy": "Treasurer (BMP Shillong)",
+      "paymentMethod": "upi",
+      "voucherNo": "VOU-BMP-001",
+      "purpose": "Hruaitu Committee thingpui leh chhang man",
+      "createdAt": "2026-08-15T10:30:00.000Z",
+      "createdBy": "9862000001"
+    },
+    {
+      "id": "EXP-1789002",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "head": "Office & Stationery",
+      "amount": 1650,
+      "date": "2026-08-25",
+      "paidTo": "Lian Stationery, Police Bazar",
+      "paidBy": "Treasurer (BMP Shillong)",
+      "paymentMethod": "cash",
+      "voucherNo": "VOU-BMP-002",
+      "purpose": "Receipt bu thar, Register lehkha leh Pen",
+      "createdAt": "2026-08-25T11:15:00.000Z",
+      "createdBy": "9862000001"
+    },
+    {
+      "id": "EXP-1789003",
+      "campaignId": "cmp-1787829303143",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "head": "Tanpuina & Relief",
+      "amount": 5000,
+      "date": "2026-08-28",
+      "paidTo": "Chhiatni tawk chhungkua",
+      "paidBy": "Finance Secretary (YMA Vengthar)",
+      "paymentMethod": "cash",
+      "voucherNo": "VOU-YMA-001",
+      "purpose": "Chhiatni ruang chhuah leh kuang senso tanpuina",
+      "createdAt": "2026-08-28T09:00:00.000Z",
+      "createdBy": "9862000001"
+    }
+  ],
+  "deletedExpenseIds": [],
+  "lastUpdated": "2026-10-05T15:51:04.062Z"
 }
