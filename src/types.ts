@@ -102,7 +102,10 @@ export interface Campaign {
     phone: string;
     role?: string;
     pin?: string;
+    canRecordExpenses?: boolean;
+    canManageMembers?: boolean;
   }>;
+  expenseHeads?: string[];
   transferredAt?: string;
   transferredFrom?: string;
   transferredTo?: string;
@@ -195,6 +198,36 @@ export interface Transaction {
   billOperator?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+}
+
+export interface KumtluangExpense {
+  id: string;
+  campaignId: string;
+  campaignTitle?: string;
+  amount: number;
+  head: string;
+  purpose: string;
+  paidTo: string;
+  paymentMode: 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque' | string;
+  voucherNo?: string;
+  referenceNo?: string;
+  attachmentUrl?: string;
+  spentDate: string;
+  recordedBy: string;
+  recordedByPhone?: string;
+  recordedAt: string;
+  createdAt?: string;
+  notes?: string;
+  status?: 'approved' | 'pending' | 'verified' | string;
+}
+
+export interface KumtluangExpenseHead {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  isSystemDefault?: boolean;
 }
 
 export interface CategoryRequest {

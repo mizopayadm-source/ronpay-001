@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, ExpenseRecord } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
@@ -2031,7 +2031,6 @@ export interface RonPayBackupPackage {
     announcement: AnnouncementBanner;
     auditLogs: AuditLog[];
     userPaidTxIds: string[];
-    expenses?: ExpenseRecord[];
   };
 }
 
@@ -2049,7 +2048,6 @@ export const exportFullDatabaseBackup = (): string => {
       announcement: getStoredAnnouncement(),
       auditLogs: getStoredAuditLogs(),
       userPaidTxIds: getStoredUserPaidTxIds(),
-      expenses: getStoredExpenses(),
     }
   };
 
@@ -2078,9 +2076,6 @@ export const restoreFullDatabaseBackup = (
     }
     if (Array.isArray(data.transactions)) {
       saveStoredTransactions(data.transactions);
-    }
-    if (Array.isArray(data.expenses)) {
-      saveStoredExpenses(data.expenses);
     }
     if (Array.isArray(data.creatorsList)) {
       saveStoredCreatorsList(data.creatorsList);
@@ -3450,138 +3445,109 @@ export const saveStoredPGConfig = (config: PaymentGatewayConfig): void => {
   }
 };
 
-// =================================================================
-// KUMTLUANG PAWL / NGO PAWISA HMAN CHHUAHNA (EXPENDITURE MANAGEMENT)
-// =================================================================
+// ==========================================
+// KUMTLUANG NGO & PAWL EXPENDITURE (EXPENSES)
+// ==========================================
 
-export const EXPENSES_KEY = 'ronpay_expenses_v2';
-export const DELETED_EXPENSE_IDS_KEY = 'ronpay_deleted_expense_ids_v1';
-
-export const DEFAULT_EXPENSE_HEADS: string[] = [
-  'Office & Stationery',
-  'Refreshment & Thingpui',
-  'Traveling & Zin Senso',
-  'Honorarium & Lawmman',
-  'Building & Chei Thatna',
-  'Tanpuina & Relief',
-  'Sound & Light / PA System',
-  'Printing & Publication',
-  'Programme & Event',
-  'Bank Charges & Fees',
-  'Miscellaneous / Dangte'
+export const DEFAULT_KUMTLUANG_EXPENSE_HEADS: string[] = [
+  'Inhlangchhawnna / Maintenance',
+  'Tlawmngaihna / Tanpuina (Relief & Welfare)',
+  'Office & Stationery / Printing',
+  'Programme & Refreshment / Thingpui',
+  'Travelling & Conveyance / DA',
+  'Electric & Tui Bill',
+  'Sound & Light / Equipment',
+  'Sports & Games / Puanchei',
+  'Thil Dang / Miscellaneous'
 ];
 
-export const INITIAL_EXPENSES: ExpenseRecord[] = [
+export const INITIAL_KUMTLUANG_EXPENSES: KumtluangExpense[] = [
   {
-    id: 'EXP-1789001',
-    campaignId: 'cmp-1788107291420',
-    campaignTitle: 'BMP Shillong',
-    head: 'Refreshment & Thingpui',
-    amount: 1450,
-    date: '2026-08-20',
-    paidTo: 'Zorun Bakery & Tea Stall',
-    paidBy: 'Treasurer (BMP Shillong)',
-    paymentMethod: 'cash',
-    voucherNo: 'VOU-BMP-001',
-    purpose: 'Executive Committee meeting thingpui leh chhang',
-    createdAt: '2026-08-20T14:30:00.000Z',
-    createdBy: '9862000001'
+    id: 'EXP-KT-2026-001',
+    campaignId: 'bcm-ebenezer',
+    campaignTitle: 'Kohhran Kumtluang Bawm (BCM Ebenezer)',
+    amount: 1500,
+    head: 'Programme & Refreshment / Thingpui',
+    purpose: 'Kohhran Committee pual thingpui leh chhang man',
+    paidTo: 'Ebenezer Canteen',
+    paymentMode: 'UPI',
+    voucherNo: 'VCH-2026-001',
+    referenceNo: 'UPI/261001/9921',
+    spentDate: '2026-09-15',
+    recordedBy: 'Lalthianghlima (Treasurer)',
+    recordedByPhone: '9862300000',
+    recordedAt: '2026-09-15T10:30:00.000Z',
+    status: 'approved'
   },
   {
-    id: 'EXP-1789002',
-    campaignId: 'cmp-1788107291420',
-    campaignTitle: 'BMP Shillong',
-    head: 'Office & Stationery',
-    amount: 2200,
-    date: '2026-08-25',
-    paidTo: 'Eastern Stationery Shillong',
-    paidBy: 'Secretary',
-    paymentMethod: 'upi',
-    voucherNo: 'VOU-BMP-002',
-    purpose: 'Receipt bu thar, Register lehkha leh Pen',
-    createdAt: '2026-08-25T11:15:00.000Z',
-    createdBy: '9862000001'
+    id: 'EXP-KT-2026-002',
+    campaignId: 'bcm-ebenezer',
+    campaignTitle: 'Kohhran Kumtluang Bawm (BCM Ebenezer)',
+    amount: 3200,
+    head: 'Office & Stationery / Printing',
+    purpose: 'Sunday School Record bu leh Member roll lehkhabu print man',
+    paidTo: 'Hnamte Press, Aizawl',
+    paymentMode: 'Cash',
+    voucherNo: 'VCH-2026-002',
+    referenceNo: 'BILL-4412',
+    spentDate: '2026-09-22',
+    recordedBy: 'Lalthianghlima (Treasurer)',
+    recordedByPhone: '9862300000',
+    recordedAt: '2026-09-22T14:15:00.000Z',
+    status: 'approved'
   },
   {
-    id: 'EXP-1789003',
-    campaignId: 'cmp-1787829303143',
-    campaignTitle: 'YMA Vengthar Br, Zobawk, Lunglei',
-    head: 'Tanpuina & Relief',
-    amount: 5000,
-    date: '2026-08-28',
-    paidTo: 'Chhiatni tawk chhungkua',
-    paidBy: 'Finance Secretary (YMA Vengthar)',
-    paymentMethod: 'cash',
-    voucherNo: 'VOU-YMA-001',
-    purpose: 'Chhiatni ruang chhuah leh kuang senso tanpuina',
-    createdAt: '2026-08-28T09:00:00.000Z',
-    createdBy: '9862000001'
+    id: 'EXP-KT-2026-003',
+    campaignId: 'yma-bungkawn',
+    campaignTitle: 'YMA Bungkawn Chhiatni / Thatni Bawm',
+    amount: 2500,
+    head: 'Tlawmngaihna / Tanpuina (Relief & Welfare)',
+    purpose: 'Damlo damdawi in awmpui tanpuina',
+    paidTo: 'Civil Hospital Ward 3 Caretaker',
+    paymentMode: 'Cash',
+    voucherNo: 'VCH-YMA-001',
+    referenceNo: 'YMA-REL-09',
+    spentDate: '2026-09-28',
+    recordedBy: 'Lalremruata (Fin Secy)',
+    recordedByPhone: '9862311223',
+    recordedAt: '2026-09-28T09:00:00.000Z',
+    status: 'approved'
   }
 ];
 
-export const getDeletedExpenseIds = (): Set<string> => {
-  try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_EXPENSE_IDS_KEY) : null;
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr.map(id => String(id).toLowerCase().trim()));
-    }
-  } catch (e) {}
-  return new Set<string>();
-};
+const KUMTLUANG_EXPENSES_KEY = 'ronpay_kumtluang_expenses_v1';
+const EXPENSE_HEADS_PREFIX = 'ronpay_expense_heads_';
 
-export const markExpenseAsDeleted = (expenseId: string): void => {
-  if (!expenseId) return;
+export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
   try {
-    const clean = String(expenseId).toLowerCase().trim();
-    const set = getDeletedExpenseIds();
-    set.add(clean);
-    const arr = Array.from(set).slice(-500);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(DELETED_EXPENSE_IDS_KEY, JSON.stringify(arr));
-    }
-  } catch (e) {}
-};
-
-export const getStoredExpenses = (campaignId?: string): ExpenseRecord[] => {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(EXPENSES_KEY);
-      const delSet = getDeletedExpenseIds();
-      let list: ExpenseRecord[] = [];
-
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          list = parsed.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()));
-        }
-      } else {
-        // Seed initial expenses
-        list = INITIAL_EXPENSES.filter(e => !delSet.has(String(e.id).toLowerCase().trim()));
-        localStorage.setItem(EXPENSES_KEY, JSON.stringify(list));
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KUMTLUANG_EXPENSES_KEY) : null;
+    let list: KumtluangExpense[] = raw ? JSON.parse(raw) : INITIAL_KUMTLUANG_EXPENSES;
+    if (!Array.isArray(list) || list.length === 0) {
+      list = INITIAL_KUMTLUANG_EXPENSES;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(list));
       }
-
-      if (campaignId && campaignId !== 'all') {
-        const cleanCampId = String(campaignId).toLowerCase().trim();
-        list = list.filter(e => String(e.campaignId).toLowerCase().trim() === cleanCampId);
-      }
-
-      return list.sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
     }
+    if (campaignId) {
+      const cleanId = String(campaignId).toLowerCase().trim();
+      return list.filter(e => e && String(e.campaignId).toLowerCase().trim() === cleanId);
+    }
+    return list;
   } catch (e) {
-    console.warn('Failed to parse stored expenses:', e);
+    console.error('Failed to get stored expenses', e);
+    return INITIAL_KUMTLUANG_EXPENSES;
   }
-  return [];
 };
 
-export const saveStoredExpenses = (expenses: ExpenseRecord[], skipServerSync: boolean = false): void => {
+export const saveStoredExpenses = (expenses: KumtluangExpense[], skipServer: boolean = false): void => {
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
-      window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: expenses }));
-      broadcastTabSync('expenses', expenses);
+      localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(expenses));
     }
-    if (!skipServerSync) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: expenses }));
+    }
+    if (!skipServer) {
       safeApiFetch('/api/data/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3589,119 +3555,56 @@ export const saveStoredExpenses = (expenses: ExpenseRecord[], skipServerSync: bo
       }).catch(() => {});
     }
   } catch (e) {
-    console.error('Failed to save expenses:', e);
+    console.error('Failed to save expenses', e);
   }
 };
 
-export const saveExpenseRecord = (expense: ExpenseRecord): void => {
-  if (!expense || !expense.id) return;
+export const saveExpense = (expense: KumtluangExpense): void => {
   const current = getStoredExpenses();
-  const cleanId = String(expense.id).toLowerCase().trim();
-  const existingIdx = current.findIndex(e => String(e.id).toLowerCase().trim() === cleanId);
-  const now = new Date().toISOString();
-
-  let updatedList: ExpenseRecord[];
-  const stamped: ExpenseRecord = {
-    ...expense,
-    updatedAt: now,
-    createdAt: expense.createdAt || now
-  };
-
-  if (existingIdx >= 0) {
-    updatedList = [...current];
-    updatedList[existingIdx] = stamped;
-    recordAuditLog(
-      'Expense Updated',
-      `Pawisa hman chhuahna '${stamped.head}' (₹${stamped.amount.toLocaleString()}) thlak danglam a ni. Hnenah: ${stamped.paidTo}.`,
-      'expense',
-      stamped.id
-    );
+  const idx = current.findIndex(e => e.id === expense.id);
+  let updated: KumtluangExpense[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = expense;
   } else {
-    updatedList = [stamped, ...current];
-    recordAuditLog(
-      'Expense Recorded',
-      `Pawisa hman chhuahna thar '${stamped.head}' (₹${stamped.amount.toLocaleString()}) record a ni. Hnenah: ${stamped.paidTo}.`,
-      'expense',
-      stamped.id
-    );
+    updated = [expense, ...current];
   }
-
-  saveStoredExpenses(updatedList);
-  safeApiFetch('/api/expenses', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(stamped)
-  }).catch(() => {});
+  saveStoredExpenses(updated);
 };
 
 export const deleteStoredExpense = (expenseId: string): void => {
-  if (!expenseId) return;
-  const cleanId = String(expenseId).toLowerCase().trim();
-  markExpenseAsDeleted(cleanId);
   const current = getStoredExpenses();
-  const deletedItem = current.find(e => String(e.id).toLowerCase().trim() === cleanId);
-  const updatedList = current.filter(e => String(e.id).toLowerCase().trim() !== cleanId);
-
-  if (deletedItem) {
-    recordAuditLog(
-      'Expense Deleted',
-      `Pawisa hman chhuahna '${deletedItem.head}' (₹${deletedItem.amount.toLocaleString()}) paih a ni.`,
-      'expense',
-      cleanId
-    );
-  }
-
-  saveStoredExpenses(updatedList);
-  safeApiFetch(`/api/expenses/${encodeURIComponent(cleanId)}`, { method: 'DELETE' }).catch(() => {});
-  safeApiFetch('/api/data/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deletedExpenseIds: [cleanId] })
-  }).catch(() => {});
+  const updated = current.filter(e => e.id !== expenseId);
+  saveStoredExpenses(updated);
 };
 
-export const deleteMultipleExpenses = (expenseIds: string[]): void => {
-  if (!expenseIds || expenseIds.length === 0) return;
-  const cleanIds = expenseIds.map(id => String(id).toLowerCase().trim()).filter(Boolean);
-  const idSet = new Set(cleanIds);
-
-  for (const id of cleanIds) {
-    markExpenseAsDeleted(id);
+export const getCampaignExpenseHeads = (campaignId: string, customHeadsFromCampaign?: string[]): string[] => {
+  if (customHeadsFromCampaign && Array.isArray(customHeadsFromCampaign) && customHeadsFromCampaign.length > 0) {
+    return Array.from(new Set([...customHeadsFromCampaign, ...DEFAULT_KUMTLUANG_EXPENSE_HEADS]));
   }
-
-  const current = getStoredExpenses();
-  const updatedList = current.filter(e => !idSet.has(String(e.id).toLowerCase().trim()));
-
-  saveStoredExpenses(updatedList);
-  safeApiFetch('/api/data/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deletedExpenseIds: cleanIds })
-  }).catch(() => {});
-};
-
-export const getCampaignExpenseHeads = (campaign?: Campaign | null): string[] => {
-  const custom = campaign?.customExpenseHeads || [];
-  const combined = Array.from(new Set([...DEFAULT_EXPENSE_HEADS, ...custom]));
-  return combined.filter(Boolean);
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(`${EXPENSE_HEADS_PREFIX}${campaignId}`) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return Array.from(new Set([...parsed, ...DEFAULT_KUMTLUANG_EXPENSE_HEADS]));
+      }
+    }
+  } catch {}
+  return DEFAULT_KUMTLUANG_EXPENSE_HEADS;
 };
 
 export const saveCampaignExpenseHeads = (campaignId: string, heads: string[]): void => {
-  if (!campaignId) return;
-  const cleanCampId = String(campaignId).toLowerCase().trim();
-  const allCampaigns = getStoredCampaigns();
-  const targetIdx = allCampaigns.findIndex(c => String(c.id).toLowerCase().trim() === cleanCampId);
-  if (targetIdx === -1) return;
-
-  const camp = allCampaigns[targetIdx];
-  const uniqueHeads = Array.from(new Set(heads.map(h => h.trim()))).filter(Boolean);
-  const updatedCamp: Campaign = {
-    ...camp,
-    customExpenseHeads: uniqueHeads,
-    updatedAt: new Date().toISOString()
-  };
-
-  saveCampaign(updatedCamp);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`${EXPENSE_HEADS_PREFIX}${campaignId}`, JSON.stringify(heads));
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_expense_heads_updated', { detail: { campaignId, heads } }));
+    }
+  } catch (e) {
+    console.error('Failed to save expense heads', e);
+  }
 };
 
 

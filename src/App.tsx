@@ -1181,7 +1181,7 @@ export default function App() {
     setIsGeneratedQROpen(true);
   };
 
-  const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => {
+  const handleOpenMemberRoll = (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses', campaignId?: string) => {
     setKumtluangInitialTab(tab || 'members_list');
     setKumtluangInitialCampaignId(campaignId);
     setIsKumtluangManagerOpen(true);

@@ -349,8 +349,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {/* Admin Sync Diagnostic Quick Action Banner */}
-      {onOpenSyncDiagnostic && (
+      {/* Admin Sync Diagnostic Quick Action Banner - strictly restricted to Admin / Super Admin */}
+      {Boolean(creatorProfile?.isAdmin === true || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') && onOpenSyncDiagnostic && (
         <div 
           onClick={onOpenSyncDiagnostic}
           className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/40 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
@@ -376,6 +376,41 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
           >
             <span>Scan Now</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Kumtluang Pawisa Hmanna (Expense Desk) Quick Banner - strictly restricted to Admin / Creator */}
+      {Boolean(creatorProfile?.isAdmin === true || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN' || creatorProfile?.isApproved) && onOpenMemberRoll && (
+        <div 
+          onClick={() => {
+            const firstKumtluang = campaigns.find(c => c.category === 'kumtluang');
+            onOpenMemberRoll('expenses', firstKumtluang?.id);
+          }}
+          className="bg-gradient-to-r from-rose-950 via-slate-900 to-indigo-950 p-2.5 px-3.5 rounded-2xl border border-rose-500/40 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-rose-400 transition group active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+              <Receipt className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs text-white">Pawisa Hman Chhuahna (Expense Desk)</span>
+                <span className="text-[8px] font-black uppercase bg-rose-500/30 text-rose-300 border border-rose-400/40 px-1.5 py-0.2 rounded-full">
+                  Admin & Creator Only
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 truncate">
+                Kumtluang bawm sum hmanna chipchiar, vouchers, custom heads & balance sheet
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="px-2.5 py-1 bg-rose-500 hover:bg-rose-400 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+          >
+            <span>Hawng Rawh</span>
             <ArrowRight className="w-3 h-3" />
           </button>
         </div>
@@ -996,18 +1031,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 pl-2">
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin) && onOpenMemberRoll && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenMemberRoll('members_list', camp.id);
-                        }}
-                        title="Open Member Roll"
-                        className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                      >
-                        <Users className="w-3 h-3" /> Roll
-                      </button>
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') && onOpenMemberRoll && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMemberRoll('members_list', camp.id);
+                          }}
+                          title="Open Member Roll"
+                          className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                        >
+                          <Users className="w-3 h-3" /> Roll
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMemberRoll('expenses', camp.id);
+                          }}
+                          title="Pawisa Hman Chhuahna (Expenses & Vouchers)"
+                          className="p-1.5 px-2 rounded-lg bg-rose-600 text-white font-extrabold text-[9px] hover:bg-rose-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                        >
+                          <Receipt className="w-3 h-3" /> Hmanna
+                        </button>
+                      </>
                     )}
 
                     {camp.category === 'kumtluang' && (isOwner || creatorProfile.isAdmin || canManageCampaignExpenses(camp, creatorProfile)) && onOpenMemberRoll && (

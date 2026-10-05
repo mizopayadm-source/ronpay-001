@@ -50,7 +50,7 @@ interface BawmExplorerScreenProps {
   onPreviewImage?: (imageUrl: string, title?: string, subtitle?: string, location?: string) => void;
   onShareCampaign?: (campaign: Campaign) => void;
   onCategoryChange?: (category: BawmCategory) => void;
-  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports', campaignId?: string) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses', campaignId?: string) => void;
   language?: Language;
 }
 
@@ -856,18 +856,32 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile?.isAdmin) && onOpenMemberRoll && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenMemberRoll('members_list', camp.id);
-                        }}
-                        className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
-                        title="Open Member Roll"
-                      >
-                        <Users className="w-3 h-3" /> Roll
-                      </button>
+                    {camp.category === 'kumtluang' && (isOwner || creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') && onOpenMemberRoll && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMemberRoll('members_list', camp.id);
+                          }}
+                          className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
+                          title="Open Member Roll"
+                        >
+                          <Users className="w-3 h-3" /> Roll
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMemberRoll('expenses', camp.id);
+                          }}
+                          className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-rose-600 hover:bg-rose-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
+                          title="Pawisa Hman Chhuahna (Expenses)"
+                        >
+                          <Receipt className="w-3 h-3" /> Hmanna
+                        </button>
+                      </>
                     )}
                     {(isOwner || creatorProfile?.isAdmin) && (
                       <button

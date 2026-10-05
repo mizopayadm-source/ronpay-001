@@ -34,12 +34,14 @@ import {
   History,
   CalendarDays,
   Plus,
-  Receipt
+  Receipt,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, saveCampaign } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
-import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
@@ -136,6 +138,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 }) => {
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
 
   const userRole = getUserRole(creatorProfile);
   const isPrivilegedUser = Boolean(
@@ -317,31 +320,44 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   const defaultCategories = ['BMP Fund'];
 
+  // Track open state and initialTab to prevent background sync from kicking user away from active tab
+  const prevIsOpenRef = useRef(false);
+  const prevInitialTabRef = useRef(initialTab);
+
   // Initialize and synchronize campaign selection & member roll
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab || 'members_list');
-      setSelectedMonth(getCurrentMonthName());
-      setSelectedYear(getCurrentYearString());
+      const isJustOpening = !prevIsOpenRef.current;
+      const isInitialTabChanged = prevInitialTabRef.current !== initialTab;
+
+      if (isJustOpening || isInitialTabChanged) {
+        setActiveTab(initialTab || 'members_list');
+        prevInitialTabRef.current = initialTab;
+        setSelectedMonth(getCurrentMonthName());
+        setSelectedYear(getCurrentYearString());
+      }
+      prevIsOpenRef.current = true;
       
-      let activeId = '';
-      if (allowedCampaigns.length > 0) {
-        if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
-          activeId = initialCampaignId;
-        } else if (selectedCampaignId && (selectedCampaignId === 'all' ? (isPrivilegedUser || allowedCampaigns.length > 1) : allowedCampaignIds.has(selectedCampaignId))) {
-          activeId = selectedCampaignId;
-        } else {
-          const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
-          activeId = initialCamp?.id || allowedCampaigns[0]?.id || '';
+      let activeId = selectedCampaignId;
+      if (!activeId || (activeId !== 'all' && !allowedCampaignIds.has(activeId))) {
+        if (allowedCampaigns.length > 0) {
+          if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
+            activeId = initialCampaignId;
+          } else {
+            const initialCamp = allowedCampaigns.find(c => c.category === 'kumtluang') || allowedCampaigns[0];
+            activeId = initialCamp?.id || allowedCampaigns[0]?.id || '';
+          }
+        } else if (isPrivilegedUser) {
+          activeId = 'all';
         }
-      } else if (isPrivilegedUser) {
-        activeId = 'all';
       }
 
-      setSelectedCampaignId(activeId);
-      setQuickEntryCampaignId(activeId || (allowedCampaigns[0]?.id || ''));
-      setRegTargetCampaignId(activeId || (allowedCampaigns[0]?.id || ''));
-      setPrintOrgScope(activeId || (allowedCampaigns[0]?.id || 'all'));
+      if (activeId && activeId !== selectedCampaignId) {
+        setSelectedCampaignId(activeId);
+        setQuickEntryCampaignId(activeId);
+        setRegTargetCampaignId(activeId);
+        setPrintOrgScope(activeId);
+      }
 
       if (activeId) {
         const mList = getScopedMembersForView(activeId);
@@ -351,9 +367,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         if (foundCamp?.orgCode) {
           setNewOrgCode(foundCamp.orgCode);
         }
-      } else {
-        setMembers([]);
       }
+    } else {
+      prevIsOpenRef.current = false;
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
 
@@ -1074,8 +1090,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn text-slate-900">
-      <div className="bg-white border-0 sm:border border-slate-200 sm:rounded-3xl rounded-none w-full max-w-4xl h-full sm:h-[90vh] max-h-[90vh] shadow-2xl overflow-hidden flex flex-col relative shrink-0">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-0 sm:p-3 md:p-4'} bg-slate-950/80 backdrop-blur-xs animate-fadeIn text-slate-900`}>
+      <div className={`bg-white border-0 sm:border border-slate-200 ${
+        isFullscreen 
+          ? 'w-screen h-screen max-w-none max-h-none rounded-none' 
+          : 'sm:rounded-3xl rounded-none w-full max-w-6xl h-full sm:h-[95vh] max-h-[95vh]'
+      } shadow-2xl overflow-hidden flex flex-col relative shrink-0 transition-all duration-200`}>
         
         {/* Top Header with Vibrant Gradient & Live Stats */}
         <div className="px-4 py-3 sm:px-6 sm:py-4 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white flex items-center justify-between shrink-0 border-b border-indigo-900/50">
@@ -1111,15 +1131,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             </div>
           </div>
           
-          <button 
-            type="button"
-            id="close-kumtluang-modal-btn"
-            onClick={onClose}
-            className="p-2 sm:p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0 ml-2"
-            title="Close"
-          >
-            <X className="w-5 h-5 sm:w-6 sm:h-6" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            <button 
+              type="button"
+              id="toggle-kumtluang-fullscreen-btn"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-2 sm:p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+              title={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />}
+              <span className="hidden md:inline">{isFullscreen ? 'Standard View' : 'Full Screen'}</span>
+            </button>
+
+            <button 
+              type="button"
+              id="close-kumtluang-modal-btn"
+              onClick={onClose}
+              className="p-2 sm:p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0"
+              title="Close"
+            >
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+          </div>
         </div>
 
         {/* PROMINENT TOP-LEVEL QR / BAWM FILTER BAR */}
@@ -1240,21 +1273,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
           <button
             type="button"
-            id="tab-btn-expenses"
-            onClick={() => setActiveTab('expenses')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'expenses'
-                ? 'border-orange-500 text-orange-600 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Receipt className="w-3.5 h-3.5 text-orange-500" />
-            <span>Pawisa Hman Chhuahna</span>
-            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-[9px] rounded-full font-bold">Expenses</span>
-          </button>
-
-          <button
-            type="button"
             id="tab-btn-print-reports"
             onClick={() => setActiveTab('print_reports')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
@@ -1279,6 +1297,20 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           >
             <Users className="w-3.5 h-3.5" />
             <span>Member Roll ({filteredTableMembers.length})</span>
+          </button>
+
+          <button
+            type="button"
+            id="tab-btn-expenses"
+            onClick={() => setActiveTab('expenses')}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
+              activeTab === 'expenses'
+                ? 'border-rose-600 text-rose-700 bg-white rounded-t-xl shadow-xs'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5 text-rose-600" />
+            <span>Pawisa Hman Chhuahna (Expenses)</span>
           </button>
 
           <div className="ml-auto flex items-center py-1.5 shrink-0 pl-2 gap-1.5">
@@ -2495,27 +2527,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
             </div>
           )}
 
-          {/* TAB: PAWISA HMAN CHHUAHNA (EXPENDITURE & CASH VOUCHERS) */}
-          {activeTab === 'expenses' && (
-            <div className="space-y-4">
-              {activeScopedCampaign ? (
-                <KumtluangExpenseManager
-                  campaign={activeScopedCampaign}
-                  creatorProfile={creatorProfile}
-                  transactions={transactions}
-                  onExpensesChanged={onDataUpdated}
-                />
-              ) : (
-                <div className="p-12 text-center text-slate-500 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                  <div className="text-base font-bold text-slate-800">Bawm Thlan Tur A Awm Lo</div>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Pawisa hman chhuahna en leh record turin a chung lam dropdown aṭang khian Kumtluang Bawm thlang hmasa rawh le.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* TAB 4: MEMBER ROLL & EDIT / DELETE WITH DYNAMIC FILTERING */}
           {activeTab === 'members_list' && (
             <div className="space-y-4">
@@ -3033,6 +3044,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 5: PAWISA HMAN CHHUAHNA (EXPENDITURE & EXPENSES) */}
+          {activeTab === 'expenses' && (
+            <div className="space-y-4">
+              <KumtluangExpenseManager
+                campaign={activeScopedCampaign || allowedCampaigns[0] || campaigns[0]}
+                creatorProfile={creatorProfile}
+                transactions={transactions}
+                onUpdateCampaign={(updatedCamp) => {
+                  saveCampaign(updatedCamp);
+                  onDataUpdated();
+                }}
+                language={language}
+              />
             </div>
           )}
 

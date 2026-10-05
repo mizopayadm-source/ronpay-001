@@ -42,15 +42,7 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": [
-        "Pathianni Chawhma Thawhlawm",
-        "Pathianni Chawhnu Thawhlawm",
-        "Pathianni Zan Thawhlawm",
-        "Nilai Zan Thawhlawm",
-        "Buhfaiṭham Thawhlawm",
-        "Inrinni Zan Thawhlawm",
-        "Bial Inkhawmpui Thawhlawm"
-      ]
+      "generalPresets": []
     },
     {
       "subCategories": [
@@ -582,7 +574,7 @@
       "upiId": "ronpay.adm@okaxis",
       "isApproved": true,
       "createdAt": "2026-08-20T00:00:00.000Z",
-      "updatedAt": "2026-09-24T00:00:00.000Z",
+      "updatedAt": "2026-10-04T10:04:20.456Z",
       "location": "Aizawl, Mizoram",
       "subCategories": [
         "Tanpuina",
@@ -594,7 +586,7 @@
       "definedSections": [
         "Shillong Unit"
       ],
-      "updatedAt": "2026-10-02T11:54:30.448Z",
+      "updatedAt": "2026-10-04T18:08:54.057Z",
       "orgCode": "BMPSHL",
       "subCategories": [
         "BMP Fund"
@@ -606,7 +598,8 @@
         "Inkhawm Thawhlawm",
         "General Hnathlang",
         "BMP Meet Contribution",
-        "Bial BMP Rorel Ṭanpuina"
+        "Bial BMP Rorel Ṭanpuina",
+        "B/F"
       ],
       "allowPublicGroupDeposits": false,
       "urgencyDeadline": "2026-09-06T23:59",
@@ -639,12 +632,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "toName": "RC Lalliana (Treasurer)",
           "transferredAt": "2026-10-01T15:45:45.524Z",
+          "toName": "RC Lalliana (Treasurer)",
           "fromName": "Super Admin (Master)",
           "toPhone": "7005153902",
-          "fromPhone": "9862000001",
-          "reason": "Term inthlak / Annual Office Bearer Handover"
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "fromPhone": "9862000001"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -653,12 +646,27 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
+          "name": "Super Admin (Master)",
           "role": "Outgoing Officer / Co-Manager",
-          "phone": "9862000001",
-          "name": "Super Admin (Master)"
+          "phone": "9862000001"
         }
       ],
-      "transferredFrom": "9862000001"
+      "transferredFrom": "9862000001",
+      "customExpenseHeads": [
+        "Office & Stationery",
+        "Refreshment & Thingpui",
+        "Traveling & Zin Senso",
+        "Honorarium & Lawmman",
+        "Building & Chei Thatna",
+        "Tanpuina & Relief",
+        "Sound & Light / PA System",
+        "Printing & Publication",
+        "Programme & Event",
+        "Bank Charges & Fees",
+        "Miscellaneous / Dangte",
+        "Damlo Kanna / Chhiatni",
+        "BIal / MTKP"
+      ]
     }
   ],
   "deletedCampaignIds": [
@@ -1351,6 +1359,19 @@
       "activeYears": [
         "2026"
       ]
+    },
+    {
+      "id": "BMPSHL-1548",
+      "campaignId": "cmp-1788107291420",
+      "name": "Zothanzuala Hrahsel",
+      "orgCode": "BMPSHL",
+      "phoneLast4": "1548",
+      "fullPhone": "",
+      "section": "Shillong Unit",
+      "isFamilyHead": true,
+      "dependents": [],
+      "createdAt": "2026-08-15T00:00:00.000Z",
+      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -1368,6 +1389,36 @@
     "ymavt-8467"
   ],
   "transactions": [
+    {
+      "donorType": "general",
+      "periodYear": "2026",
+      "periodLabel": "October 2026",
+      "amount": 7000,
+      "isDependent": false,
+      "donorVeng": "Shillong Unit",
+      "category": "kumtluang",
+      "subCategory": "Bial BMP Rorel Ṭanpuina",
+      "platformFee": 0,
+      "periodType": "monthly",
+      "campaignTitle": "BMP Shillong",
+      "timestamp": "2026-10-15T12:00:00.000Z",
+      "isAnonymous": false,
+      "date": "2026-10-15",
+      "utr": "UTR602087495832",
+      "campaignId": "cmp-1788107291420",
+      "createdAt": "2026-10-04T18:03:30.576Z",
+      "txHash": "UTR602087495832",
+      "periodMonth": "October",
+      "subCategoryBreakdown": {
+        "Bial BMP Rorel Ṭanpuina": 7000
+      },
+      "updatedAt": "2026-10-04T18:03:53.019Z",
+      "paymentMethod": "cash",
+      "id": "RPAY-CASH-776243",
+      "totalAmount": 7000,
+      "status": "completed",
+      "donorName": "Bial BMP Rorel Ṭanpuina (Bial Treasurer)"
+    },
     {
       "timestamp": "2026-10-01T19:13:57.108Z",
       "isDependent": false,
@@ -1911,27 +1962,6 @@
       "campaignId": "cmp-custom",
       "donorName": "Valued Donor",
       "amount": 1
-    },
-    {
-      "id": "RPAY_TXN_1790236637582_542",
-      "campaignId": "cmp-1789722801941",
-      "platformFee": 2,
-      "campaignNetReceived": 225,
-      "referenceNo": "OM2609241327183005398406",
-      "donorName": "Anonymous",
-      "utr": "UTR183005398406",
-      "paymentMethod": "phonepe",
-      "timestamp": "2026-09-24T07:57:17.582Z",
-      "feeOption": "ADD_ON",
-      "isDependent": false,
-      "status": "completed",
-      "updatedAt": "2026-09-24T07:57:37.550Z",
-      "isAnonymous": true,
-      "amount": 225,
-      "campaignTitle": "Fingmawii Ralna",
-      "totalAmount": 227,
-      "category": "ralna",
-      "verifiedAt": "2026-09-24T07:57:37.547Z"
     },
     {
       "updatedAt": "2026-09-24T07:56:26.046Z",
@@ -12237,7 +12267,8 @@
     "rpay_txn_1790875972483_197",
     "tx-manual-1790888425532-253",
     "tx-manual-1790888034425-369",
-    "rpay-cash-738522"
+    "rpay-cash-738522",
+    "rpay_txn_1790236637582_542"
   ],
   "creators": [
     {
@@ -12743,10 +12774,10 @@
     },
     {
       "isApproved": true,
-      "pin": "1234",
+      "pin": "ronpay2026",
       "isAdmin": true,
       "name": "Super Admin (Master)",
-      "registeredAt": "2026-10-01T19:45:34.928Z",
+      "registeredAt": "2026-10-05T08:32:23.201Z",
       "approvedCategories": [
         "ralna",
         "khawlsak",
@@ -12761,7 +12792,7 @@
       "orgName": "RonPay Master Headquarters",
       "designation": "Chief System Architect",
       "createdQRsCount": 15,
-      "password": "1234",
+      "password": "ronpay2026",
       "updatedAt": "2026-09-24T09:25:49.811Z"
     },
     {
@@ -12854,7 +12885,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-03T17:40:49.888Z",
+    "lastUpdated": "2026-10-04T10:04:27.742Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13087,13 +13118,37 @@
   },
   "auditLogs": [
     {
+      "id": "log-1791189201209-c4pv",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-05T08:33:21.209Z"
+    },
+    {
+      "id": "log-1791189143202-001r",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-05T08:32:23.202Z"
+    },
+    {
+      "id": "log-1791189137818-phy9",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-05T08:32:17.818Z"
+    },
+    {
       "id": "log-3",
       "action": "Campaign Approved",
       "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
       "targetType": "campaign",
       "targetId": "cmp-ralna-1",
       "performedBy": "Admin",
-      "timestamp": "2026-10-03T11:40:49.915Z"
+      "timestamp": "2026-10-04T04:04:27.765Z"
     },
     {
       "id": "log-2",
@@ -13102,7 +13157,7 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-03T05:40:49.915Z"
+      "timestamp": "2026-10-03T22:04:27.765Z"
     },
     {
       "id": "log-1",
@@ -13110,7 +13165,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-02T17:40:49.915Z"
+      "timestamp": "2026-10-03T10:04:27.765Z"
     },
     {
       "id": "log-1790883934929-dxan",
@@ -15387,7 +15442,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T17:40:52.484Z",
+      "lastLogin": "2026-10-04T10:04:29.428Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15401,7 +15456,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T13:40:52.484Z",
+      "lastLogin": "2026-10-04T06:04:29.428Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15415,10 +15470,10 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-03T15:40:52.484Z",
+      "lastLogin": "2026-10-04T08:04:29.428Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
   "deletedStaffIds": [],
-  "lastUpdated": "2026-10-04T09:51:09.360Z"
+  "lastUpdated": "2026-10-05T09:04:09.060Z"
 }
