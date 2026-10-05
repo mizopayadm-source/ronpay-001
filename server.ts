@@ -4365,61 +4365,28 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // 5. Ensure initial Kumtluang Pawl expenses are present if empty
-  if (!Array.isArray(db.expenses) || db.expenses.length === 0) {
-    const delExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
-    const initialExpenses = [
-      {
-        id: 'EXP-1789001',
-        campaignId: 'cmp-1788107291420',
-        campaignTitle: 'BMP Shillong',
-        head: 'Thingpui & Refreshment',
-        amount: 2800,
-        date: '2026-08-15',
-        paidTo: 'Bazar Canteen',
-        paidBy: 'Treasurer (BMP Shillong)',
-        paymentMethod: 'upi',
-        voucherNo: 'VOU-BMP-001',
-        purpose: 'Hruaitu Committee thingpui leh chhang man',
-        createdAt: '2026-08-15T10:30:00.000Z',
-        createdBy: '9862000001'
-      },
-      {
-        id: 'EXP-1789002',
-        campaignId: 'cmp-1788107291420',
-        campaignTitle: 'BMP Shillong',
-        head: 'Office & Stationery',
-        amount: 1650,
-        date: '2026-08-25',
-        paidTo: 'Lian Stationery, Police Bazar',
-        paidBy: 'Treasurer (BMP Shillong)',
-        paymentMethod: 'cash',
-        voucherNo: 'VOU-BMP-002',
-        purpose: 'Receipt bu thar, Register lehkha leh Pen',
-        createdAt: '2026-08-25T11:15:00.000Z',
-        createdBy: '9862000001'
-      },
-      {
-        id: 'EXP-1789003',
-        campaignId: 'cmp-1787829303143',
-        campaignTitle: 'YMA Vengthar Br, Zobawk, Lunglei',
-        head: 'Tanpuina & Relief',
-        amount: 5000,
-        date: '2026-08-28',
-        paidTo: 'Chhiatni tawk chhungkua',
-        paidBy: 'Finance Secretary (YMA Vengthar)',
-        paymentMethod: 'cash',
-        voucherNo: 'VOU-YMA-001',
-        purpose: 'Chhiatni ruang chhuah leh kuang senso tanpuina',
-        createdAt: '2026-08-28T09:00:00.000Z',
-        createdBy: '9862000001'
-      }
-    ].filter(e => !delExpSet.has(e.id.toLowerCase()));
-    if (initialExpenses.length > 0) {
-      db.expenses = initialExpenses;
+  // 5. Ensure expenses array exists without injecting mock data
+  const dummyExpenseIds = new Set(['exp-1789003', 'exp-1789002', 'exp-1789001', 'exp-kt-2026-001', 'exp-kt-2026-002', 'exp-kt-2026-003']);
+  if (!Array.isArray(db.expenses)) {
+    db.expenses = [];
+    changed = true;
+  } else {
+    const filtered = db.expenses.filter((e: any) => e && e.id && !dummyExpenseIds.has(String(e.id).toLowerCase().trim()));
+    if (filtered.length !== db.expenses.length) {
+      db.expenses = filtered;
       changed = true;
     }
   }
+  if (!Array.isArray(db.deletedExpenseIds)) {
+    db.deletedExpenseIds = [];
+    changed = true;
+  }
+  dummyExpenseIds.forEach(id => {
+    if (!db.deletedExpenseIds!.includes(id)) {
+      db.deletedExpenseIds!.push(id);
+      changed = true;
+    }
+  });
 
   return changed;
 }

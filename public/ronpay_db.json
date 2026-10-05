@@ -586,7 +586,7 @@
       "definedSections": [
         "Shillong Unit"
       ],
-      "updatedAt": "2026-10-04T18:08:54.057Z",
+      "updatedAt": "2026-10-05T18:08:38.334Z",
       "orgCode": "BMPSHL",
       "subCategories": [
         "BMP Fund"
@@ -633,11 +633,11 @@
       "transferHistory": [
         {
           "transferredAt": "2026-10-01T15:45:45.524Z",
-          "toName": "RC Lalliana (Treasurer)",
-          "fromName": "Super Admin (Master)",
-          "toPhone": "7005153902",
           "reason": "Term inthlak / Annual Office Bearer Handover",
-          "fromPhone": "9862000001"
+          "fromName": "Super Admin (Master)",
+          "fromPhone": "9862000001",
+          "toPhone": "7005153902",
+          "toName": "RC Lalliana (Treasurer)"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -646,9 +646,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
-          "name": "Super Admin (Master)",
+          "phone": "9862000001",
           "role": "Outgoing Officer / Co-Manager",
-          "phone": "9862000001"
+          "name": "Super Admin (Master)"
         }
       ],
       "transferredFrom": "9862000001",
@@ -666,7 +666,8 @@
         "Miscellaneous / Dangte",
         "Damlo Kanna / Chhiatni",
         "BIal / MTKP"
-      ]
+      ],
+      "openingBalance": 7827
     }
   ],
   "deletedCampaignIds": [
@@ -12777,7 +12778,7 @@
       "pin": "ronpay2026",
       "isAdmin": true,
       "name": "Super Admin (Master)",
-      "registeredAt": "2026-10-05T08:32:23.201Z",
+      "registeredAt": "2026-10-05T17:52:36.769Z",
       "approvedCategories": [
         "ralna",
         "khawlsak",
@@ -12885,7 +12886,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-04T10:04:27.742Z",
+    "lastUpdated": "2026-10-05T17:41:47.787Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13118,6 +13119,23 @@
   },
   "auditLogs": [
     {
+      "id": "log-1791222756769-qglb",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-05T17:52:36.769Z"
+    },
+    {
+      "id": "log-3",
+      "action": "Campaign Approved",
+      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
+      "targetType": "campaign",
+      "targetId": "cmp-ralna-1",
+      "performedBy": "Admin",
+      "timestamp": "2026-10-05T11:41:47.797Z"
+    },
+    {
       "id": "log-1791189201209-c4pv",
       "action": "SUPER_ADMIN Login",
       "details": "Super Admin (Master) authenticated via Tester Hub.",
@@ -13142,22 +13160,13 @@
       "timestamp": "2026-10-05T08:32:17.818Z"
     },
     {
-      "id": "log-3",
-      "action": "Campaign Approved",
-      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
-      "targetType": "campaign",
-      "targetId": "cmp-ralna-1",
-      "performedBy": "Admin",
-      "timestamp": "2026-10-04T04:04:27.765Z"
-    },
-    {
       "id": "log-2",
       "action": "Creator Approved",
       "details": "Bungkawn Branch YMA creator profile verified and approved for Ralna & Rikrum categories.",
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-03T22:04:27.765Z"
+      "timestamp": "2026-10-05T05:41:47.797Z"
     },
     {
       "id": "log-1",
@@ -13165,7 +13174,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-03T10:04:27.765Z"
+      "timestamp": "2026-10-04T17:41:47.797Z"
     },
     {
       "id": "log-1790883934929-dxan",
@@ -15442,7 +15451,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-04T10:04:29.428Z",
+      "lastLogin": "2026-10-05T17:41:49.380Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15456,7 +15465,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-04T06:04:29.428Z",
+      "lastLogin": "2026-10-05T13:41:49.380Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15470,58 +15479,20 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-04T08:04:29.428Z",
+      "lastLogin": "2026-10-05T15:41:49.380Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
   "deletedStaffIds": [],
-  "expenses": [
-    {
-      "id": "EXP-1789001",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "head": "Thingpui & Refreshment",
-      "amount": 2800,
-      "date": "2026-08-15",
-      "paidTo": "Bazar Canteen",
-      "paidBy": "Treasurer (BMP Shillong)",
-      "paymentMethod": "upi",
-      "voucherNo": "VOU-BMP-001",
-      "purpose": "Hruaitu Committee thingpui leh chhang man",
-      "createdAt": "2026-08-15T10:30:00.000Z",
-      "createdBy": "9862000001"
-    },
-    {
-      "id": "EXP-1789002",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "head": "Office & Stationery",
-      "amount": 1650,
-      "date": "2026-08-25",
-      "paidTo": "Lian Stationery, Police Bazar",
-      "paidBy": "Treasurer (BMP Shillong)",
-      "paymentMethod": "cash",
-      "voucherNo": "VOU-BMP-002",
-      "purpose": "Receipt bu thar, Register lehkha leh Pen",
-      "createdAt": "2026-08-25T11:15:00.000Z",
-      "createdBy": "9862000001"
-    },
-    {
-      "id": "EXP-1789003",
-      "campaignId": "cmp-1787829303143",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "head": "Tanpuina & Relief",
-      "amount": 5000,
-      "date": "2026-08-28",
-      "paidTo": "Chhiatni tawk chhungkua",
-      "paidBy": "Finance Secretary (YMA Vengthar)",
-      "paymentMethod": "cash",
-      "voucherNo": "VOU-YMA-001",
-      "purpose": "Chhiatni ruang chhuah leh kuang senso tanpuina",
-      "createdAt": "2026-08-28T09:00:00.000Z",
-      "createdBy": "9862000001"
-    }
+  "expenses": [],
+  "deletedExpenseIds": [
+    "exp-1789003",
+    "exp-1789002",
+    "exp-1789001",
+    "exp-kt-2026-001",
+    "exp-kt-2026-002",
+    "exp-kt-2026-003",
+    "exp-test-1"
   ],
-  "deletedExpenseIds": [],
-  "lastUpdated": "2026-10-05T15:51:04.062Z"
+  "lastUpdated": "2026-10-05T18:24:38.305Z"
 }

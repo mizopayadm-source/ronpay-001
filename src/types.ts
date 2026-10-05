@@ -106,6 +106,7 @@ export interface Campaign {
     canManageMembers?: boolean;
   }>;
   expenseHeads?: string[];
+  openingBalance?: number;
   transferredAt?: string;
   transferredFrom?: string;
   transferredTo?: string;
@@ -217,6 +218,7 @@ export interface KumtluangExpense {
   recordedByPhone?: string;
   recordedAt: string;
   createdAt?: string;
+  updatedAt?: string;
   notes?: string;
   status?: 'approved' | 'pending' | 'verified' | string;
 }

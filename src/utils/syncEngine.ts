@@ -1,4 +1,4 @@
-import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount } from '../types';
+import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount, KumtluangExpense } from '../types';
 import { resolveApiUrl } from './apiConfig';
 import { BCM_EBENEZER_DEFAULT_LOGO, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { 
@@ -26,6 +26,10 @@ import {
   markMemberAsDeleted,
   getDeletedStaffIds,
   markStaffAsDeleted,
+  getStoredExpenses,
+  saveStoredExpenses,
+  getDeletedExpenseIds,
+  markExpenseAsDeleted,
   broadcastTabSync,
   safeApiFetch
 } from './storage';
@@ -53,6 +57,7 @@ export interface SyncDataState {
   announcement: AnnouncementBanner;
   auditLogs: AuditLog[];
   staffAccounts?: StaffAccount[];
+  expenses?: KumtluangExpense[];
   lastUpdated?: string;
 }
 
@@ -161,7 +166,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           announcement: localAnnouncement,
           auditLogs: localAuditLogs,
           staffAccounts: localStaff,
-          deletedStaffIds: Array.from(getDeletedStaffIds())
+          deletedStaffIds: Array.from(getDeletedStaffIds()),
+          expenses: getStoredExpenses(),
+          deletedExpenseIds: Array.from(getDeletedExpenseIds())
         }),
       });
 
@@ -221,6 +228,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         if (Array.isArray(serverData.deletedStaffIds)) {
           for (const sId of serverData.deletedStaffIds) {
             markStaffAsDeleted(sId);
+          }
+        }
+        if (Array.isArray(serverData.deletedExpenseIds)) {
+          for (const eId of serverData.deletedExpenseIds) {
+            markExpenseAsDeleted(eId);
           }
         }
 
@@ -441,6 +453,46 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         // 9. Update audit logs
         if (Array.isArray(serverData.auditLogs)) {
           saveStoredAuditLogs(serverData.auditLogs);
+        }
+
+        // 10. Update expenses (NGO / Kumtluang Expenditure desk)
+        if (Array.isArray(serverData.deletedExpenseIds)) {
+          serverData.deletedExpenseIds.forEach((id: string) => {
+            if (id) markExpenseAsDeleted(String(id).toLowerCase().trim());
+          });
+        }
+        if (Array.isArray(serverData.expenses)) {
+          const deletedExpSet = getDeletedExpenseIds();
+          const cleanServerExpenses = serverData.expenses.filter((e: any) => e && e.id && !deletedExpSet.has(String(e.id).toLowerCase().trim()));
+          const localExpenses = getStoredExpenses().filter(e => e && e.id && !deletedExpSet.has(String(e.id).toLowerCase().trim()));
+          const expMap = new Map<string, any>();
+          for (const se of cleanServerExpenses) {
+            expMap.set(String(se.id).toLowerCase().trim(), se);
+          }
+          for (const le of localExpenses) {
+            const k = String(le.id).toLowerCase().trim();
+            if (!expMap.has(k)) {
+              expMap.set(k, le);
+            } else {
+              const existing = expMap.get(k);
+              const localTime = new Date(le.updatedAt || le.recordedAt || le.spentDate || 0).getTime();
+              const serverTime = new Date(existing.updatedAt || existing.recordedAt || existing.spentDate || 0).getTime();
+              if (localTime > serverTime) {
+                expMap.set(k, { ...existing, ...le });
+              }
+            }
+          }
+          const finalExpenses = Array.from(expMap.values());
+          finalExpenses.sort((a, b) => {
+            const timeA = new Date(a.spentDate || a.recordedAt || 0).getTime();
+            const timeB = new Date(b.spentDate || b.recordedAt || 0).getTime();
+            return timeB - timeA;
+          });
+          saveStoredExpenses(finalExpenses, true);
+          serverData.expenses = finalExpenses;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: finalExpenses }));
+          }
         }
 
         // Dispatch event to re-render any listening UI

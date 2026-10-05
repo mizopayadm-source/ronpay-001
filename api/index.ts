@@ -37,6 +37,8 @@ interface CentralDatabase {
   pricingConfig: any;
   announcement: any;
   auditLogs: any[];
+  expenses?: any[];
+  deletedExpenseIds?: string[];
   lastUpdated: string;
 }
 
@@ -62,6 +64,8 @@ function getCentralDatabase(): CentralDatabase {
       pricingConfig: {},
       announcement: {},
       auditLogs: [],
+      expenses: [],
+      deletedExpenseIds: [],
       lastUpdated: new Date().toISOString()
     };
   }
@@ -1676,6 +1680,19 @@ export default async function handler(req: any, res: any) {
       if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
         const deletedSet = new Set(body.deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
         db.transactions = db.transactions.filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
+      }
+      if (Array.isArray(body.deletedExpenseIds) && body.deletedExpenseIds.length > 0) {
+        const delExpSet = new Set<string>(body.deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
+        db.expenses = (db.expenses || []).filter(e => !delExpSet.has(String(e.id).toLowerCase().trim()));
+        db.deletedExpenseIds = Array.from(new Set<string>([
+          ...(db.deletedExpenseIds || []),
+          ...Array.from(delExpSet)
+        ]));
+      }
+      if (Array.isArray(body.expenses) && body.expenses.length > 0) {
+        const serverDelExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
+        db.expenses = mergeCollections(db.expenses || [], body.expenses, 'id');
+        db.expenses = (db.expenses || []).filter(e => !serverDelExpSet.has(String(e.id).toLowerCase().trim()));
       }
       if (Array.isArray(body.creators) && body.creators.length > 0) {
         db.creators = mergeCollections(db.creators, body.creators, 'phone');
