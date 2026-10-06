@@ -4754,12 +4754,10 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
     ]);
 
-    // Canonical dataset & Inkhawm Thawhlawm protection
+    // Canonical dataset protection
     const PROTECTED_CANONICAL_TX_IDS = new Set([
       'rpay_txn_1790185923025_689',
       'rpay-cash-773692',
-      'rpay-cash-800-web',
-      'rpay-cash-800-app',
       'rpay-cash-168598',
       'rpay-cash-742024',
       'rpay-cash-531295',
@@ -4777,8 +4775,6 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       if (!t || !t.id) return false;
       const idL = String(t.id).toLowerCase().trim();
       if (PROTECTED_CANONICAL_TX_IDS.has(idL)) return true;
-      if (t.donorType === 'general' || (t.donorName && String(t.donorName).toLowerCase().includes('inkhawm'))) return true;
-      if (t.subCategory && String(t.subCategory).toLowerCase().includes('inkhawm')) return true;
       return false;
     };
 
@@ -5286,6 +5282,45 @@ app.post('/api/transactions', (req: Request, res: Response) => {
     db.transactions = reconcileAndDeduplicateTransactions(merged, delSet);
     saveDatabase(db);
     res.json({ success: true, transaction: tx, data: db });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/transactions/batch', (req: Request, res: Response) => {
+  try {
+    const { transactions: batchTxs } = req.body || {};
+    if (Array.isArray(batchTxs) && batchTxs.length > 0) {
+      const db = getDatabase();
+      const validTxs = batchTxs.filter((t: any) => t && t.id);
+      const idSet = new Set(validTxs.map((t: any) => String(t.id).toLowerCase().trim()));
+      
+      db.deletedTransactionIds = (db.deletedTransactionIds || []).filter((id: string) => !idSet.has(id));
+
+      validTxs.forEach((tx: any) => {
+        const titleL = String(tx.campaignTitle || '').toLowerCase();
+        const cleanTitle = titleL.replace(/,+$/, '').trim();
+        const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && String(tx.memberId).startsWith('BMPSHL'));
+        if (isBmp) {
+          tx.category = 'kumtluang';
+          tx.campaignId = 'cmp-1788107291420';
+          tx.campaignTitle = 'BMP Shillong';
+          if (!tx.donorVeng) tx.donorVeng = 'General';
+          if (!tx.subCategory) tx.subCategory = tx.donorType === 'general' ? 'General' : 'BMP Fund';
+          if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+            const subKey = tx.subCategory || (tx.donorType === 'general' ? 'General' : 'BMP Fund');
+            tx.subCategoryBreakdown = { [subKey]: tx.amount };
+          }
+        }
+      });
+
+      const merged = mergeCollections(db.transactions, validTxs, 'id');
+      const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.transactions = reconcileAndDeduplicateTransactions(merged, delSet);
+      saveDatabase(db);
+      return res.json({ success: true, count: validTxs.length });
+    }
+    res.json({ success: true, count: 0 });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -318,7 +318,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const defaultCategories = ['BMP Fund'];
+  const defaultCategories = ['BMP Fund', 'General'];
 
   // Track open state and initialTab to prevent background sync from kicking user away from active tab
   const prevIsOpenRef = useRef(false);

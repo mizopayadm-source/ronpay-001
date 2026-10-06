@@ -274,6 +274,13 @@ export const buildKumtluangMatrix = (
   // Canonical heads ONLY for the specific canonical campaign (BMP Shillong) if needed
   if (activeCampaign?.id === 'cmp-1788107291420' || (!activeCampaign && transactions.some(t => t.campaignId === 'cmp-1788107291420'))) {
     if (!predefinedSubCats.includes('BMP Fund')) predefinedSubCats.unshift('BMP Fund');
+    if (!predefinedSubCats.includes('General')) {
+      const bmpIdx = predefinedSubCats.indexOf('BMP Fund');
+      predefinedSubCats.splice(bmpIdx + 1, 0, 'General');
+    }
+  } else if (predefinedSubCats.includes('BMP Fund') && !predefinedSubCats.includes('General')) {
+    const bmpIdx = predefinedSubCats.indexOf('BMP Fund');
+    predefinedSubCats.splice(bmpIdx + 1, 0, 'General');
   }
 
   // If viewing across multiple campaigns without a single selected campaign:
@@ -460,6 +467,11 @@ export const buildKumtluangMatrix = (
                 return scLower === cleanKey || scLower.includes(cleanKey) || cleanKey.includes(scLower);
               });
             }
+            if (!matchedOfficial && predefinedSubCats.includes('General')) {
+              if (cleanKey.includes('general') || cleanKey.includes('inkhawm') || cleanKey.includes('thawhlawm') || cleanKey.includes('hnathlang') || cleanKey.includes('contribution') || resolvedType === 'general' || t.donorType === 'general') {
+                matchedOfficial = 'General';
+              }
+            }
             if (matchedOfficial) {
               categorySet.add(matchedOfficial);
               donorCats[matchedOfficial] = (donorCats[matchedOfficial] || 0) + num;
@@ -495,6 +507,21 @@ export const buildKumtluangMatrix = (
 
         if (!resolvedSubCat && isDonorInkhawm && predefinedSubCats.includes('Inkhawm Thawhlawm')) {
           resolvedSubCat = 'Inkhawm Thawhlawm';
+        }
+
+        const isGeneralOffering = 
+          resolvedType === 'general' ||
+          t.donorType === 'general' ||
+          isDonorInkhawm ||
+          (t.subCategory && (
+            t.subCategory.toLowerCase().includes('general') ||
+            t.subCategory.toLowerCase().includes('thawhlawm') ||
+            t.subCategory.toLowerCase().includes('hnathlang') ||
+            t.subCategory.toLowerCase().includes('contribution')
+          ));
+
+        if (!resolvedSubCat && isGeneralOffering && predefinedSubCats.includes('General')) {
+          resolvedSubCat = 'General';
         }
 
         if (!resolvedSubCat) {

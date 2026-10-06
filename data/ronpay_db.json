@@ -640,12 +640,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "fromPhone": "9862000001",
           "reason": "Term inthlak / Annual Office Bearer Handover",
-          "toPhone": "7005153902",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
           "fromName": "Super Admin (Master)",
-          "toName": "RC Lalliana (Treasurer)",
-          "transferredAt": "2026-10-01T15:45:45.524Z"
+          "fromPhone": "9862000001",
+          "toPhone": "7005153902",
+          "toName": "RC Lalliana (Treasurer)"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -1426,70 +1426,6 @@
       "donorPhone": "9865321212"
     },
     {
-      "id": "RPAY-CASH-800-WEB",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Inkhawm Thawhlawm (Web)",
-      "donorVeng": "Shillong Unit",
-      "donorType": "general",
-      "isDependent": false,
-      "isAnonymous": false,
-      "amount": 800,
-      "platformFee": 0,
-      "totalAmount": 800,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "Inkhawm Thawhlawm": 800
-      },
-      "periodType": "monthly",
-      "periodMonth": "October",
-      "periodYear": "2026",
-      "periodLabel": "October 2026 (Web Entry)",
-      "timestamp": "2026-10-06T12:27:49.527Z",
-      "createdAt": "2026-10-06T12:27:49.527Z",
-      "updatedAt": "2026-10-06T12:27:49.527Z",
-      "date": "2026-10-06",
-      "txHash": "UTR800WEB91823",
-      "utr": "UTR800WEB91823",
-      "verifiedBy": "Super Admin (Master)",
-      "verifiedAt": "2026-10-06T12:27:49.527Z"
-    },
-    {
-      "id": "RPAY-CASH-800-APP",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Inkhawm Thawhlawm (Mobile App)",
-      "donorVeng": "Shillong Unit",
-      "donorType": "general",
-      "isDependent": false,
-      "isAnonymous": false,
-      "amount": 800,
-      "platformFee": 0,
-      "totalAmount": 800,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "Inkhawm Thawhlawm": 800
-      },
-      "periodType": "monthly",
-      "periodMonth": "October",
-      "periodYear": "2026",
-      "periodLabel": "October 2026 (App Entry)",
-      "timestamp": "2026-10-06T12:27:49.527Z",
-      "createdAt": "2026-10-06T12:27:49.527Z",
-      "updatedAt": "2026-10-06T12:27:49.527Z",
-      "date": "2026-10-06",
-      "txHash": "UTR800APP72619",
-      "utr": "UTR800APP72619",
-      "verifiedBy": "Super Admin (Master)",
-      "verifiedAt": "2026-10-06T12:27:49.527Z"
-    },
-    {
       "timestamp": "2026-10-01T19:13:57.108Z",
       "isDependent": false,
       "amount": 500,
@@ -1802,24 +1738,6 @@
       "feeOption": "ADD_ON",
       "verifiedAt": "2026-09-27T16:20:51.464Z",
       "campaignTitle": "In hmun nghet lo"
-    },
-    {
-      "referenceNo": "T1790525095771",
-      "donorName": "Anonymous",
-      "platformFee": 0,
-      "campaignId": "cmp-1789722498375",
-      "status": "failed",
-      "timestamp": "2026-09-27T15:57:34.457Z",
-      "campaignNetReceived": 500,
-      "category": "rikrum",
-      "paymentMethod": "phonepe",
-      "feeOption": "ADD_ON",
-      "updatedAt": "2026-09-27T16:04:55.869Z",
-      "campaignTitle": "Leimin Puihna",
-      "totalAmount": 500,
-      "isAnonymous": true,
-      "amount": 500,
-      "id": "RPAY_TXN_1790524654457_867"
     },
     {
       "campaignNetReceived": 200,
@@ -10939,9 +10857,9 @@
       "totalAmount": 5200,
       "paymentMethod": "cash",
       "status": "completed",
-      "subCategory": "BMP Meet Contribution",
+      "subCategory": "General",
       "subCategoryBreakdown": {
-        "BMP Meet Contribution": 5200
+        "General": 5200
       },
       "periodMonth": "March",
       "periodYear": "2026",
@@ -12363,7 +12281,10 @@
     "rpay-cash-866993",
     "rpay-cash-776243",
     "rpay-cash-470387",
-    "rpay-cash-186684"
+    "rpay-cash-186684",
+    "rpay_txn_1790524654457_867",
+    "rpay-cash-800-web",
+    "rpay-cash-800-app"
   ],
   "creators": [
     {
@@ -12872,7 +12793,7 @@
       "pin": "ronpay2026",
       "isAdmin": true,
       "name": "Super Admin (Master)",
-      "registeredAt": "2026-10-05T17:52:36.769Z",
+      "registeredAt": "2026-10-06T17:43:14.923Z",
       "approvedCategories": [
         "ralna",
         "khawlsak",
@@ -12980,7 +12901,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-06T12:53:52.438Z",
+    "lastUpdated": "2026-10-06T16:05:53.999Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13213,13 +13134,21 @@
   },
   "auditLogs": [
     {
+      "id": "log-1791308594923-bn53",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-06T17:43:14.923Z"
+    },
+    {
       "id": "log-3",
       "action": "Campaign Approved",
       "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
       "targetType": "campaign",
       "targetId": "cmp-ralna-1",
       "performedBy": "Admin",
-      "timestamp": "2026-10-06T06:53:52.473Z"
+      "timestamp": "2026-10-06T10:05:54.017Z"
     },
     {
       "id": "log-2",
@@ -13228,7 +13157,7 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-06T00:53:52.472Z"
+      "timestamp": "2026-10-06T04:05:54.017Z"
     },
     {
       "id": "log-1791222756769-qglb",
@@ -13244,7 +13173,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-05T12:53:52.472Z"
+      "timestamp": "2026-10-05T16:05:54.017Z"
     },
     {
       "id": "log-1791189201209-c4pv",
@@ -15545,7 +15474,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T12:53:55.354Z",
+      "lastLogin": "2026-10-06T16:05:55.835Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15559,7 +15488,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T08:53:55.354Z",
+      "lastLogin": "2026-10-06T12:05:55.835Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15573,7 +15502,7 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T10:53:55.354Z",
+      "lastLogin": "2026-10-06T14:05:55.835Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
@@ -15651,8 +15580,8 @@
       "purpose": "TKP Shillong Unit Golden Jubilee lawmpuina",
       "recordedByPhone": "9862000001",
       "attachmentUrl": null,
-      "updatedAt": "2026-10-05T19:06:40.681Z",
-      "paidTo": "TKP Shillong Uni",
+      "updatedAt": "2026-10-06T18:08:18.393Z",
+      "paidTo": "TKP Shillong Unit",
       "id": "EXP-1791226689416"
     },
     {
@@ -15779,5 +15708,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-06T13:24:43.883Z"
+  "lastUpdated": "2026-10-06T18:36:58.312Z"
 }

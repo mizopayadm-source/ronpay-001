@@ -474,7 +474,14 @@ export const getStoredCampaigns = (): Campaign[] => {
                 updated.title = updated.title.replace(/,+$/, '').trim();
               }
               if (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0) {
-                updated.subCategories = ['BMP Fund'];
+                updated.subCategories = ['BMP Fund', 'General'];
+              } else if (!updated.subCategories.includes('General')) {
+                const bIdx = updated.subCategories.indexOf('BMP Fund');
+                if (bIdx !== -1) {
+                  updated.subCategories.splice(bIdx + 1, 0, 'General');
+                } else {
+                  updated.subCategories.push('General');
+                }
               }
               if (!updated.imageUrl) {
                 updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
@@ -913,8 +920,6 @@ const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
 export const PROTECTED_CANONICAL_TX_IDS = new Set([
   'rpay_txn_1790185923025_689',
   'rpay-cash-773692',
-  'rpay-cash-800-web',
-  'rpay-cash-800-app',
   'rpay-cash-168598',
   'rpay-cash-742024',
   'rpay-cash-531295',
@@ -929,6 +934,8 @@ export const PROTECTED_CANONICAL_TX_IDS = new Set([
 ]);
 
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
+  'rpay-cash-800-web',
+  'rpay-cash-800-app',
   'rpay_txn_1790753980087_908',
   'tx-manual-1790888181260-628',
   'tx-manual-1790888224928-5',
@@ -1098,10 +1105,9 @@ export const getStoredTransactions = (): Transaction[] => {
             hasAttrChange = true;
           }
 
-          // Ensure Inkhawm Thawhlawm donation has dedicated subCategory and subCategoryBreakdown
-          if (cleanId === 'rpay-cash-709121' || (t.donorName && (t.donorName.toLowerCase().includes('inkhawm') || t.donorName.toLowerCase().includes('inkawm')))) {
+          // Ensure Inkhawm Thawhlawm legacy donation rpay-cash-709121 has dedicated subCategory and breakdown
+          if (cleanId === 'rpay-cash-709121') {
             if (t.subCategory !== 'Inkhawm Thawhlawm' || !t.subCategoryBreakdown || !t.subCategoryBreakdown['Inkhawm Thawhlawm']) {
-              t.donorName = 'Inkhawm Thawhlawm';
               t.subCategory = 'Inkhawm Thawhlawm';
               t.subCategoryBreakdown = { 'Inkhawm Thawhlawm': t.amount };
               hasAttrChange = true;
@@ -3312,6 +3318,83 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
     body: JSON.stringify({ deletedTransactionIds: cleanIds })
   });
   broadcastTabSync('transactions', updated);
+};
+
+export const saveMultipleTransactions = (txs: Transaction[]): void => {
+  if (!txs || txs.length === 0) return;
+  const current = getStoredTransactions();
+  const txMap = new Map<string, Transaction>();
+  current.forEach(t => {
+    if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
+  });
+  
+  txs.forEach(tx => {
+    if (!tx || !tx.id) return;
+    if (!tx.createdAt) tx.createdAt = new Date().toISOString();
+    tx.updatedAt = new Date().toISOString();
+    
+    const isBill = Boolean(tx.billServiceType || tx.billConsumerNumber || tx.billOperator) ||
+      String(tx.id || '').startsWith('BILL-') || 
+      String(tx.id || '').startsWith('TXN-BILL-') || 
+      String(tx.campaignId || '').startsWith('bill-');
+
+    if (!isBill) {
+      if (tx.memberId && !tx.donorName) {
+        try {
+          const mems = getMembers(tx.campaignId);
+          const mem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());
+          if (mem && mem.name) {
+            tx.donorName = mem.name;
+          }
+        } catch (e) {}
+      }
+
+      const titleL = String(tx.campaignTitle || '').toLowerCase();
+      const cleanTitle = titleL.replace(/,+$/, '').trim();
+      const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && tx.memberId.startsWith('BMPSHL'));
+      if (isBmp) {
+        tx.category = 'kumtluang';
+        tx.campaignId = 'cmp-1788107291420';
+        tx.campaignTitle = 'BMP Shillong';
+        if (!tx.donorVeng) {
+          tx.donorVeng = 'General';
+        }
+        if (!tx.subCategory) {
+          tx.subCategory = tx.donorType === 'general' ? 'General' : 'BMP Fund';
+        }
+        if (!tx.subCategoryBreakdown || Object.keys(tx.subCategoryBreakdown).length === 0) {
+          const subKey = tx.subCategory || (tx.donorType === 'general' ? 'General' : 'BMP Fund');
+          tx.subCategoryBreakdown = { [subKey]: tx.amount };
+        }
+      }
+    }
+    txMap.set(String(tx.id).toLowerCase().trim(), tx);
+    recordUserPaidTxId(tx.id);
+    syncTransactionToFirestore(tx).catch(() => {});
+  });
+
+  const updated = Array.from(txMap.values());
+  saveStoredTransactions(updated);
+  if (typeof window !== 'undefined') {
+    broadcastTabSync('transactions');
+    broadcastTabSync('user_paid');
+    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
+    window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: getStoredUserPaidTxIds() }));
+  }
+
+  safeApiFetch('/api/transactions/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions: txs })
+  }).catch(() => {
+    txs.forEach(t => {
+      safeApiFetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(t)
+      }).catch(() => {});
+    });
+  });
 };
 
 export const deleteMembersOfCampaign = (campaignId: string): void => {

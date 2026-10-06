@@ -68,7 +68,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions } from '../utils/storage';
+import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions, saveMultipleTransactions } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { 
   formatDateDDMMYYYY, 
@@ -445,8 +445,28 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
   const isKumtluang = selectedFilter === 'kumtluang';
   const kumtluangMatrix = useMemo(() => {
-    return buildKumtluangMatrix(filteredTransactions, sortOrder, selectedCampaignObj);
-  }, [filteredTransactions, sortOrder, selectedCampaignObj]);
+    return buildKumtluangMatrix(baseTransactions, sortOrder, selectedCampaignObj);
+  }, [baseTransactions, sortOrder, selectedCampaignObj]);
+
+  const displayedMatrixRows = useMemo(() => {
+    if (recordTypeFilter === 'member') return kumtluangMatrix.memberRows;
+    if (recordTypeFilter === 'group') return kumtluangMatrix.groupRows;
+    if (recordTypeFilter === 'general') return kumtluangMatrix.generalRows;
+    return kumtluangMatrix.rows;
+  }, [kumtluangMatrix, recordTypeFilter]);
+
+  const displayedMatrixTotals = useMemo(() => {
+    const colTotals: { [cat: string]: number } = {};
+    kumtluangMatrix.categories.forEach(c => { colTotals[c] = 0; });
+    let total = 0;
+    displayedMatrixRows.forEach(r => {
+      total += r.total;
+      kumtluangMatrix.categories.forEach(c => {
+        colTotals[c] += (r.categoryAmounts[c] || 0);
+      });
+    });
+    return { colTotals, total };
+  }, [kumtluangMatrix.categories, displayedMatrixRows]);
 
   // Scoped members for the current selected campaign
   const scopedMembers = useMemo(() => {
@@ -700,7 +720,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       ? kumtluangMatrix.categories
       : (selectedCampaignObj?.subCategories && selectedCampaignObj.subCategories.length > 0
           ? selectedCampaignObj.subCategories
-          : ['BMP Fund', 'Inkhawm Thawhlawm']);
+          : ['BMP Fund', 'General']);
 
     if (reportPrintStyle === 'member_matrix') {
       if (matrixScopeType === 'group') {
@@ -858,24 +878,35 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Find all transactions by donor name for Kumtluang matrix row edit (View & Edit all payments across months/dates)
   const handleEditDonorRow = (donorName: string) => {
+    const cleanTarget = (donorName || '').trim();
+    const cleanLower = cleanTarget.toLowerCase();
+
     const matchedMember = scopedMembers.find(m => 
-      m.name.toLowerCase().trim() === donorName.toLowerCase().trim()
+      m.name.toLowerCase().trim() === cleanLower
     );
 
-    // Get all transactions belonging to this donor
+    // Get all transactions belonging to this donor / offering head
     const donorTxs = transactions.filter(t => {
-      // Creator security boundary: Must be authorized campaign
-      if (!isStaffFullAccess && !creatorCampaignIds.has(t.campaignId)) return false;
-      if (selectedCampaignId !== 'all' && t.campaignId !== selectedCampaignId) return false;
-      
-      const matchName = t.donorName && t.donorName.toLowerCase().trim() === donorName.toLowerCase().trim();
-      const matchMember = matchedMember && (t.memberId === matchedMember.id || (t.remark && t.remark.includes(matchedMember.id)));
+      // Must match current campaign scope if selected
+      const matchCampaign = selectedCampaignId === 'all' || 
+        t.campaignId === selectedCampaignId || 
+        (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
+      if (!matchCampaign) return false;
+
+      const tDonor = (t.donorName || '').toLowerCase().trim();
+      const matchName = tDonor === cleanLower ||
+        (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
+        (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
+      const matchMember = matchedMember && (
+        (t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim()) ||
+        (t.remark && t.remark.includes(matchedMember.id))
+      );
       return matchName || matchMember;
     });
 
     if (donorTxs.length > 0 || matchedMember) {
       setEditingDonorGroup({
-        donorName: matchedMember?.name || donorName,
+        donorName: matchedMember?.name || cleanTarget,
         donorMemberId: matchedMember?.id || donorTxs[0]?.memberId,
         donorPhone: matchedMember?.fullPhone || matchedMember?.phoneLast4 || donorTxs[0]?.donorPhone,
         donorSection: matchedMember?.section || donorTxs[0]?.donorVeng,
@@ -883,8 +914,49 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         donorTransactions: donorTxs
       });
     } else {
-      alert('He donor payment record hi hmuh a ni lo.');
+      alert(`He donor (${cleanTarget}) payment record hi hmuh a ni lo.`);
     }
+  };
+
+  const handleDeleteDonorRow = (donorName: string, totalAmount?: number) => {
+    const cleanTarget = (donorName || '').trim();
+    const cleanLower = cleanTarget.toLowerCase();
+
+    const matchedMember = scopedMembers.find(m => 
+      m.name.toLowerCase().trim() === cleanLower
+    );
+
+    const donorTxs = transactions.filter(t => {
+      const matchCampaign = selectedCampaignId === 'all' || 
+        t.campaignId === selectedCampaignId || 
+        (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
+      if (!matchCampaign) return false;
+
+      const tDonor = (t.donorName || '').toLowerCase().trim();
+      const matchName = tDonor === cleanLower ||
+        (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
+        (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
+      const matchMember = matchedMember && (
+        (t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim()) ||
+        (t.remark && t.remark.includes(matchedMember.id))
+      );
+      return matchName || matchMember;
+    });
+
+    if (donorTxs.length === 0) {
+      alert(`He donor (${cleanTarget}) payment record hi paih tur hmuh a ni lo.`);
+      return;
+    }
+
+    const confirmMsg = `${cleanTarget}${totalAmount ? ` (₹${totalAmount.toLocaleString('en-IN')})` : ''} pekna zawng zawng (${donorTxs.length} entries) hi paih hlen i chiang em?\n\n(Hriattirna: Entry thenkhat/pakhat chauh siamtha emaw paih duh chuan 'Ennawn / Edit' hmang rawh le)`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const idsToDelete = donorTxs.map(t => t.id).filter(Boolean);
+    deleteMultipleTransactions(idsToDelete);
+    if (onDeleteTransaction) {
+      idsToDelete.forEach(id => onDeleteTransaction(id));
+    }
+    showExportSuccessToast(`${cleanTarget} record (${idsToDelete.length} txns) paih fel a ni e!`, idsToDelete.length);
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
@@ -894,8 +966,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
         deletedIds.forEach(id => onDeleteTransaction(id));
       }
     }
-    if (onUpdateTransaction && updatedTxs.length > 0) {
-      updatedTxs.forEach(tx => onUpdateTransaction(tx));
+    if (updatedTxs.length > 0) {
+      saveMultipleTransactions(updatedTxs);
+      if (onUpdateTransaction) {
+        updatedTxs.forEach(tx => onUpdateTransaction(tx));
+      }
     }
     setEditingDonorGroup(null);
     showExportSuccessToast(
@@ -2238,7 +2313,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-medium text-slate-700">
-                      {kumtluangMatrix.rows.map((row, idx) => (
+                      {displayedMatrixRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-2 px-3 font-bold text-slate-900 border-r border-slate-200">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -2286,13 +2361,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                             {row.total.toLocaleString('en-IN')}
                           </td>
                           <td className="py-2 px-2.5 text-center">
-                            <button
-                              onClick={() => handleEditDonorRow(row.donorName)}
-                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 mx-auto cursor-pointer border border-indigo-200 shadow-2xs whitespace-nowrap"
-                              title="Pek ni, pek dan (Cash/Online), thla bi leh category breakdown ennawn leh siamtha rawh"
-                            >
-                              <Edit3 className="w-3 h-3" /> Ennawn / Edit
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                              <button
+                                onClick={() => handleEditDonorRow(row.donorName)}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs whitespace-nowrap"
+                                title="Pek ni, pek dan (Cash/Online), thla bi leh category breakdown ennawn leh siamtha rawh"
+                              >
+                                <Edit3 className="w-3 h-3" /> Ennawn / Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDonorRow(row.donorName, row.total)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-rose-200 shadow-2xs whitespace-nowrap"
+                                title="He donor / thawhlawm record hi paih hlen rawh"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-600" /> Paih
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2303,11 +2387,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                         <td className="py-2.5 px-2 text-center text-[9px] text-slate-400 font-semibold border-r border-slate-800">ALL</td>
                         {kumtluangMatrix.categories.map((h) => (
                           <td key={h} className="py-2.5 px-2.5 text-right font-mono text-amber-300">
-                            {kumtluangMatrix.columnTotals[h]?.toLocaleString('en-IN') || '0'}
+                            {displayedMatrixTotals.colTotals[h]?.toLocaleString('en-IN') || '0'}
                           </td>
                         ))}
                         <td className="py-2.5 px-3 text-right font-mono text-emerald-400 bg-slate-950 font-black text-sm">
-                          ₹{kumtluangMatrix.grandTotal.toLocaleString('en-IN')}
+                          ₹{displayedMatrixTotals.total.toLocaleString('en-IN')}
                         </td>
                         <td className="py-2.5 px-2.5 bg-slate-950"></td>
                       </tr>
@@ -2578,9 +2662,23 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   
   // Breakdown state
   const campaign = campaigns.find(c => c.id === transaction.campaignId);
-  const defaultCategories = campaign?.subCategories && campaign.subCategories.length > 0 
-    ? campaign.subCategories 
-    : ['Pathian Ram', 'Mission', 'Building Fund'];
+  const defaultCategories = useMemo(() => {
+    if (campaign?.subCategories && campaign.subCategories.length > 0) {
+      const cats = campaign.subCategories.map(s => s?.trim()).filter(Boolean);
+      if (campaign.id === 'cmp-1788107291420' || campaign.title?.toLowerCase().includes('bmp')) {
+        if (!cats.includes('BMP Fund')) cats.unshift('BMP Fund');
+        if (!cats.includes('General')) {
+          const idx = cats.indexOf('BMP Fund');
+          cats.splice(idx + 1, 0, 'General');
+        }
+      }
+      return cats;
+    }
+    if (campaign?.id === 'cmp-1788107291420' || campaign?.title?.toLowerCase().includes('bmp')) {
+      return ['BMP Fund', 'General'];
+    }
+    return ['BMP Fund', 'General', 'Mission', 'Building Fund'];
+  }, [campaign]);
 
   const initialBreakdown: { [key: string]: number } = transaction.subCategoryBreakdown || {
     [defaultCategories[0]]: transaction.amount || 0

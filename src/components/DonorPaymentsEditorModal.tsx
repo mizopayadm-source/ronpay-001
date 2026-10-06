@@ -32,6 +32,8 @@ interface EditablePaymentEntry {
   periodLabel: string;
   paymentMethod: 'online' | 'cash';
   subCategoryBreakdown: { [cat: string]: number };
+  subCategory?: string;
+  donorType?: string;
   remark: string;
   txHash?: string;
   campaignId: string;
@@ -91,9 +93,20 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 
   const subCategoriesList = useMemo(() => {
     if (currentCampaign?.subCategories && Array.isArray(currentCampaign.subCategories) && currentCampaign.subCategories.length > 0) {
-      return currentCampaign.subCategories;
+      const cats = currentCampaign.subCategories.map(s => s?.trim()).filter(Boolean) as string[];
+      if (currentCampaign?.id === 'cmp-1788107291420' || currentCampaign?.title?.toLowerCase().includes('bmp')) {
+        if (!cats.includes('BMP Fund')) cats.unshift('BMP Fund');
+        if (!cats.includes('General')) {
+          const idx = cats.indexOf('BMP Fund');
+          cats.splice(idx + 1, 0, 'General');
+        }
+      }
+      return cats;
     }
-    return ['Pathian Ram', 'Ramthim', 'Mission', 'Building Fund', 'Tualchhung'];
+    if (currentCampaign?.id === 'cmp-1788107291420' || currentCampaign?.title?.toLowerCase().includes('bmp')) {
+      return ['BMP Fund', 'General'];
+    }
+    return ['BMP Fund', 'General', 'Pathian Ram', 'Mission'];
   }, [currentCampaign]);
 
   // 3. Initialize editable payment entries from existing transactions
@@ -143,11 +156,13 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
           ? { ...t.subCategoryBreakdown }
           : (t.subCategory 
               ? { [t.subCategory]: t.amount }
-              : { [subCategoriesList[0] || 'BMP Fund']: t.amount }),
+              : { [t.donorType === 'general' ? 'General' : (subCategoriesList[0] || 'BMP Fund')]: t.amount }),
         remark: t.remark || '',
         txHash: t.txHash,
         campaignId: t.campaignId || activeCampaignId,
         campaignTitle: t.campaignTitle || currentCampaign?.title || 'Collection',
+        subCategory: t.subCategory,
+        donorType: t.donorType,
       };
     });
   });
@@ -316,7 +331,16 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       const resolvedCampaign = campaigns.find(c => c.id === (e.campaignId || activeCampaignId)) || currentCampaign;
       const resolvedCategory = (resolvedCampaign?.category || (activeCampaignId === 'cmp-1788107291420' ? 'kumtluang' : 'kumtluang')) as BawmCategory;
       
-      const primarySubCat = subCategoriesList[0] || 'BMP Fund';
+      // Determine effective subCategory
+      let primarySubCat = e.subCategory;
+      if (!primarySubCat && e.subCategoryBreakdown) {
+        const nonZero = Object.entries(e.subCategoryBreakdown).find(([_, v]) => Number(v) > 0);
+        if (nonZero) primarySubCat = nonZero[0];
+      }
+      if (!primarySubCat) {
+        primarySubCat = (e.donorType === 'general' || !currentMemberId) ? 'General' : (subCategoriesList[0] || 'BMP Fund');
+      }
+
       let effectiveBreakdown: { [category: string]: number } | undefined = undefined;
       if (e.subCategoryBreakdown && Object.keys(e.subCategoryBreakdown).length > 0) {
         effectiveBreakdown = { ...e.subCategoryBreakdown };
@@ -330,6 +354,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         donorPhone: currentPhone.trim() || undefined,
         donorVeng: currentSection.trim() || undefined,
         memberId: currentMemberId.trim() || undefined,
+        donorType: e.donorType || (currentMemberId ? 'member' : 'general'),
         amount: Number(e.amount) || 0,
         paymentMethod: e.paymentMethod,
         timestamp: isoTimestamp,
@@ -344,7 +369,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         subCategoryBreakdown: effectiveBreakdown,
         remark: e.remark.trim() || undefined,
         txHash: e.txHash || `RON-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-        status: 'SUCCESS',
+        status: 'completed',
         isAnonymous: false,
       };
     });

@@ -564,7 +564,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         const initialMap: { [key: string]: number | '' } = {};
         const cats = (campaign?.subCategories && campaign.subCategories.length > 0)
           ? campaign.subCategories
-          : ['BMP Fund'];
+          : ['BMP Fund', 'General'];
         cats.forEach((cat, idx) => {
           initialMap[cat] = explicitAmt || (idx === 0 ? 500 : '');
         });

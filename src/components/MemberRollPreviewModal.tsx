@@ -205,7 +205,7 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
     if (activeCampaign?.subCategories && activeCampaign.subCategories.length > 0) {
       return activeCampaign.subCategories;
     }
-    return ['BMP Fund'];
+    return ['BMP Fund', 'General'];
   }, [activeCampaign]);
 
   // Master Ledger Data calculations
