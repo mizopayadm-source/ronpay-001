@@ -20,6 +20,8 @@ import {
   saveStoredStaffAccounts,
   getDeletedTransactionIds,
   markTransactionAsDeleted,
+  PROTECTED_CANONICAL_TX_IDS,
+  CANONICAL_BMP_RECEIPTS,
   getDeletedCampaignIds,
   recordDeletedCampaignId,
   getDeletedMemberIds,
@@ -337,8 +339,15 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           const deletedIds = getDeletedTransactionIds();
           if (Array.isArray(serverData.deletedTransactionIds)) {
             for (const tId of serverData.deletedTransactionIds) {
-              deletedIds.add(String(tId).toLowerCase().trim());
+              const cleanTId = String(tId).toLowerCase().trim();
+              if (!PROTECTED_CANONICAL_TX_IDS.has(cleanTId)) {
+                deletedIds.add(cleanTId);
+              }
             }
+          }
+          // Ensure protected canonical IDs are never in deletedIds
+          for (const pId of PROTECTED_CANONICAL_TX_IDS) {
+            deletedIds.delete(pId.toLowerCase().trim());
           }
 
           const currentTxs = getStoredTransactions();
@@ -360,6 +369,16 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               const k = String(it.id).toLowerCase().trim();
               if (!deletedIds.has(k) && !txMap.has(k)) {
                 txMap.set(k, it);
+              }
+            }
+          }
+
+          // 2b. Always guarantee canonical BMP receipts from phone app are present
+          for (const cTx of CANONICAL_BMP_RECEIPTS) {
+            if (cTx && cTx.id) {
+              const k = String(cTx.id).toLowerCase().trim();
+              if (!txMap.has(k)) {
+                txMap.set(k, cTx);
               }
             }
           }

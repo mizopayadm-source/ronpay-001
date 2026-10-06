@@ -38,7 +38,10 @@ import {
   getMembers,
   getDeletedTransactionIds,
   markTransactionAsDeleted,
+  clearDeletedTransactionId,
   PERMANENTLY_PURGED_TX_IDS,
+  PROTECTED_CANONICAL_TX_IDS,
+  CANONICAL_BMP_RECEIPTS,
   getDeletedExpenseIds,
   markExpenseAsDeleted,
   getStoredExpenses,
@@ -143,6 +146,9 @@ function getLocalDeletedTxIds(): Set<string> {
   const result = getDeletedTransactionIds();
   for (const id of PERMANENTLY_PURGED_TX_IDS) {
     if (id) result.add(id.toLowerCase().trim());
+  }
+  for (const pId of PROTECTED_CANONICAL_TX_IDS) {
+    result.delete(pId.toLowerCase().trim());
   }
   return result;
 }
@@ -562,8 +568,16 @@ function startLeaderFirestoreListeners(): void {
         for (const it of INITIAL_TRANSACTIONS) {
           if (it && it.id) {
             const k = String(it.id).toLowerCase().trim();
-            if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+            if ((!deletedIds.has(k) || PROTECTED_CANONICAL_TX_IDS.has(k)) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               txMap.set(k, it);
+            }
+          }
+        }
+        for (const cTx of CANONICAL_BMP_RECEIPTS) {
+          if (cTx && cTx.id) {
+            const k = String(cTx.id).toLowerCase().trim();
+            if (!txMap.has(k)) {
+              txMap.set(k, cTx);
             }
           }
         }
@@ -887,8 +901,10 @@ function startLeaderFirestoreListeners(): void {
         data.deleted_transactions.forEach((id: any) => {
           if (id) {
             const clean = String(id).toLowerCase().trim();
-            markTransactionAsDeleted(clean);
-            txUpdated = true;
+            if (!PROTECTED_CANONICAL_TX_IDS.has(clean)) {
+              markTransactionAsDeleted(clean);
+              txUpdated = true;
+            }
           }
         });
       }
@@ -1628,7 +1644,13 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
       for (const it of INITIAL_TRANSACTIONS) {
         if (it && it.id) {
           const k = String(it.id).toLowerCase().trim();
-          if (!deletedIds.has(k)) txMap.set(k, it);
+          if (!deletedIds.has(k) || PROTECTED_CANONICAL_TX_IDS.has(k)) txMap.set(k, it);
+        }
+      }
+      for (const cTx of CANONICAL_BMP_RECEIPTS) {
+        if (cTx && cTx.id) {
+          const k = String(cTx.id).toLowerCase().trim();
+          if (!txMap.has(k)) txMap.set(k, cTx);
         }
       }
       // 2. Overlay remote Firestore transactions

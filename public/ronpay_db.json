@@ -633,12 +633,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "toPhone": "7005153902",
           "toName": "RC Lalliana (Treasurer)",
-          "fromName": "Super Admin (Master)",
           "fromPhone": "9862000001",
-          "transferredAt": "2026-10-01T15:45:45.524Z",
-          "reason": "Term inthlak / Annual Office Bearer Handover"
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "fromName": "Super Admin (Master)",
+          "toPhone": "7005153902",
+          "transferredAt": "2026-10-01T15:45:45.524Z"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -647,9 +647,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
-          "phone": "9862000001",
+          "role": "Outgoing Officer / Co-Manager",
           "name": "Super Admin (Master)",
-          "role": "Outgoing Officer / Co-Manager"
+          "phone": "9862000001"
         }
       ],
       "transferredFrom": "9862000001",
@@ -10577,6 +10577,66 @@
       "totalAmount": 200
     },
     {
+      "id": "RPAY-CASH-168598",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 1140,
+      "platformFee": 0,
+      "totalAmount": 1140,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 1140
+      },
+      "periodType": "monthly",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026 (02/08/2026)",
+      "timestamp": "2026-08-02T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.338Z",
+      "updatedAt": "2026-10-02T07:24:55.338Z",
+      "date": "2026-08-02",
+      "txHash": "UTR762224887246",
+      "utr": "UTR762224887246"
+    },
+    {
+      "id": "RPAY-CASH-742024",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 500
+      },
+      "periodType": "monthly",
+      "periodMonth": "July",
+      "periodYear": "2026",
+      "periodLabel": "July 2026 (19/07/2026)",
+      "timestamp": "2026-07-19T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.385Z",
+      "updatedAt": "2026-10-02T07:24:55.385Z",
+      "date": "2026-07-19",
+      "txHash": "UTR958965561392",
+      "utr": "UTR958965561392"
+    },
+    {
       "periodYear": "2026",
       "txHash": "RPAYEBE312007",
       "id": "TXN-EBE-3120-07",
@@ -10695,6 +10755,36 @@
       "periodLabel": "July 2026",
       "periodMonth": "Jul",
       "date": "2026-07-14"
+    },
+    {
+      "id": "RPAY-CASH-531295",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 1100,
+      "platformFee": 0,
+      "totalAmount": 1100,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 1100
+      },
+      "periodType": "monthly",
+      "periodMonth": "June",
+      "periodYear": "2026",
+      "periodLabel": "June 2026 (21/06/2026)",
+      "timestamp": "2026-06-21T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.426Z",
+      "updatedAt": "2026-10-02T07:24:55.426Z",
+      "date": "2026-06-21",
+      "txHash": "UTR473197412245",
+      "utr": "UTR473197412245"
     },
     {
       "id": "TXN-EBE-8622-06",
@@ -10877,6 +10967,66 @@
       "totalAmount": 3030,
       "memberId": "EBE-1460",
       "date": "2026-05-12"
+    },
+    {
+      "id": "RPAY-CASH-773692",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 800,
+      "platformFee": 0,
+      "totalAmount": 800,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 800
+      },
+      "periodType": "monthly",
+      "periodMonth": "May",
+      "periodYear": "2026",
+      "periodLabel": "May 2026 (03/05/2026)",
+      "timestamp": "2026-05-03T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.464Z",
+      "updatedAt": "2026-10-02T07:24:55.464Z",
+      "date": "2026-05-03",
+      "txHash": "UTR155090411925",
+      "utr": "UTR155090411925"
+    },
+    {
+      "id": "RPAY-CASH-536139",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 520,
+      "platformFee": 0,
+      "totalAmount": 520,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 520
+      },
+      "periodType": "monthly",
+      "periodMonth": "April",
+      "periodYear": "2026",
+      "periodLabel": "April 2026 (19/04/2026)",
+      "timestamp": "2026-04-19T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.501Z",
+      "updatedAt": "2026-10-02T07:24:55.501Z",
+      "date": "2026-04-19",
+      "txHash": "UTR266272015786",
+      "utr": "UTR266272015786"
     },
     {
       "periodLabel": "April 2026",
@@ -11495,6 +11645,36 @@
       "updatedAt": "2026-10-01T20:40:22.601Z",
       "date": "2026-03-15",
       "totalAmount": 200
+    },
+    {
+      "id": "RPAY-CASH-553088",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 750,
+      "platformFee": 0,
+      "totalAmount": 750,
+      "paymentMethod": "cash",
+      "status": "SUCCESS",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 750
+      },
+      "periodType": "monthly",
+      "periodMonth": "March",
+      "periodYear": "2026",
+      "periodLabel": "March 2026 (01/03/2026)",
+      "timestamp": "2026-03-01T00:00:00.000Z",
+      "createdAt": "2026-10-02T07:24:55.596Z",
+      "updatedAt": "2026-10-02T07:24:55.596Z",
+      "date": "2026-03-01",
+      "txHash": "UTR521042190838",
+      "utr": "UTR521042190838"
     },
     {
       "donorPhone": "9436156368",
@@ -12491,13 +12671,7 @@
     "rpay-cash-800-app",
     "rpay-cash-738522",
     "rpay_txn_1790236637582_542",
-    "rpay-cash-168598",
-    "rpay-cash-742024",
-    "rpay-cash-531295",
-    "rpay-cash-773692",
-    "rpay-cash-536139",
     "rpay-cash-553089",
-    "rpay-cash-553088",
     "rpay_txn_1790749698765_269"
   ],
   "creators": [
@@ -13115,7 +13289,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-06T19:02:37.854Z",
+    "lastUpdated": "2026-10-06T20:34:16.307Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13348,6 +13522,14 @@
   },
   "auditLogs": [
     {
+      "id": "log-1791320908012-omgz",
+      "action": "SUPER_ADMIN Login",
+      "details": "Super Admin (Master) authenticated via Tester Hub.",
+      "targetType": "system",
+      "performedBy": "Admin (Biometric)",
+      "timestamp": "2026-10-06T21:08:28.012Z"
+    },
+    {
       "id": "log-1791308594923-bn53",
       "action": "SUPER_ADMIN Login",
       "details": "Super Admin (Master) authenticated via Tester Hub.",
@@ -13362,7 +13544,7 @@
       "targetType": "campaign",
       "targetId": "cmp-ralna-1",
       "performedBy": "Admin",
-      "timestamp": "2026-10-06T13:02:37.875Z"
+      "timestamp": "2026-10-06T14:34:16.314Z"
     },
     {
       "id": "log-2",
@@ -13371,7 +13553,7 @@
       "targetType": "creator",
       "targetId": "9862311223",
       "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-06T07:02:37.875Z"
+      "timestamp": "2026-10-06T08:34:16.314Z"
     },
     {
       "id": "log-1",
@@ -13379,7 +13561,7 @@
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-05T19:02:37.875Z"
+      "timestamp": "2026-10-05T20:34:16.314Z"
     },
     {
       "id": "log-1791222756769-qglb",
@@ -15688,7 +15870,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T19:02:40.429Z",
+      "lastLogin": "2026-10-06T20:34:17.584Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15702,7 +15884,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T15:02:40.429Z",
+      "lastLogin": "2026-10-06T16:34:17.584Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15716,7 +15898,7 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T17:02:40.429Z",
+      "lastLogin": "2026-10-06T18:34:17.584Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
@@ -15922,5 +16104,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-06T20:02:14.876Z"
+  "lastUpdated": "2026-10-06T21:08:48.249Z"
 }
