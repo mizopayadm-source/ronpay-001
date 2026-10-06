@@ -145,7 +145,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
 
       const deletedTxSet = getDeletedTransactionIds();
       const unsyncedTransactions = localTransactions.filter(t => 
-        t && t.id && !deletedTxSet.has(String(t.id).toLowerCase().trim()) && (t.isSynced === false || (t as any).isOfflinePending)
+        t && t.id && !deletedTxSet.has(String(t.id).toLowerCase().trim()) && (t.isSynced !== true || (t as any).isOfflinePending)
       );
 
       const response = await fetch('/api/data/sync', {
@@ -316,9 +316,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const lm of localMembers) {
             const k = String(lm.id).toLowerCase().trim();
             if (!memMap.has(k)) {
-              if ((lm as any).isOfflinePending || (!forceAuthoritative && (Date.now() - new Date(lm.createdAt || 0).getTime() < 24 * 3600 * 1000))) {
-                memMap.set(k, lm);
-              }
+              memMap.set(k, lm);
             } else {
               const existing = memMap.get(k);
               const localTime = new Date(lm.updatedAt || lm.createdAt || 0).getTime();
@@ -342,6 +340,30 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               deletedIds.add(String(tId).toLowerCase().trim());
             }
           }
+
+          // Canonical & General Inkhawm Thawhlawm protection
+          const PROTECTED_CANONICAL_TX_IDS = new Set([
+            'rpay_txn_1790185923025_689',
+            'rpay-cash-773692',
+            'rpay-cash-800-web',
+            'rpay-cash-800-app',
+            'rpay-cash-168598',
+            'rpay-cash-742024',
+            'rpay-cash-531295',
+            'rpay-cash-536139',
+            'rpay-cash-553089',
+            'rpay-cash-553088',
+            'rpay-cash-391500',
+            'rpay-cash-426904',
+            'rpay-cash-738522',
+            'rpay_txn_1790236637582_542',
+            'rpay_txn_1790749698765_269'
+          ]);
+
+          for (const pid of PROTECTED_CANONICAL_TX_IDS) {
+            deletedIds.delete(pid);
+          }
+
           const currentTxs = getStoredTransactions();
           const txMap = new Map<string, any>();
           const nowMs = Date.now();
@@ -356,11 +378,22 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          // 2. Overlay authoritative server transactions
+          // 2. Overlay authoritative server transactions (server state takes precedence over local tombstones)
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              if (!deletedIds.has(k)) {
+              const isProtected = PROTECTED_CANONICAL_TX_IDS.has(k) || 
+                t.donorType === 'general' || 
+                (t.donorName && String(t.donorName).toLowerCase().includes('inkhawm')) ||
+                (t.subCategory && String(t.subCategory).toLowerCase().includes('inkhawm'));
+
+              if (isProtected) {
+                deletedIds.delete(k);
+              }
+
+              // If the authoritative server sent this transaction, it is NOT deleted!
+              if (!deletedIds.has(k) || isProtected) {
+                deletedIds.delete(k);
                 const existing = txMap.get(k);
                 txMap.set(k, existing ? { ...existing, ...t } : t);
               }
@@ -395,12 +428,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
 
                 if (!txMap.has(k)) {
-                  // Only preserve genuine pending offline transactions created in last 24 hours
-                  const tTime = new Date(t.createdAt || t.timestamp || 0).getTime();
-                  if (nowMs - tTime < 24 * 3600 * 1000) {
-                    txMap.set(k, t);
-                    newLocalTxsToPush.push(t);
-                  }
+                  // Keep genuine local transactions and push to server
+                  txMap.set(k, t);
+                  newLocalTxsToPush.push(t);
                 }
               }
             }

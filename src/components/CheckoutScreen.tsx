@@ -1495,22 +1495,22 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         platformFee: 0,
         totalAmount: subtotal,
         paymentMethod: 'cash',
-        status: (isOfficerAuthorized || isOwner) ? 'completed' : 'pending_verification',
-        verifiedBy: (isOfficerAuthorized || isOwner) ? (creatorProfile?.name || 'Treasurer / Officer') : undefined,
-        verifiedAt: (isOfficerAuthorized || isOwner) ? new Date().toISOString() : undefined,
+        status: (isOfficerAuthorized || isOwner || resolvedDonorType === 'general') ? 'completed' : 'pending_verification',
+        verifiedBy: (isOfficerAuthorized || isOwner || resolvedDonorType === 'general') ? (creatorProfile?.name || 'Treasurer / Admin') : undefined,
+        verifiedAt: (isOfficerAuthorized || isOwner || resolvedDonorType === 'general') ? new Date().toISOString() : undefined,
         remark: remark.trim() || undefined,
         subCategory: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? (resolvedGroupName || 'Group Sum')
               : resolvedDonorType === 'general'
-              ? (generalTitle.trim() || 'General Thawhlawm')
+              ? (generalTitle.trim() || 'Inkhawm Thawhlawm')
               : (Object.keys(resolvedNumericSubcatAmounts)[0] || Object.keys(subcatAmounts || {})[0] || undefined))
           : undefined,
         subCategoryBreakdown: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
               ? { [resolvedGroupName || 'Group Sum']: subtotal }
               : resolvedDonorType === 'general'
-              ? { [generalTitle.trim() || 'General Thawhlawm']: subtotal }
+              ? { [generalTitle.trim() || 'Inkhawm Thawhlawm']: subtotal }
               : resolvedNumericSubcatAmounts)
           : undefined,
         periodType: category === 'kumtluang' ? periodType : undefined,
@@ -1522,6 +1522,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         updatedAt: new Date().toISOString(),
         date: paymentTimestamp.slice(0, 10),
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        isSynced: false,
       };
 
       setTimeout(() => {

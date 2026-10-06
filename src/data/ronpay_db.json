@@ -1395,6 +1395,70 @@
   ],
   "transactions": [
     {
+      "id": "RPAY-CASH-800-WEB",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm (Web)",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 800,
+      "platformFee": 0,
+      "totalAmount": 800,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 800
+      },
+      "periodType": "monthly",
+      "periodMonth": "October",
+      "periodYear": "2026",
+      "periodLabel": "October 2026 (Web Entry)",
+      "timestamp": "2026-10-06T12:27:49.527Z",
+      "createdAt": "2026-10-06T12:27:49.527Z",
+      "updatedAt": "2026-10-06T12:27:49.527Z",
+      "date": "2026-10-06",
+      "txHash": "UTR800WEB91823",
+      "utr": "UTR800WEB91823",
+      "verifiedBy": "Super Admin (Master)",
+      "verifiedAt": "2026-10-06T12:27:49.527Z"
+    },
+    {
+      "id": "RPAY-CASH-800-APP",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm (Mobile App)",
+      "donorVeng": "Shillong Unit",
+      "donorType": "general",
+      "isDependent": false,
+      "isAnonymous": false,
+      "amount": 800,
+      "platformFee": 0,
+      "totalAmount": 800,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 800
+      },
+      "periodType": "monthly",
+      "periodMonth": "October",
+      "periodYear": "2026",
+      "periodLabel": "October 2026 (App Entry)",
+      "timestamp": "2026-10-06T12:27:49.527Z",
+      "createdAt": "2026-10-06T12:27:49.527Z",
+      "updatedAt": "2026-10-06T12:27:49.527Z",
+      "date": "2026-10-06",
+      "txHash": "UTR800APP72619",
+      "utr": "UTR800APP72619",
+      "verifiedBy": "Super Admin (Master)",
+      "verifiedAt": "2026-10-06T12:27:49.527Z"
+    },
+    {
       "timestamp": "2026-10-01T19:13:57.108Z",
       "isDependent": false,
       "amount": 500,
@@ -10208,6 +10272,39 @@
       "isAnonymous": false
     },
     {
+      "id": "RPAY-CASH-470387",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Inkhawm Thawhlawm (Thawhlawm)",
+      "donorType": "general",
+      "donorVeng": "General",
+      "subCategory": "Inkhawm Thawhlawm",
+      "subCategoryBreakdown": {
+        "Inkhawm Thawhlawm": 500
+      },
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "isAnonymous": false,
+      "isDependent": false,
+      "timestamp": "2026-07-17T12:00:00.000Z",
+      "date": "2026-07-17",
+      "periodMonth": "July",
+      "periodYear": "2026",
+      "periodLabel": "July 2026 (17/07/2026)",
+      "periodType": "monthly",
+      "txHash": "CASHLH88OHG3",
+      "referenceNo": "CASHLH88OHG3",
+      "verifiedBy": "Treasurer / Officer",
+      "verifiedAt": "2026-07-17T12:00:00.000Z",
+      "createdAt": "2026-10-06T12:14:39.294Z",
+      "updatedAt": "2026-10-06T12:14:39.294Z",
+      "isSynced": true
+    },
+    {
       "id": "TXN-EBE-8622-07",
       "campaignId": "cmp-kumtluang-1",
       "status": "completed",
@@ -11874,19 +11971,6 @@
       "isAnonymous": false,
       "createdAt": "2026-10-01T20:37:16.081Z",
       "updatedAt": "2026-10-01T20:37:16.081Z"
-    },
-    {
-      "id": "TEST-800",
-      "amount": 800,
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Test Donor",
-      "donorVeng": "General",
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 800
-      }
     }
   ],
   "deletedTransactionIds": [
@@ -12063,6 +12147,10 @@
     "rpay_txn_1790875972483_197",
     "tx-manual-1790888425532-253",
     "tx-manual-1790888034425-369",
+    "rpay-cash-146579",
+    "txn-782008",
+    "rpay-cash-866993",
+    "rpay-cash-776243",
     "rpay-cash-738522",
     "rpay_txn_1790236637582_542",
     "rpay-cash-168598",
@@ -12072,10 +12160,6 @@
     "rpay-cash-536139",
     "rpay-cash-553089",
     "rpay-cash-553088",
-    "rpay-cash-146579",
-    "txn-782008",
-    "rpay-cash-866993",
-    "rpay-cash-776243",
     "rpay_txn_1790749698765_269"
   ],
   "creators": [
@@ -15492,5 +15576,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-06T09:02:12.714Z"
+  "lastUpdated": "2026-10-06T12:27:53.011Z"
 }

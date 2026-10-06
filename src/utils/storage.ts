@@ -910,9 +910,26 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
+export const PROTECTED_CANONICAL_TX_IDS = new Set([
+  'rpay_txn_1790185923025_689',
+  'rpay-cash-773692',
+  'rpay-cash-800-web',
+  'rpay-cash-800-app',
+  'rpay-cash-168598',
+  'rpay-cash-742024',
+  'rpay-cash-531295',
+  'rpay-cash-536139',
+  'rpay-cash-553089',
+  'rpay-cash-553088',
+  'rpay-cash-391500',
+  'rpay-cash-426904',
+  'rpay-cash-738522',
+  'rpay_txn_1790236637582_542',
+  'rpay_txn_1790749698765_269'
+]);
+
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay_txn_1790753980087_908',
-  'rpay-cash-738522',
   'tx-manual-1790888181260-628',
   'tx-manual-1790888224928-5',
   'tx-manual-1790888268953-440',
@@ -931,7 +948,9 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
 export const getDeletedTransactionIds = (): Set<string> => {
   const result = new Set<string>();
   for (const id of PERMANENTLY_PURGED_TX_IDS) {
-    if (id) result.add(id.toLowerCase().trim());
+    if (id && !PROTECTED_CANONICAL_TX_IDS.has(id.toLowerCase().trim())) {
+      result.add(id.toLowerCase().trim());
+    }
   }
   try {
     const raw = localStorage.getItem(DELETED_TX_IDS_KEY) || localStorage.getItem('ronpay_deleted_tx_ids');
@@ -941,7 +960,9 @@ export const getDeletedTransactionIds = (): Set<string> => {
         arr.forEach(id => {
           if (!id) return;
           const clean = String(id).toLowerCase().trim();
-          result.add(clean);
+          if (!PROTECTED_CANONICAL_TX_IDS.has(clean)) {
+            result.add(clean);
+          }
         });
       }
     }
