@@ -864,6 +864,7 @@ export default function App() {
         saveTransaction(verifiedTx);
         recordUserPaidTxId(verifiedTx.id);
         setTransactions(prev => [verifiedTx, ...prev.filter(t => t.id !== verifiedTx.id)]);
+        setUserPaidIds(prev => Array.from(new Set([verifiedTx.id, ...prev])));
         setCampaigns(getStoredCampaigns());
         setCurrentScreen('success');
         setAppView('app');
@@ -882,6 +883,7 @@ export default function App() {
         saveTransaction(verifiedTx);
         recordUserPaidTxId(verifiedTx.id);
         setTransactions(prev => [verifiedTx, ...prev.filter(t => t.id !== verifiedTx.id)]);
+        setUserPaidIds(prev => Array.from(new Set([verifiedTx.id, ...prev])));
         setCurrentScreen('success');
         setAppView('app');
         updateBrowserUrl('success', null, null, { replace: true });
@@ -1174,6 +1176,8 @@ export default function App() {
     try {
       localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
     } catch {}
+    setTransactions(prev => [transaction, ...prev.filter(t => t.id !== transaction.id)]);
+    setUserPaidIds(prev => Array.from(new Set([transaction.id, ...prev])));
     reloadLocalData();
     if (transaction.status === 'completed') {
       setCurrentScreen('success');

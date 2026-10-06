@@ -96,6 +96,35 @@ export const formatDateTimeDDMMYYYY = (dateInput?: string | Date | number | null
   }
 };
 
+/**
+ * Formats time in Indian Standard Time (Asia/Kolkata) with AM/PM (e.g. "06:46 PM")
+ */
+export const formatTimeOnlyIST = (dateInput?: string | Date | number | null): string => {
+  if (!dateInput) return '—';
+  try {
+    let d = typeof dateInput === 'object' && dateInput instanceof Date 
+      ? dateInput 
+      : new Date(dateInput);
+    if (isNaN(d.getTime())) return '—';
+
+    // Auto-heal future timestamps if double IST offset occurred (+5.5h)
+    const nowMs = Date.now();
+    if (d.getTime() > nowMs + 60000 && d.getTime() - nowMs <= (6.5 * 3600 * 1000)) {
+      d = new Date(d.getTime() - (5.5 * 3600 * 1000));
+    }
+
+    const formatter = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    return formatter.format(d);
+  } catch {
+    return '—';
+  }
+};
+
 export const isCampaignExpired = (validityDate?: string, status?: string): boolean => {
   if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected') return true;
   if (!validityDate) return false;

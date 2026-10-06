@@ -1108,34 +1108,13 @@ export const getStoredTransactions = (): Transaction[] => {
             }
           }
 
-          // Auto-heal back-dated transactions so their timestamp matches their intended period
-          const pMonth = t.periodMonth || (t.periodLabel ? t.periodLabel.split(' ')[0] : '');
-          const pYear = t.periodYear || (t.periodLabel ? t.periodLabel.split(' ')[1] : '');
-          if (pMonth && pYear) {
-            const monthNames = [
-              'january', 'february', 'march', 'april', 'may', 'june',
-              'july', 'august', 'september', 'october', 'november', 'december'
-            ];
-            const mIdx = monthNames.indexOf(pMonth.toLowerCase().trim());
-            const yNum = parseInt(pYear);
-            if (mIdx !== -1 && !isNaN(yNum) && yNum >= 2020 && yNum <= 2035) {
-              const expectedPrefix = `${yNum}-${String(mIdx + 1).padStart(2, '0')}`;
-              const curPrefix = (t.timestamp || '').slice(0, 7);
-              if (curPrefix !== expectedPrefix) {
-                let day = '15';
-                if (t.periodLabel) {
-                  const dm = t.periodLabel.match(/\((\d{1,2})\/\d{1,2}\/\d{4}\)/);
-                  if (dm) day = dm[1].padStart(2, '0');
-                } else if (t.timestamp) {
-                  const d = t.timestamp.slice(8, 10);
-                  if (parseInt(d) >= 1 && parseInt(d) <= 28) day = d;
-                }
-                const newTs = `${yNum}-${String(mIdx + 1).padStart(2, '0')}-${day}T12:00:00.000Z`;
-                t.timestamp = newTs;
-                t.date = newTs.slice(0, 10);
-                hasAttrChange = true;
-              }
-            }
+          // Ensure date attribute exists without mutating actual payment timestamp
+          if (!t.date && t.timestamp) {
+            t.date = t.timestamp.slice(0, 10);
+          } else if (!t.timestamp) {
+            t.timestamp = new Date().toISOString();
+            t.date = t.timestamp.slice(0, 10);
+            hasAttrChange = true;
           }
 
           return t;
@@ -3045,6 +3024,12 @@ export const saveTransaction = (tx: Transaction): void => {
   const updated = [tx, ...current.filter(t => t.id !== tx.id)];
   saveStoredTransactions(updated);
   recordUserPaidTxId(tx.id);
+  if (typeof window !== 'undefined') {
+    broadcastTabSync('transactions');
+    broadcastTabSync('user_paid');
+    window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
+    window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: getStoredUserPaidTxIds() }));
+  }
   syncTransactionToFirestore(tx).catch(() => {});
   safeApiFetch('/api/transactions', {
     method: 'POST',

@@ -1288,16 +1288,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     if (paymentMethod === 'phonepe') {
       const merchantTxnId = `RPAY_TXN_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
 
-      let paymentTimestamp = new Date().toISOString();
-      if (category === 'kumtluang') {
-        if (useCustomDate && selectedCustomDate) {
-          paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
-        } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
-          const mIdx = getMonthIndex(selectedMonth);
-          const yNum = parseInt(selectedYear) || new Date().getFullYear();
-          if (mIdx !== -1) {
-            paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
-          }
+      const now = new Date();
+      let paymentTimestamp = now.toISOString();
+      let paymentDate = now.toISOString().slice(0, 10);
+
+      if (category === 'kumtluang' && useCustomDate && selectedCustomDate) {
+        paymentDate = selectedCustomDate;
+        const parts = selectedCustomDate.split('-').map(Number);
+        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+          const dt = new Date(parts[0], parts[1] - 1, parts[2], now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+          paymentTimestamp = dt.toISOString();
         }
       }
 
@@ -1323,7 +1323,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         timestamp: paymentTimestamp,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        date: paymentTimestamp.slice(0, 10),
+        date: paymentDate,
         remark: remark.trim() || undefined,
         feeOption: feeBearerOption,
         subCategory: category === 'kumtluang' 
@@ -1463,16 +1463,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     setIsProcessing(true);
 
     if (paymentMethod === 'cash') {
-      let paymentTimestamp = new Date().toISOString();
-      if (category === 'kumtluang') {
-        if (useCustomDate && selectedCustomDate) {
-          paymentTimestamp = `${selectedCustomDate}T12:00:00.000Z`;
-        } else if (periodType === 'monthly' && selectedMonth && selectedYear) {
-          const mIdx = getMonthIndex(selectedMonth);
-          const yNum = parseInt(selectedYear) || new Date().getFullYear();
-          if (mIdx !== -1) {
-            paymentTimestamp = new Date(Date.UTC(yNum, mIdx, 15, 12, 0, 0)).toISOString();
-          }
+      const now = new Date();
+      let paymentTimestamp = now.toISOString();
+      let paymentDate = now.toISOString().slice(0, 10);
+
+      if (category === 'kumtluang' && useCustomDate && selectedCustomDate) {
+        paymentDate = selectedCustomDate;
+        const parts = selectedCustomDate.split('-').map(Number);
+        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+          const dt = new Date(parts[0], parts[1] - 1, parts[2], now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+          paymentTimestamp = dt.toISOString();
         }
       }
 
@@ -1520,7 +1520,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         timestamp: paymentTimestamp,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        date: paymentTimestamp.slice(0, 10),
+        date: paymentDate,
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
         isSynced: false,
       };

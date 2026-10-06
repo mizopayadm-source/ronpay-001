@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
 import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
 import { getStoredCampaigns } from '../utils/storage';
@@ -552,11 +552,11 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           </div>
           <div className="flex justify-between items-center">
             <span>DATE:</span>
-            <span className="font-bold text-slate-700">{formatDateDDMMYYYY(transaction?.timestamp || Date.now())}</span>
+            <span className="font-bold text-slate-700">{formatDateDDMMYYYY(transaction?.timestamp || transaction?.createdAt || Date.now())}</span>
           </div>
           <div className="flex justify-between items-center">
             <span>TIME:</span>
-            <span>{new Date(transaction?.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+            <span className="font-bold text-slate-700">{formatTimeOnlyIST(transaction?.timestamp || transaction?.createdAt || Date.now())}</span>
           </div>
           {transaction?.txHash && (
             <div className="flex justify-between items-center truncate">

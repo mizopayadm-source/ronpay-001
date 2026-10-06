@@ -26,7 +26,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
 import { 
   isCampaignCreator, 
@@ -91,6 +91,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(() => getDeletedTransactionIds());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
 
+  // Automatically refresh local data whenever modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      setDeletedTxIds(getDeletedTransactionIds());
+      if (onRefreshData) {
+        onRefreshData();
+      }
+    }
+  }, [isOpen, onRefreshData]);
+
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     setDeletedTxIds(getDeletedTransactionIds());
@@ -110,15 +120,34 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }, 600);
   };
 
-  // Defensive array checks
+  // Defensive array checks - combines incoming props with local storage to never miss newly recorded transactions
   const safeTransactions = useMemo(() => {
-    const list = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-    return list.filter(t => {
+    const listFromProps = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+    const listFromStorage = getStoredTransactions();
+    const map = new Map<string, Transaction>();
+    for (const t of listFromStorage) {
+      if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
+    }
+    for (const t of listFromProps) {
+      if (t && t.id) {
+        const k = String(t.id).toLowerCase().trim();
+        const existing = map.get(k);
+        if (!existing) {
+          map.set(k, t);
+        } else {
+          const tTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
+          const eTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+          map.set(k, tTime >= eTime ? t : existing);
+        }
+      }
+    }
+    const combined = Array.from(map.values());
+    return combined.filter(t => {
       if (!t || !t.id) return false;
       const clean = String(t.id).toLowerCase().trim();
       return !deletedTxIds.has(clean) && !PERMANENTLY_PURGED_TX_IDS.has(clean);
     });
-  }, [transactions, deletedTxIds]);
+  }, [transactions, deletedTxIds, isOpen]);
 
   const safeCampaigns = useMemo(() => {
     return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
@@ -206,13 +235,19 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     const isDonorPhone = Boolean(profilePhone && txPhone && profilePhone === txPhone);
     const isPaidOnDevice = safeUserPaidIds.includes(tx.id);
 
+    // If owned by active creator or super admin:
+    if (isOwned || isSuperAdminUser) {
+      // If creator explicitly paid with their own personal phone as donor to their own Bawm, it's personal 'sent'
+      if (isDonorPhone && tx.paymentMethod !== 'cash') {
+        return 'sent';
+      }
+      // Cash deposit or general collection or donation received into this Bawm:
+      return 'received';
+    }
+
     // If active user contributed this payment directly, it belongs to personal 'sent' giving
     if (isDonorPhone || isPaidOnDevice) {
       return 'sent';
-    }
-
-    if (isOwned || isSuperAdminUser) {
-      return 'received';
     }
 
     return 'sent';
@@ -1229,7 +1264,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                       {resolveTxCampaignTitle(tx)}
                     </h4>
                     <div className="flex items-center justify-between text-[10.5px] text-slate-500 mt-0.5">
-                      <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span>{formatDateDDMMYYYY(tx.timestamp)}</span>
+                        <span className="text-slate-300">•</span>
+                        <span>{formatTimeOnlyIST(tx.timestamp)}</span>
+                      </span>
                       {tx.periodLabel && (
                         <span className="text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
                           {tx.periodLabel}

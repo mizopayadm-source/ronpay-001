@@ -417,32 +417,43 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           
           const isLocalInflated = localConfirmedSum > Math.max(1000000, serverConfirmedSum * 2);
 
-          // Merge local transactions only if not forcing authoritative and not corrupted
-          if (!forceAuthoritative && !isLocalInflated) {
-            const newLocalTxsToPush: Transaction[] = [];
-            for (const t of currentTxs) {
-              if (t && t.id) {
-                const k = String(t.id).toLowerCase().trim();
-                if (deletedIds.has(k)) continue;
-                const amt = Number(t.amount);
-                if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
+          // Preserve all genuine local transactions:
+          // Local transactions that are not deleted must ALWAYS be merged into txMap
+          // so real payments created on this device (Web or Mobile App) are NEVER wiped out by server fetches!
+          const newLocalTxsToPush: Transaction[] = [];
+          for (const t of currentTxs) {
+            if (t && t.id) {
+              const k = String(t.id).toLowerCase().trim();
+              if (deletedIds.has(k)) continue;
+              const amt = Number(t.amount);
+              if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
 
-                if (!txMap.has(k)) {
-                  // Keep genuine local transactions and push to server
-                  txMap.set(k, t);
+              if (!txMap.has(k)) {
+                // Keep genuine local transactions and push to server
+                txMap.set(k, t);
+                newLocalTxsToPush.push(t);
+              } else {
+                const existing = txMap.get(k);
+                const localTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
+                const serverTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                const localStatus = (t.status || '').toLowerCase().trim();
+                const serverStatus = (existing.status || '').toLowerCase().trim();
+                // If local status is completed/verified while server is pending, or local has newer timestamp:
+                if ((localStatus === 'completed' && serverStatus === 'pending') || localTime > serverTime) {
+                  txMap.set(k, { ...existing, ...t });
                   newLocalTxsToPush.push(t);
                 }
               }
             }
+          }
 
-            // If there are genuine recent local transactions, push them to server
-            if (newLocalTxsToPush.length > 0) {
-              safeApiFetch('/api/data/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transactions: newLocalTxsToPush })
-              }).catch(() => {});
-            }
+          // If there are genuine recent local transactions, push them to server immediately
+          if (newLocalTxsToPush.length > 0) {
+            safeApiFetch('/api/data/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transactions: newLocalTxsToPush })
+            }).catch(() => {});
           }
 
           const cleanTxs = Array.from(txMap.values());
@@ -455,6 +466,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           serverData.transactions = cleanTxs;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+            broadcastTabSync('transactions');
           }
         }
 

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Clock, Check, ArrowLeft, AlertCircle, Banknote, ShieldCheck } from 'lucide-react';
 import { Transaction, CreatorProfile, Campaign } from '../types';
 import { getStoredTransactions } from '../utils/storage';
+import { formatDateTimeDDMMYYYY } from '../utils/date';
 
 interface CashPendingScreenProps {
   transaction: Transaction | null;
@@ -151,14 +152,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           <div className="flex justify-between items-center text-[11px] text-slate-500">
             <span className="font-medium">Pek Hun:</span>
             <span className="font-semibold text-slate-700">
-              {new Date(effectiveTx.timestamp).toLocaleString('en-IN', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true,
-              })}
+              {formatDateTimeDDMMYYYY(effectiveTx.timestamp)}
             </span>
           </div>
         )}
