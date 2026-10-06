@@ -1885,7 +1885,7 @@ export default function App() {
         <ErrorBoundary name="PeknaSulhnuModal">
           <PeknaSulhnuModal
             isOpen={isHistoryOpen}
-            transactions={userVisibleTransactions}
+            transactions={transactions}
             campaigns={campaigns}
             creatorProfile={creatorProfile}
             userPaidIds={userPaidIds}

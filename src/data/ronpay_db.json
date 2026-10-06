@@ -1541,24 +1541,6 @@
       "date": "2026-08-01"
     },
     {
-      "campaignNetReceived": 1,
-      "amount": 1,
-      "platformFee": 0,
-      "isAnonymous": false,
-      "referenceNo": "T1790749976247",
-      "totalAmount": 0,
-      "paymentMethod": "phonepe",
-      "id": "RPAY_TXN_1790749698765_269",
-      "campaignId": "cmp-custom",
-      "donorName": "Valued Donor",
-      "feeOption": "ADD_ON",
-      "campaignTitle": "RonPay Community Bawm",
-      "timestamp": "2026-09-30T06:32:56.247Z",
-      "status": "failed",
-      "category": "khawlsak",
-      "updatedAt": "2026-09-30T06:32:56.270Z"
-    },
-    {
       "status": "completed",
       "campaignId": "cmp-custom",
       "updatedAt": "2026-09-29T10:53:05.456Z",
@@ -11892,6 +11874,19 @@
       "isAnonymous": false,
       "createdAt": "2026-10-01T20:37:16.081Z",
       "updatedAt": "2026-10-01T20:37:16.081Z"
+    },
+    {
+      "id": "TEST-800",
+      "amount": 800,
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Test Donor",
+      "donorVeng": "General",
+      "subCategory": "BMP Fund",
+      "subCategoryBreakdown": {
+        "BMP Fund": 800
+      }
     }
   ],
   "deletedTransactionIds": [
@@ -12080,7 +12075,8 @@
     "rpay-cash-146579",
     "txn-782008",
     "rpay-cash-866993",
-    "rpay-cash-776243"
+    "rpay-cash-776243",
+    "rpay_txn_1790749698765_269"
   ],
   "creators": [
     {
@@ -15496,5 +15492,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-06T08:34:46.953Z"
+  "lastUpdated": "2026-10-06T09:02:12.714Z"
 }

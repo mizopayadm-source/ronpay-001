@@ -1291,6 +1291,37 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
     record.utr = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
   }
 
+  // Persist successful payment to central database so it is visible across all devices and in Sulhnu
+  if (status === 'PAYMENT_SUCCESS') {
+    try {
+      const db = getDatabase();
+      const newTx = {
+        id: merchantTransactionId,
+        campaignId: record.campaignId || 'cmp-1788107291420',
+        campaignTitle: record.campaignTitle || 'BMP Shillong',
+        category: record.category || 'kumtluang',
+        donorName: record.donorName || 'Valued Donor',
+        donorPhone: record.donorPhone || '',
+        amount: record.baseAmountRupees || record.amountRupees || (record.amount / 100),
+        platformFee: record.platformFeeRupees || 0,
+        totalAmount: record.amountRupees || (record.amount / 100),
+        paymentMethod: record.paymentMethod || 'phonepe',
+        status: 'completed',
+        isAnonymous: Boolean(record.isAnonymous),
+        timestamp: record.createdAt || new Date().toISOString(),
+        utr: record.utr,
+        feeOption: record.feeOption || 'ADD_ON',
+        campaignNetReceived: record.baseAmountRupees || record.amountRupees || (record.amount / 100),
+        createdAt: record.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.transactions = mergeCollections(db.transactions || [], [newTx], 'id');
+      saveDatabase(db);
+    } catch (saveErr) {
+      console.warn('Failed to save to central db during confirm-paid in server.ts:', saveErr);
+    }
+  }
+
   // Also log to webhook store for transparency
   webhookLogStore.unshift({
     id: 'WH_EVT_' + Date.now(),
@@ -3643,6 +3674,40 @@ app.all([
         platformShare: 500
       }
     };
+  }
+
+  // Persist successful payment to central database
+  if (isSuccess) {
+    try {
+      const db = getDatabase();
+      const rec = transactionStore[effectiveTxnId];
+      if (rec) {
+        const newTx = {
+          id: effectiveTxnId,
+          campaignId: rec.campaignId || 'cmp-1788107291420',
+          campaignTitle: rec.campaignTitle || 'BMP Shillong',
+          category: rec.category || 'kumtluang',
+          donorName: rec.donorName || 'Valued Donor',
+          donorPhone: rec.donorPhone || '',
+          amount: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
+          platformFee: rec.platformFeeRupees || 0,
+          totalAmount: rec.amountRupees || (rec.amount / 100),
+          paymentMethod: 'phonepe',
+          status: 'completed',
+          isAnonymous: Boolean(rec.isAnonymous),
+          timestamp: rec.createdAt || new Date().toISOString(),
+          utr: rec.utr || phonePeUtr,
+          feeOption: rec.feeOption || 'ADD_ON',
+          campaignNetReceived: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
+          createdAt: rec.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        db.transactions = mergeCollections(db.transactions || [], [newTx], 'id');
+        saveDatabase(db);
+      }
+    } catch (saveErr) {
+      console.warn('Failed to save to central db during callback in server.ts:', saveErr);
+    }
   }
 
   // Determine base URL dynamically
