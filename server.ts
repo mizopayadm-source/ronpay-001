@@ -4565,7 +4565,8 @@ function reconcileAndDeduplicateTransactions(transactionsList: any[], serverDelT
     const cat = String(t.subCategory || 'bmp fund').toLowerCase().trim();
     const isManual = (t.paymentMethod || '').toLowerCase() === 'cash' || cleanId.startsWith('tx-manual') || cleanId.startsWith('rpay-cash');
 
-    if (donor && period && isManual) {
+    const isGeneralOrGroup = t.donorType === 'general' || t.donorType === 'group' || (t.donorName && t.donorName.toLowerCase().includes('thawhlawm'));
+    if (donor && period && isManual && !isGeneralOrGroup && t.memberId) {
       const key = `${camp}::${donor}::${period}::${cat}`;
       if (seenMemberPeriod.has(key)) {
         const existingIdx = seenMemberPeriod.get(key)!;
