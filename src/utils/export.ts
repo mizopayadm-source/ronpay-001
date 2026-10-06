@@ -536,12 +536,14 @@ export const buildKumtluangMatrix = (
     }
   });
 
-  // Strict Category Isolation:
-  // If the campaign has configured subCategories, the columns are EXCLUSIVELY and ONLY those categories!
-  // No foreign, rogue, or bleed-over category can ever become a column.
+  // Include predefined campaign categories plus any active collection heads like Inkhawm Thawhlawm
   let categories: string[] = [];
   if (predefinedSubCats.length > 0) {
-    categories = [...predefinedSubCats];
+    const combined = new Set([...predefinedSubCats]);
+    categorySet.forEach(c => {
+      if (c && c.trim()) combined.add(c.trim());
+    });
+    categories = Array.from(combined);
   } else {
     categories = Array.from(categorySet);
     if (categories.length === 0) {

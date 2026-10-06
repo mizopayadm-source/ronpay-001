@@ -1495,7 +1495,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         platformFee: 0,
         totalAmount: subtotal,
         paymentMethod: 'cash',
-        status: 'pending_verification',
+        status: (isOfficerAuthorized || isOwner) ? 'completed' : 'pending_verification',
+        verifiedBy: (isOfficerAuthorized || isOwner) ? (creatorProfile?.name || 'Treasurer / Officer') : undefined,
+        verifiedAt: (isOfficerAuthorized || isOwner) ? new Date().toISOString() : undefined,
         remark: remark.trim() || undefined,
         subCategory: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'

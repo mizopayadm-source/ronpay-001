@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, saveCampaign } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, isTransactionForCampaign, saveCampaign } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
 import { getUserRole } from '../utils/rbac';
 import { 
@@ -299,7 +299,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Print Styles & Configuration State
-  const [printOrgScope, setPrintOrgScope] = useState<string>('cmp-kumtluang-1');
+  const [printOrgScope, setPrintOrgScope] = useState<string>(() => initialCampaignId || 'cmp-kumtluang-1');
   const [printStyle, setPrintStyle] = useState<'style1_master' | 'style1_group_master' | 'style1_general_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
   const [printScopeType, setPrintScopeType] = useState<'member' | 'group' | 'general'>('member');
   const [printMemberId, setPrintMemberId] = useState<string>('');
@@ -338,7 +338,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       prevIsOpenRef.current = true;
       
-      let activeId = selectedCampaignId;
+      let activeId = (initialCampaignId && (allowedCampaignIds.has(initialCampaignId) || isPrivilegedUser))
+        ? initialCampaignId
+        : selectedCampaignId;
+
       if (!activeId || (activeId !== 'all' && !allowedCampaignIds.has(activeId))) {
         if (allowedCampaigns.length > 0) {
           if (initialCampaignId && allowedCampaignIds.has(initialCampaignId)) {
@@ -357,6 +360,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         setQuickEntryCampaignId(activeId);
         setRegTargetCampaignId(activeId);
         setPrintOrgScope(activeId);
+      } else if (initialCampaignId && initialCampaignId !== printOrgScope) {
+        setPrintOrgScope(initialCampaignId);
+        setQuickEntryCampaignId(initialCampaignId);
+        setRegTargetCampaignId(initialCampaignId);
       }
 
       if (activeId) {
@@ -992,6 +999,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
     return transactions.filter(t => 
       t.campaignId === printOrgScope || 
+      (printTargetCampaign && isTransactionForCampaign(t, printTargetCampaign)) ||
       (printTargetCampaign?.title && t.campaignTitle === printTargetCampaign.title) ||
       (printTargetCampaign?.orgCode && (t.memberId?.startsWith(`${printTargetCampaign.orgCode}-`) || t.txHash?.includes(printTargetCampaign.orgCode)))
     );

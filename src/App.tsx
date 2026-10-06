@@ -1175,8 +1175,13 @@ export default function App() {
       localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
     } catch {}
     reloadLocalData();
-    setCurrentScreen('cash_pending');
-    updateBrowserUrl('cash_pending', null, null, { replace: true, txn: transaction });
+    if (transaction.status === 'completed') {
+      setCurrentScreen('success');
+      updateBrowserUrl('success', selectedCampaign, selectedCategory, { replace: true, txn: transaction });
+    } else {
+      setCurrentScreen('cash_pending');
+      updateBrowserUrl('cash_pending', null, null, { replace: true, txn: transaction });
+    }
   };
 
   const handleGenerateQR = (campaign: Campaign) => {

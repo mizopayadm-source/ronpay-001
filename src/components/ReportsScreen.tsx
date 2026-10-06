@@ -68,7 +68,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { getMembers, isCampaignCreator, isConfirmedTransaction, deleteMultipleTransactions } from '../utils/storage';
+import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { 
   formatDateDDMMYYYY, 
@@ -255,6 +255,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     return creatorCampaigns.filter(c => selectedFilter === 'all' || c.category === selectedFilter);
   }, [isCreator, creatorCampaigns, selectedFilter]);
 
+  // Selected campaign object
+  const selectedCampaignObj = useMemo(() => {
+    return creatorCampaigns.find(c => c.id === selectedCampaignId);
+  }, [creatorCampaigns, selectedCampaignId]);
+
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
     if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
@@ -266,7 +271,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
 
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's authorized campaigns
-      if (!isStaffFullAccess && !creatorCampaignIds.has(t.campaignId)) {
+      const matchesOwnership = isStaffFullAccess || 
+        creatorCampaignIds.has(t.campaignId) || 
+        creatorCampaigns.some(c => isTransactionForCampaign(t, c));
+      if (!matchesOwnership) {
         return false;
       }
 
@@ -278,7 +286,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       // 3. Specific Campaign sub-filter
       if (selectedCampaignId !== 'all') {
-        if (t.campaignId !== selectedCampaignId) return false;
+        const matchesSpecific = t.campaignId === selectedCampaignId || 
+          (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
+        if (!matchesSpecific) return false;
       }
 
       // 4. Date range filter (checks both effective period date and raw timestamp)
@@ -307,7 +317,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {
@@ -428,7 +438,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const grandTotal = filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Selected campaign display name
-  const selectedCampaignObj = creatorCampaigns.find(c => c.id === selectedCampaignId);
   const currentCampaignDisplayName = selectedCampaignObj 
     ? selectedCampaignObj.title 
     : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);

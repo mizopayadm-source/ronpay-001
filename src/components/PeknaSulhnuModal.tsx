@@ -31,6 +31,7 @@ import { printHtmlSafely } from '../utils/export';
 import { 
   isCampaignCreator, 
   getStoredCampaigns, 
+  getStoredTransactions,
   saveTransaction, 
   deleteStoredTransaction, 
   deleteMultipleTransactions,
@@ -377,13 +378,20 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       ...tx,
       status: 'completed',
       txHash: utr,
-      utr: utr
+      utr: utr,
+      verifiedBy: creatorProfile?.name || 'Treasurer / Admin',
+      verifiedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     saveTransaction(updatedTx);
     if (onRefreshData) onRefreshData();
+    try {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: getStoredTransactions() }));
+      window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: getStoredTransactions() }));
+    } catch {}
     setStatusDialogTx(null);
     setStatusDialogResult(null);
-    setActionToast(`✅ ${tx.id} hi Verified-ah dah a ni ta.`);
+    setActionToast(`✅ ${tx.id} (${tx.donorName || 'Cash'}) hi Verified-ah dah a ni ta.`);
     setTimeout(() => setActionToast(null), 3500);
   };
 
@@ -1292,21 +1300,38 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <button
-                          id={`sulhnu-check-btn-${tx.id}`}
-                          type="button"
-                          disabled={checkingTxId === tx.id}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleCheckPendingStatus(tx);
-                          }}
-                          className="bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 text-[10px] font-extrabold py-1 px-2 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
-                          title="Check status from PhonePe / Bank"
-                        >
-                          <RefreshCw className={`w-3 h-3 text-amber-800 ${checkingTxId === tx.id ? 'animate-spin' : ''}`} />
-                          <span>{checkingTxId === tx.id ? 'Enfiah mek...' : 'Enfiah / Check'}</span>
-                        </button>
+                        {isCash ? (
+                          <button
+                            id={`sulhnu-approve-cash-btn-${tx.id}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleManualConfirmPaid(tx);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10.5px] py-1 px-2.5 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs active:scale-95"
+                            title="Cash pawisa dawng fel a ni tih pawm rawh"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                            <span>Pawm / Approve</span>
+                          </button>
+                        ) : (
+                          <button
+                            id={`sulhnu-check-btn-${tx.id}`}
+                            type="button"
+                            disabled={checkingTxId === tx.id}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleCheckPendingStatus(tx);
+                            }}
+                            className="bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 text-[10px] font-extrabold py-1 px-2 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+                            title="Check status from PhonePe / Bank"
+                          >
+                            <RefreshCw className={`w-3 h-3 text-amber-800 ${checkingTxId === tx.id ? 'animate-spin' : ''}`} />
+                            <span>{checkingTxId === tx.id ? 'Enfiah mek...' : 'Enfiah / Check'}</span>
+                          </button>
+                        )}
 
                         <button
                           id={`sulhnu-delete-btn-${tx.id}`}

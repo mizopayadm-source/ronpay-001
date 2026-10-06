@@ -6,21 +6,15 @@ export const CLOUD_BACKEND_URL = 'https://ronpay.app';
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  const hostname = (window.location.hostname || '').toLowerCase();
+  const protocol = (window.location.protocol || '').toLowerCase();
   
-  // 1. If running on ronpay.app, www.ronpay.app, Cloud Run (*.run.app), localhost, or 127.0.0.1:
-  // Always use relative path so API requests hit the exact same server hosting the app!
-  if (
-    hostname.includes('ronpay.app') ||
-    hostname.includes('run.app') ||
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === ''
-  ) {
+  // 1. Any web browser, iframe preview, mobile web browser, or PWA running over http or https:
+  // ALWAYS use relative path so API requests hit the exact server hosting the app!
+  if (protocol === 'http:' || protocol === 'https:') {
     return '';
   }
   
-  // 2. On standalone native hybrid wrappers (e.g. capacitor://, file://, or external sandboxes),
+  // 2. On standalone native hybrid wrappers (e.g. capacitor://, ionic://, file://):
   // route to the production backend server https://ronpay.app
   return CLOUD_BACKEND_URL;
 }

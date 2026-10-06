@@ -4278,6 +4278,15 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
+  // Ensure BMP Shillong has both 'BMP Fund' and 'Inkhawm Thawhlawm' subcategories
+  const bmpCamp = (db.campaigns || []).find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp')));
+  if (bmpCamp) {
+    if (!Array.isArray(bmpCamp.subCategories) || !bmpCamp.subCategories.includes('Inkhawm Thawhlawm')) {
+      bmpCamp.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
+      changed = true;
+    }
+  }
+
   // Ensure announcement banner is disabled by default unless explicitly turned on
   if (db.announcement && db.announcement.isActive) {
     db.announcement.isActive = false;

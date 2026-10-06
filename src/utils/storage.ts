@@ -904,7 +904,7 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
   // Authoritative alias matching
   if (cId === 'cmp-kumtluang-1' && (tTitle.includes('ebenezer') || tCampId === 'cmp-kumtluang-1')) return true;
   if (cId === 'cmp-1787829303143' && (tTitle.includes('vengthar') || tCampId === 'cmp-kumtluang-ymavt')) return true;
-  if (cId === 'cmp-1788107291420' && (tTitle.includes('bmp') || tTitle.includes('shillong') || (t.memberId && String(t.memberId).startsWith('BMPSHL')))) return true;
+  if ((cId === 'cmp-1788107291420' || cTitle.includes('bmp') || cTitle.includes('shillong')) && (tCampId === 'cmp-1788107291420' || tTitle.includes('bmp') || tTitle.includes('shillong') || (t.memberId && String(t.memberId).startsWith('BMPSHL')))) return true;
   if (cId === 'cmp-1788526889943' && (tTitle.includes('lalrinpuii') || tCampId === 'cmp-1787545326556')) return true;
   return false;
 };
@@ -1725,6 +1725,17 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
     }
     if (campCreatedBy && campCreatedBy === creatorRawPhone) {
       return true;
+    }
+    const campTransferredPhone = ((camp as any).transferredTo || '').trim().replace(/\D/g, '').slice(-10);
+    if (campTransferredPhone && campTransferredPhone.length >= 8 && campTransferredPhone === creatorPhone) {
+      return true;
+    }
+    if (Array.isArray((camp as any).authorizedOfficers)) {
+      const isAuthOfficer = (camp as any).authorizedOfficers.some((o: any) => {
+        const oPhone = (o?.phone || '').trim().replace(/\D/g, '').slice(-10);
+        return oPhone && oPhone.length >= 8 && oPhone === creatorPhone;
+      });
+      if (isAuthOfficer) return true;
     }
   }
 
