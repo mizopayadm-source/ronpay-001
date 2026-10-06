@@ -341,61 +341,48 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          // Canonical & General Inkhawm Thawhlawm protection
-          const PROTECTED_CANONICAL_TX_IDS = new Set([
-            'rpay_txn_1790185923025_689',
-            'rpay-cash-773692',
-            'rpay-cash-800-web',
-            'rpay-cash-800-app',
-            'rpay-cash-168598',
-            'rpay-cash-742024',
-            'rpay-cash-531295',
-            'rpay-cash-536139',
-            'rpay-cash-553089',
-            'rpay-cash-553088',
-            'rpay-cash-391500',
-            'rpay-cash-426904',
-            'rpay-cash-738522',
-            'rpay_txn_1790236637582_542',
-            'rpay_txn_1790749698765_269'
-          ]);
-
-          for (const pid of PROTECTED_CANONICAL_TX_IDS) {
-            deletedIds.delete(pid);
-          }
-
           const currentTxs = getStoredTransactions();
           const txMap = new Map<string, any>();
-          const nowMs = Date.now();
 
-          // 1. Seed canonical baseline transactions so official records are NEVER purged
+          // 1. First add current local transactions so local user edits are preserved
+          for (const ct of currentTxs) {
+            if (ct && ct.id) {
+              const k = String(ct.id).toLowerCase().trim();
+              if (!deletedIds.has(k)) {
+                txMap.set(k, ct);
+              }
+            }
+          }
+
+          // 2. Add baseline initial transactions for any non-deleted entries not yet stored
           for (const it of INITIAL_TRANSACTIONS) {
             if (it && it.id) {
               const k = String(it.id).toLowerCase().trim();
-              if (!deletedIds.has(k)) {
+              if (!deletedIds.has(k) && !txMap.has(k)) {
                 txMap.set(k, it);
               }
             }
           }
 
-          // 2. Overlay authoritative server transactions (server state takes precedence over local tombstones)
+          // 3. Overlay authoritative server transactions for items not marked deleted
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              const isProtected = PROTECTED_CANONICAL_TX_IDS.has(k) || 
-                t.donorType === 'general' || 
-                (t.donorName && String(t.donorName).toLowerCase().includes('inkhawm')) ||
-                (t.subCategory && String(t.subCategory).toLowerCase().includes('inkhawm'));
-
-              if (isProtected) {
-                deletedIds.delete(k);
+              if (deletedIds.has(k)) {
+                continue; // Do NOT resurrect deleted transactions!
               }
 
-              // If the authoritative server sent this transaction, it is NOT deleted!
-              if (!deletedIds.has(k) || isProtected) {
-                deletedIds.delete(k);
-                const existing = txMap.get(k);
-                txMap.set(k, existing ? { ...existing, ...t } : t);
+              const existing = txMap.get(k);
+              if (!existing) {
+                txMap.set(k, t);
+              } else {
+                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                const serverTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
+                if (serverTime >= existingTime) {
+                  txMap.set(k, { ...existing, ...t });
+                } else {
+                  txMap.set(k, { ...t, ...existing });
+                }
               }
             }
           }

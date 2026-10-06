@@ -20,6 +20,7 @@ import {
 import { Transaction, Campaign, MemberRecord, BawmCategory } from '../types';
 import { ALL_MONTH_NAMES_FULL, ALL_MONTH_NAMES_SHORT, getTransactionMonthInfo, getMonthIndex } from '../utils/monthHelper';
 import { formatDateDDMMYYYY } from '../utils/date';
+import { getMembers, saveMembers } from '../utils/storage';
 
 interface EditablePaymentEntry {
   tempId: string;
@@ -38,6 +39,7 @@ interface EditablePaymentEntry {
   txHash?: string;
   campaignId: string;
   campaignTitle: string;
+  createdAt?: string;
 }
 
 interface DonorPaymentsEditorModalProps {
@@ -163,6 +165,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         campaignTitle: t.campaignTitle || currentCampaign?.title || 'Collection',
         subCategory: t.subCategory,
         donorType: t.donorType,
+        createdAt: t.createdAt || t.timestamp,
       };
     });
   });
@@ -200,9 +203,15 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         // Update existing entry
         setEntries(prev => prev.map(e => {
           if (e.tempId === existing.tempId) {
+            let updatedBreakdown = e.subCategoryBreakdown ? { ...e.subCategoryBreakdown } : {};
+            if (Object.keys(updatedBreakdown).length <= 1) {
+              const catKey = Object.keys(updatedBreakdown)[0] || e.subCategory || 'General';
+              updatedBreakdown = { [catKey]: numAmt };
+            }
             return {
               ...e,
               amount: numAmt,
+              subCategoryBreakdown: updatedBreakdown,
               periodMonth: monthFullName,
               periodYear: activeYear,
               periodLabel: `${monthFullName} ${activeYear}`
@@ -215,6 +224,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       // Create new entry for this month
       const monthIdx = ALL_MONTH_NAMES_FULL.indexOf(monthFullName as any);
       const mTwoDigit = String(monthIdx + 1).padStart(2, '0');
+      const primaryCat = currentMemberId ? (subCategoriesList[0] || 'BMP Fund') : 'General';
       const newEntry: EditablePaymentEntry = {
         tempId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         amount: numAmt,
@@ -224,7 +234,8 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         periodType: 'monthly',
         periodLabel: `${monthFullName} ${activeYear}`,
         paymentMethod: 'online',
-        subCategoryBreakdown: {},
+        subCategoryBreakdown: { [primaryCat]: numAmt },
+        subCategory: primaryCat,
         remark: '',
         campaignId: activeCampaignId || 'camp-default',
         campaignTitle: currentCampaign?.title || 'Collection',
@@ -247,6 +258,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 
     const monthIdx = ALL_MONTH_NAMES_FULL.indexOf(nextMonth as any);
     const mTwoDigit = String(monthIdx + 1).padStart(2, '0');
+    const primaryCat = currentMemberId ? (subCategoriesList[0] || 'BMP Fund') : 'General';
 
     const newEntry: EditablePaymentEntry = {
       tempId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
@@ -257,7 +269,8 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       periodType: 'monthly',
       periodLabel: `${nextMonth} ${activeYear}`,
       paymentMethod: 'online',
-      subCategoryBreakdown: {},
+      subCategoryBreakdown: { [primaryCat]: 500 },
+      subCategory: primaryCat,
       remark: '',
       campaignId: activeCampaignId || 'camp-default',
       campaignTitle: currentCampaign?.title || 'Collection',
@@ -269,8 +282,9 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
   // Delete a single transaction entry
   const handleDeleteEntry = (tempId: string) => {
     const target = entries.find(e => e.tempId === tempId);
-    if (target?.originalId) {
-      setDeletedIds(prev => Array.from(new Set([...prev, target.originalId!])));
+    const targetId = target?.originalId || (!tempId.startsWith('new-') ? tempId : undefined);
+    if (targetId) {
+      setDeletedIds(prev => Array.from(new Set([...prev, targetId])));
     }
     setEntries(prev => prev.filter(e => e.tempId !== tempId));
     setStatusMessage(`Payment #${target?.periodLabel || 'record'} paih a ni ta. Khawngaihin hnuai bera "Save Siamthatna Zawng Zawng" hmet rawh le.`);
@@ -281,6 +295,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
     setEntries(prev => prev.map(e => {
       if (e.tempId !== tempId) return e;
       const updated = { ...e, [field]: val };
+      if (field === 'amount') {
+        const numAmt = parseFloat(val) || 0;
+        updated.amount = numAmt;
+        if (updated.subCategoryBreakdown && Object.keys(updated.subCategoryBreakdown).length <= 1) {
+          const key = Object.keys(updated.subCategoryBreakdown)[0] || updated.subCategory || 'General';
+          updated.subCategoryBreakdown = { [key]: numAmt };
+        }
+      }
       if (field === 'periodMonth' || field === 'periodYear') {
         updated.periodLabel = `${updated.periodMonth} ${updated.periodYear}`;
       }
@@ -306,7 +328,12 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 
   // Save all changes
   const handleSaveAll = () => {
-    if (!currentDonorName.trim()) {
+    const trimmedDonorName = currentDonorName.trim();
+    const trimmedMemberId = currentMemberId.trim();
+    const trimmedPhone = currentPhone.trim();
+    const trimmedSection = currentSection.trim();
+
+    if (!trimmedDonorName) {
       setStatusMessage('Khawngaihin hming (Donor Name) dah ngei a ngai!');
       return;
     }
@@ -316,9 +343,40 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       return;
     }
 
+    // 1. If this donor is a registered member, propagate profile updates to members list immediately
+    if (trimmedMemberId || memberRecord) {
+      try {
+        const allMembers = getMembers();
+        const targetMid = (trimmedMemberId || memberRecord?.id || '').toLowerCase().trim();
+        let memberUpdated = false;
+        const updatedMembers = allMembers.map(m => {
+          if (m && m.id && m.id.toLowerCase().trim() === targetMid) {
+            memberUpdated = true;
+            return {
+              ...m,
+              name: trimmedDonorName || m.name,
+              fullPhone: trimmedPhone || m.fullPhone,
+              phoneLast4: trimmedPhone ? trimmedPhone.slice(-4) : m.phoneLast4,
+              section: trimmedSection || m.section,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return m;
+        });
+
+        if (memberUpdated) {
+          saveMembers(updatedMembers);
+        }
+      } catch (err) {
+        console.warn('Could not update member record in storage:', err);
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+
     // Convert entries to real Transaction objects
     const finalTransactions: Transaction[] = entries.map(e => {
-      let isoTimestamp = new Date().toISOString();
+      let isoTimestamp = nowIso;
       if (e.dateStr) {
         try {
           const d = new Date(e.dateStr);
@@ -338,26 +396,47 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         if (nonZero) primarySubCat = nonZero[0];
       }
       if (!primarySubCat) {
-        primarySubCat = (e.donorType === 'general' || !currentMemberId) ? 'General' : (subCategoriesList[0] || 'BMP Fund');
+        primarySubCat = (e.donorType === 'general' || !trimmedMemberId) ? 'General' : (subCategoriesList[0] || 'BMP Fund');
       }
 
+      const numAmt = Number(e.amount) || 0;
       let effectiveBreakdown: { [category: string]: number } | undefined = undefined;
       if (e.subCategoryBreakdown && Object.keys(e.subCategoryBreakdown).length > 0) {
-        effectiveBreakdown = { ...e.subCategoryBreakdown };
+        const bKeys = Object.keys(e.subCategoryBreakdown);
+        if (bKeys.length === 1) {
+          effectiveBreakdown = { [bKeys[0]]: numAmt };
+        } else {
+          const currentSum = Object.values(e.subCategoryBreakdown).reduce((s, v) => s + (Number(v) || 0), 0);
+          if (currentSum === numAmt) {
+            effectiveBreakdown = { ...e.subCategoryBreakdown };
+          } else if (currentSum === 0) {
+            effectiveBreakdown = { [primarySubCat]: numAmt };
+          } else {
+            const diff = numAmt - currentSum;
+            effectiveBreakdown = { ...e.subCategoryBreakdown };
+            const adjustKey = effectiveBreakdown[primarySubCat] !== undefined ? primarySubCat : bKeys[0];
+            effectiveBreakdown[adjustKey] = Math.max(0, (Number(effectiveBreakdown[adjustKey]) || 0) + diff);
+          }
+        }
       } else {
-        effectiveBreakdown = { [primarySubCat]: Number(e.amount) || 0 };
+        effectiveBreakdown = { [primarySubCat]: numAmt };
       }
 
       return {
         id: e.originalId || `TXN-${Math.floor(100000 + Math.random() * 900000)}`,
-        donorName: currentDonorName.trim(),
-        donorPhone: currentPhone.trim() || undefined,
-        donorVeng: currentSection.trim() || undefined,
-        memberId: currentMemberId.trim() || undefined,
-        donorType: e.donorType || (currentMemberId ? 'member' : 'general'),
-        amount: Number(e.amount) || 0,
+        donorName: trimmedDonorName,
+        donorPhone: trimmedPhone || undefined,
+        donorVeng: trimmedSection || undefined,
+        memberId: trimmedMemberId || undefined,
+        donorType: e.donorType || (trimmedMemberId ? 'member' : 'general'),
+        amount: numAmt,
+        totalAmount: numAmt,
         paymentMethod: e.paymentMethod,
         timestamp: isoTimestamp,
+        date: e.dateStr || (isoTimestamp ? isoTimestamp.slice(0, 10) : nowIso.slice(0, 10)),
+        createdAt: e.createdAt || isoTimestamp,
+        updatedAt: nowIso,
+        isSynced: false,
         periodType: e.periodType,
         periodMonth: e.periodMonth,
         periodYear: e.periodYear,

@@ -917,21 +917,7 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
-export const PROTECTED_CANONICAL_TX_IDS = new Set([
-  'rpay_txn_1790185923025_689',
-  'rpay-cash-773692',
-  'rpay-cash-168598',
-  'rpay-cash-742024',
-  'rpay-cash-531295',
-  'rpay-cash-536139',
-  'rpay-cash-553089',
-  'rpay-cash-553088',
-  'rpay-cash-391500',
-  'rpay-cash-426904',
-  'rpay-cash-738522',
-  'rpay_txn_1790236637582_542',
-  'rpay_txn_1790749698765_269'
-]);
+export const PROTECTED_CANONICAL_TX_IDS = new Set<string>();
 
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay-cash-800-web',
@@ -955,7 +941,7 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
 export const getDeletedTransactionIds = (): Set<string> => {
   const result = new Set<string>();
   for (const id of PERMANENTLY_PURGED_TX_IDS) {
-    if (id && !PROTECTED_CANONICAL_TX_IDS.has(id.toLowerCase().trim())) {
+    if (id) {
       result.add(id.toLowerCase().trim());
     }
   }
@@ -966,10 +952,7 @@ export const getDeletedTransactionIds = (): Set<string> => {
       if (Array.isArray(arr)) {
         arr.forEach(id => {
           if (!id) return;
-          const clean = String(id).toLowerCase().trim();
-          if (!PROTECTED_CANONICAL_TX_IDS.has(clean)) {
-            result.add(clean);
-          }
+          result.add(String(id).toLowerCase().trim());
         });
       }
     }
@@ -982,7 +965,6 @@ export const markTransactionAsDeleted = (txId: string): void => {
   try {
     const clean = String(txId).toLowerCase().trim();
     const set = getDeletedTransactionIds();
-    if (set.has(clean)) return; // Already recorded as deleted, do not re-process
     set.add(clean);
     const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
@@ -1059,21 +1041,22 @@ export const getStoredTransactions = (): Transaction[] => {
           
           return false;
         }).map(t => {
-          // Sync canonical status and attributes for existing canonical transactions
+          // Backfill missing fields from canonical transactions without overwriting user edits
           const cleanId = String(t.id).toLowerCase().trim();
           const canonical = canonicalTxMap.get(cleanId);
           if (canonical) {
-            if (t.amount !== canonical.amount || t.status !== canonical.status) {
+            if (t.amount === undefined || isNaN(Number(t.amount))) {
+              t.amount = canonical.amount;
               hasAttrChange = true;
             }
-            return {
-              ...t,
-              status: canonical.status,
-              amount: canonical.amount,
-              totalAmount: canonical.totalAmount,
-              platformFee: canonical.platformFee,
-              campaignNetReceived: canonical.campaignNetReceived,
-            };
+            if (!t.status) {
+              t.status = canonical.status;
+              hasAttrChange = true;
+            }
+            if (t.totalAmount === undefined || isNaN(Number(t.totalAmount))) {
+              t.totalAmount = t.amount;
+              hasAttrChange = true;
+            }
           }
 
           // Auto-heal future timestamps if double IST offset occurred (e.g. IST formatted as UTC)
@@ -1099,8 +1082,8 @@ export const getStoredTransactions = (): Transaction[] => {
             hasAttrChange = true;
           }
 
-          // Enforce canonical name for BMPSHL-1739 (Upa Thawngphena Tuallawt)
-          if (String(t.memberId).toLowerCase().trim() === 'bmpshl-1739' && t.donorName !== 'Upa Thawngphena Tuallawt') {
+          // Enforce canonical name for BMPSHL-1739 if missing
+          if (String(t.memberId).toLowerCase().trim() === 'bmpshl-1739' && !t.donorName) {
             t.donorName = 'Upa Thawngphena Tuallawt';
             hasAttrChange = true;
           }
@@ -1207,9 +1190,13 @@ export const saveStoredTransactions = (transactions: Transaction[], skipServerPu
                 if (t && t.id) localMap.set(String(t.id).toLowerCase().trim(), t);
               }
               let hasNewFromOtherWindow = false;
+              const deletedIdsSet = getDeletedTransactionIds();
               for (const st of serverTxs) {
                 if (st && st.id) {
                   const k = String(st.id).toLowerCase().trim();
+                  if (deletedIdsSet.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
+                    continue;
+                  }
                   if (!localMap.has(k)) {
                     localMap.set(k, st);
                     hasNewFromOtherWindow = true;
@@ -3026,8 +3013,13 @@ export const saveTransaction = (tx: Transaction): void => {
       }
     }
   }
+  const cleanTxId = String(tx.id).toLowerCase().trim();
+  tx.updatedAt = new Date().toISOString();
+  tx.isSynced = false;
+  tx.totalAmount = Number(tx.amount) || 0;
+  tx.campaignNetReceived = Number(tx.amount) || 0;
   const current = getStoredTransactions();
-  const updated = [tx, ...current.filter(t => t.id !== tx.id)];
+  const updated = [tx, ...current.filter(t => String(t.id).toLowerCase().trim() !== cleanTxId)];
   saveStoredTransactions(updated);
   recordUserPaidTxId(tx.id);
   if (typeof window !== 'undefined') {
@@ -3328,10 +3320,14 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
     if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
   });
   
+  const nowStamp = new Date().toISOString();
   txs.forEach(tx => {
     if (!tx || !tx.id) return;
-    if (!tx.createdAt) tx.createdAt = new Date().toISOString();
-    tx.updatedAt = new Date().toISOString();
+    if (!tx.createdAt) tx.createdAt = nowStamp;
+    tx.updatedAt = nowStamp;
+    tx.isSynced = false;
+    tx.totalAmount = Number(tx.amount) || 0;
+    tx.campaignNetReceived = Number(tx.amount) || 0;
     
     const isBill = Boolean(tx.billServiceType || tx.billConsumerNumber || tx.billOperator) ||
       String(tx.id || '').startsWith('BILL-') || 

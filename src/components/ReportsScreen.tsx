@@ -91,6 +91,7 @@ interface ReportsScreenProps {
   onUpdateCampaign?: (campaign: Campaign) => void;
   onUpdateTransaction?: (transaction: Transaction) => void;
   onDeleteTransaction?: (transactionId: string) => void;
+  onBatchUpdateTransactions?: (updatedTransactions: Transaction[], deletedTransactionIds: string[]) => void;
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses') => void;
   onRefreshCloud?: () => Promise<void> | void;
@@ -144,6 +145,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onUpdateCampaign,
   onUpdateTransaction,
   onDeleteTransaction,
+  onBatchUpdateTransactions,
   onOpenImagePreview,
   onOpenMemberRoll,
   onRefreshCloud,
@@ -952,24 +954,32 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     if (!window.confirm(confirmMsg)) return;
 
     const idsToDelete = donorTxs.map(t => t.id).filter(Boolean);
-    deleteMultipleTransactions(idsToDelete);
-    if (onDeleteTransaction) {
-      idsToDelete.forEach(id => onDeleteTransaction(id));
+    if (onBatchUpdateTransactions) {
+      onBatchUpdateTransactions([], idsToDelete);
+    } else {
+      deleteMultipleTransactions(idsToDelete);
+      if (onDeleteTransaction) {
+        idsToDelete.forEach(id => onDeleteTransaction(id));
+      }
     }
     showExportSuccessToast(`${cleanTarget} record (${idsToDelete.length} txns) paih fel a ni e!`, idsToDelete.length);
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    if (deletedIds && deletedIds.length > 0) {
-      deleteMultipleTransactions(deletedIds);
-      if (onDeleteTransaction) {
-        deletedIds.forEach(id => onDeleteTransaction(id));
+    if (onBatchUpdateTransactions) {
+      onBatchUpdateTransactions(updatedTxs, deletedIds);
+    } else {
+      if (deletedIds && deletedIds.length > 0) {
+        deleteMultipleTransactions(deletedIds);
+        if (onDeleteTransaction) {
+          deletedIds.forEach(id => onDeleteTransaction(id));
+        }
       }
-    }
-    if (updatedTxs.length > 0) {
-      saveMultipleTransactions(updatedTxs);
-      if (onUpdateTransaction) {
-        updatedTxs.forEach(tx => onUpdateTransaction(tx));
+      if (updatedTxs.length > 0) {
+        saveMultipleTransactions(updatedTxs);
+        if (onUpdateTransaction) {
+          updatedTxs.forEach(tx => onUpdateTransaction(tx));
+        }
       }
     }
     setEditingDonorGroup(null);
@@ -2588,9 +2598,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           onDeleteAll={() => {
             const allIds = editingDonorGroup.donorTransactions.map(t => t.id).filter(Boolean);
             if (allIds.length > 0) {
-              deleteMultipleTransactions(allIds);
-              if (onDeleteTransaction) {
-                allIds.forEach(id => onDeleteTransaction(id));
+              if (onBatchUpdateTransactions) {
+                onBatchUpdateTransactions([], allIds);
+              } else {
+                deleteMultipleTransactions(allIds);
+                if (onDeleteTransaction) {
+                  allIds.forEach(id => onDeleteTransaction(id));
+                }
               }
               showExportSuccessToast(`He donor records ${allIds.length} zawng zawng paih fai a ni ta.`, allIds.length);
             }
@@ -2756,6 +2770,9 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       paymentMethod: paymentMethod,
       status: status,
       timestamp: updatedTimestamp,
+      date: paymentDate || (updatedTimestamp ? updatedTimestamp.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+      updatedAt: new Date().toISOString(),
+      isSynced: false,
       periodLabel: periodLabel.trim() || undefined,
       remark: remark.trim() || undefined,
       subCategoryBreakdown: isKumtluang ? breakdown : undefined,

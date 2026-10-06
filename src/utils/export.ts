@@ -473,9 +473,12 @@ export const buildKumtluangMatrix = (
               }
             }
             if (matchedOfficial) {
-              categorySet.add(matchedOfficial);
-              donorCats[matchedOfficial] = (donorCats[matchedOfficial] || 0) + num;
-              allocatedAmt += num;
+              const actualAdd = t.amount > 0 ? Math.min(num, Math.max(0, t.amount - allocatedAmt)) : num;
+              if (actualAdd > 0) {
+                categorySet.add(matchedOfficial);
+                donorCats[matchedOfficial] = (donorCats[matchedOfficial] || 0) + actualAdd;
+                allocatedAmt += actualAdd;
+              }
             }
           }
         });

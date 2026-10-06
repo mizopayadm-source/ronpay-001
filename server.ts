@@ -4754,30 +4754,6 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
     ]);
 
-    // Canonical dataset protection
-    const PROTECTED_CANONICAL_TX_IDS = new Set([
-      'rpay_txn_1790185923025_689',
-      'rpay-cash-773692',
-      'rpay-cash-168598',
-      'rpay-cash-742024',
-      'rpay-cash-531295',
-      'rpay-cash-536139',
-      'rpay-cash-553089',
-      'rpay-cash-553088',
-      'rpay-cash-391500',
-      'rpay-cash-426904',
-      'rpay-cash-738522',
-      'rpay_txn_1790236637582_542',
-      'rpay_txn_1790749698765_269'
-    ]);
-
-    const isProtectedTx = (t: any) => {
-      if (!t || !t.id) return false;
-      const idL = String(t.id).toLowerCase().trim();
-      if (PROTECTED_CANONICAL_TX_IDS.has(idL)) return true;
-      return false;
-    };
-
     if (Array.isArray(deletedExpenseIds) && deletedExpenseIds.length > 0) {
       const delSet = new Set(deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
       db.expenses = (db.expenses || []).filter((e: any) => !delSet.has(String(e.id).toLowerCase().trim()));
@@ -4790,13 +4766,12 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
       const delSet = new Set(deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim()));
       db.transactions = (db.transactions || []).filter((t: any) => {
-        if (isProtectedTx(t)) return true;
         const idLower = String(t.id).toLowerCase().trim();
         return !delSet.has(idLower);
       });
       db.deletedTransactionIds = Array.from(new Set([
-        ...(db.deletedTransactionIds || []).filter((id: string) => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim())),
-        ...Array.from(delSet).filter(id => !PROTECTED_CANONICAL_TX_IDS.has(id))
+        ...(db.deletedTransactionIds || []),
+        ...Array.from(delSet)
       ]));
     }
 
@@ -4861,24 +4836,9 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       });
     }
     if (Array.isArray(transactions)) {
-      // If incoming transactions include genuine records that were previously in deletedTransactionIds, resurrect them
-      const resurrectedIds = new Set<string>();
-      for (const t of transactions) {
-        if (t && t.id) {
-          const cleanId = String(t.id).toLowerCase().trim();
-          if (isProtectedTx(t) || serverDelTxSet.has(cleanId)) {
-            serverDelTxSet.delete(cleanId);
-            resurrectedIds.add(cleanId);
-          }
-        }
-      }
-      if (resurrectedIds.size > 0) {
-        db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => !resurrectedIds.has(String(id).toLowerCase().trim()));
-      }
-
       const cleanTx = transactions.filter((t: any) => {
         if (!t || !t.id) return false;
-        if (serverDelTxSet.has(String(t.id).toLowerCase().trim()) && !isProtectedTx(t)) return false;
+        if (serverDelTxSet.has(String(t.id).toLowerCase().trim())) return false;
         const amt = Number(t.amount);
         if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
         return true;
@@ -5251,6 +5211,9 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid transaction payload' });
     }
     const db = getDatabase();
+    tx.updatedAt = new Date().toISOString();
+    tx.totalAmount = Number(tx.amount) || 0;
+    tx.campaignNetReceived = Number(tx.amount) || 0;
     // If this transaction was previously deleted, resurrect or clean it from tombstone
     const cleanId = String(tx.id).toLowerCase().trim();
     db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
@@ -5298,6 +5261,9 @@ app.post('/api/transactions/batch', (req: Request, res: Response) => {
       db.deletedTransactionIds = (db.deletedTransactionIds || []).filter((id: string) => !idSet.has(id));
 
       validTxs.forEach((tx: any) => {
+        tx.updatedAt = tx.updatedAt || new Date().toISOString();
+        tx.totalAmount = Number(tx.amount) || 0;
+        tx.campaignNetReceived = Number(tx.amount) || 0;
         const titleL = String(tx.campaignTitle || '').toLowerCase();
         const cleanTitle = titleL.replace(/,+$/, '').trim();
         const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && String(tx.memberId).startsWith('BMPSHL'));

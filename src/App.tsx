@@ -36,7 +36,9 @@ import {
   getMembers,
   saveMembers,
   saveTransaction,
+  saveMultipleTransactions,
   deleteStoredTransaction,
+  deleteMultipleTransactions,
   recordUserPaidTxId,
   recordAuditLog,
   restoreFullDatabaseBackup,
@@ -1273,6 +1275,16 @@ export default function App() {
     setTransactions(getStoredTransactions());
   };
 
+  const handleBatchUpdateTransactions = (updatedTxs: Transaction[], deletedIds: string[]) => {
+    if (deletedIds && deletedIds.length > 0) {
+      deleteMultipleTransactions(deletedIds);
+    }
+    if (updatedTxs && updatedTxs.length > 0) {
+      saveMultipleTransactions(updatedTxs);
+    }
+    setTransactions(getStoredTransactions());
+  };
+
   const handleUpdateCreator = (creator: CreatorProfile) => {
     // 1. Update creators list
     const currentList = getStoredCreatorsList();
@@ -1703,6 +1715,7 @@ export default function App() {
               onUpdateCampaign={handleUpdateCampaign}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
+              onBatchUpdateTransactions={handleBatchUpdateTransactions}
               onOpenImagePreview={handlePreviewImage}
               onOpenMemberRoll={handleOpenMemberRoll}
               onRefreshCloud={handleRefreshCloudData}
