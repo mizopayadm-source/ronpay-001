@@ -374,8 +374,8 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
   }
 
   const now = Date.now();
-  // 120-second cache: Do not read Firestore again if fetched recently to conserve quota
-  if (!force && now - lastMembersFetchTime < 120 * 1000 && localMembers.length > 0) {
+  // 5-second cache: Allow fast responsiveness while preventing rapid loop spam
+  if (!force && now - lastMembersFetchTime < 5 * 1000 && localMembers.length > 0) {
     return localMembers;
   }
 
@@ -400,8 +400,8 @@ export async function fetchMembersFromFirestore(campaignId?: string, force: bool
 
       const deletedMemIds = getDeletedMemberIds();
 
-      // 2. Fetch current active members collection (limit 60 for low quota consumption)
-      const memQuery = query(collection(db, 'members'), limit(60));
+      // 2. Fetch current active members collection (up to 400 members for full organization coverage)
+      const memQuery = query(collection(db, 'members'), limit(400));
       const snapshot = await getDocs(memQuery);
       const remoteMembers: MemberRecord[] = [];
       snapshot.forEach(docSnap => {
