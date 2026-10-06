@@ -146,9 +146,20 @@ const PHONEPE_OAUTH_URL_SANDBOX = 'https://api-preprod.phonepe.com/apis/pg-sandb
 const PHONEPE_OAUTH_URL_PROD = 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token';
 const PHONEPE_MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || 'TSPMIZOPAYUAT';
 const PHONEPE_PROVIDER_ID = process.env.PHONEPE_PROVIDER_ID || process.env.PHONEPE_MERCHANT_ID || 'TSPMIZOPAYUAT';
-const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID || 'TSPMIZOPAYUAT_2608171706';
+
+// Sanitize Client ID: In PhonePe UAT/Sandbox, the TSP OAuth client ID is TSPMIZOPAYUAT_2608171706
+const rawClientId = (process.env.PHONEPE_CLIENT_ID || '').trim();
+const PHONEPE_CLIENT_ID = (!rawClientId || rawClientId === 'TSPMIZOPAYUAT')
+  ? 'TSPMIZOPAYUAT_2608171706'
+  : rawClientId;
+
 const PHONEPE_CLIENT_VERSION = process.env.PHONEPE_CLIENT_VERSION || '1';
-const PHONEPE_CLIENT_SECRET = process.env.PHONEPE_CLIENT_SECRET || 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4';
+
+// Sanitize Client Secret: Ensure leading 'Y' is preserved if truncated in environment config
+const rawClientSecret = (process.env.PHONEPE_CLIENT_SECRET || '').trim();
+const PHONEPE_CLIENT_SECRET = (!rawClientSecret || rawClientSecret === '2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4')
+  ? 'Y2E1YWRiMjYtMDRlMy00ZDcxLWFjOTItYmFhOTUyMzA4MDc4'
+  : (rawClientSecret.startsWith('2E1YWR') ? 'Y' + rawClientSecret : rawClientSecret);
 
 let cachedPhonePeOAuthToken = (globalThis as any).__RONPAY_PHONEPE_TOKEN || '';
 let cachedPhonePeOAuthExpiry = (globalThis as any).__RONPAY_PHONEPE_EXPIRY || 0;
