@@ -147,9 +147,6 @@ function getLocalDeletedTxIds(): Set<string> {
   for (const id of PERMANENTLY_PURGED_TX_IDS) {
     if (id) result.add(id.toLowerCase().trim());
   }
-  for (const pId of PROTECTED_CANONICAL_TX_IDS) {
-    result.delete(pId.toLowerCase().trim());
-  }
   return result;
 }
 
@@ -564,20 +561,12 @@ function startLeaderFirestoreListeners(): void {
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
 
-        // 1. Seed canonical baseline transactions so official records are NEVER purged
-        for (const it of INITIAL_TRANSACTIONS) {
+        // 1. Seed with existing local transactions
+        for (const it of localTx) {
           if (it && it.id) {
             const k = String(it.id).toLowerCase().trim();
-            if ((!deletedIds.has(k) || PROTECTED_CANONICAL_TX_IDS.has(k)) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+            if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               txMap.set(k, it);
-            }
-          }
-        }
-        for (const cTx of CANONICAL_BMP_RECEIPTS) {
-          if (cTx && cTx.id) {
-            const k = String(cTx.id).toLowerCase().trim();
-            if (!txMap.has(k)) {
-              txMap.set(k, cTx);
             }
           }
         }
@@ -1640,17 +1629,11 @@ export async function forceRefreshFirestore(): Promise<Transaction[]> {
       const cleanRemote = remoteTxList.filter(t => t && t.id);
       
       const txMap = new Map<string, Transaction>();
-      // 1. Seed canonical baseline
-      for (const it of INITIAL_TRANSACTIONS) {
+      // 1. Seed with local transactions
+      for (const it of localTx) {
         if (it && it.id) {
           const k = String(it.id).toLowerCase().trim();
-          if (!deletedIds.has(k) || PROTECTED_CANONICAL_TX_IDS.has(k)) txMap.set(k, it);
-        }
-      }
-      for (const cTx of CANONICAL_BMP_RECEIPTS) {
-        if (cTx && cTx.id) {
-          const k = String(cTx.id).toLowerCase().trim();
-          if (!txMap.has(k)) txMap.set(k, cTx);
+          if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) txMap.set(k, it);
         }
       }
       // 2. Overlay remote Firestore transactions

@@ -4229,191 +4229,20 @@ function getDefaultDatabase(): DatabaseSchema {
   };
 }
 
-const PROTECTED_CANONICAL_TX_IDS = new Set<string>([
-  'rpay-cash-168598',
-  'rpay-cash-742024',
-  'rpay-cash-531295',
-  'rpay-cash-773692',
-  'rpay-cash-536139',
-  'rpay-cash-553088'
-]);
+const PROTECTED_CANONICAL_TX_IDS = new Set<string>();
 
-const CANONICAL_BMP_RECEIPTS: any[] = [
-  {
-    id: "RPAY-CASH-168598",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 1140,
-    platformFee: 0,
-    totalAmount: 1140,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 1140 },
-    periodType: "monthly",
-    periodMonth: "August",
-    periodYear: "2026",
-    periodLabel: "August 2026 (02/08/2026)",
-    timestamp: "2026-08-02T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.338Z",
-    updatedAt: "2026-10-02T07:24:55.338Z",
-    date: "2026-08-02",
-    txHash: "UTR762224887246",
-    utr: "UTR762224887246"
-  },
-  {
-    id: "RPAY-CASH-742024",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 500,
-    platformFee: 0,
-    totalAmount: 500,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 500 },
-    periodType: "monthly",
-    periodMonth: "July",
-    periodYear: "2026",
-    periodLabel: "July 2026 (19/07/2026)",
-    timestamp: "2026-07-19T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.385Z",
-    updatedAt: "2026-10-02T07:24:55.385Z",
-    date: "2026-07-19",
-    txHash: "UTR958965561392",
-    utr: "UTR958965561392"
-  },
-  {
-    id: "RPAY-CASH-531295",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 1100,
-    platformFee: 0,
-    totalAmount: 1100,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 1100 },
-    periodType: "monthly",
-    periodMonth: "June",
-    periodYear: "2026",
-    periodLabel: "June 2026 (21/06/2026)",
-    timestamp: "2026-06-21T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.426Z",
-    updatedAt: "2026-10-02T07:24:55.426Z",
-    date: "2026-06-21",
-    txHash: "UTR473197412245",
-    utr: "UTR473197412245"
-  },
-  {
-    id: "RPAY-CASH-773692",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 800,
-    platformFee: 0,
-    totalAmount: 800,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 800 },
-    periodType: "monthly",
-    periodMonth: "May",
-    periodYear: "2026",
-    periodLabel: "May 2026 (03/05/2026)",
-    timestamp: "2026-05-03T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.464Z",
-    updatedAt: "2026-10-02T07:24:55.464Z",
-    date: "2026-05-03",
-    txHash: "UTR155090411925",
-    utr: "UTR155090411925"
-  },
-  {
-    id: "RPAY-CASH-536139",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 520,
-    platformFee: 0,
-    totalAmount: 520,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 520 },
-    periodType: "monthly",
-    periodMonth: "April",
-    periodYear: "2026",
-    periodLabel: "April 2026 (19/04/2026)",
-    timestamp: "2026-04-19T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.501Z",
-    updatedAt: "2026-10-02T07:24:55.501Z",
-    date: "2026-04-19",
-    txHash: "UTR266272015786",
-    utr: "UTR266272015786"
-  },
-  {
-    id: "RPAY-CASH-553088",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 750,
-    platformFee: 0,
-    totalAmount: 750,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 750 },
-    periodType: "monthly",
-    periodMonth: "March",
-    periodYear: "2026",
-    periodLabel: "March 2026 (01/03/2026)",
-    timestamp: "2026-03-01T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.596Z",
-    updatedAt: "2026-10-02T07:24:55.596Z",
-    date: "2026-03-01",
-    txHash: "UTR521042190838",
-    utr: "UTR521042190838"
-  }
-];
+const CANONICAL_BMP_RECEIPTS: any[] = [];
 
 const PURGED_SIMULATOR_TXS = new Set([
   'rpay_txn_1789150125034_382',
   'rpay_txn_1789149531480_724',
   'rpay_txn_1789055627850_921',
-  'upi-156410'
+  'upi-156410',
+  'rpay-cash-553089',
+  'rpay_txn_1790236637582_542',
+  'rpay_txn_1790524654457_867',
+  'rpay_txn_1790749698765_269',
+  'rpay-cash-738522'
 ]);
 
 function autoHealDatabase(db: DatabaseSchema): boolean {
@@ -4688,25 +4517,20 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   });
 
-  // 6. Ensure protected canonical transaction IDs are never in deletedTransactionIds
-  if (Array.isArray(db.deletedTransactionIds)) {
-    const beforeLen = db.deletedTransactionIds.length;
-    db.deletedTransactionIds = db.deletedTransactionIds.filter(id => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim()));
-    if (db.deletedTransactionIds.length !== beforeLen) {
-      changed = true;
-    }
-  }
-
-  // 7. Ensure all canonical BMP Shillong Inkhawm Thawhlawm receipts are present in transactions
+  // Ensure transactions are unique by ID and no purged test items exist
   if (Array.isArray(db.transactions)) {
-    const existingTxMap = new Map(db.transactions.map((t: any) => [String(t.id).toLowerCase().trim(), t]));
-    for (const cTx of CANONICAL_BMP_RECEIPTS) {
-      const k = String(cTx.id).toLowerCase().trim();
-      if (!existingTxMap.has(k)) {
-        db.transactions.push(cTx);
-        existingTxMap.set(k, cTx);
-        changed = true;
-      }
+    const seenTxIds = new Set<string>();
+    const origCount = db.transactions.length;
+    db.transactions = db.transactions.filter((t: any) => {
+      if (!t || !t.id) return false;
+      const cleanId = String(t.id).toLowerCase().trim();
+      if (PURGED_SIMULATOR_TXS.has(cleanId)) return false;
+      if (seenTxIds.has(cleanId)) return false; // Drop duplicate transaction with identical ID
+      seenTxIds.add(cleanId);
+      return true;
+    });
+    if (db.transactions.length !== origCount) {
+      changed = true;
     }
   }
 
@@ -4868,7 +4692,7 @@ function reconcileAndDeduplicateTransactions(transactionsList: any[], serverDelT
   for (const t of transactionsList) {
     if (!t || !t.id) continue;
     const cleanId = String(t.id).toLowerCase().trim();
-    if (serverDelTxSet.has(cleanId) && !PROTECTED_CANONICAL_TX_IDS.has(cleanId)) continue;
+    if (serverDelTxSet.has(cleanId)) continue;
     if (PURGED_SIMULATOR_TXS.has(cleanId)) continue;
     const amt = Number(t.amount);
     if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
@@ -4980,16 +4804,14 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
 
     if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
       const delSet = new Set(
-        deletedTransactionIds
-          .map((id: any) => String(id).toLowerCase().trim())
-          .filter((id: string) => !PROTECTED_CANONICAL_TX_IDS.has(id))
+        deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())
       );
       db.transactions = (db.transactions || []).filter((t: any) => {
         const idLower = String(t.id).toLowerCase().trim();
         return !delSet.has(idLower);
       });
       db.deletedTransactionIds = Array.from(new Set([
-        ...(db.deletedTransactionIds || []).filter((id: string) => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim())),
+        ...(db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()),
         ...Array.from(delSet)
       ]));
     }
@@ -5013,19 +4835,19 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     }
 
     const delCampSet = (Array.isArray(deletedCampaignIds) && deletedCampaignIds.length > 0)
-      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()).filter(id => !CANONICAL_CAMPAIGN_IDS.has(id)))
+      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()))
       : undefined;
 
     if (delCampSet && delCampSet.size > 0) {
       db.campaigns = (db.campaigns || []).filter((c: any) => !delCampSet.has(String(c.id).toLowerCase().trim()));
       db.deletedCampaignIds = Array.from(new Set([
-        ...(db.deletedCampaignIds || []).filter(id => !CANONICAL_CAMPAIGN_IDS.has(String(id).toLowerCase().trim())),
+        ...(db.deletedCampaignIds || []).map(id => String(id).toLowerCase().trim()),
         ...Array.from(delCampSet)
       ]));
     }
 
     const serverDelCampSet = new Set((db.deletedCampaignIds || []).map((id: any) => String(id).toLowerCase().trim()));
-    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()).filter((id: string) => !PROTECTED_CANONICAL_TX_IDS.has(id)));
+    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()));
     const serverDelMemSet = new Set((db.deletedMemberIds || []).map((id: any) => String(id).toLowerCase().trim()));
     const serverDelStaffSet = new Set((db.deletedStaffIds || []).map((id: any) => String(id).trim()));
 
@@ -5058,7 +4880,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
       const cleanTx = transactions.filter((t: any) => {
         if (!t || !t.id) return false;
         const cleanId = String(t.id).toLowerCase().trim();
-        if (serverDelTxSet.has(cleanId) && !PROTECTED_CANONICAL_TX_IDS.has(cleanId)) return false;
+        if (serverDelTxSet.has(cleanId)) return false;
         const amt = Number(t.amount);
         if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
         return true;

@@ -634,12 +634,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "toName": "RC Lalliana (Treasurer)",
-          "fromPhone": "9862000001",
-          "reason": "Term inthlak / Annual Office Bearer Handover",
-          "fromName": "Super Admin (Master)",
           "toPhone": "7005153902",
-          "transferredAt": "2026-10-01T15:45:45.524Z"
+          "fromName": "Super Admin (Master)",
+          "toName": "RC Lalliana (Treasurer)",
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "transferredAt": "2026-10-01T15:45:45.524Z",
+          "fromPhone": "9862000001"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -648,9 +648,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
+          "phone": "9862000001",
           "role": "Outgoing Officer / Co-Manager",
-          "name": "Super Admin (Master)",
-          "phone": "9862000001"
+          "name": "Super Admin (Master)"
         }
       ],
       "transferredFrom": "9862000001",
@@ -10482,7 +10482,7 @@
       "totalAmount": 1140,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 1140
       },
@@ -10512,7 +10512,7 @@
       "totalAmount": 500,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 500
       },
@@ -10662,7 +10662,7 @@
       "totalAmount": 1100,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 1100
       },
@@ -10874,7 +10874,7 @@
       "totalAmount": 800,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 800
       },
@@ -10904,7 +10904,7 @@
       "totalAmount": 520,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 520
       },
@@ -11552,7 +11552,7 @@
       "totalAmount": 750,
       "paymentMethod": "cash",
       "status": "SUCCESS",
-      "subCategory": "BMP Fund",
+      "subCategory": "Inkhawm Thawhlawm",
       "subCategoryBreakdown": {
         "Inkhawm Thawhlawm": 750
       },
@@ -13184,7 +13184,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-06T20:34:16.307Z",
+    "lastUpdated": "2026-10-07T09:44:11.215Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -13417,6 +13417,24 @@
   },
   "auditLogs": [
     {
+      "id": "log-3",
+      "action": "Campaign Approved",
+      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
+      "targetType": "campaign",
+      "targetId": "cmp-ralna-1",
+      "performedBy": "Admin",
+      "timestamp": "2026-10-07T03:44:11.230Z"
+    },
+    {
+      "id": "log-2",
+      "action": "Creator Approved",
+      "details": "Bungkawn Branch YMA creator profile verified and approved for Ralna & Rikrum categories.",
+      "targetType": "creator",
+      "targetId": "9862311223",
+      "performedBy": "Admin (Biometric Verified)",
+      "timestamp": "2026-10-06T21:44:11.230Z"
+    },
+    {
       "id": "log-1791320908012-omgz",
       "action": "SUPER_ADMIN Login",
       "details": "Super Admin (Master) authenticated via Tester Hub.",
@@ -13433,30 +13451,12 @@
       "timestamp": "2026-10-06T17:43:14.923Z"
     },
     {
-      "id": "log-3",
-      "action": "Campaign Approved",
-      "details": "Pi Lalhmingliani Ralna QR verified with verified beneficiary details.",
-      "targetType": "campaign",
-      "targetId": "cmp-ralna-1",
-      "performedBy": "Admin",
-      "timestamp": "2026-10-06T14:34:16.314Z"
-    },
-    {
-      "id": "log-2",
-      "action": "Creator Approved",
-      "details": "Bungkawn Branch YMA creator profile verified and approved for Ralna & Rikrum categories.",
-      "targetType": "creator",
-      "targetId": "9862311223",
-      "performedBy": "Admin (Biometric Verified)",
-      "timestamp": "2026-10-06T08:34:16.314Z"
-    },
-    {
       "id": "log-1",
       "action": "System Initialized",
       "details": "RonPay Community Platform v2.5 security and moderation subsystem online.",
       "targetType": "system",
       "performedBy": "System Administrator",
-      "timestamp": "2026-10-05T20:34:16.314Z"
+      "timestamp": "2026-10-06T09:44:11.230Z"
     },
     {
       "id": "log-1791222756769-qglb",
@@ -15765,7 +15765,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T20:34:17.584Z",
+      "lastLogin": "2026-10-07T09:44:12.743Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15779,7 +15779,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T16:34:17.584Z",
+      "lastLogin": "2026-10-07T05:44:12.743Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15793,7 +15793,7 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-06T18:34:17.584Z",
+      "lastLogin": "2026-10-07T07:44:12.743Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
@@ -15999,5 +15999,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-07T08:40:56.119Z"
+  "lastUpdated": "2026-10-07T10:26:58.159Z"
 }

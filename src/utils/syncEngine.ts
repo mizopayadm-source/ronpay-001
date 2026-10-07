@@ -341,14 +341,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           if (Array.isArray(serverData.deletedTransactionIds)) {
             for (const tId of serverData.deletedTransactionIds) {
               const cleanTId = String(tId).toLowerCase().trim();
-              if (!PROTECTED_CANONICAL_TX_IDS.has(cleanTId)) {
-                deletedIds.add(cleanTId);
-              }
+              deletedIds.add(cleanTId);
             }
-          }
-          // Ensure protected canonical IDs are never in deletedIds
-          for (const pId of PROTECTED_CANONICAL_TX_IDS) {
-            deletedIds.delete(pId.toLowerCase().trim());
           }
 
           const currentTxs = getStoredTransactions();
@@ -364,27 +358,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          // 2. Add baseline initial transactions for any non-deleted entries not yet stored
-          for (const it of INITIAL_TRANSACTIONS) {
-            if (it && it.id) {
-              const k = String(it.id).toLowerCase().trim();
-              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k) && !txMap.has(k)) {
-                txMap.set(k, it);
-              }
-            }
-          }
-
-          // 2b. Always guarantee canonical BMP receipts from phone app are present
-          for (const cTx of CANONICAL_BMP_RECEIPTS) {
-            if (cTx && cTx.id) {
-              const k = String(cTx.id).toLowerCase().trim();
-              if (!txMap.has(k)) {
-                txMap.set(k, cTx);
-              }
-            }
-          }
-
-          // 3. Overlay authoritative server transactions for items not marked deleted
+          // 2. Overlay authoritative server transactions for items not marked deleted
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();

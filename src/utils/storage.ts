@@ -35,13 +35,7 @@ export const getDeletedCampaignIds = (): Set<string> => {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        // Canonical campaigns are protected and must never be suppressed by stale test tombstones
-        const canonicalIds = new Set(INITIAL_CAMPAIGNS.map(c => String(c.id).toLowerCase().trim()));
-        const filtered = arr.filter(id => !canonicalIds.has(String(id).toLowerCase().trim()));
-        if (filtered.length !== arr.length && typeof localStorage !== 'undefined') {
-          localStorage.setItem(DELETED_CAMPAIGN_IDS_KEY, JSON.stringify(filtered));
-        }
-        return new Set(filtered.map(id => String(id).toLowerCase().trim()));
+        return new Set(arr.map(id => String(id).toLowerCase().trim()));
       }
     }
   } catch (e) {}
@@ -540,6 +534,7 @@ export const getStoredCampaigns = (): Campaign[] => {
 
         for (const initCamp of INITIAL_CAMPAIGNS) {
           const initCleanId = String(initCamp.id).toLowerCase().trim();
+          if (deletedCampIds.has(initCleanId)) continue;
           if (!existingIds.has(initCleanId)) {
             merged.push(initCamp);
             hasNew = true;
@@ -917,203 +912,9 @@ export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign
 };
 
 const DELETED_TX_IDS_KEY = 'ronpay_deleted_tx_ids_v1';
-export const PROTECTED_CANONICAL_TX_IDS = new Set<string>([
-  'rpay-cash-168598',
-  'rpay-cash-742024',
-  'rpay-cash-531295',
-  'rpay-cash-773692',
-  'rpay-cash-536139',
-  'rpay-cash-553088'
-]);
+export const PROTECTED_CANONICAL_TX_IDS = new Set<string>();
 
-export const CANONICAL_BMP_RECEIPTS: Transaction[] = [
-  {
-    id: "RPAY-CASH-168598",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 1140,
-    platformFee: 0,
-    totalAmount: 1140,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 1140 },
-    periodType: "monthly",
-    periodMonth: "August",
-    periodYear: "2026",
-    periodLabel: "August 2026 (02/08/2026)",
-    timestamp: "2026-08-02T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.338Z",
-    updatedAt: "2026-10-02T07:24:55.338Z",
-    date: "2026-08-02",
-    txHash: "UTR762224887246",
-    utr: "UTR762224887246"
-  },
-  {
-    id: "RPAY-CASH-742024",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 500,
-    platformFee: 0,
-    totalAmount: 500,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 500 },
-    periodType: "monthly",
-    periodMonth: "July",
-    periodYear: "2026",
-    periodLabel: "July 2026 (19/07/2026)",
-    timestamp: "2026-07-19T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.385Z",
-    updatedAt: "2026-10-02T07:24:55.385Z",
-    date: "2026-07-19",
-    txHash: "UTR958965561392",
-    utr: "UTR958965561392"
-  },
-  {
-    id: "RPAY-CASH-531295",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 1100,
-    platformFee: 0,
-    totalAmount: 1100,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 1100 },
-    periodType: "monthly",
-    periodMonth: "June",
-    periodYear: "2026",
-    periodLabel: "June 2026 (21/06/2026)",
-    timestamp: "2026-06-21T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.426Z",
-    updatedAt: "2026-10-02T07:24:55.426Z",
-    date: "2026-06-21",
-    txHash: "UTR473197412245",
-    utr: "UTR473197412245"
-  },
-  {
-    id: "RPAY-CASH-773692",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 800,
-    platformFee: 0,
-    totalAmount: 800,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 800 },
-    periodType: "monthly",
-    periodMonth: "May",
-    periodYear: "2026",
-    periodLabel: "May 2026 (03/05/2026)",
-    timestamp: "2026-05-03T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.464Z",
-    updatedAt: "2026-10-02T07:24:55.464Z",
-    date: "2026-05-03",
-    txHash: "UTR155090411925",
-    utr: "UTR155090411925"
-  },
-  {
-    id: "RPAY-CASH-536139",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 520,
-    platformFee: 0,
-    totalAmount: 520,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 520 },
-    periodType: "monthly",
-    periodMonth: "April",
-    periodYear: "2026",
-    periodLabel: "April 2026 (19/04/2026)",
-    timestamp: "2026-04-19T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.501Z",
-    updatedAt: "2026-10-02T07:24:55.501Z",
-    date: "2026-04-19",
-    txHash: "UTR266272015786",
-    utr: "UTR266272015786"
-  },
-  {
-    id: "RPAY-CASH-553088",
-    campaignId: "cmp-1788107291420",
-    campaignTitle: "BMP Shillong",
-    category: "kumtluang",
-    donorName: "Inkhawm Thawhlawm",
-    donorVeng: "Shillong Unit",
-    donorType: "general",
-    isDependent: false,
-    isAnonymous: false,
-    amount: 750,
-    platformFee: 0,
-    totalAmount: 750,
-    paymentMethod: "cash",
-    status: "SUCCESS",
-    subCategory: "BMP Fund",
-    subCategoryBreakdown: { "Inkhawm Thawhlawm": 750 },
-    periodType: "monthly",
-    periodMonth: "March",
-    periodYear: "2026",
-    periodLabel: "March 2026 (01/03/2026)",
-    timestamp: "2026-03-01T00:00:00.000Z",
-    createdAt: "2026-10-02T07:24:55.596Z",
-    updatedAt: "2026-10-02T07:24:55.596Z",
-    date: "2026-03-01",
-    txHash: "UTR521042190838",
-    utr: "UTR521042190838"
-  }
-];
-
-// Auto-clean any protected canonical IDs from client localStorage deletion tombstones on startup
-if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-  try {
-    [DELETED_TX_IDS_KEY, 'ronpay_deleted_tx_ids'].forEach(k => {
-      const raw = localStorage.getItem(k);
-      if (raw) {
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) {
-          const cleaned = arr.filter(id => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim()));
-          if (cleaned.length !== arr.length) {
-            localStorage.setItem(k, JSON.stringify(cleaned));
-          }
-        }
-      }
-    });
-  } catch (e) {}
-}
+export const CANONICAL_BMP_RECEIPTS: Transaction[] = [];
 
 export const clearDeletedTransactionId = (txId: string): void => {
   if (!txId) return;
@@ -1149,7 +950,12 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay_txn_1789150125034_382',
   'rpay_txn_1789149531480_724',
   'rpay_txn_1789055627850_921',
-  'upi-156410'
+  'upi-156410',
+  'rpay-cash-553089',
+  'rpay_txn_1790236637582_542',
+  'rpay_txn_1790524654457_867',
+  'rpay_txn_1790749698765_269',
+  'rpay-cash-738522'
 ]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
@@ -1171,17 +977,12 @@ export const getDeletedTransactionIds = (): Set<string> => {
       }
     }
   } catch (e) {}
-  // Ensure protected canonical transactions are never returned as deleted
-  for (const pId of PROTECTED_CANONICAL_TX_IDS) {
-    result.delete(pId.toLowerCase().trim());
-  }
   return result;
 };
 
 export const markTransactionAsDeleted = (txId: string): void => {
   if (!txId) return;
   const clean = String(txId).toLowerCase().trim();
-  if (PROTECTED_CANONICAL_TX_IDS.has(clean)) return; // Protected canonical transactions cannot be deleted
   try {
     const set = getDeletedTransactionIds();
     set.add(clean);
@@ -1234,7 +1035,7 @@ export const getStoredTransactions = (): Transaction[] => {
           const cleanId = String(t.id).toLowerCase().trim();
           
           // 1. If explicitly deleted or permanently purged, ALWAYS exclude!
-          if ((deletedIds.has(cleanId) && !PROTECTED_CANONICAL_TX_IDS.has(cleanId)) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
+          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
           if (legacyMismatchedIds.has(t.id)) return false;
 
           // 2. Authoritative baseline: active canonical database transactions are preserved
@@ -1334,49 +1135,28 @@ export const getStoredTransactions = (): Transaction[] => {
           return t;
         });
 
-        // Smart merge with INITIAL_TRANSACTIONS so all 437 canonical transactions are guaranteed present
-        const existingIds = new Set(cleaned.map(t => String(t.id).toLowerCase().trim()));
-        let hasNew = false;
-        const merged = [...cleaned];
-        for (const initTx of INITIAL_TRANSACTIONS) {
-          const initKey = String(initTx.id).toLowerCase().trim();
-          if (deletedIds.has(initKey) || PERMANENTLY_PURGED_TX_IDS.has(initKey)) continue;
-          if (!existingIds.has(initKey)) {
-            merged.push(initTx);
-            existingIds.add(initKey);
-            hasNew = true;
+        // Strict Deduplication Pass by unique transaction ID only (allows multiple real offerings in the same month/day/service without artificial locking)
+        const seenTxIds = new Set<string>();
+        const finalMerged: Transaction[] = [];
+        for (const t of cleaned) {
+          if (!t || !t.id) continue;
+          const cleanId = String(t.id).toLowerCase().trim();
+          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
+            continue;
           }
-        }
-
-        // Guarantee all canonical BMP receipts from phone app are present
-        for (const cTx of CANONICAL_BMP_RECEIPTS) {
-          const cKey = String(cTx.id).toLowerCase().trim();
-          if (!existingIds.has(cKey)) {
-            merged.push(cTx);
-            existingIds.add(cKey);
-            hasNew = true;
+          if (seenTxIds.has(cleanId)) {
+            // Drop duplicate transaction with identical ID
+            continue;
           }
+          seenTxIds.add(cleanId);
+          finalMerged.push(t);
         }
 
-        if (hasNew || cleaned.length !== parsed.length || hasAttrChange) {
-          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(merged));
+        if (finalMerged.length !== parsed.length || hasAttrChange) {
+          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(finalMerged));
         }
 
-        // Auto-heal check for client storage corruption / rogue inflated total (e.g. ₹13,00,950 vs verified ₹2,77,875.9)
-        const localConfirmedSum = merged
-          .filter(t => {
-            const s = (t.status || '').toLowerCase().trim();
-            return s === 'completed' || s === 'success' || s === 'verified';
-          })
-          .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-
-        if (localConfirmedSum > 500000) {
-          console.warn(`[RonPay Auto-Heal] Detected inflated local transactions sum (₹${localConfirmedSum.toLocaleString()}). Resetting to verified canonical database.`);
-          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
-          return INITIAL_TRANSACTIONS;
-        }
-
-        return merged;
+        return finalMerged;
       }
     }
     // Initialize if never stored before
