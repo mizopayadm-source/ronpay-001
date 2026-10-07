@@ -1883,6 +1883,11 @@ export default async function handler(req: any, res: any) {
       }
       if (Array.isArray(body.transactions) && body.transactions.length > 0) {
         db.transactions = mergeCollections(db.transactions, body.transactions, 'id');
+        db.transactions.sort((a: any, b: any) => {
+          const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+          return timeB - timeA;
+        });
       }
       if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
         const deletedSet = new Set(

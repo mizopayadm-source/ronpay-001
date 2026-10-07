@@ -439,8 +439,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
 
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {
-            const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
             return timeB - timeA;
           });
           saveStoredTransactions(cleanTxs, true);

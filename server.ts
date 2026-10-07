@@ -4902,8 +4902,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         }
       });
       db.transactions.sort((a: any, b: any) => {
-        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
         return timeB - timeA;
       });
     }

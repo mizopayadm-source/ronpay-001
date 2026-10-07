@@ -530,7 +530,9 @@ export default function App() {
 
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
-        syncAllWithServer().catch(() => {});
+        syncAllWithServer().then(() => {
+          reloadLocalData();
+        }).catch(() => {});
       }
     }, 15000);
 

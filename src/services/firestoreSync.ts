@@ -519,9 +519,9 @@ function startLeaderFirestoreListeners(): void {
 
   const newUnsubscribers: Array<() => void> = [];
 
-  // 1. Transactions Listener (up to 25 recent items for fast live sync with minimal quota)
+  // 1. Transactions Listener (up to 200 recent items for fast live sync across all devices)
   try {
-    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(25));
+    const txQuery = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(200));
     const unsubTx = onSnapshot(txQuery, (snapshot) => {
       updateStatus('connected');
 
@@ -582,22 +582,18 @@ function startLeaderFirestoreListeners(): void {
           }
         }
 
-        // 3. Preserve genuine local transactions that are not deleted
+        // 3. Preserve ALL genuine local transactions that are not deleted
         for (const t of localTx) {
           if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
             if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
               const existing = txMap.get(k);
               if (!existing) {
-                // Do not resurrect pending transactions that are absent from remote Firestore
-                const status = (t.status || '').toLowerCase().trim();
-                const isPending = status === 'pending' || status === 'pending_verification';
-                if (!isPending) {
-                  txMap.set(k, t);
-                }
+                // ALWAYS preserve local transactions (including manual, cash, and pending) so mobile/web entries never vanish!
+                txMap.set(k, t);
               } else {
-                const localTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
-                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                const localTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+                const existingTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
                 if (localTime > existingTime) {
                   txMap.set(k, { ...existing, ...t });
                 }
@@ -608,8 +604,8 @@ function startLeaderFirestoreListeners(): void {
 
         const merged = Array.from(txMap.values());
         merged.sort((a, b) => {
-          const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-          const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
           return timeB - timeA;
         });
 

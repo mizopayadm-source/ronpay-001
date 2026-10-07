@@ -91,13 +91,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(() => getDeletedTransactionIds());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
 
-  // Automatically refresh local data whenever modal is opened
+  // Automatically refresh local data and pull latest cross-device sync whenever modal is opened
   useEffect(() => {
     if (isOpen) {
       setDeletedTxIds(getDeletedTransactionIds());
       if (onRefreshData) {
         onRefreshData();
       }
+      syncAllWithServer(true).then(() => {
+        if (onRefreshData) onRefreshData();
+      }).catch(() => {});
     }
   }, [isOpen, onRefreshData]);
 
@@ -135,18 +138,27 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         if (!existing) {
           map.set(k, t);
         } else {
-          const tTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
-          const eTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+          const tTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+          const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
           map.set(k, tTime >= eTime ? t : existing);
         }
       }
     }
     const combined = Array.from(map.values());
-    return combined.filter(t => {
+    const valid = combined.filter(t => {
       if (!t || !t.id) return false;
       const clean = String(t.id).toLowerCase().trim();
       return !deletedTxIds.has(clean) && !PERMANENTLY_PURGED_TX_IDS.has(clean);
     });
+
+    // CRITICAL: Sort by latest activity (updatedAt -> createdAt -> timestamp) so newly entered transactions ALWAYS appear right at the top
+    valid.sort((a, b) => {
+      const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return valid;
   }, [transactions, deletedTxIds, isOpen]);
 
   const safeCampaigns = useMemo(() => {

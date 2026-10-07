@@ -40,8 +40,9 @@ import {
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, isCampaignCreator, isTransactionForCampaign, saveCampaign } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
+import { syncAllWithServer } from '../utils/syncEngine';
 import { getUserRole } from '../utils/rbac';
 import { 
   exportMasterLedgerPrint, 
@@ -613,7 +614,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       subCategoryBreakdown: { [selectedCategory]: amt },
       updatedAt: new Date().toISOString(),
       remark: txRemark,
-      status: 'completed'
+      status: 'completed',
+      isSynced: false
     } : {
       id: `TX-MANUAL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       campaignId: targetCampaign?.id || 'cmp-1788107291420',
@@ -628,13 +630,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       amount: amt,
       platformFee: 0,
       totalAmount: amt,
-      timestamp: effectiveIso,
+      timestamp: new Date().toISOString(),
       txHash: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
       status: 'completed',
       paymentMethod: 'cash',
       referenceNo: `CASH-${payerId}-${Date.now().toString().slice(-6)}`,
       remark: txRemark,
-      isSynced: true,
+      isSynced: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       date: effectiveIso.slice(0, 10),
@@ -647,8 +649,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
 
     saveTransaction(txToSave);
+    recordUserPaidTxId(txToSave.id);
     setEntrySuccess(`₹${amt.toLocaleString('en-IN')} (${selectedCategory} - ${selectedMonth}) chu ${payerName} (${payerId}) pualin record fel a ni ta!`);
     onDataUpdated();
+    syncAllWithServer(true).catch(() => {});
     setTimeout(() => {
       setEntrySuccess(null);
       setEntryRemark('');
