@@ -109,6 +109,9 @@ export async function createDirectPhonePeOrder(options: {
   donorPhone?: string;
   campaignTitle?: string;
   campaignId?: string;
+  category?: string;
+  feeOption?: string;
+  isAnonymous?: boolean;
   origin?: string;
 }): Promise<{ redirectUrl: string; orderId: string; merchantTransactionId: string }> {
   const token = await getDirectPhonePeOAuthToken();
@@ -116,7 +119,43 @@ export async function createDirectPhonePeOrder(options: {
   const origin = options.origin || (typeof window !== 'undefined' ? window.location.origin : 'https://ronpay.app');
   const amountPaise = Math.round(options.amountInRupees * 100);
 
-  const callbackUrl = `${origin}/api/phonepe/callback?txnId=${encodeURIComponent(txnId)}`;
+  // Pre-register transaction in advance with backend server so callbacks and status queries have full context
+  try {
+    fetch(`${origin}/api/phonepe/initiate-pay`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        merchantTransactionId: txnId,
+        amountInRupees: options.amountInRupees,
+        donorName: options.donorName || 'Valued Donor',
+        donorPhone: options.donorPhone || '',
+        campaignTitle: options.campaignTitle || 'RonPay Community Bawm',
+        campaignId: options.campaignId || '',
+        feeOption: options.feeOption || 'ADD_ON',
+        category: options.category || 'others',
+        isAnonymous: Boolean(options.isAnonymous),
+        origin: origin
+      })
+    }).catch(() => {});
+  } catch {}
+
+  const callbackParams = new URLSearchParams({
+    txnId: txnId,
+    cid: options.campaignId || '',
+    ctitle: options.campaignTitle || '',
+    cat: options.category || '',
+    donor: options.donorName || '',
+    donorPhone: options.donorPhone || '',
+    amt: String(options.amountInRupees || ''),
+    baseAmt: String(options.amountInRupees || ''),
+    feeOpt: options.feeOption || 'ADD_ON',
+    anon: options.isAnonymous ? '1' : '0'
+  });
+
+  const callbackUrl = `${origin}/api/phonepe/callback?${callbackParams.toString()}`;
   const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 
   // Only use headers strictly allowed in PhonePe Preprod CORS access-control-allow-headers!
@@ -175,6 +214,7 @@ export async function getPhonePeMercuryUrl(options: {
   campaignId?: string;
   feeOption?: string;
   category?: string;
+  isAnonymous?: boolean;
   origin?: string;
 }): Promise<string> {
   const origin = options.origin || (typeof window !== 'undefined' ? window.location.origin : 'https://ronpay.app');
@@ -189,6 +229,9 @@ export async function getPhonePeMercuryUrl(options: {
       donorPhone: options.donorPhone,
       campaignTitle: options.campaignTitle,
       campaignId: options.campaignId,
+      category: options.category,
+      feeOption: options.feeOption,
+      isAnonymous: options.isAnonymous,
       origin: origin
     });
     if (directOrder?.redirectUrl && directOrder.redirectUrl.includes('mercury-uat.phonepe.com')) {
