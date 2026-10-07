@@ -521,8 +521,8 @@ export const getStoredCampaigns = (): Campaign[] => {
               changed = true;
             }
             if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
-              if (updated.subCategories && updated.subCategories.includes('Inkhawm Thawhlawm')) {
-                updated.subCategories = updated.subCategories.filter(s => s !== 'Inkhawm Thawhlawm');
+              if (!updated.subCategories || !updated.subCategories.includes('BMP Fund') || !updated.subCategories.includes('Inkhawm Thawhlawm')) {
+                updated.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
                 changed = true;
               }
               if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {
@@ -1145,7 +1145,11 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'tx-manual-1790887177103-526',
   'tx-manual-1790887107422-42',
   'tx-manual-1790886883155-450',
-  'rpay_txn_1790875972483_197'
+  'rpay_txn_1790875972483_197',
+  'rpay_txn_1789150125034_382',
+  'rpay_txn_1789149531480_724',
+  'rpay_txn_1789055627850_921',
+  'upi-156410'
 ]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
@@ -1310,6 +1314,12 @@ export const getStoredTransactions = (): Transaction[] => {
               t.subCategoryBreakdown = { 'Inkhawm Thawhlawm': t.amount };
               hasAttrChange = true;
             }
+          }
+
+          // Normalize Pocket Monye typo to Pocket Money
+          if (t.campaignTitle === 'Pocket Monye') {
+            t.campaignTitle = 'Pocket Money';
+            hasAttrChange = true;
           }
 
           // Ensure date attribute exists without mutating actual payment timestamp

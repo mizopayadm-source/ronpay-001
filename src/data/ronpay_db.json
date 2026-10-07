@@ -1355,23 +1355,6 @@
       "updatedAt": "2026-09-30T13:24:23.942Z"
     },
     {
-      "updatedAt": "2026-10-01T20:42:46.288Z",
-      "dependents": [],
-      "campaignId": "cmp-1788107291420",
-      "createdAt": "2026-10-01T17:14:40.746Z",
-      "name": "Upa Vanlalliana",
-      "phoneLast4": "6771",
-      "isFamilyHead": true,
-      "orgCode": "BMPSHL",
-      "id": "BMPSHL-6771",
-      "fullPhone": "9436006771",
-      "section": "Shillong Unit",
-      "enrollmentYear": "2026",
-      "activeYears": [
-        "2026"
-      ]
-    },
-    {
       "id": "BMPSHL-1548",
       "campaignId": "cmp-1788107291420",
       "name": "Zothanzuala Hrahsel",
@@ -1397,7 +1380,8 @@
     "bmpshl-2445",
     "bmpshl-1548",
     "ymavt-5456",
-    "ymavt-8467"
+    "ymavt-8467",
+    "bmpshl-6771"
   ],
   "transactions": [
     {
@@ -5893,27 +5877,6 @@
       "date": "2026-09-11"
     },
     {
-      "paymentMethod": "phonepe",
-      "isDependent": false,
-      "timestamp": "2026-09-11T18:08:45.035Z",
-      "campaignTitle": "PhonePe PG Merchant",
-      "feeOption": "DEDUCT",
-      "id": "RPAY_TXN_1789150125034_382",
-      "isAnonymous": true,
-      "amount": 1515,
-      "totalAmount": 1515,
-      "status": "completed",
-      "utr": "OM2609112338463618240129",
-      "campaignNetReceived": 1500,
-      "category": "khawlsak",
-      "campaignId": "pg-1789150104136",
-      "referenceNo": "OM2609112338463618240129",
-      "donorName": "Anonymous",
-      "updatedAt": "2026-09-17T08:54:11.923Z",
-      "platformFee": 15,
-      "date": "2026-09-11"
-    },
-    {
       "donorName": "Anonymous",
       "updatedAt": "2026-09-17T08:54:11.924Z",
       "referenceNo": "OM2609112328212198240744",
@@ -5935,27 +5898,6 @@
       "amount": 55,
       "verifiedAt": "2026-09-11T18:02:48.359Z",
       "donorPhone": "9862300000",
-      "date": "2026-09-11"
-    },
-    {
-      "category": "khawlsak",
-      "totalAmount": 56,
-      "isAnonymous": true,
-      "isDependent": false,
-      "id": "RPAY_TXN_1789149531480_724",
-      "feeOption": "DEDUCT",
-      "utr": "OM2609112328530088240403",
-      "campaignTitle": "PhonePe PG Merchant",
-      "paymentMethod": "phonepe",
-      "timestamp": "2026-09-11T17:58:51.480Z",
-      "amount": 56,
-      "campaignNetReceived": 55,
-      "referenceNo": "OM2609112328530088240403",
-      "campaignId": "pg-1789149515918",
-      "updatedAt": "2026-09-17T08:54:11.924Z",
-      "donorName": "Anonymous",
-      "status": "completed",
-      "platformFee": 1,
       "date": "2026-09-11"
     },
     {
@@ -6921,27 +6863,6 @@
       "updatedAt": "2026-09-17T08:54:11.943Z",
       "donorName": "Anonymous",
       "category": "ralna",
-      "date": "2026-09-10"
-    },
-    {
-      "feeOption": "ADD_ON",
-      "txHash": "UTR508141050933",
-      "timestamp": "2026-09-10T15:53:52.154Z",
-      "platformFee": 2,
-      "id": "RPAY_TXN_1789055627850_921",
-      "category": "khawlsak",
-      "campaignNetReceived": 200,
-      "campaignId": "scan-1789055602147",
-      "amount": 200,
-      "donorName": "Anonymous",
-      "updatedAt": "2026-09-17T08:54:11.943Z",
-      "status": "completed",
-      "campaignTitle": "https://merchant-simulato...",
-      "totalAmount": 202,
-      "paymentMethod": "phonepe",
-      "utr": "UTR508141050933",
-      "isDependent": false,
-      "isAnonymous": true,
       "date": "2026-09-10"
     },
     {
@@ -8801,7 +8722,7 @@
       "isAnonymous": false,
       "category": "khawlsak",
       "payerUPI": "Google Pay (GPay)",
-      "campaignTitle": "Pocket Monye",
+      "campaignTitle": "Pocket Money",
       "timestamp": "2026-09-01T11:36:40.393Z",
       "status": "completed",
       "paymentMethod": "online",
@@ -8883,7 +8804,7 @@
       "periodLabel": "September 2026",
       "periodMonth": "September",
       "txHash": "UPIXEOV6EIW8O",
-      "campaignTitle": "Pocket Monye",
+      "campaignTitle": "Pocket Money",
       "platformFee": 1,
       "donorVeng": "Bial 1 (Vengchhak)",
       "campaignId": "cmp-1788262396368",
@@ -9159,24 +9080,6 @@
       "periodType": "monthly",
       "txHash": "UPI5JSGSV99NK",
       "id": "RPAY-319684",
-      "date": "2026-08-28"
-    },
-    {
-      "category": "khawlsak",
-      "id": "UPI-156410",
-      "campaignTitle": "UPI Transfer to: liana@jsja",
-      "timestamp": "2026-08-28T17:12:36.410Z",
-      "paymentMethod": "online",
-      "campaignId": "direct-upi-transfer",
-      "totalAmount": 500,
-      "txHash": "UPI1787937156410RPAY",
-      "status": "completed",
-      "platformFee": 0,
-      "remark": "Puihna",
-      "amount": 500,
-      "donorPhone": "9862300000",
-      "donorName": "RonPay User",
-      "updatedAt": "2026-09-17T08:54:11.957Z",
       "date": "2026-08-28"
     },
     {
@@ -12672,7 +12575,11 @@
     "rpay-cash-738522",
     "rpay_txn_1790236637582_542",
     "rpay-cash-553089",
-    "rpay_txn_1790749698765_269"
+    "rpay_txn_1790749698765_269",
+    "rpay_txn_1789150125034_382",
+    "rpay_txn_1789149531480_724",
+    "rpay_txn_1789055627850_921",
+    "upi-156410"
   ],
   "creators": [
     {
@@ -16104,5 +16011,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-06T21:27:21.166Z"
+  "lastUpdated": "2026-10-07T08:14:46.356Z"
 }

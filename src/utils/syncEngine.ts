@@ -22,6 +22,7 @@ import {
   markTransactionAsDeleted,
   PROTECTED_CANONICAL_TX_IDS,
   CANONICAL_BMP_RECEIPTS,
+  PERMANENTLY_PURGED_TX_IDS,
   getDeletedCampaignIds,
   recordDeletedCampaignId,
   getDeletedMemberIds,
@@ -357,7 +358,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const ct of currentTxs) {
             if (ct && ct.id) {
               const k = String(ct.id).toLowerCase().trim();
-              if (!deletedIds.has(k)) {
+              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
                 txMap.set(k, ct);
               }
             }
@@ -367,7 +368,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const it of INITIAL_TRANSACTIONS) {
             if (it && it.id) {
               const k = String(it.id).toLowerCase().trim();
-              if (!deletedIds.has(k) && !txMap.has(k)) {
+              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k) && !txMap.has(k)) {
                 txMap.set(k, it);
               }
             }
@@ -387,7 +388,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           for (const t of serverData.transactions) {
             if (t && t.id) {
               const k = String(t.id).toLowerCase().trim();
-              if (deletedIds.has(k)) {
+              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
                 continue; // Do NOT resurrect deleted transactions!
               }
 

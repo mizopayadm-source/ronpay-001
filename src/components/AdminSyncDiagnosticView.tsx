@@ -203,6 +203,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       ...Array.from(serverTxMap.keys())
     ]);
 
+    const isCloudActive = cloudStatus === 'connected' || cloudTxList.length > 0;
+
     allTxIds.forEach(cleanId => {
       const isDeletedLocally = deletedTxIds.has(cleanId);
       const isDeletedInCloud = cloudTombstoneSet.has(cleanId);
@@ -233,8 +235,46 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       // If deleted locally and not in cloud, it's properly purged
       if (isDeletedLocally && !cloudTx) return;
 
-      // Check Missing in Cloud
-      if (localTx && !cloudTx) {
+      // 1. Check Missing in Central Server DB
+      if (localTx && !serverTx && serverStatus === 'online') {
+        items.push({
+          id: localTx.id,
+          type: 'transaction',
+          title: `Donation ₹${localTx.amount?.toLocaleString('en-IN') || 0} (${localTx.donorName || 'Anonymous'})`,
+          subTitle: `Campaign: ${localTx.campaignTitle || localTx.campaignId}`,
+          discrepancyType: 'missing_in_server',
+          severity: 'alert',
+          localData: localTx,
+          cloudData: cloudTx,
+          serverData: null,
+          description: `Transaction exists locally, but is MISSING from central database.`,
+          descriptionMizo: `He transaction hi he device-ah a awm a, central server-ah a la lut lo.`,
+          suggestedAction: 'push_to_server'
+        });
+        return;
+      }
+
+      // 2. Check Missing in Local from Server
+      if (serverTx && !localTx && !isDeletedLocally) {
+        items.push({
+          id: serverTx.id,
+          type: 'transaction',
+          title: `Donation ₹${serverTx.amount?.toLocaleString('en-IN') || 0} (${serverTx.donorName || 'Anonymous'})`,
+          subTitle: `Campaign: ${serverTx.campaignTitle || serverTx.campaignId}`,
+          discrepancyType: 'missing_in_local',
+          severity: 'warning',
+          localData: null,
+          cloudData: cloudTx,
+          serverData: serverTx,
+          description: `Transaction exists in central server database, but is MISSING from local device storage.`,
+          descriptionMizo: `Central server-ah a awm a, mahse he device Local Storage-ah a la awm lo.`,
+          suggestedAction: 'pull_to_local'
+        });
+        return;
+      }
+
+      // 3. Check Missing in Cloud (only if Cloud is actively connected)
+      if (isCloudActive && localTx && !cloudTx) {
         items.push({
           id: localTx.id,
           type: 'transaction',
@@ -252,8 +292,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         return;
       }
 
-      // Check Missing in Local
-      if (cloudTx && !localTx) {
+      // 4. Check Missing in Local from Cloud (only if Cloud is actively connected)
+      if (isCloudActive && cloudTx && !localTx && !isDeletedLocally) {
         items.push({
           id: cloudTx.id,
           type: 'transaction',
@@ -339,13 +379,53 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       ...Array.from(serverCampMap.keys())
     ]);
 
+    const isCloudCampActive = cloudStatus === 'connected' || cloudCampList.length > 0;
+
     allCampIds.forEach(cleanId => {
       const localCamp = localCampMap.get(cleanId);
       const cloudCamp = cloudCampMap.get(cleanId);
       const serverCamp = serverCampMap.get(cleanId);
 
-      // Check Missing in Cloud
-      if (localCamp && !cloudCamp) {
+      // 1. Check Missing in Central Server
+      if (localCamp && !serverCamp && serverStatus === 'online') {
+        items.push({
+          id: localCamp.id,
+          type: 'campaign',
+          title: localCamp.title || 'Untitled Campaign',
+          subTitle: `Category: ${localCamp.category} • Location: ${localCamp.location || 'Mizoram'}`,
+          discrepancyType: 'missing_in_server',
+          severity: 'alert',
+          localData: localCamp,
+          cloudData: cloudCamp,
+          serverData: null,
+          description: `Campaign exists in Local Storage/App, but is MISSING from central server database.`,
+          descriptionMizo: `He Bawm/QR hi he device-ah a awm a, central server database-ah a la awm lo.`,
+          suggestedAction: 'push_to_server'
+        });
+        return;
+      }
+
+      // 2. Check Missing in Local from Server
+      if (serverCamp && !localCamp) {
+        items.push({
+          id: serverCamp.id,
+          type: 'campaign',
+          title: serverCamp.title || 'Untitled Campaign',
+          subTitle: `Category: ${serverCamp.category} • Location: ${serverCamp.location || 'Mizoram'}`,
+          discrepancyType: 'missing_in_local',
+          severity: 'warning',
+          localData: null,
+          cloudData: cloudCamp,
+          serverData: serverCamp,
+          description: `Campaign exists in central server database, but is MISSING from local device storage.`,
+          descriptionMizo: `He Bawm/QR hi central server-ah a awm a, mahse he device Local Storage-ah a la awm lo.`,
+          suggestedAction: 'pull_to_local'
+        });
+        return;
+      }
+
+      // 3. Check Missing in Cloud (only if Cloud is actively connected)
+      if (isCloudCampActive && localCamp && !cloudCamp) {
         items.push({
           id: localCamp.id,
           type: 'campaign',
@@ -363,8 +443,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         return;
       }
 
-      // Check Missing in Local
-      if (cloudCamp && !localCamp) {
+      // 4. Check Missing in Local from Cloud (only if Cloud is actively connected)
+      if (isCloudCampActive && cloudCamp && !localCamp) {
         items.push({
           id: cloudCamp.id,
           type: 'campaign',
@@ -437,26 +517,27 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
     try {
       if (item.type === 'transaction') {
-        if (item.suggestedAction === 'push_to_cloud' && item.localData) {
-          // Push local record to Firestore and Server
-          await syncTransactionToFirestore(item.localData);
+        if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
+          // Push local record to Server and Firestore
           await saveTransactionToServer(item.localData);
-        } else if (item.suggestedAction === 'pull_to_local' && item.cloudData) {
-          // Adopt cloud record locally
-          saveTransaction(item.cloudData);
+          await syncTransactionToFirestore(item.localData);
+        } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
+          // Adopt server/cloud record locally
+          saveTransaction(item.serverData || item.cloudData);
         } else if (item.suggestedAction === 'purge') {
           // Enforce deletion tombstone everywhere
           markTransactionAsDeleted(item.id);
           await deleteTransactionFromFirestore(item.id);
         }
       } else if (item.type === 'campaign') {
-        if (item.suggestedAction === 'push_to_cloud' && item.localData) {
-          await syncCampaignToFirestore(item.localData);
+        if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
           await saveCampaignToServer(item.localData);
-        } else if (item.suggestedAction === 'pull_to_local' && item.cloudData) {
+          await syncCampaignToFirestore(item.localData);
+        } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
+          const targetCamp = item.serverData || item.cloudData;
           const fresh = getStoredCampaigns();
-          const merged = fresh.filter(c => c.id !== item.cloudData.id);
-          merged.push(item.cloudData);
+          const merged = fresh.filter(c => c.id !== targetCamp.id);
+          merged.push(targetCamp);
           saveStoredCampaigns(merged);
         }
       }
@@ -499,12 +580,12 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     for (const item of discrepancies) {
       try {
         if (item.type === 'transaction') {
-          if (item.suggestedAction === 'push_to_cloud' && item.localData) {
-            await syncTransactionToFirestore(item.localData);
+          if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
             await saveTransactionToServer(item.localData);
+            await syncTransactionToFirestore(item.localData);
             successCount++;
-          } else if (item.suggestedAction === 'pull_to_local' && item.cloudData) {
-            saveTransaction(item.cloudData);
+          } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
+            saveTransaction(item.serverData || item.cloudData);
             successCount++;
           } else if (item.suggestedAction === 'purge') {
             markTransactionAsDeleted(item.id);
@@ -512,14 +593,15 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             successCount++;
           }
         } else if (item.type === 'campaign') {
-          if (item.suggestedAction === 'push_to_cloud' && item.localData) {
-            await syncCampaignToFirestore(item.localData);
+          if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
             await saveCampaignToServer(item.localData);
+            await syncCampaignToFirestore(item.localData);
             successCount++;
-          } else if (item.suggestedAction === 'pull_to_local' && item.cloudData) {
+          } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
+            const targetCamp = item.serverData || item.cloudData;
             const fresh = getStoredCampaigns();
-            const merged = fresh.filter(c => c.id !== item.cloudData.id);
-            merged.push(item.cloudData);
+            const merged = fresh.filter(c => c.id !== targetCamp.id);
+            merged.push(targetCamp);
             saveStoredCampaigns(merged);
             successCount++;
           }

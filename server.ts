@@ -4409,16 +4409,29 @@ const CANONICAL_BMP_RECEIPTS: any[] = [
   }
 ];
 
+const PURGED_SIMULATOR_TXS = new Set([
+  'rpay_txn_1789150125034_382',
+  'rpay_txn_1789149531480_724',
+  'rpay_txn_1789055627850_921',
+  'upi-156410'
+]);
+
 function autoHealDatabase(db: DatabaseSchema): boolean {
   let changed = false;
 
-  // 0. Filter out invalid/corrupted transactions with absurd amounts
+  // 0. Filter out invalid/corrupted transactions with absurd amounts and simulator test txs
   if (Array.isArray(db.transactions)) {
     const origLen = db.transactions.length;
     db.transactions = db.transactions.filter((t: any) => {
       if (!t || !t.id) return false;
+      const cleanId = String(t.id).toLowerCase().trim();
+      if (PURGED_SIMULATOR_TXS.has(cleanId)) return false;
       const amt = Number(t.amount);
       if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+      if (t.campaignTitle === 'Pocket Monye') {
+        t.campaignTitle = 'Pocket Money';
+        changed = true;
+      }
       return true;
     });
     if (db.transactions.length !== origLen) {
@@ -4426,16 +4439,22 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // 1. Recover members from transactions if any are missing
+  // 1. Recover members from transactions if any are missing (NEVER resurrect deleted or purged members)
   const memMap = new Map<string, any>();
   for (const m of (db.members || [])) {
     if (m && m.id) memMap.set(String(m.id).toLowerCase(), m);
   }
 
+  const deletedMemberSet = new Set((db.deletedMemberIds || []).map(id => String(id).toLowerCase().trim()));
+
   for (const t of (db.transactions || [])) {
     if (t && t.memberId && String(t.memberId).trim()) {
       const mid = String(t.memberId).trim();
       const k = mid.toLowerCase();
+      // DO NOT resurrect deleted or purged members
+      if (deletedMemberSet.has(k) || k === 'bmpshl-9000' || k === 'bmpshl-9001' || k === 'bmpshl-1253') {
+        continue;
+      }
       if (!memMap.has(k)) {
         const orgCode = mid.split('-')[0] || '';
         const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
@@ -4599,7 +4618,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         changed = true;
       }
       if (!t.donorVeng) {
-        t.donorVeng = 'General';
+        t.donorVeng = 'Shillong Unit';
         changed = true;
       }
       if (!t.subCategory) {
@@ -4844,42 +4863,36 @@ function mergeCollections<T extends Record<string, any>>(serverList: T[], client
 
 function reconcileAndDeduplicateTransactions(transactionsList: any[], serverDelTxSet: Set<string>): any[] {
   const result: any[] = [];
-  const seenMemberPeriod = new Map<string, number>();
+  const seenTxIds = new Map<string, number>();
 
   for (const t of transactionsList) {
     if (!t || !t.id) continue;
     const cleanId = String(t.id).toLowerCase().trim();
     if (serverDelTxSet.has(cleanId) && !PROTECTED_CANONICAL_TX_IDS.has(cleanId)) continue;
+    if (PURGED_SIMULATOR_TXS.has(cleanId)) continue;
     const amt = Number(t.amount);
     if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
 
-    const period = (t.periodMonth || t.periodLabel || '').toLowerCase().trim();
-    const donor = (t.donorName || t.memberId || '').toLowerCase().trim();
-    const camp = String(t.campaignId || '').toLowerCase().trim();
-    const cat = String(t.subCategory || 'bmp fund').toLowerCase().trim();
-    const isManual = (t.paymentMethod || '').toLowerCase() === 'cash' || cleanId.startsWith('tx-manual') || cleanId.startsWith('rpay-cash');
+    // Normalize Pocket Monye typo
+    if (t.campaignTitle === 'Pocket Monye') {
+      t.campaignTitle = 'Pocket Money';
+    }
 
-    const isGeneralOrGroup = t.donorType === 'general' || t.donorType === 'group' || (t.donorName && t.donorName.toLowerCase().includes('thawhlawm'));
-    if (donor && period && isManual && !isGeneralOrGroup && t.memberId) {
-      const key = `${camp}::${donor}::${period}::${cat}`;
-      if (seenMemberPeriod.has(key)) {
-        const existingIdx = seenMemberPeriod.get(key)!;
-        const existing = result[existingIdx];
-        const existingTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-        const incomingTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
-        if (incomingTime >= existingTime) {
-          result[existingIdx] = {
-            ...existing,
-            ...t,
-            id: existing.id
-          };
-        }
-        continue;
-      } else {
-        seenMemberPeriod.set(key, result.length);
-        result.push(t);
+    if (seenTxIds.has(cleanId)) {
+      const existingIdx = seenTxIds.get(cleanId)!;
+      const existing = result[existingIdx];
+      const existingTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+      const incomingTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+      if (incomingTime >= existingTime) {
+        result[existingIdx] = {
+          ...existing,
+          ...t,
+          id: existing.id
+        };
       }
+      continue;
     } else {
+      seenTxIds.set(cleanId, result.length);
       result.push(t);
     }
   }
