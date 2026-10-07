@@ -590,6 +590,7 @@
       "orgCode": "BMPSHL",
       "subCategories": [
         "BMP Fund",
+        "General",
         "Inkhawm Thawhlawm"
       ],
       "upiId": "mizopay@axl",
@@ -1353,19 +1354,6 @@
       "createdAt": "2026-09-30T13:24:23.942Z",
       "status": "paid",
       "updatedAt": "2026-09-30T13:24:23.942Z"
-    },
-    {
-      "id": "BMPSHL-1548",
-      "campaignId": "cmp-1788107291420",
-      "name": "Zothanzuala Hrahsel",
-      "orgCode": "BMPSHL",
-      "phoneLast4": "1548",
-      "fullPhone": "",
-      "section": "Shillong Unit",
-      "isFamilyHead": true,
-      "dependents": [],
-      "createdAt": "2026-08-15T00:00:00.000Z",
-      "status": "paid"
     }
   ],
   "deletedMemberIds": [
@@ -16011,5 +15999,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-07T08:14:46.356Z"
+  "lastUpdated": "2026-10-07T08:40:56.119Z"
 }
