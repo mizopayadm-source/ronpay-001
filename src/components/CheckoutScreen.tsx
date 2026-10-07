@@ -378,6 +378,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isCustomGeneral, setIsCustomGeneral] = useState<boolean>(false);
 
   // Dynamic Group & General Presets (Creator Pre-set prioritized to ensure data consistency)
+  const [editingPresetInfo, setEditingPresetInfo] = useState<{ type: 'group' | 'general'; oldName: string } | null>(null);
+  const [editingPresetText, setEditingPresetText] = useState<string>('');
+
   const [groupPresets, setGroupPresets] = useState<string[]>(() => {
     if (campaign?.groupPresets && campaign.groupPresets.length > 0) {
       return campaign.groupPresets;
@@ -394,18 +397,24 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const [generalPresets, setGeneralPresets] = useState<string[]>(() => {
+    const isBmp = campaign?.id === 'cmp-1788107291420' || String(campaign?.title || '').toLowerCase().includes('bmp');
     if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
-      return campaign.generalPresets;
+      const filtered = isBmp ? campaign.generalPresets.filter(p => p !== 'Inkhawm Thawhlawm') : campaign.generalPresets;
+      return filtered.length > 0 ? filtered : ['General Hnathlang'];
     }
     const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
     const saved = localStorage.getItem(key) || localStorage.getItem('ronpay_general_presets_global');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = isBmp ? parsed.filter(p => p !== 'Inkhawm Thawhlawm') : parsed;
+          return filtered.length > 0 ? filtered : ['General Hnathlang'];
+        }
       } catch (e) {}
     }
-    return [
+    return isBmp ? ['General Hnathlang'] : [
+      'General Hnathlang',
       'Pathianni Chawhma Thawhlawm',
       'Pathianni Chawhnu Thawhlawm',
       'Pathianni Zan Thawhlawm',
@@ -418,16 +427,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Sync presets whenever campaign changes or is updated by creator
   useEffect(() => {
+    const isBmp = campaign?.id === 'cmp-1788107291420' || String(campaign?.title || '').toLowerCase().includes('bmp');
     if (campaign?.groupPresets && campaign.groupPresets.length > 0) {
       setGroupPresets(campaign.groupPresets);
       if (!groupName || (!campaign.groupPresets.includes(groupName) && !isCustomGroup)) {
         setGroupName(campaign.groupPresets[0]);
       }
     }
-    if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
-      setGeneralPresets(campaign.generalPresets);
-      if (!generalTitle || (!campaign.generalPresets.includes(generalTitle) && !isCustomGeneral)) {
-        setGeneralTitle(campaign.generalPresets[0]);
+    if (campaign?.generalPresets) {
+      const filtered = isBmp ? campaign.generalPresets.filter(p => p !== 'Inkhawm Thawhlawm') : campaign.generalPresets;
+      setGeneralPresets(filtered);
+      if (!generalTitle || (!filtered.includes(generalTitle) && !isCustomGeneral)) {
+        setGeneralTitle(filtered[0] || '');
       }
     }
   }, [campaign?.id, campaign?.groupPresets, campaign?.generalPresets]);
@@ -825,72 +836,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     }
   };
 
-  const handleAddGroupPreset = (nameToAdd: string) => {
-    const trimmed = nameToAdd.trim();
-    if (!trimmed) return;
-    if (!groupPresets.includes(trimmed)) {
-      const updated = [...groupPresets, trimmed];
-      setGroupPresets(updated);
-      const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
-      localStorage.setItem(key, JSON.stringify(updated));
-      localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
-      if (campaign && isOwner) {
-        const updatedCamp = { ...campaign, groupPresets: updated };
-        saveCampaign(updatedCamp);
-      }
-    }
-    setGroupName(trimmed);
-    setNewGroupPresetInput('');
-    setShowAddGroupPreset(false);
-  };
-
-  const handleRemoveGroupPreset = (nameToRemove: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = groupPresets.filter(p => p !== nameToRemove);
-    setGroupPresets(updated);
-    const key = `ronpay_group_presets_${campaign?.id || 'default'}`;
-    localStorage.setItem(key, JSON.stringify(updated));
-    localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
-    if (campaign && isOwner) {
-      const updatedCamp = { ...campaign, groupPresets: updated };
-      saveCampaign(updatedCamp);
-    }
-    if (groupName === nameToRemove) setGroupName('');
-  };
-
-  const handleAddGeneralPreset = (nameToAdd: string) => {
-    const trimmed = nameToAdd.trim();
-    if (!trimmed) return;
-    if (!generalPresets.includes(trimmed)) {
-      const updated = [...generalPresets, trimmed];
-      setGeneralPresets(updated);
-      const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
-      localStorage.setItem(key, JSON.stringify(updated));
-      localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
-      if (campaign && isOwner) {
-        const updatedCamp = { ...campaign, generalPresets: updated };
-        saveCampaign(updatedCamp);
-      }
-    }
-    setGeneralTitle(trimmed);
-    setNewGeneralPresetInput('');
-    setShowAddGeneralPreset(false);
-  };
-
-  const handleRemoveGeneralPreset = (nameToRemove: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = generalPresets.filter(p => p !== nameToRemove);
-    setGeneralPresets(updated);
-    const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
-    localStorage.setItem(key, JSON.stringify(updated));
-    localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
-    if (campaign && isOwner) {
-      const updatedCamp = { ...campaign, generalPresets: updated };
-      saveCampaign(updatedCamp);
-    }
-    if (generalTitle === nameToRemove) setGeneralTitle('');
-  };
-
   // Check if current user has clearance for Group & General entry
   const isOfficerAuthorized = useMemo(() => {
     // 1. If Creator has deliberately opened public deposits, allow direct entry
@@ -903,6 +848,124 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     // 3. Strict Protection: Officer PIN is required to unlock Group & General for other users
     return isOfficerUnlocked;
   }, [activeCampaign?.allowPublicGroupDeposits, isOwner, creatorProfile, isOfficerUnlocked]);
+
+  const canManagePresets = Boolean(isOwner || isOfficerAuthorized || isOfficerUnlocked || creatorProfile?.isAdmin);
+
+  const handleAddGroupPreset = (nameToAdd: string) => {
+    const trimmed = nameToAdd.trim();
+    if (!trimmed) return;
+    if (!groupPresets.includes(trimmed)) {
+      const updated = [...groupPresets, trimmed];
+      setGroupPresets(updated);
+      const camp = activeCampaign || campaign;
+      const key = `ronpay_group_presets_${camp?.id || 'default'}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+      if (camp) {
+        const updatedCamp = { ...camp, groupPresets: updated };
+        saveCampaign(updatedCamp);
+        onUpdateCampaign?.(updatedCamp);
+      }
+    }
+    setGroupName(trimmed);
+    setNewGroupPresetInput('');
+    setShowAddGroupPreset(false);
+  };
+
+  const handleEditGroupPreset = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingPresetInfo(null);
+      return;
+    }
+    const updated = groupPresets.map(p => p === oldName ? trimmed : p);
+    setGroupPresets(updated);
+    const camp = activeCampaign || campaign;
+    const key = `ronpay_group_presets_${camp?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+    if (camp) {
+      const updatedCamp = { ...camp, groupPresets: updated };
+      saveCampaign(updatedCamp);
+      onUpdateCampaign?.(updatedCamp);
+    }
+    if (groupName === oldName) setGroupName(trimmed);
+    setEditingPresetInfo(null);
+  };
+
+  const handleRemoveGroupPreset = (nameToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = groupPresets.filter(p => p !== nameToRemove);
+    setGroupPresets(updated);
+    const camp = activeCampaign || campaign;
+    const key = `ronpay_group_presets_${camp?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_group_presets_global', JSON.stringify(updated));
+    if (camp) {
+      const updatedCamp = { ...camp, groupPresets: updated };
+      saveCampaign(updatedCamp);
+      onUpdateCampaign?.(updatedCamp);
+    }
+    if (groupName === nameToRemove) setGroupName(updated[0] || '');
+  };
+
+  const handleAddGeneralPreset = (nameToAdd: string) => {
+    const trimmed = nameToAdd.trim();
+    if (!trimmed) return;
+    if (!generalPresets.includes(trimmed)) {
+      const updated = [...generalPresets, trimmed];
+      setGeneralPresets(updated);
+      const camp = activeCampaign || campaign;
+      const key = `ronpay_general_presets_${camp?.id || 'default'}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+      if (camp) {
+        const updatedCamp = { ...camp, generalPresets: updated };
+        saveCampaign(updatedCamp);
+        onUpdateCampaign?.(updatedCamp);
+      }
+    }
+    setGeneralTitle(trimmed);
+    setNewGeneralPresetInput('');
+    setShowAddGeneralPreset(false);
+  };
+
+  const handleEditGeneralPreset = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingPresetInfo(null);
+      return;
+    }
+    const updated = generalPresets.map(p => p === oldName ? trimmed : p);
+    setGeneralPresets(updated);
+    const camp = activeCampaign || campaign;
+    const key = `ronpay_general_presets_${camp?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+    if (camp) {
+      const updatedCamp = { ...camp, generalPresets: updated };
+      saveCampaign(updatedCamp);
+      onUpdateCampaign?.(updatedCamp);
+    }
+    if (generalTitle === oldName) setGeneralTitle(trimmed);
+    setEditingPresetInfo(null);
+  };
+
+  const handleRemoveGeneralPreset = (nameToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = generalPresets.filter(p => p !== nameToRemove);
+    setGeneralPresets(updated);
+    const camp = activeCampaign || campaign;
+    const key = `ronpay_general_presets_${camp?.id || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(updated));
+    localStorage.setItem('ronpay_general_presets_global', JSON.stringify(updated));
+    if (camp) {
+      const updatedCamp = { ...camp, generalPresets: updated };
+      saveCampaign(updatedCamp);
+      onUpdateCampaign?.(updatedCamp);
+    }
+    if (generalTitle === nameToRemove) setGeneralTitle(updated[0] || '');
+  };
 
   const handleVerifyOfficerPin = () => {
     setOfficerPinError('');
@@ -2783,19 +2846,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       Creator Set
                     </span>
                   </div>
-                  {isOwner && (
+                  {canManagePresets && (
                     <button
                       type="button"
                       onClick={() => setShowAddGroupPreset(!showAddGroupPreset)}
                       className="text-[9.5px] font-black text-indigo-700 hover:text-indigo-900 flex items-center gap-0.5 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-indigo-200"
                     >
-                      <Plus className="w-3 h-3" /> Creator: Preset Dahna
+                      <Plus className="w-3 h-3" /> Preset Dahna
                     </button>
                   )}
                 </div>
 
-                {/* Inline form to add custom group preset - STRICTLY for Campaign Creator */}
-                {isOwner && showAddGroupPreset && (
+                {/* Inline form to add custom group preset */}
+                {canManagePresets && showAddGroupPreset && (
                   <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-indigo-200 rounded-xl shadow-xs">
                     <input
                       type="text"
@@ -2822,39 +2885,93 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 )}
 
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {groupPresets.map((preset) => (
-                    <div
-                      key={preset}
-                      className={`inline-flex items-center gap-1 text-[10.5px] ${isOwner ? 'pl-2.5 pr-1.5' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
-                        groupName === preset
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGroupName(preset);
-                          setIsCustomGroup(false);
-                        }}
-                        className="cursor-pointer"
+                  {groupPresets.map((preset) => {
+                    const isEditingThis = editingPresetInfo?.type === 'group' && editingPresetInfo?.oldName === preset;
+                    if (isEditingThis) {
+                      return (
+                        <div key={preset} className="inline-flex items-center gap-1 bg-white border-2 border-indigo-500 rounded-lg px-1.5 py-0.5 shadow-xs">
+                          <input
+                            type="text"
+                            value={editingPresetText}
+                            onChange={(e) => setEditingPresetText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleEditGroupPreset(preset, editingPresetText);
+                              if (e.key === 'Escape') setEditingPresetInfo(null);
+                            }}
+                            autoFocus
+                            placeholder="Preset hming..."
+                            className="text-[10.5px] font-bold px-1 py-0.5 outline-none text-slate-900 w-28 bg-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEditGroupPreset(preset, editingPresetText)}
+                            className="p-0.5 text-indigo-700 hover:bg-indigo-50 rounded cursor-pointer"
+                            title="Save / Siamtha rawh"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPresetInfo(null)}
+                            className="p-0.5 text-slate-400 hover:bg-slate-100 rounded cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={preset}
+                        className={`inline-flex items-center gap-1 text-[10.5px] ${canManagePresets ? 'pl-2.5 pr-1' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
+                          groupName === preset
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                        }`}
                       >
-                        {preset}
-                      </button>
-                      {isOwner && (
                         <button
                           type="button"
-                          onClick={(e) => handleRemoveGroupPreset(preset, e)}
-                          title="Creator: Paih bo rawh"
-                          className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
-                            groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
-                          }`}
+                          onClick={() => {
+                            setGroupName(preset);
+                            setIsCustomGroup(false);
+                          }}
+                          className="cursor-pointer"
                         >
-                          <X className="w-2.5 h-2.5" />
+                          {preset}
                         </button>
-                      )}
-                    </div>
-                  ))}
+                        {canManagePresets && (
+                          <div className="inline-flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPresetInfo({ type: 'group', oldName: preset });
+                                setEditingPresetText(preset);
+                              }}
+                              title="Thlak / Edit rawh"
+                              className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                                groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-indigo-600'
+                              }`}
+                            >
+                              <Edit3 className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveGroupPreset(preset, e)}
+                              title="Paih bo rawh"
+                              className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                                groupName === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                              }`}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="relative">
@@ -2868,13 +2985,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     placeholder="e.g. Group A / TKP Fellowship / Unit 1..."
                     className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
                   />
-                  {isOwner && groupName.trim() && !groupPresets.includes(groupName.trim()) && (
+                  {canManagePresets && groupName.trim() && !groupPresets.includes(groupName.trim()) && (
                     <button
                       type="button"
                       onClick={() => handleAddGroupPreset(groupName)}
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-lg hover:bg-indigo-100 flex items-center gap-1 cursor-pointer"
                     >
-                      <Sparkles className="w-3 h-3 text-amber-500" /> Creator: Save as Preset
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
                     </button>
                   )}
                 </div>
@@ -3018,19 +3135,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       Creator Set
                     </span>
                   </div>
-                  {isOwner && (
+                  {canManagePresets && (
                     <button
                       type="button"
                       onClick={() => setShowAddGeneralPreset(!showAddGeneralPreset)}
                       className="text-[9.5px] font-black text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-emerald-200"
                     >
-                      <Plus className="w-3 h-3" /> Creator: Preset Dahna
+                      <Plus className="w-3 h-3" /> Preset Dahna
                     </button>
                   )}
                 </div>
 
-                {/* Inline form to add custom general preset - STRICTLY for Campaign Creator */}
-                {isOwner && showAddGeneralPreset && (
+                {/* Inline form to add custom general preset */}
+                {canManagePresets && showAddGeneralPreset && (
                   <div className="flex items-center gap-1.5 mb-2 p-1.5 bg-white border border-emerald-200 rounded-xl shadow-xs">
                     <input
                       type="text"
@@ -3057,39 +3174,93 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 )}
 
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {generalPresets.map((preset) => (
-                    <div
-                      key={preset}
-                      className={`inline-flex items-center gap-1 text-[10.5px] ${isOwner ? 'pl-2.5 pr-1.5' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
-                        generalTitle === preset
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGeneralTitle(preset);
-                          setIsCustomGeneral(false);
-                        }}
-                        className="cursor-pointer"
+                  {generalPresets.map((preset) => {
+                    const isEditingThis = editingPresetInfo?.type === 'general' && editingPresetInfo?.oldName === preset;
+                    if (isEditingThis) {
+                      return (
+                        <div key={preset} className="inline-flex items-center gap-1 bg-white border-2 border-emerald-500 rounded-lg px-1.5 py-0.5 shadow-xs">
+                          <input
+                            type="text"
+                            value={editingPresetText}
+                            onChange={(e) => setEditingPresetText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleEditGeneralPreset(preset, editingPresetText);
+                              if (e.key === 'Escape') setEditingPresetInfo(null);
+                            }}
+                            autoFocus
+                            placeholder="Preset hming..."
+                            className="text-[10.5px] font-bold px-1 py-0.5 outline-none text-slate-900 w-28 bg-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEditGeneralPreset(preset, editingPresetText)}
+                            className="p-0.5 text-emerald-700 hover:bg-emerald-50 rounded cursor-pointer"
+                            title="Save / Siamtha rawh"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPresetInfo(null)}
+                            className="p-0.5 text-slate-400 hover:bg-slate-100 rounded cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={preset}
+                        className={`inline-flex items-center gap-1 text-[10.5px] ${canManagePresets ? 'pl-2.5 pr-1' : 'px-2.5'} py-1 rounded-lg font-bold border transition ${
+                          generalTitle === preset
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+                        }`}
                       >
-                        {preset}
-                      </button>
-                      {isOwner && (
                         <button
                           type="button"
-                          onClick={(e) => handleRemoveGeneralPreset(preset, e)}
-                          title="Creator: Paih bo rawh"
-                          className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
-                            generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
-                          }`}
+                          onClick={() => {
+                            setGeneralTitle(preset);
+                            setIsCustomGeneral(false);
+                          }}
+                          className="cursor-pointer"
                         >
-                          <X className="w-2.5 h-2.5" />
+                          {preset}
                         </button>
-                      )}
-                    </div>
-                  ))}
+                        {canManagePresets && (
+                          <div className="inline-flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPresetInfo({ type: 'general', oldName: preset });
+                                setEditingPresetText(preset);
+                              }}
+                              title="Thlak / Edit rawh"
+                              className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                                generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-emerald-700'
+                              }`}
+                            >
+                              <Edit3 className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveGeneralPreset(preset, e)}
+                              title="Paih bo rawh"
+                              className={`p-0.5 rounded hover:bg-black/10 transition cursor-pointer ${
+                                generalTitle === preset ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-600'
+                              }`}
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="relative">
@@ -3103,13 +3274,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     placeholder="e.g. Pathianni Chawhma Thawhlawm..."
                     className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
-                  {isOwner && generalTitle.trim() && !generalPresets.includes(generalTitle.trim()) && (
+                  {canManagePresets && generalTitle.trim() && !generalPresets.includes(generalTitle.trim()) && (
                     <button
                       type="button"
                       onClick={() => handleAddGeneralPreset(generalTitle)}
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9.5px] bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-lg hover:bg-emerald-100 flex items-center gap-1 cursor-pointer"
                     >
-                      <Sparkles className="w-3 h-3 text-amber-500" /> Creator: Save as Preset
+                      <Sparkles className="w-3 h-3 text-amber-500" /> Save as Preset
                     </button>
                   )}
                 </div>
