@@ -1152,7 +1152,20 @@ export const getStoredTransactions = (): Transaction[] => {
           finalMerged.push(t);
         }
 
-        if (finalMerged.length !== parsed.length || hasAttrChange) {
+        // Authoritative baseline merge: guarantee any non-deleted verified records from INITIAL_TRANSACTIONS are present on web (ensures 471 confirmed transactions)
+        let hasNewFromBaseline = false;
+        for (const initTx of INITIAL_TRANSACTIONS) {
+          if (!initTx || !initTx.id) continue;
+          const initKey = String(initTx.id).toLowerCase().trim();
+          if (deletedIds.has(initKey) || PERMANENTLY_PURGED_TX_IDS.has(initKey)) continue;
+          if (!seenTxIds.has(initKey)) {
+            finalMerged.push(initTx);
+            seenTxIds.add(initKey);
+            hasNewFromBaseline = true;
+          }
+        }
+
+        if (finalMerged.length !== parsed.length || hasAttrChange || hasNewFromBaseline) {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(finalMerged));
         }
 

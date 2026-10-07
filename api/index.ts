@@ -252,19 +252,17 @@ function getCentralDatabase(): CentralDatabase {
     };
   }
 
-  // Ensure canonical BMP Shillong receipts are always present
+  // Ensure canonical BMP Shillong receipts are always present if not deleted
   if (Array.isArray(memoryDb.transactions)) {
     const existingTxMap = new Map((memoryDb.transactions || []).map((t: any) => [String(t.id).toLowerCase().trim(), t]));
+    const delSet = new Set((memoryDb.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()));
     for (const cTx of CANONICAL_BMP_RECEIPTS) {
       const k = String(cTx.id).toLowerCase().trim();
-      if (!existingTxMap.has(k)) {
+      if (!delSet.has(k) && !existingTxMap.has(k)) {
         memoryDb.transactions.push(cTx);
         existingTxMap.set(k, cTx);
       }
     }
-  }
-  if (Array.isArray(memoryDb.deletedTransactionIds)) {
-    memoryDb.deletedTransactionIds = memoryDb.deletedTransactionIds.filter(id => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim()));
   }
 
   (globalThis as any).__RONPAY_CENTRAL_DB = memoryDb;
@@ -1888,14 +1886,14 @@ export default async function handler(req: any, res: any) {
       }
       if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
         const deletedSet = new Set(
-          body.deletedTransactionIds
-            .map((id: any) => String(id).toLowerCase().trim())
-            .filter((id: string) => !PROTECTED_CANONICAL_TX_IDS.has(id))
+          body.deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())
         );
         db.transactions = db.transactions.filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
-        if (Array.isArray(db.deletedTransactionIds)) {
-          db.deletedTransactionIds = db.deletedTransactionIds.filter(id => !PROTECTED_CANONICAL_TX_IDS.has(String(id).toLowerCase().trim()));
-        }
+        if (!Array.isArray(db.deletedTransactionIds)) db.deletedTransactionIds = [];
+        db.deletedTransactionIds = Array.from(new Set<string>([
+          ...(db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()),
+          ...Array.from(deletedSet).map((id: any) => String(id).toLowerCase().trim())
+        ]));
       }
       if (Array.isArray(body.deletedExpenseIds) && body.deletedExpenseIds.length > 0) {
         const delExpSet = new Set<string>(body.deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
