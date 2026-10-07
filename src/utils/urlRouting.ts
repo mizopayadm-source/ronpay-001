@@ -19,6 +19,20 @@ export interface ParsedRoute {
     category?: BawmCategory;
     donorName?: string;
     donorPhone?: string;
+    donorVeng?: string;
+    donorType?: string;
+    groupName?: string;
+    memberId?: string;
+    subId?: string;
+    isDependent?: boolean;
+    subCategory?: string;
+    subCategoryBreakdown?: Record<string, number>;
+    periodType?: string;
+    periodMonth?: string;
+    periodYear?: string;
+    periodLabel?: string;
+    remark?: string;
+    date?: string;
     isAnonymous?: boolean;
     utr?: string;
   };
@@ -353,6 +367,27 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const anonParam = searchParams.get('anon');
       const utrParam = searchParams.get('utr');
 
+      const vengParam = searchParams.get('veng') || searchParams.get('donorVeng');
+      const donorTypeParam = searchParams.get('donorType');
+      const groupParam = searchParams.get('group') || searchParams.get('groupName');
+      const midParam = searchParams.get('mid') || searchParams.get('memberId');
+      const subIdParam = searchParams.get('subId');
+      const isDepParam = searchParams.get('isDep') || searchParams.get('isDependent');
+      const subcatParam = searchParams.get('subcat') || searchParams.get('subCategory');
+      const pTypeParam = searchParams.get('pType') || searchParams.get('periodType');
+      const pMonthParam = searchParams.get('pMonth') || searchParams.get('periodMonth');
+      const pYearParam = searchParams.get('pYear') || searchParams.get('periodYear');
+      const pLabelParam = searchParams.get('pLabel') || searchParams.get('periodLabel');
+      const remarkParam = searchParams.get('remark') || searchParams.get('remarks');
+      const dateParam = searchParams.get('date');
+      const subBreakParam = searchParams.get('subBreak');
+      let parsedSubBreak: Record<string, number> | undefined;
+      if (subBreakParam) {
+        try {
+          parsedSubBreak = JSON.parse(decodeURIComponent(subBreakParam));
+        } catch {}
+      }
+
       const receiptMeta = (amtParam || baseAmtParam || cidParam || ctitleParam || donorParam) ? {
         amount: amtParam ? parseFloat(amtParam) : undefined,
         baseAmount: baseAmtParam ? parseFloat(baseAmtParam) : undefined,
@@ -363,6 +398,20 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         category: (catParam as BawmCategory) || undefined,
         donorName: donorParam ? decodeURIComponent(donorParam) : undefined,
         donorPhone: donorPhoneParam ? decodeURIComponent(donorPhoneParam) : undefined,
+        donorVeng: vengParam ? decodeURIComponent(vengParam) : undefined,
+        donorType: donorTypeParam ? decodeURIComponent(donorTypeParam) : undefined,
+        groupName: groupParam ? decodeURIComponent(groupParam) : undefined,
+        memberId: midParam ? decodeURIComponent(midParam) : undefined,
+        subId: subIdParam ? decodeURIComponent(subIdParam) : undefined,
+        isDependent: isDepParam === '1' || isDepParam === 'true',
+        subCategory: subcatParam ? decodeURIComponent(subcatParam) : undefined,
+        subCategoryBreakdown: parsedSubBreak,
+        periodType: pTypeParam ? decodeURIComponent(pTypeParam) : undefined,
+        periodMonth: pMonthParam ? decodeURIComponent(pMonthParam) : undefined,
+        periodYear: pYearParam ? decodeURIComponent(pYearParam) : undefined,
+        periodLabel: pLabelParam ? decodeURIComponent(pLabelParam) : undefined,
+        remark: remarkParam ? decodeURIComponent(remarkParam) : undefined,
+        date: dateParam ? decodeURIComponent(dateParam) : undefined,
         isAnonymous: anonParam === '1' || anonParam === 'true',
         utr: utrParam ? decodeURIComponent(utrParam) : undefined,
       } : undefined;

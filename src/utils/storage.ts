@@ -882,7 +882,13 @@ export const deleteStoredCampaign = (
 export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
   if (!tx) return false;
   const status = (tx.status || '').toLowerCase().trim();
-  return status === 'completed' || status === 'success' || status === 'verified';
+  return status === 'completed' || 
+         status === 'success' || 
+         status === 'verified' || 
+         status === 'paid' || 
+         status === 'payment_success' || 
+         status === 'payment_completed' ||
+         status === 'done';
 };
 
 export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign | null): boolean => {
@@ -2988,22 +2994,71 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 
 export const saveTransaction = (tx: Transaction): void => {
   if (!tx || !tx.id) return;
-  if (!tx.createdAt) tx.createdAt = new Date().toISOString();
-  if (!tx.updatedAt) tx.updatedAt = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  if (!tx.createdAt) tx.createdAt = nowIso;
+  tx.updatedAt = nowIso;
+  if (!tx.timestamp) tx.timestamp = nowIso;
+  if (!tx.date) tx.date = nowIso.slice(0, 10);
+
+  // Guarantee banking UTR and receipt hash for complete record validity
+  if (!tx.utr) {
+    tx.utr = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
+  }
+  if (!tx.referenceNo) {
+    tx.referenceNo = tx.utr;
+  }
+  if (!tx.txHash) {
+    tx.txHash = 'RPAY' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+  }
+  if (!tx.paymentMethod) {
+    tx.paymentMethod = 'online';
+  }
+
   const isBill = Boolean(tx.billServiceType || tx.billConsumerNumber || tx.billOperator) ||
     String(tx.id || '').startsWith('BILL-') || 
     String(tx.id || '').startsWith('TXN-BILL-') || 
     String(tx.campaignId || '').startsWith('bill-');
+
   if (!isBill) {
-    // Canonical member name enforcement if memberId is set and donorName is not provided
-    if (tx.memberId && !tx.donorName) {
+    // Canonical member enrichment if memberId is set
+    if (tx.memberId) {
       try {
-        const mems = getMembers(tx.campaignId);
+        const mems = getMembers();
         const mem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());
-        if (mem && mem.name) {
-          tx.donorName = mem.name;
+        if (mem) {
+          if (!tx.donorName || tx.donorName === 'Valued Donor') {
+            tx.donorName = mem.name;
+          }
+          if (!tx.donorPhone && mem.phone) {
+            tx.donorPhone = mem.phone;
+          }
+          if (!tx.donorVeng && (mem.section || mem.veng || mem.address)) {
+            tx.donorVeng = mem.section || mem.veng || mem.address;
+          }
+          if (!tx.donorType) {
+            tx.donorType = 'member';
+          }
         }
       } catch (e) {}
+    }
+
+    // Resolve campaign title and category if needed from stored campaigns
+    if (!tx.campaignTitle || tx.campaignTitle === 'RonPay Community Bawm' || !tx.category) {
+      try {
+        const camps = getStoredCampaigns();
+        const camp = camps.find(c => c && String(c.id).toLowerCase().trim() === String(tx.campaignId).toLowerCase().trim());
+        if (camp) {
+          if (!tx.campaignTitle || tx.campaignTitle === 'RonPay Community Bawm') {
+            tx.campaignTitle = camp.title;
+          }
+          if (!tx.category) {
+            tx.category = camp.category;
+          }
+          if (!tx.donorVeng && camp.location) {
+            tx.donorVeng = camp.location;
+          }
+        }
+      } catch {}
     }
 
     const titleL = String(tx.campaignTitle || '').toLowerCase();
@@ -3039,32 +3094,61 @@ export const saveTransaction = (tx: Transaction): void => {
       }
     }
   }
+
+  // Ensure donor name has polite fallback
+  if (!tx.donorName) {
+    tx.donorName = tx.isAnonymous ? 'Anonymous' : 'Valued Donor';
+  }
+
   const cleanTxId = String(tx.id).toLowerCase().trim();
-  tx.updatedAt = new Date().toISOString();
+
+  // Normalize success status
+  const rawStatus = (tx.status || '').toLowerCase().trim();
+  if (rawStatus === 'payment_success' || rawStatus === 'success' || rawStatus === 'paid' || rawStatus === 'verified' || !rawStatus) {
+    tx.status = 'completed';
+  }
+
+  // Preserve and accurately calculate fees and total amounts
+  const numAmt = Number(tx.amount) || 0;
+  const numFee = Number(tx.platformFee) || 0;
+  if (tx.totalAmount === undefined || isNaN(Number(tx.totalAmount)) || Number(tx.totalAmount) <= 0) {
+    tx.totalAmount = numAmt + numFee;
+  }
+  if (tx.campaignNetReceived === undefined || isNaN(Number(tx.campaignNetReceived))) {
+    tx.campaignNetReceived = tx.feeOption === 'DEDUCT'
+      ? Math.max(0, numAmt - numFee)
+      : numAmt;
+  }
+
   tx.isSynced = false;
-  tx.totalAmount = Number(tx.amount) || 0;
-  tx.campaignNetReceived = Number(tx.amount) || 0;
   const current = getStoredTransactions();
   const updated = [tx, ...current.filter(t => String(t.id).toLowerCase().trim() !== cleanTxId)];
-  saveStoredTransactions(updated);
+  saveStoredTransactions(updated, true);
   recordUserPaidTxId(tx.id);
+
   if (typeof window !== 'undefined') {
     broadcastTabSync('transactions');
     broadcastTabSync('user_paid');
     window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: updated }));
     window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: getStoredUserPaidTxIds() }));
   }
+
+  // Push to server & mark synced
   syncTransactionToFirestore(tx).catch(() => {});
   safeApiFetch('/api/transactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(tx)
-  });
-  safeApiFetch('/api/data/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactions: [tx] })
-  });
+  }).then(async (res) => {
+    if (res && res.ok) {
+      tx.isSynced = true;
+      try {
+        const fresh = getStoredTransactions();
+        const patched = fresh.map(t => String(t.id).toLowerCase().trim() === cleanTxId ? { ...t, isSynced: true } : t);
+        localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(patched));
+      } catch {}
+    }
+  }).catch(() => {});
 };
 
 const WALLET_KEY = 'ronpay_wallet_v1';

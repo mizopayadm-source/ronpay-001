@@ -42,7 +42,9 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowRightLeft,
-  Receipt
+  Receipt,
+  Copy,
+  Check
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';

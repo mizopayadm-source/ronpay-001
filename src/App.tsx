@@ -65,7 +65,7 @@ import {
   setupWindowFocusSync,
   invalidateCacheOnAuthOrBoot
 } from './services/crossTabSync';
-import { syncAllWithServer, subscribeServerEvents } from './utils/syncEngine';
+import { syncAllWithServer, subscribeServerEvents, saveTransactionToServer, pullLatestServerState } from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS } from './data/initialData';
 
 // Components
@@ -514,27 +514,39 @@ export default function App() {
     });
 
     // Window Focus / Tab Re-activation Refetch:
-    // Performs a light check or invalidates stale localStorage/in-memory cache
-    // to sync the latest state whenever the user switches back to the tab or opens a new window.
+    // Performs a light check to sync the latest state whenever user switches back to tab or opens new window
     const unsubFocus = setupWindowFocusSync(() => {
       reloadLocalData();
-      syncAllWithServer().catch(() => {});
+      pullLatestServerState().then((res) => {
+        if (res?.transactions && res.transactions.length > 0) {
+          setTransactions(res.transactions);
+        }
+      }).catch(() => {});
     });
 
     // Real-time Server-Sent Events (SSE) for instant sub-second cross-device, phone, & multi-user sync
     const unsubSSE = subscribeServerEvents(() => {
-      syncAllWithServer().then(() => {
+      reloadLocalData();
+      pullLatestServerState().then((res) => {
+        if (res?.transactions && res.transactions.length > 0) {
+          setTransactions(res.transactions);
+        }
         reloadLocalData();
-      }).catch(() => {});
+      }).catch(() => {
+        reloadLocalData();
+      });
     });
 
+    // Gentle periodic background sync (every 12 seconds) without broadcasting loops
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
-        syncAllWithServer().then(() => {
-          reloadLocalData();
+        pullLatestServerState().then((res) => {
+          if (res?.transactions && res.transactions.length > 0) {
+            setTransactions(res.transactions);
+          }
         }).catch(() => {});
       }
-    }, 15000);
+    }, 12000);
 
     // Load local storage immediately on startup
     reloadLocalData();
@@ -848,14 +860,30 @@ export default function App() {
           campaignTitle: resolvedCampTitle,
           donorName: baseTx?.donorName || (meta?.isAnonymous ? 'Anonymous' : (meta?.donorName || 'Valued Donor')),
           donorPhone: baseTx?.donorPhone || meta?.donorPhone,
+          donorVeng: baseTx?.donorVeng || meta?.donorVeng,
+          donorType: baseTx?.donorType || meta?.donorType,
+          groupName: baseTx?.groupName || meta?.groupName,
+          memberId: baseTx?.memberId || meta?.memberId,
+          subId: baseTx?.subId || meta?.subId,
+          isDependent: Boolean(baseTx?.isDependent || meta?.isDependent),
           isAnonymous: Boolean(baseTx?.isAnonymous || meta?.isAnonymous),
           amount: base,
           platformFee: fee,
           totalAmount: total,
           category: (baseTx?.category || meta?.category || matchedCamp?.category || 'others') as any,
-          paymentMethod: 'phonepe',
+          paymentMethod: baseTx?.paymentMethod || 'phonepe',
           status: 'completed',
+          remark: baseTx?.remark || meta?.remark,
+          subCategory: baseTx?.subCategory || meta?.subCategory,
+          subCategoryBreakdown: baseTx?.subCategoryBreakdown || meta?.subCategoryBreakdown,
+          periodType: baseTx?.periodType || meta?.periodType,
+          periodMonth: baseTx?.periodMonth || meta?.periodMonth,
+          periodYear: baseTx?.periodYear || meta?.periodYear,
+          periodLabel: baseTx?.periodLabel || meta?.periodLabel,
           timestamp: baseTx?.timestamp || new Date().toISOString(),
+          createdAt: baseTx?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          date: baseTx?.date || meta?.date || new Date().toISOString().slice(0, 10),
           referenceNo: statusRes.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
           verifiedAt: new Date().toISOString(),
           feeOption: feeOption,
@@ -1158,10 +1186,14 @@ export default function App() {
       markCampaignPaidInSession(transaction.campaignId);
     }
     setCompletedTransaction(transaction);
+    setTransactions(prev => [transaction, ...prev.filter(t => t.id !== transaction.id)]);
+    setUserPaidIds(prev => Array.from(new Set([transaction.id, ...prev])));
     setSelectedCampaign(null);
     setAutoOpenPhonePeCheckout(false);
     cleanPaymentUrlParams();
     reloadLocalData();
+    saveTransactionToServer(transaction).catch(() => {});
+    syncAllWithServer(true).catch(() => {});
     handleNavigate('success', { replace: true });
   };
 
@@ -1528,6 +1560,7 @@ export default function App() {
             <HomeScreen
               campaigns={campaigns}
               transactions={transactions}
+              userPaidIds={userPaidIds}
               creatorProfile={creatorProfile}
               announcement={announcement}
               onStartScanner={handleStartScanner}
@@ -1736,6 +1769,8 @@ export default function App() {
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);
                 cleanPaymentUrlParams();
+                reloadLocalData();
+                pullLatestServerState().catch(() => {});
                 handleNavigate('home', { replace: true });
               }}
               onExploreMore={() => {
@@ -1746,6 +1781,8 @@ export default function App() {
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);
                 cleanPaymentUrlParams();
+                reloadLocalData();
+                pullLatestServerState().catch(() => {});
                 handleNavigate('explorer', { replace: true });
               }}
             />

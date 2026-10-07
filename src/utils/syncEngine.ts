@@ -620,14 +620,24 @@ export async function deleteMemberFromServer(memberId: string): Promise<void> {
  */
 export async function saveTransactionToServer(tx: Transaction): Promise<void> {
   // 1. Direct write to Firestore
-  await syncTransactionToFirestore(tx);
+  syncTransactionToFirestore(tx).catch(() => {});
 
-  // 2. Also post to local server
-  safeApiFetch('/api/transactions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(tx),
-  });
+  // 2. Also post to local express server and update sync state
+  try {
+    const res = await safeApiFetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx),
+    });
+    if (res && res.ok) {
+      tx.isSynced = true;
+      try {
+        const fresh = getStoredTransactions();
+        const patched = fresh.map(t => String(t.id).toLowerCase().trim() === String(tx.id).toLowerCase().trim() ? { ...t, isSynced: true } : t);
+        localStorage.setItem('ronpay_transactions_v2', JSON.stringify(patched));
+      } catch {}
+    }
+  } catch {}
 }
 
 /**
@@ -864,6 +874,125 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
 }
 
 /**
+ * Fast authoritative pull of latest central state without re-posting back stale data.
+ * Used for real-time SSE updates and tab focus events to avoid infinite broadcast loops.
+ */
+export async function pullLatestServerState(): Promise<SyncDataState | null> {
+  if (typeof window === 'undefined') return null;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return getLocalFallbackState();
+  }
+
+  try {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
+
+    const response = await fetch(resolveApiUrl('/api/data/state'), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller ? controller.signal : undefined
+    });
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const res = await response.json();
+      if (res && res.success && res.data) {
+        const serverData = res.data;
+
+        // 1. Process server deletions first
+        if (Array.isArray(serverData.deletedTransactionIds)) {
+          for (const tId of serverData.deletedTransactionIds) {
+            markTransactionAsDeleted(tId);
+          }
+        }
+        if (Array.isArray(serverData.deletedCampaignIds)) {
+          for (const dId of serverData.deletedCampaignIds) {
+            recordDeletedCampaignId(dId);
+          }
+        }
+        if (Array.isArray(serverData.deletedMemberIds)) {
+          for (const mId of serverData.deletedMemberIds) {
+            markMemberAsDeleted(mId);
+          }
+        }
+
+        // 2. Campaigns
+        if (Array.isArray(serverData.campaigns)) {
+          saveStoredCampaigns(serverData.campaigns, true);
+        }
+
+        // 3. Members
+        if (Array.isArray(serverData.members)) {
+          saveMembers(serverData.members, true);
+        }
+
+        // 4. Transactions - merge with offline pending
+        if (Array.isArray(serverData.transactions)) {
+          const currentTxs = getStoredTransactions();
+          const deletedIds = getDeletedTransactionIds();
+          const txMap = new Map<string, Transaction>();
+
+          // Add genuinely offline pending transactions
+          for (const lt of currentTxs) {
+            if (lt && lt.id && (lt.isSynced === false || (lt as any).isOfflinePending)) {
+              const k = String(lt.id).toLowerCase().trim();
+              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+                txMap.set(k, lt);
+              }
+            }
+          }
+
+          // Authoritative server transactions
+          for (const st of serverData.transactions) {
+            if (st && st.id) {
+              const k = String(st.id).toLowerCase().trim();
+              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+                txMap.set(k, { ...st, isSynced: true });
+              }
+            }
+          }
+
+          const cleanTxs = Array.from(txMap.values());
+          cleanTxs.sort((a, b) => {
+            const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+            return timeB - timeA;
+          });
+
+          saveStoredTransactions(cleanTxs, true);
+          serverData.transactions = cleanTxs;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+          }
+        }
+
+        // 5. Creators
+        if (Array.isArray(serverData.creators)) {
+          saveStoredCreatorsList(serverData.creators, true);
+        }
+
+        // 6. Pricing & Announcements
+        if (serverData.pricingConfig) {
+          saveStoredPricingConfig(serverData.pricingConfig, true);
+        }
+        if (serverData.announcement) {
+          saveStoredAnnouncement(serverData.announcement, true);
+        }
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(RONPAY_SYNC_EVENT, { detail: serverData }));
+        }
+        return serverData;
+      }
+    }
+  } catch (err) {
+    // Silently fall back to cached state
+  }
+
+  return getLocalFallbackState();
+}
+
+/**
  * High-speed Server-Sent Events (SSE) listener for instant sub-second multi-device / multi-user data synchronization.
  * Guarantees phones, browsers, and different user sessions stay in lockstep without delay.
  */
@@ -874,6 +1003,7 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
 
   let eventSource: EventSource | null = null;
   let sseReconnectTimer: any = null;
+  let debounceTimer: any = null;
   let isClosed = false;
 
   const connect = () => {
@@ -885,7 +1015,14 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
         try {
           const parsed = JSON.parse(event.data);
           if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
-            onChanged();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              pullLatestServerState().then(() => {
+                onChanged();
+              }).catch(() => {
+                onChanged();
+              });
+            }, 180);
           }
         } catch {}
       };
@@ -919,7 +1056,7 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
       if (!eventSource) {
         connect();
       }
-      onChanged();
+      pullLatestServerState().then(() => onChanged()).catch(() => onChanged());
     }
   };
 
@@ -928,7 +1065,7 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
       if (!eventSource) {
         connect();
       }
-      onChanged();
+      pullLatestServerState().then(() => onChanged()).catch(() => onChanged());
     }
   };
 
@@ -940,6 +1077,10 @@ export function subscribeServerEvents(onChanged: () => void): () => void {
     if (sseReconnectTimer) {
       clearTimeout(sseReconnectTimer);
       sseReconnectTimer = null;
+    }
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
     }
     if (eventSource) {
       eventSource.close();
