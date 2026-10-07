@@ -272,15 +272,25 @@ export const buildKumtluangMatrix = (
     : [];
 
   // Canonical heads ONLY for the specific canonical campaign (BMP Shillong) if needed
+  predefinedSubCats = predefinedSubCats.map(s => s === 'Inkhawm Thawhlawm' ? 'Group' : s);
+
   if (activeCampaign?.id === 'cmp-1788107291420' || (!activeCampaign && transactions.some(t => t.campaignId === 'cmp-1788107291420'))) {
     if (!predefinedSubCats.includes('BMP Fund')) predefinedSubCats.unshift('BMP Fund');
     if (!predefinedSubCats.includes('General')) {
       const bmpIdx = predefinedSubCats.indexOf('BMP Fund');
       predefinedSubCats.splice(bmpIdx + 1, 0, 'General');
     }
+    if (!predefinedSubCats.includes('Group')) {
+      predefinedSubCats.push('Group');
+    }
+    predefinedSubCats = predefinedSubCats.filter(s => s !== 'Inkhawm Thawhlawm');
   } else if (predefinedSubCats.includes('BMP Fund') && !predefinedSubCats.includes('General')) {
     const bmpIdx = predefinedSubCats.indexOf('BMP Fund');
     predefinedSubCats.splice(bmpIdx + 1, 0, 'General');
+    if (!predefinedSubCats.includes('Group')) {
+      predefinedSubCats.push('Group');
+    }
+    predefinedSubCats = predefinedSubCats.filter(s => s !== 'Inkhawm Thawhlawm');
   }
 
   // If viewing across multiple campaigns without a single selected campaign:
@@ -472,6 +482,11 @@ export const buildKumtluangMatrix = (
                 matchedOfficial = 'General';
               }
             }
+            if (!matchedOfficial && predefinedSubCats.includes('Group')) {
+              if (cleanKey.includes('group') || resolvedType === 'group' || t.donorType === 'group' || (t.groupName && t.groupName.trim().length > 0)) {
+                matchedOfficial = 'Group';
+              }
+            }
             if (matchedOfficial) {
               const actualAdd = t.amount > 0 ? Math.min(num, Math.max(0, t.amount - allocatedAmt)) : num;
               if (actualAdd > 0) {
@@ -508,8 +523,14 @@ export const buildKumtluangMatrix = (
           }
         }
 
-        if (!resolvedSubCat && isDonorInkhawm && predefinedSubCats.includes('Inkhawm Thawhlawm')) {
-          resolvedSubCat = 'Inkhawm Thawhlawm';
+        const isGroupOffering = 
+          resolvedType === 'group' ||
+          t.donorType === 'group' ||
+          (t.groupName && t.groupName.trim().length > 0) ||
+          (t.subCategory && t.subCategory.toLowerCase().includes('group'));
+
+        if (!resolvedSubCat && isGroupOffering && predefinedSubCats.includes('Group')) {
+          resolvedSubCat = 'Group';
         }
 
         const isGeneralOffering = 
@@ -525,6 +546,10 @@ export const buildKumtluangMatrix = (
 
         if (!resolvedSubCat && isGeneralOffering && predefinedSubCats.includes('General')) {
           resolvedSubCat = 'General';
+        }
+
+        if (!resolvedSubCat && isDonorInkhawm && predefinedSubCats.includes('Inkhawm Thawhlawm')) {
+          resolvedSubCat = 'Inkhawm Thawhlawm';
         }
 
         if (!resolvedSubCat) {
@@ -566,16 +591,25 @@ export const buildKumtluangMatrix = (
     }
   });
 
-  // Include predefined campaign categories plus any active collection heads like Inkhawm Thawhlawm
+  // Include predefined campaign categories (strictly preserving order: BMP Fund, General, Group, etc.)
   let categories: string[] = [];
   if (predefinedSubCats.length > 0) {
-    const combined = new Set([...predefinedSubCats]);
-    categorySet.forEach(c => {
-      if (c && c.trim()) combined.add(c.trim());
+    const combined = new Set<string>();
+    predefinedSubCats.forEach(c => {
+      if (c && c.trim()) {
+        const clean = c.trim() === 'Inkhawm Thawhlawm' ? 'Group' : c.trim();
+        combined.add(clean);
+      }
     });
-    categories = Array.from(combined);
+    categorySet.forEach(c => {
+      if (c && c.trim()) {
+        const clean = c.trim() === 'Inkhawm Thawhlawm' ? 'Group' : c.trim();
+        combined.add(clean);
+      }
+    });
+    categories = Array.from(combined).filter(c => c !== 'Inkhawm Thawhlawm');
   } else {
-    categories = Array.from(categorySet);
+    categories = Array.from(categorySet).map(c => c === 'Inkhawm Thawhlawm' ? 'Group' : c).filter(Boolean);
     if (categories.length === 0) {
       categories = ['Thawhlawm'];
     }

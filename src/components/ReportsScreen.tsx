@@ -896,7 +896,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (!matchCampaign) return false;
 
       const tDonor = (t.donorName || '').toLowerCase().trim();
+      const isUnknownDonorTarget = cleanLower === 'unknown donor' || cleanLower === 'unknown';
+      const matchUnknown = isUnknownDonorTarget && (!t.donorName || tDonor === '' || tDonor === 'unknown donor' || tDonor === 'unknown');
       const matchName = tDonor === cleanLower ||
+        matchUnknown ||
         (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
         (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
       const matchMember = matchedMember && (
@@ -935,7 +938,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (!matchCampaign) return false;
 
       const tDonor = (t.donorName || '').toLowerCase().trim();
+      const isUnknownDonorTarget = cleanLower === 'unknown donor' || cleanLower === 'unknown';
+      const matchUnknown = isUnknownDonorTarget && (!t.donorName || tDonor === '' || tDonor === 'unknown donor' || tDonor === 'unknown');
       const matchName = tDonor === cleanLower ||
+        matchUnknown ||
         (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
         (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
       const matchMember = matchedMember && (

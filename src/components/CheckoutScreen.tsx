@@ -562,10 +562,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       if (lastInitCampId.current !== campId) {
         lastInitCampId.current = campId;
         const initialMap: { [key: string]: number | '' } = {};
-        const cats = (campaign?.subCategories && campaign.subCategories.length > 0)
+        const isBmp = campId === 'cmp-1788107291420' || String(campaign?.title || '').toLowerCase().includes('bmp');
+        const rawCats = (campaign?.subCategories && campaign.subCategories.length > 0)
           ? campaign.subCategories
-          : ['BMP Fund', 'General'];
-        cats.forEach((cat, idx) => {
+          : (isBmp ? ['BMP Fund'] : ['Thawhlawm']);
+        // Exclude General, Inkhawm Thawhlawm, Group from member donation breakdown inputs
+        const cats = rawCats.filter(c => {
+          const lower = c.trim().toLowerCase();
+          return lower !== 'general' && lower !== 'inkhawm thawhlawm' && lower !== 'group';
+        });
+        const finalCats = cats.length > 0 ? cats : (isBmp ? ['BMP Fund'] : ['Thawhlawm']);
+        finalCats.forEach((cat, idx) => {
           initialMap[cat] = explicitAmt || (idx === 0 ? 500 : '');
         });
         setSubcatAmounts(initialMap);
@@ -1054,12 +1061,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         ? (typeof groupAmount === 'number' ? groupAmount : 0)
         : kumtluangDonorType === 'general'
         ? (typeof generalAmount === 'number' ? generalAmount : 0)
-        : (Object.values(subcatAmounts) as (number | '')[]).reduce<number>((acc, curr) => acc + (typeof curr === 'number' ? curr : 0), 0))
+        : (Object.entries(subcatAmounts) as [string, number | ''][])
+            .filter(([k]) => {
+              const lower = k.trim().toLowerCase();
+              return lower !== 'general' && lower !== 'inkhawm thawhlawm' && lower !== 'group';
+            })
+            .reduce<number>((acc, [, curr]) => acc + (typeof curr === 'number' ? curr : 0), 0))
     : (typeof standardAmount === 'number' ? standardAmount : 0);
 
   const resolvedNumericSubcatAmounts = useMemo(() => {
     const res: { [key: string]: number } = {};
     Object.entries(subcatAmounts).forEach(([k, v]) => {
+      const lower = k.trim().toLowerCase();
+      if (lower === 'general' || lower === 'inkhawm thawhlawm' || lower === 'group') return;
       const num = typeof v === 'number' ? v : parseFloat(String(v));
       if (!isNaN(num) && num > 0) {
         res[k] = num;
@@ -3433,7 +3447,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
                 {/* Sub-Category Amounts (e.g. BMP Fund, Mission, Building Fund, etc.) */}
                 <div className="space-y-3">
-                  {Object.keys(subcatAmounts).map((catName) => {
+                  {Object.keys(subcatAmounts)
+                    .filter((catName) => {
+                      const lower = catName.trim().toLowerCase();
+                      return lower !== 'general' && lower !== 'inkhawm thawhlawm' && lower !== 'group';
+                    })
+                    .map((catName) => {
                     const currentVal = subcatAmounts[catName];
                     const numVal = typeof currentVal === 'number' ? currentVal : (parseFloat(String(currentVal)) || 0);
                     return (

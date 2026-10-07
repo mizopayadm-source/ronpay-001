@@ -467,16 +467,7 @@ export const getStoredCampaigns = (): Campaign[] => {
               if (updated.title) {
                 updated.title = updated.title.replace(/,+$/, '').trim();
               }
-              if (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0) {
-                updated.subCategories = ['BMP Fund', 'General'];
-              } else if (!updated.subCategories.includes('General')) {
-                const bIdx = updated.subCategories.indexOf('BMP Fund');
-                if (bIdx !== -1) {
-                  updated.subCategories.splice(bIdx + 1, 0, 'General');
-                } else {
-                  updated.subCategories.push('General');
-                }
-              }
+              updated.subCategories = ['BMP Fund'];
               if (!updated.imageUrl) {
                 updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
               }
@@ -515,8 +506,8 @@ export const getStoredCampaigns = (): Campaign[] => {
               changed = true;
             }
             if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
-              if (!updated.subCategories || !updated.subCategories.includes('BMP Fund') || !updated.subCategories.includes('Inkhawm Thawhlawm')) {
-                updated.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
+              if (!updated.subCategories || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
+                updated.subCategories = ['BMP Fund'];
                 changed = true;
               }
               if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {
@@ -931,6 +922,8 @@ export const clearDeletedTransactionId = (txId: string): void => {
 };
 
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
+  'rpay-test-123456',
+  'test-123',
   'rpay-cash-800-web',
   'rpay-cash-800-app',
   'rpay_txn_1790753980087_908',

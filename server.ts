@@ -4234,6 +4234,8 @@ const PROTECTED_CANONICAL_TX_IDS = new Set<string>();
 const CANONICAL_BMP_RECEIPTS: any[] = [];
 
 const PURGED_SIMULATOR_TXS = new Set([
+  'rpay-test-123456',
+  'test-123',
   'rpay_txn_1789150125034_382',
   'rpay_txn_1789149531480_724',
   'rpay_txn_1789055627850_921',
@@ -4592,11 +4594,15 @@ function saveDatabase(db: DatabaseSchema) {
     try {
       const srcPath = path.join(process.cwd(), 'src', 'data', 'ronpay_db.json');
       if (fs.existsSync(path.dirname(srcPath))) {
-        fs.writeFileSync(srcPath, JSON.stringify(db, null, 2), 'utf-8');
+        const tmpSrc = `${srcPath}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
+        fs.writeFileSync(tmpSrc, JSON.stringify(db, null, 2), 'utf-8');
+        fs.renameSync(tmpSrc, srcPath);
       }
       const publicPath = path.join(process.cwd(), 'public', 'ronpay_db.json');
       if (fs.existsSync(path.dirname(publicPath))) {
-        fs.writeFileSync(publicPath, JSON.stringify(db, null, 2), 'utf-8');
+        const tmpPub = `${publicPath}.${Date.now()}.${Math.random().toString(36).substring(2, 8)}.tmp`;
+        fs.writeFileSync(tmpPub, JSON.stringify(db, null, 2), 'utf-8');
+        fs.renameSync(tmpPub, publicPath);
       }
     } catch {}
 
