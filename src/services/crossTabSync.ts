@@ -9,6 +9,7 @@
  */
 
 import { resetCloudSessionGuards } from './firestoreSync';
+import { markMemberAsDeleted } from '../utils/storage';
 
 export const BROADCAST_CHANNEL_NAME = 'ronpay_state_sync';
 export const LEGACY_BROADCAST_CHANNEL_NAME = 'ronpay_realtime_sync';
@@ -113,14 +114,14 @@ function handleIncomingMessage(rawEventData: any) {
 
   // Cross-tab member deletion tombstone processing
   if (normalizedMessage.topic === 'members') {
-    import('../utils/storage').then(({ markMemberAsDeleted }) => {
+    try {
       if (normalizedMessage.data?.deletedId) {
         markMemberAsDeleted(normalizedMessage.data.deletedId);
       }
       if (Array.isArray(normalizedMessage.data?.deletedIds)) {
         normalizedMessage.data.deletedIds.forEach((id: string) => markMemberAsDeleted(id));
       }
-    }).catch(() => {});
+    } catch {}
   }
 
   // Dispatch custom local events on the receiving tab so open modals & components update instantly

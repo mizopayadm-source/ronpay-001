@@ -1316,7 +1316,7 @@ export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicP
  * and atomically increment the Distributed Counter in stats/public_pool
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
-  if (!isNetworkOnline || !tx || !tx.id) return;
+  if (!tx || !tx.id) return;
   try {
     const cleanTx = sanitizeForFirestore({
       ...tx,
@@ -1607,7 +1607,7 @@ export async function deleteTransactionFromFirestore(
   transactionId: string,
   txDetails?: Transaction | { amount?: number; status?: string; timestamp?: string }
 ): Promise<void> {
-  if (!isNetworkOnline || !transactionId) return;
+  if (!transactionId) return;
   const cleanId = String(transactionId).trim();
   const idKey = cleanId.toLowerCase();
 
@@ -1703,7 +1703,7 @@ export async function deleteMultipleTransactionsFromFirestore(
   transactionIds: string[],
   knownTransactions?: Transaction[]
 ): Promise<void> {
-  if (!isNetworkOnline || !transactionIds || transactionIds.length === 0) return;
+  if (!transactionIds || transactionIds.length === 0) return;
   const cleanIds = transactionIds.map(id => String(id).trim()).filter(Boolean);
   if (cleanIds.length === 0) return;
 
