@@ -3444,7 +3444,9 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   } catch (e) {}
 
   // Atomic batch delete & distributed counter decrement in stats/public_pool
-  deleteMultipleTransactionsFromFirestore(cleanIds, targetTxs).catch(() => {});
+  deleteMultipleTransactionsFromFirestore(cleanIds, targetTxs).catch((err) => {
+    console.error('Failed to delete transactions from Firestore:', err);
+  });
 
   safeApiFetch('/api/transactions/delete-batch', {
     method: 'POST',

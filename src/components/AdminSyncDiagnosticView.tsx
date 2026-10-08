@@ -24,6 +24,7 @@ import {
   Info
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
+import { AuditLogTable } from './AuditLogTable';
 import { 
   getStoredTransactions, 
   getStoredCampaigns, 
@@ -38,6 +39,8 @@ import {
   fetchFirestoreDiagnosticData, 
   FirestoreDiagnosticData, 
   performDeepAuditAndAutoRepair,
+  purgeNonBMPTransactions,
+  purgeSystemUpdatedTransactions,
   DeepAuditResult,
   syncTransactionToFirestore, 
   syncCampaignToFirestore,
@@ -226,6 +229,36 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         message: `❌ Audit failed: ${err?.message || 'Network error'}`,
         type: 'error'
       });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePurgeNonBMP = async () => {
+    if (!confirm("Are you sure you want to delete ALL transactions except BMP Shillong Unit? This cannot be undone!")) return;
+    
+    setIsScanning(true);
+    try {
+      const count = await purgeNonBMPTransactions();
+      alert(`Successfully purged ${count} transactions.`);
+      await runDiagnosticScan();
+    } catch (err: any) {
+      alert('Error purging transactions: ' + err.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePurgeSystemUpdated = async () => {
+    if (!confirm("Are you sure you want to delete ALL transactions that were automatically updated by the system? This cannot be undone!")) return;
+    
+    setIsScanning(true);
+    try {
+      const count = await purgeSystemUpdatedTransactions();
+      alert(`Successfully purged ${count} system-updated transactions.`);
+      await runDiagnosticScan();
+    } catch (err: any) {
+      alert('Error purging transactions: ' + err.message);
     } finally {
       setIsScanning(false);
     }
@@ -750,6 +783,28 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <span>{isScanning ? 'Auditing & Repairing...' : 'Scan Now'}</span>
           </button>
 
+          <button
+            type="button"
+            onClick={handlePurgeNonBMP}
+            disabled={isScanning}
+            title="Purge Non-BMP Shillong Unit Transactions"
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs flex items-center gap-2 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Purge Non-BMP</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePurgeSystemUpdated}
+            disabled={isScanning}
+            title="Purge System-Updated Transactions"
+            className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center gap-2 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Purge System-Updated</span>
+          </button>
+
           {discrepancies.length > 0 && (
             <button
               type="button"
@@ -1131,6 +1186,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           </div>
         </div>
       </div>
+
+      <AuditLogTable />
 
       {/* Discrepancy Items List */}
       <div className="space-y-2.5">

@@ -160,6 +160,49 @@ function getLocalDeletedTxIds(): Set<string> {
 }
 
 /**
+ * Purge transactions not belonging to BMP Shillong Unit (cmp-1788107291420)
+ */
+export async function purgeNonBMPTransactions(): Promise<number> {
+  const allTransactions = await getStoredTransactions();
+  const bmpCampaignId = 'cmp-1788107291420';
+  const toDelete = allTransactions.filter(t => t.campaignId !== bmpCampaignId);
+
+  if (toDelete.length === 0) return 0;
+
+  const batch = writeBatch(db);
+  for (const t of toDelete) {
+    const docRef = doc(db, 'transactions', t.id);
+    batch.delete(docRef);
+  }
+  
+  await batch.commit();
+
+  // Update local storage
+  const remaining = allTransactions.filter(t => t.campaignId === bmpCampaignId);
+  await saveStoredTransactions(remaining);
+  
+  return toDelete.length;
+}
+
+/**
+ * Purge transactions that have been automatically updated by the system.
+ * We identify these as transactions where updatedAt is present and different from createdAt.
+ */
+export async function purgeSystemUpdatedTransactions(): Promise<number> {
+  const allTransactions = await getStoredTransactions();
+  const systemUpdatedTransactions = allTransactions.filter(t => 
+    t.updatedAt && t.createdAt && t.updatedAt !== t.createdAt
+  );
+
+  const idsToPurge = systemUpdatedTransactions.map(t => t.id);
+  if (idsToPurge.length === 0) return 0;
+
+  // Perform purge (e.g., deleteMultipleTransactions)
+  await deleteMultipleTransactions(idsToPurge);
+  return idsToPurge.length;
+}
+
+/**
  * Merge local and remote collections by unique key, keeping newest and most complete records
  */
 import { compressDataUrl } from '../utils/imageCompressor';

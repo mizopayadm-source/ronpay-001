@@ -1065,6 +1065,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     });
 
     if (donorTxs.length === 0) {
+      console.warn('No transactions found for donor:', cleanTarget, { transactionsCount: transactions.length, selectedCampaignId });
       alert(`He donor (${cleanTarget}) payment record hi paih tur hmuh a ni lo.`);
       return;
     }
