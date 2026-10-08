@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { saveStoredCreatorProfile } from '../utils/storage';
+import { saveStoredCreatorProfile, executeCleanSlateFactoryReset } from '../utils/storage';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -709,18 +709,32 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <p className="text-[10px] text-amber-800">Protected with Biometrics & End-to-End Integrity</p>
         </div>
 
-        <div className="flex gap-2 pt-1">
+        <div className="space-y-2 pt-1">
+          <div className="flex gap-2">
+            <button
+              onClick={onResetData}
+              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Reset Demo
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs"
+            >
+              Close
+            </button>
+          </div>
           <button
-            onClick={onResetData}
-            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+            onClick={() => {
+              if (window.confirm("Data leh transaction zawng zawng paihin a bul atangin (Clean Slate / Data Ruak) tan i duh tak zet em? System-in sample data a rawn dah tawh lo vang.")) {
+                executeCleanSlateFactoryReset();
+                onResetData();
+              }
+            }}
+            className="w-full bg-rose-50 hover:bg-rose-100 text-rose-800 font-black py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Reset Demo
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-xs"
-          >
-            Close
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Clean Slate Factory Reset (Data Ruak Tanthar)</span>
           </button>
         </div>
       </div>

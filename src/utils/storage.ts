@@ -418,6 +418,14 @@ export const setLastSyncTime = (timestamp: string = new Date().toISOString()) =>
 
 export const getStoredCampaigns = (): Campaign[] => {
   try {
+    if (isCleanSlateModeActive()) {
+      const raw = localStorage.getItem(CAMPAIGNS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      return [];
+    }
+
     const deletedCampIds = getDeletedCampaignIds();
     const canonicalCampIds = new Set(INITIAL_CAMPAIGNS.map(c => String(c.id).toLowerCase().trim()));
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
@@ -1025,6 +1033,14 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
 
 export const getStoredTransactions = (): Transaction[] => {
   try {
+    if (isCleanSlateModeActive()) {
+      const raw = localStorage.getItem(TRANSACTIONS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      return [];
+    }
+
     const deletedIds = getDeletedTransactionIds();
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
     if (raw !== null) {
@@ -3938,6 +3954,32 @@ export const deleteCampaignExpenseHead = (campaignId: string, headToRemove: stri
     saveStoredExpenses(updatedExpenses);
   }
   return updatedHeads;
+};
+
+export const isCleanSlateModeActive = (): boolean => {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('ronpay_clean_slate_mode_v1') === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const executeCleanSlateFactoryReset = (): void => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('ronpay_clean_slate_mode_v1', 'true');
+      localStorage.removeItem(TRANSACTIONS_KEY);
+      localStorage.removeItem(CAMPAIGNS_KEY);
+      localStorage.removeItem('ronpay_public_pool_stats_v1');
+      localStorage.removeItem('ronpay_deleted_tx_ids_v1');
+      localStorage.removeItem('ronpay_deleted_campaign_ids_v1');
+      localStorage.removeItem('ronpay_kumtluang_members_v1');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: [] }));
+        window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: [] }));
+      }
+    }
+  } catch {}
 };
 
 export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[] => {
