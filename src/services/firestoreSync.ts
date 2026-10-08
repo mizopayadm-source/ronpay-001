@@ -645,13 +645,15 @@ function startLeaderFirestoreListeners(): void {
               data.createdAt = data.timestamp;
             }
           }
-          remoteTxList.push(data);
+          if (!(data as any).isDeleted) {
+            remoteTxList.push(data);
+          }
         }
       });
 
       if (remoteTxList.length > 0) {
         const deletedIds = getLocalDeletedTxIds();
-        const cleanRemote = remoteTxList.filter(t => t && t.id);
+        const cleanRemote = remoteTxList.filter(t => t && t.id && !(t as any).isDeleted);
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
         const remoteIdSet = new Set(cleanRemote.map(t => String(t.id).toLowerCase().trim()));

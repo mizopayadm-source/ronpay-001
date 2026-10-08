@@ -32,6 +32,7 @@ import {
   isCampaignCreator, 
   getStoredCampaigns, 
   getStoredTransactions,
+  getStoredUserPaidTxIds,
   saveTransaction, 
   deleteStoredTransaction, 
   deleteMultipleTransactions,
@@ -78,8 +79,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onRefreshData,
   onOpenLogin,
 }) => {
-  // Default to 'all' so users see their records immediately without hidden filter exclusion
-  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>('all');
+  const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
+  // Default to 'all' for Admin/Super Admin, 'sent' for regular users so ordinary donors only see their own records
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>(() => {
+    return isSuperAdminUser ? 'all' : 'sent';
+  });
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -185,8 +189,6 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }
     return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
   }, [safeCampaigns, creatorProfile]);
-
-  const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
 
   const isCreatorAccount = Boolean(
     isSuperAdminUser || 
