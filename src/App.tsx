@@ -10,6 +10,7 @@ import {
   AuditLog,
   MemberRecord,
   BillService,
+  PublicPoolStats,
 } from './types';
 import { Language, getCampaignCauseTitle } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
@@ -59,6 +60,7 @@ import {
   syncPricingConfigToFirestore,
   syncAnnouncementToFirestore,
   forceRefreshFirestore,
+  getStoredPublicPoolStats,
 } from './services/firestoreSync';
 import {
   subscribeCrossTabSync,
@@ -192,6 +194,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStoredAuditLogs());
   const [members, setMembersState] = useState<MemberRecord[]>(() => getMembers());
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
+  const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>(() => getStoredPublicPoolStats());
 
   // Modals Visibility
   const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
@@ -354,6 +357,11 @@ export default function App() {
         try {
           window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: updatedExpenses }));
         } catch {}
+      },
+      onStatsUpdate: (updatedStats) => {
+        if (updatedStats) {
+          setPublicPoolStats(updatedStats);
+        }
       },
     });
 
@@ -1563,6 +1571,7 @@ export default function App() {
               userPaidIds={userPaidIds}
               creatorProfile={creatorProfile}
               announcement={announcement}
+              publicPoolStats={publicPoolStats}
               onStartScanner={handleStartScanner}
               onCreateQRClick={() => {
                 if (creatorProfile.isApproved && creatorProfile.phone) {

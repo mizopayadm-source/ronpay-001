@@ -4,13 +4,14 @@ import {
   setDoc, 
   deleteDoc, 
   onSnapshot, 
-  getDocs,
-  getDoc,
+  getDocs, 
+  getDoc, 
   query, 
   orderBy, 
   limit, 
-  writeBatch,
-  arrayUnion 
+  writeBatch, 
+  arrayUnion, 
+  increment 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -20,8 +21,9 @@ import {
   CreatorProfile, 
   SystemPricingConfig, 
   AnnouncementBanner, 
-  AuditLog,
-  KumtluangExpense
+  AuditLog, 
+  KumtluangExpense, 
+  PublicPoolStats 
 } from '../types';
 import { 
   INITIAL_CAMPAIGNS, 
@@ -59,6 +61,7 @@ export interface FirestoreSyncCallbacks {
   onPricingConfigUpdate?: (pricingConfig: SystemPricingConfig) => void;
   onAuditLogsUpdate?: (logs: AuditLog[]) => void;
   onExpensesUpdate?: (expenses: KumtluangExpense[]) => void;
+  onStatsUpdate?: (stats: PublicPoolStats) => void;
   onStatusChange?: (status: FirestoreConnectionStatus, message?: string) => void;
 }
 
@@ -942,6 +945,41 @@ function startLeaderFirestoreListeners(): void {
     logFirestoreNetworkNote('Attach tombstones listener', err);
   }
 
+  // 6. Public Pool Distributed Counter Listener (doc: stats/public_pool - Costs ONLY 1 READ!)
+  try {
+    const statsDocRef = doc(db, 'stats', 'public_pool');
+    const unsubStats = onSnapshot(statsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const stats: PublicPoolStats = {
+          totalAmount: Number(data?.totalAmount) || 0,
+          totalCount: Number(data?.totalCount) || 0,
+          lastUpdated: data?.lastUpdated || new Date().toISOString(),
+          todayCount: Number(data?.todayCount) || 0,
+        };
+        setLocalJson('ronpay_public_pool_stats_v1', stats);
+        broadcast('onStatsUpdate', stats);
+        if (coordinatorChannel) {
+          try {
+            coordinatorChannel.postMessage({ type: 'sync_update', channel: 'stats', payload: stats });
+          } catch {}
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: stats }));
+          window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: stats }));
+        } catch {}
+      } else {
+        // Bootstrap: If stats/public_pool document doesn't exist yet, auto-calibrate from transactions!
+        recalibratePublicPoolStatsFromFirestore().catch(() => {});
+      }
+    }, (error) => {
+      logFirestoreNetworkNote('Stats public_pool listener note', error);
+    });
+    newUnsubscribers.push(unsubStats);
+  } catch (err) {
+    logFirestoreNetworkNote('Attach stats listener', err);
+  }
+
   activeFirestoreUnsubscribers = newUnsubscribers;
 }
 
@@ -1012,6 +1050,13 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
               broadcast('onExpensesUpdate', msg.payload);
               try {
                 window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: msg.payload }));
+              } catch {}
+            } else if (msg.channel === 'stats' && msg.payload) {
+              setLocalJson('ronpay_public_pool_stats_v1', msg.payload);
+              broadcast('onStatsUpdate', msg.payload);
+              try {
+                window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: msg.payload }));
+                window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: msg.payload }));
               } catch {}
             }
           } else if (msg.type === 'leader_resigned') {
@@ -1093,7 +1138,86 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
 }
 
 /**
+ * Helper to get currently stored public pool stats
+ */
+export function getStoredPublicPoolStats(): PublicPoolStats {
+  return getLocalJson<PublicPoolStats>('ronpay_public_pool_stats_v1', {
+    totalAmount: 0,
+    totalCount: 0,
+    lastUpdated: '',
+    todayCount: 0,
+  });
+}
+
+function hasIncrementedStats(txId: string): boolean {
+  try {
+    const raw = localStorage.getItem('ronpay_incremented_tx_ids');
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) && ids.includes(txId);
+  } catch {
+    return false;
+  }
+}
+
+function markIncrementedStats(txId: string): void {
+  try {
+    const raw = localStorage.getItem('ronpay_incremented_tx_ids');
+    const ids = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(ids) && !ids.includes(txId)) {
+      ids.push(txId);
+      if (ids.length > 500) ids.splice(0, ids.length - 500);
+      localStorage.setItem('ronpay_incremented_tx_ids', JSON.stringify(ids));
+    }
+  } catch {}
+}
+
+/**
+ * Recalibrates stats/public_pool document in Firestore from authoritative transactions
+ */
+export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicPoolStats | null> {
+  if (!isNetworkOnline) return null;
+  try {
+    const txQuery = query(collection(db, 'transactions'), limit(1000));
+    const snap = await getDocs(txQuery);
+    let totalAmt = 0;
+    let totalCnt = 0;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let todayCnt = 0;
+
+    snap.forEach((d) => {
+      const data = d.data() as Transaction;
+      const s = (data.status || '').toLowerCase().trim();
+      const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
+      if (isConfirmed) {
+        totalAmt += Number(data.amount) || 0;
+        totalCnt += 1;
+        const txDate = (data.timestamp || data.createdAt || data.date || '').slice(0, 10);
+        if (txDate === todayStr) {
+          todayCnt += 1;
+        }
+      }
+    });
+
+    const statsRef = doc(db, 'stats', 'public_pool');
+    const freshStats: PublicPoolStats = {
+      totalAmount: Math.round(totalAmt * 100) / 100,
+      totalCount: totalCnt,
+      lastUpdated: new Date().toISOString(),
+      todayCount: todayCnt,
+    };
+    await setDoc(statsRef, freshStats, { merge: true });
+    setLocalJson('ronpay_public_pool_stats_v1', freshStats);
+    broadcast('onStatsUpdate', freshStats);
+    return freshStats;
+  } catch (e) {
+    console.warn('[FirestoreSync] Failed to recalibrate public pool stats:', e);
+    return null;
+  }
+}
+
+/**
  * Direct write: Save single transaction to Firebase Firestore (transactions collection)
+ * and atomically increment the Distributed Counter in stats/public_pool
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
   if (!isNetworkOnline || !tx || !tx.id) return;
@@ -1104,6 +1228,23 @@ export async function syncTransactionToFirestore(tx: Transaction): Promise<void>
     });
     const docRef = doc(db, 'transactions', tx.id);
     await setDoc(docRef, cleanTx, { merge: true });
+
+    // Atomic Distributed Counter update in stats/public_pool
+    const cleanTxId = String(tx.id).toLowerCase().trim();
+    if (!hasIncrementedStats(cleanTxId)) {
+      const s = (tx.status || '').toLowerCase().trim();
+      const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
+      const amt = Number(tx.amount) || 0;
+      if (isConfirmed && amt > 0) {
+        markIncrementedStats(cleanTxId);
+        const statsRef = doc(db, 'stats', 'public_pool');
+        await setDoc(statsRef, {
+          totalAmount: increment(amt),
+          totalCount: increment(1),
+          lastUpdated: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
   } catch (err) {
     logFirestoreNetworkNote('Transaction sync', err);
   }

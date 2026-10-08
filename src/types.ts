@@ -622,4 +622,11 @@ export interface PaymentGatewayConfig {
   updatedAt?: string;
 }
 
+export interface PublicPoolStats {
+  totalAmount: number;
+  totalCount: number;
+  lastUpdated?: string;
+  todayCount?: number;
+}
+
 

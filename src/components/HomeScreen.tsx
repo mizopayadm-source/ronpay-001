@@ -46,7 +46,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem } from '../types';
+import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem, PublicPoolStats } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { CampaignTransferModal } from './CampaignTransferModal';
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
@@ -82,6 +82,7 @@ interface HomeScreenProps {
   onOpenSyncDiagnostic?: () => void;
   onOpenWebsite?: () => void;
   onPreviewImage?: (url: string, title?: string) => void;
+  publicPoolStats?: PublicPoolStats;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -93,6 +94,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   transactions = [],
   creatorProfile,
   announcement,
+  publicPoolStats,
   onOpenReports,
   onOpenMemberRoll,
   onShowBalance,
@@ -216,16 +218,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
-  // Compute dynamic live stats (Strictly based on confirmed transactions for 100% pool accuracy)
+  // Compute dynamic live stats (Prioritize authoritative Firestore Distributed Counter stats/public_pool for 100% multi-device consistency)
   const confirmedTxs = safeTransactions.filter(isConfirmedTransaction);
-  const totalRaised = confirmedTxs.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
-  const totalTxnsCount = confirmedTxs.length;
+  const localRaised = confirmedTxs.reduce((sum, t) => sum + (Number(t?.amount) || 0), 0);
+  const localTxnsCount = confirmedTxs.length;
+
+  const totalRaised = (publicPoolStats && publicPoolStats.totalAmount > 0)
+    ? publicPoolStats.totalAmount
+    : localRaised;
+
+  const totalTxnsCount = (publicPoolStats && publicPoolStats.totalCount > 0)
+    ? publicPoolStats.totalCount
+    : localTxnsCount;
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayTxnsCount = confirmedTxs.filter(t => {
+  const localTodayTxnsCount = confirmedTxs.filter(t => {
     const tDate = (t?.timestamp || t?.createdAt || t?.date || '').slice(0, 10);
     return tDate === todayStr;
   }).length;
+  const todayTxnsCount = (publicPoolStats && publicPoolStats.todayCount !== undefined && publicPoolStats.todayCount > 0)
+    ? publicPoolStats.todayCount
+    : localTodayTxnsCount;
 
   const activeQRsCount = safeCampaigns.filter(c => c && c.status === 'active').length;
 
