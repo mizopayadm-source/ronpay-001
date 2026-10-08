@@ -68,6 +68,7 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
+import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
 import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions, saveMultipleTransactions } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { 
@@ -198,6 +199,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     startMonth: chartStartMonth,
     endMonth: chartEndMonth,
   }), [chartStartMonth, chartEndMonth]);
+
+  const { stats: publicPoolStats } = usePublicPoolStats();
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
@@ -346,10 +349,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       }
     });
 
-    const allSum = baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const isGlobalUnfiltered = selectedFilter === 'all' && selectedCampaignId === 'all' && !startDate && !endDate && !searchQuery;
+    const allCount = isGlobalUnfiltered && publicPoolStats?.totalCount ? publicPoolStats.totalCount : baseTransactions.length;
+    const allSum = isGlobalUnfiltered && publicPoolStats?.totalAmount ? publicPoolStats.totalAmount : baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
     return {
-      allCount: baseTransactions.length,
+      allCount,
       allSum,
       memberCount,
       memberSum,
@@ -358,7 +363,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       generalCount,
       generalSum
     };
-  }, [baseTransactions]);
+  }, [baseTransactions, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery, publicPoolStats]);
 
   // Filter transactions with Record Type Filter applied
   const filteredTransactions = useMemo(() => {
@@ -435,9 +440,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, [filteredTransactions, sortOrder]);
 
   // Calculate totals (Platform Fee is completely excluded from Reports)
-  const totalCount = filteredTransactions.length;
+  const isUnfiltered = selectedFilter === 'all' && selectedCampaignId === 'all' && !startDate && !endDate && !searchQuery && recordTypeFilter === 'all';
+  const totalCount = isUnfiltered && publicPoolStats?.totalCount ? publicPoolStats.totalCount : filteredTransactions.length;
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
-  const grandTotal = filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const grandTotal = isUnfiltered && publicPoolStats?.totalAmount ? publicPoolStats.totalAmount : filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Selected campaign display name
   const currentCampaignDisplayName = selectedCampaignObj 

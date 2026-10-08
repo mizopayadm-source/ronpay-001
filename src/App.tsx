@@ -466,10 +466,20 @@ export default function App() {
       }
     };
 
+    const handleStatsSync = (e: any) => {
+      if (e && e.detail && typeof e.detail === 'object') {
+        setPublicPoolStats(e.detail);
+      } else {
+        setPublicPoolStats(getStoredPublicPoolStats());
+      }
+    };
+
     window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
     window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
     window.addEventListener('ronpay-transactions-updated', handleTransactionsSync);
+    window.addEventListener('ronpay_stats_updated', handleStatsSync);
+    window.addEventListener('ronpay-stats-updated', handleStatsSync);
     window.addEventListener('ronpay_user_paid_updated', handleUserPaidSync);
     window.addEventListener('ronpay-creator-updated', handleCreatorSync);
     window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
@@ -573,6 +583,8 @@ export default function App() {
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
       window.removeEventListener('ronpay-transactions-updated', handleTransactionsSync);
+      window.removeEventListener('ronpay_stats_updated', handleStatsSync);
+      window.removeEventListener('ronpay-stats-updated', handleStatsSync);
       window.removeEventListener('ronpay_user_paid_updated', handleUserPaidSync);
       window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
       window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);

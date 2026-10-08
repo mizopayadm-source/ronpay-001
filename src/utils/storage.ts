@@ -6,6 +6,7 @@ import {
   deleteCampaignFromFirestore,
   syncTransactionToFirestore,
   deleteTransactionFromFirestore,
+  deleteMultipleTransactionsFromFirestore,
   syncMemberToFirestore,
   deleteMemberFromFirestore,
   syncCreatorToFirestore,
@@ -843,6 +844,10 @@ export const deleteStoredCampaign = (
       return c;
     });
     saveStoredCampaigns(updated);
+    const updatedCamp = updated.find(c => String(c.id).toLowerCase().trim() === cleanId);
+    if (updatedCamp) {
+      syncCampaignToFirestore(updatedCamp).catch(() => {});
+    }
     recordAuditLog(
       'Campaign Cancelled & Archived',
       `Campaign "${target.title}" (${target.id}) with ₹${totalCollected} collected was cancelled and safely archived. Reason: ${reason || 'Admin cancelled'} (Ledger Retained)`,
@@ -888,7 +893,8 @@ export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
          status === 'paid' || 
          status === 'payment_success' || 
          status === 'payment_completed' ||
-         status === 'done';
+         status === 'done' ||
+         !status;
 };
 
 export const isTransactionForCampaign = (t?: Transaction | null, camp?: Campaign | null): boolean => {
@@ -983,7 +989,7 @@ export const getDeletedTransactionIds = (): Set<string> => {
   return result;
 };
 
-export const markTransactionAsDeleted = (txId: string): void => {
+export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = true): void => {
   if (!txId) return;
   const clean = String(txId).toLowerCase().trim();
   try {
@@ -993,8 +999,10 @@ export const markTransactionAsDeleted = (txId: string): void => {
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
     localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
 
-    // Also notify Firestore tombstone in real-time
-    deleteTransactionFromFirestore(clean).catch(() => {});
+    // Also notify Firestore tombstone in real-time if requested
+    if (syncFirestore) {
+      deleteTransactionFromFirestore(clean).catch(() => {});
+    }
 
     // Immediately remove from local transaction cache to instantly reflect deletion
     const raw = localStorage.getItem(TRANSACTIONS_KEY);
@@ -3384,9 +3392,11 @@ export const deleteStaffAccount = (staffId: string): void => {
 export const deleteStoredTransaction = (transactionId: string): void => {
   if (!transactionId) return;
   const cleanId = String(transactionId).trim();
-  markTransactionAsDeleted(cleanId);
-  
   const current = getStoredTransactions();
+  const targetTx = current.find(t => String(t.id).toLowerCase().trim() === cleanId.toLowerCase());
+
+  markTransactionAsDeleted(cleanId, false);
+  
   const updated = current.filter(t => String(t.id).toLowerCase().trim() !== cleanId.toLowerCase());
   
   // Update local storage and broadcast
@@ -3397,8 +3407,8 @@ export const deleteStoredTransaction = (transactionId: string): void => {
     }
   } catch (e) {}
 
-  // Delete from Firestore
-  deleteTransactionFromFirestore(cleanId).catch(() => {});
+  // Delete from Firestore with known tx details to atomically decrement stats/public_pool
+  deleteTransactionFromFirestore(cleanId, targetTx).catch(() => {});
 
   // Delete from Server immediately
   safeApiFetch(`/api/transactions/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
@@ -3415,11 +3425,13 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   const cleanIds = transactionIds.map(id => String(id).trim()).filter(Boolean);
   const idSet = new Set(cleanIds.map(id => id.toLowerCase()));
 
+  const current = getStoredTransactions();
+  const targetTxs = current.filter(t => idSet.has(String(t.id).toLowerCase().trim()));
+
   for (const id of cleanIds) {
-    markTransactionAsDeleted(id);
+    markTransactionAsDeleted(id, false);
   }
 
-  const current = getStoredTransactions();
   const updated = current.filter(t => !idSet.has(String(t.id).toLowerCase().trim()));
 
   try {
@@ -3429,9 +3441,8 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
     }
   } catch (e) {}
 
-  for (const id of cleanIds) {
-    deleteTransactionFromFirestore(id).catch(() => {});
-  }
+  // Atomic batch delete & distributed counter decrement in stats/public_pool
+  deleteMultipleTransactionsFromFirestore(cleanIds, targetTxs).catch(() => {});
 
   safeApiFetch('/api/transactions/delete-batch', {
     method: 'POST',
