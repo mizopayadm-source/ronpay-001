@@ -2,8 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   initializeFirestore, 
   getFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager,
+  memoryLocalCache,
   setLogLevel
 } from "firebase/firestore";
 
@@ -29,9 +28,7 @@ try {
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    }),
+    localCache: memoryLocalCache(),
     experimentalAutoDetectLongPolling: true
   });
 } catch {
