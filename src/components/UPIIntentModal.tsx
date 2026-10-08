@@ -238,11 +238,18 @@ export function UPIIntentModal({
         paymentMethod: 'online',
         status: 'completed',
         remark: remark?.trim() || undefined,
-        subCategoryBreakdown: campaign?.category === 'kumtluang' ? subcatAmounts : undefined,
-        periodType: campaign?.category === 'kumtluang' ? periodType : undefined,
-        periodMonth: campaign?.category === 'kumtluang' ? periodMonth : undefined,
-        periodYear: campaign?.category === 'kumtluang' ? periodYear : undefined,
-        periodLabel: campaign?.category === 'kumtluang' ? periodLabel : undefined,
+        subCategory: (category === 'kumtluang' || campaign?.category === 'kumtluang') 
+          ? (donorType === 'group' 
+              ? (groupName || 'Group Sum') 
+              : donorType === 'general' 
+              ? 'General Thawhlawm' 
+              : (subcatAmounts ? Object.keys(subcatAmounts)[0] : undefined)) 
+          : undefined,
+        subCategoryBreakdown: (category === 'kumtluang' || campaign?.category === 'kumtluang') ? subcatAmounts : undefined,
+        periodType: (category === 'kumtluang' || campaign?.category === 'kumtluang') ? periodType : undefined,
+        periodMonth: (category === 'kumtluang' || campaign?.category === 'kumtluang') ? periodMonth : undefined,
+        periodYear: (category === 'kumtluang' || campaign?.category === 'kumtluang') ? periodYear : undefined,
+        periodLabel: (category === 'kumtluang' || campaign?.category === 'kumtluang') ? periodLabel : undefined,
         timestamp: new Date().toISOString(),
         txHash: 'UPI' + Math.random().toString(36).substring(2, 10).toUpperCase(),
         utr: utrCode,

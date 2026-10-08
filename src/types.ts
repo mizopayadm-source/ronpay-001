@@ -490,6 +490,7 @@ export interface MemberRecord {
   orgCode?: string;
   phoneLast4?: string;
   fullPhone?: string;
+  phone?: string;
   section?: string;
   isFamilyHead?: boolean;
   dependents?: MemberDependent[];

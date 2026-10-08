@@ -1443,6 +1443,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         origin: window.location.origin
       });
 
+      if (resolvedDonorVeng) launchParams.set('veng', resolvedDonorVeng);
+      if (resolvedMemberId) launchParams.set('memId', resolvedMemberId);
+      if (resolvedSubId) launchParams.set('subId', resolvedSubId);
+      if (resolvedDonorType) launchParams.set('dtype', resolvedDonorType);
+      if (resolvedGroupName) launchParams.set('grp', resolvedGroupName);
+      if (pendingTx.subCategory) launchParams.set('subcat', pendingTx.subCategory);
+      if (pendingTx.subCategoryBreakdown) launchParams.set('subcats', JSON.stringify(pendingTx.subCategoryBreakdown));
+      if (periodType) launchParams.set('ptype', periodType);
+      if (selectedMonth) launchParams.set('pmonth', selectedMonth);
+      if (selectedYear) launchParams.set('pyear', selectedYear);
+      if (periodLabel) launchParams.set('plabel', periodLabel);
+      if (remark.trim()) launchParams.set('rem', remark.trim());
+      if (paymentDate) launchParams.set('dt', paymentDate);
+
       const fullLaunchUrl = `/api/phonepe/launch-pay?${launchParams.toString()}`;
       setPhonePeLaunchUrl(fullLaunchUrl);
       setActivePendingTxn(pendingTx);
@@ -1599,6 +1613,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         updatedAt: new Date().toISOString(),
         date: paymentDate,
         txHash: 'CASH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        utr: 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
+        referenceNo: 'CASH-' + Math.floor(100000 + Math.random() * 900000),
+        campaignNetReceived: subtotal,
         isSynced: false,
       };
 

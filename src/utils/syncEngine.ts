@@ -927,14 +927,15 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
         }
 
         // 4. Transactions - merge with offline pending
+        // 4. Transactions - preserve all local records & merge authoritative server data
         if (Array.isArray(serverData.transactions)) {
           const currentTxs = getStoredTransactions();
           const deletedIds = getDeletedTransactionIds();
           const txMap = new Map<string, Transaction>();
 
-          // Add genuinely offline pending transactions
+          // 1. Seed with all valid, non-deleted local transactions
           for (const lt of currentTxs) {
-            if (lt && lt.id && (lt.isSynced === false || (lt as any).isOfflinePending)) {
+            if (lt && lt.id) {
               const k = String(lt.id).toLowerCase().trim();
               if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
                 txMap.set(k, lt);
@@ -942,14 +943,51 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
             }
           }
 
-          // Authoritative server transactions
+          // 2. Safely merge server transactions
           for (const st of serverData.transactions) {
             if (st && st.id) {
               const k = String(st.id).toLowerCase().trim();
-              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
+              const existing = txMap.get(k);
+              if (!existing) {
                 txMap.set(k, { ...st, isSynced: true });
+              } else {
+                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+                const serverTime = new Date(st.updatedAt || st.timestamp || 0).getTime();
+                const existingStatus = (existing.status || '').toLowerCase().trim();
+                const serverStatus = (st.status || '').toLowerCase().trim();
+                
+                // If local status is confirmed completed, never demote back to pending
+                if (existingStatus === 'completed' && serverStatus === 'pending') {
+                  txMap.set(k, { ...st, ...existing, status: 'completed', isSynced: true });
+                } else if (serverTime >= existingTime) {
+                  txMap.set(k, { ...existing, ...st, isSynced: true });
+                } else {
+                  txMap.set(k, { ...st, ...existing, isSynced: true });
+                }
               }
             }
+          }
+
+          // 3. Detect any genuine local transactions missing from server and queue push
+          const unpushedLocalTxs: Transaction[] = [];
+          for (const lt of currentTxs) {
+            if (lt && lt.id) {
+              const k = String(lt.id).toLowerCase().trim();
+              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
+              const amt = Number(lt.amount);
+              if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
+              if (!serverData.transactions.some((st: any) => String(st?.id).toLowerCase().trim() === k)) {
+                unpushedLocalTxs.push(lt);
+              }
+            }
+          }
+          if (unpushedLocalTxs.length > 0) {
+            safeApiFetch('/api/data/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transactions: unpushedLocalTxs })
+            }).catch(() => {});
           }
 
           const cleanTxs = Array.from(txMap.values());
@@ -963,6 +1001,7 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
           serverData.transactions = cleanTxs;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: cleanTxs }));
+            broadcastTabSync('transactions');
           }
         }
 

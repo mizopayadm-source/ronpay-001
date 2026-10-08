@@ -368,24 +368,28 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const utrParam = searchParams.get('utr');
 
       const vengParam = searchParams.get('veng') || searchParams.get('donorVeng');
-      const donorTypeParam = searchParams.get('donorType');
-      const groupParam = searchParams.get('group') || searchParams.get('groupName');
-      const midParam = searchParams.get('mid') || searchParams.get('memberId');
+      const donorTypeParam = searchParams.get('donorType') || searchParams.get('dtype');
+      const groupParam = searchParams.get('group') || searchParams.get('groupName') || searchParams.get('grp');
+      const midParam = searchParams.get('mid') || searchParams.get('memberId') || searchParams.get('memId');
       const subIdParam = searchParams.get('subId');
       const isDepParam = searchParams.get('isDep') || searchParams.get('isDependent');
       const subcatParam = searchParams.get('subcat') || searchParams.get('subCategory');
-      const pTypeParam = searchParams.get('pType') || searchParams.get('periodType');
-      const pMonthParam = searchParams.get('pMonth') || searchParams.get('periodMonth');
-      const pYearParam = searchParams.get('pYear') || searchParams.get('periodYear');
-      const pLabelParam = searchParams.get('pLabel') || searchParams.get('periodLabel');
-      const remarkParam = searchParams.get('remark') || searchParams.get('remarks');
-      const dateParam = searchParams.get('date');
-      const subBreakParam = searchParams.get('subBreak');
+      const pTypeParam = searchParams.get('pType') || searchParams.get('periodType') || searchParams.get('ptype');
+      const pMonthParam = searchParams.get('pMonth') || searchParams.get('periodMonth') || searchParams.get('pmonth');
+      const pYearParam = searchParams.get('pYear') || searchParams.get('periodYear') || searchParams.get('pyear');
+      const pLabelParam = searchParams.get('pLabel') || searchParams.get('periodLabel') || searchParams.get('plabel');
+      const remarkParam = searchParams.get('remark') || searchParams.get('remarks') || searchParams.get('rem');
+      const dateParam = searchParams.get('date') || searchParams.get('dt');
+      const subBreakParam = searchParams.get('subBreak') || searchParams.get('subcats') || searchParams.get('subCategoryBreakdown');
       let parsedSubBreak: Record<string, number> | undefined;
       if (subBreakParam) {
         try {
           parsedSubBreak = JSON.parse(decodeURIComponent(subBreakParam));
-        } catch {}
+        } catch {
+          try {
+            parsedSubBreak = JSON.parse(subBreakParam);
+          } catch {}
+        }
       }
 
       const receiptMeta = (amtParam || baseAmtParam || cidParam || ctitleParam || donorParam) ? {

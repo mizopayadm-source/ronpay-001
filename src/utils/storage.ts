@@ -3020,27 +3020,43 @@ export const saveTransaction = (tx: Transaction): void => {
     String(tx.campaignId || '').startsWith('bill-');
 
   if (!isBill) {
-    // Canonical member enrichment if memberId is set
-    if (tx.memberId) {
-      try {
-        const mems = getMembers();
-        const mem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());
-        if (mem) {
-          if (!tx.donorName || tx.donorName === 'Valued Donor') {
-            tx.donorName = mem.name;
-          }
-          if (!tx.donorPhone && mem.phone) {
-            tx.donorPhone = mem.phone;
-          }
-          if (!tx.donorVeng && (mem.section || mem.veng || mem.address)) {
-            tx.donorVeng = mem.section || mem.veng || mem.address;
-          }
-          if (!tx.donorType) {
-            tx.donorType = 'member';
+    // Canonical member enrichment if memberId or donorPhone is set
+    try {
+      const mems = getMembers();
+      let matchedMem = null;
+      if (tx.memberId) {
+        matchedMem = mems.find(m => m.id && m.id.toLowerCase().trim() === tx.memberId!.toLowerCase().trim());
+      }
+      if (!matchedMem && tx.donorPhone) {
+        const cleanP = tx.donorPhone.replace(/\D/g, '').slice(-10);
+        if (cleanP.length === 10) {
+          matchedMem = mems.find(m => {
+            const p = m.fullPhone || m.phone;
+            return p && p.replace(/\D/g, '').slice(-10) === cleanP;
+          });
+        }
+      }
+      if (matchedMem) {
+        if (!tx.memberId) {
+          tx.memberId = matchedMem.id;
+        }
+        if (!tx.donorName || tx.donorName === 'Valued Donor' || tx.donorName === 'Anonymous') {
+          if (!tx.isAnonymous) {
+            tx.donorName = matchedMem.name;
           }
         }
-      } catch (e) {}
-    }
+        const memPhone = matchedMem.fullPhone || matchedMem.phone;
+        if (!tx.donorPhone && memPhone) {
+          tx.donorPhone = memPhone;
+        }
+        if (!tx.donorVeng && (matchedMem.section || (matchedMem as any).veng || (matchedMem as any).address)) {
+          tx.donorVeng = matchedMem.section || (matchedMem as any).veng || (matchedMem as any).address;
+        }
+        if (!tx.donorType) {
+          tx.donorType = 'member';
+        }
+      }
+    } catch (e) {}
 
     // Resolve campaign title and category if needed from stored campaigns
     if (!tx.campaignTitle || tx.campaignTitle === 'RonPay Community Bawm' || !tx.category) {
@@ -3061,6 +3077,15 @@ export const saveTransaction = (tx: Transaction): void => {
       } catch {}
     }
 
+    // Ensure subCategory and subCategoryBreakdown consistency
+    if (tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0) {
+      if (!tx.subCategory) {
+        tx.subCategory = Object.keys(tx.subCategoryBreakdown)[0];
+      }
+    } else if (tx.subCategory) {
+      tx.subCategoryBreakdown = { [tx.subCategory]: tx.amount };
+    }
+
     const titleL = String(tx.campaignTitle || '').toLowerCase();
     const cleanTitle = titleL.replace(/,+$/, '').trim();
     const isBmp = tx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (tx.memberId && tx.memberId.startsWith('BMPSHL'));
@@ -3070,7 +3095,7 @@ export const saveTransaction = (tx: Transaction): void => {
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
       if (!tx.donorVeng) {
-        tx.donorVeng = 'General';
+        tx.donorVeng = 'Shillong Unit';
       }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
@@ -3123,7 +3148,7 @@ export const saveTransaction = (tx: Transaction): void => {
   tx.isSynced = false;
   const current = getStoredTransactions();
   const updated = [tx, ...current.filter(t => String(t.id).toLowerCase().trim() !== cleanTxId)];
-  saveStoredTransactions(updated, true);
+  saveStoredTransactions(updated, false);
   recordUserPaidTxId(tx.id);
 
   if (typeof window !== 'undefined') {

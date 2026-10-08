@@ -52,7 +52,7 @@ import { CampaignTransferModal } from './CampaignTransferModal';
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
-import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
+import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction, isTransactionForCampaign, getStoredTransactions, getDeletedTransactionIds } from '../utils/storage';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
@@ -63,6 +63,7 @@ interface HomeScreenProps {
   onOpenBillService: (service: BillService) => void;
   campaigns: Campaign[];
   transactions: Transaction[];
+  userPaidIds?: string[];
   creatorProfile: CreatorProfile;
   announcement?: AnnouncementBanner;
   onOpenReports: () => void;
@@ -184,7 +185,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const safeTransactions = useMemo(() => {
+    const listFromProps = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
+    const listFromStorage = getStoredTransactions();
+    const deletedIds = getDeletedTransactionIds();
+    const map = new Map<string, Transaction>();
+    for (const t of listFromStorage) {
+      if (t && t.id) {
+        const k = String(t.id).toLowerCase().trim();
+        if (!deletedIds.has(k)) map.set(k, t);
+      }
+    }
+    for (const t of listFromProps) {
+      if (t && t.id) {
+        const k = String(t.id).toLowerCase().trim();
+        if (!deletedIds.has(k)) {
+          const existing = map.get(k);
+          if (!existing) {
+            map.set(k, t);
+          } else {
+            const tTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
+            const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+            map.set(k, tTime >= eTime ? t : existing);
+          }
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [transactions]);
+
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
   // Compute dynamic live stats (Strictly based on confirmed transactions for 100% pool accuracy)

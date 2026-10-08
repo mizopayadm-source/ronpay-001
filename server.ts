@@ -1056,6 +1056,70 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
       console.warn('launch-pay checkout/v2/pay error:', v2Err?.message || v2Err);
     }
 
+    const donorVeng = (req.query.veng || req.query.donorVeng || '') as string;
+    const donorType = (req.query.dtype || req.query.donorType || '') as string;
+    const groupName = (req.query.grp || req.query.groupName || '') as string;
+    const memberId = (req.query.memId || req.query.memberId || '') as string;
+    const subId = (req.query.subId || '') as string;
+    const isDependent = req.query.dep === '1' || req.query.isDependent === 'true';
+    const subCategory = (req.query.subcat || req.query.subCategory || '') as string;
+    let subCategoryBreakdown: Record<string, number> | undefined = undefined;
+    if (req.query.subcats) {
+      try {
+        subCategoryBreakdown = JSON.parse(req.query.subcats as string);
+      } catch {}
+    }
+    const periodType = (req.query.ptype || req.query.periodType || '') as string;
+    const periodMonth = (req.query.pmonth || req.query.periodMonth || '') as string;
+    const periodYear = (req.query.pyear || req.query.periodYear || '') as string;
+    const periodLabel = (req.query.plabel || req.query.periodLabel || '') as string;
+    const remark = (req.query.rem || req.query.remark || '') as string;
+    const customDate = (req.query.dt || req.query.date || '') as string;
+
+    const db = getDatabase();
+    let resolvedTitle = campaignTitle;
+    let resolvedCategory = category;
+    let resolvedVeng = donorVeng;
+    let resolvedDonorName = donorName || 'Valued Donor';
+    let resolvedPhone = customerPhone || '';
+    let resolvedMemberId = memberId;
+
+    if (campaignId) {
+      const matchedCamp = (db.campaigns || []).find((c: any) => c && String(c.id).toLowerCase().trim() === String(campaignId).toLowerCase().trim());
+      if (matchedCamp) {
+        if (!resolvedTitle || resolvedTitle === 'RonPay Community Bawm') {
+          resolvedTitle = matchedCamp.title;
+        }
+        if (!resolvedCategory || resolvedCategory === 'others') {
+          resolvedCategory = matchedCamp.category;
+        }
+        if (!resolvedVeng && matchedCamp.location) {
+          resolvedVeng = matchedCamp.location;
+        }
+      }
+    }
+
+    if (!isAnonymous) {
+      let matchedMem = null;
+      if (resolvedMemberId) {
+        matchedMem = (db.members || []).find((m: any) => m && m.id && String(m.id).toLowerCase().trim() === String(resolvedMemberId).toLowerCase().trim());
+      }
+      if (!matchedMem && resolvedPhone) {
+        const cleanP = resolvedPhone.replace(/\D/g, '').slice(-10);
+        if (cleanP.length === 10) {
+          matchedMem = (db.members || []).find((m: any) => m && m.phone && String(m.phone).replace(/\D/g, '').slice(-10) === cleanP);
+        }
+      }
+      if (matchedMem) {
+        if (!resolvedMemberId) resolvedMemberId = matchedMem.id;
+        if (!resolvedDonorName || resolvedDonorName === 'Valued Donor') resolvedDonorName = matchedMem.name;
+        if (!resolvedPhone && matchedMem.phone) resolvedPhone = matchedMem.phone;
+        if (!resolvedVeng && (matchedMem.section || matchedMem.veng || matchedMem.address)) {
+          resolvedVeng = matchedMem.section || matchedMem.veng || matchedMem.address;
+        }
+      }
+    }
+
     transactionStore[merchantTransactionId] = {
       merchantTransactionId,
       merchantUserId,
@@ -1065,11 +1129,25 @@ app.get('/api/phonepe/launch-pay', async (req: Request, res: Response) => {
       platformFeeRupees: platformFeePaise / 100,
       feeOption: feeOption,
       campaignId: campaignId || '',
-      campaignTitle: campaignTitle || 'RonPay Community Bawm',
-      category: category || 'others',
-      donorName: donorName || 'Valued Donor',
-      donorPhone: customerPhone || '9862000000',
+      campaignTitle: resolvedTitle || 'RonPay Community Bawm',
+      category: resolvedCategory || 'others',
+      donorName: resolvedDonorName,
+      donorPhone: resolvedPhone,
+      donorVeng: resolvedVeng || undefined,
+      donorType: donorType || undefined,
+      groupName: groupName || undefined,
+      memberId: resolvedMemberId || undefined,
+      subId: subId || undefined,
+      isDependent: isDependent,
       isAnonymous: Boolean(isAnonymous),
+      subCategory: subCategory || (subCategoryBreakdown ? Object.keys(subCategoryBreakdown)[0] : undefined),
+      subCategoryBreakdown: subCategoryBreakdown || (subCategory ? { [subCategory]: merchantSharePaise / 100 } : undefined),
+      periodType: periodType || undefined,
+      periodMonth: periodMonth || undefined,
+      periodYear: periodYear || undefined,
+      periodLabel: periodLabel || undefined,
+      remark: remark || undefined,
+      date: customDate || new Date().toISOString().slice(0, 10),
       status: 'PENDING',
       createdAt: new Date().toISOString(),
       phonePeTransactionId: phonePeOrderId,
@@ -1254,12 +1332,62 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
     category,
     donorName,
     donorPhone,
+    donorVeng,
+    donorType,
+    groupName,
+    memberId,
+    subId,
+    isDependent,
     isAnonymous,
+    subCategory,
+    subCategoryBreakdown,
+    periodType,
+    periodMonth,
+    periodYear,
+    periodLabel,
+    remark,
+    date,
     feeOption,
-    paymentMethod
+    paymentMethod,
+    utr
   } = req.body;
   if (!merchantTransactionId) {
     return res.status(400).json({ success: false, message: 'Missing merchantTransactionId' });
+  }
+
+  const db = getDatabase();
+  let matchedCamp = null;
+  if (campaignId) {
+    matchedCamp = (db.campaigns || []).find((c: any) => c && String(c.id).toLowerCase().trim() === String(campaignId).toLowerCase().trim());
+  }
+
+  const existingStoreRec = transactionStore[merchantTransactionId];
+  let resolvedTitle = campaignTitle || existingStoreRec?.campaignTitle || matchedCamp?.title || 'RonPay Community Bawm';
+  let resolvedCat = category || existingStoreRec?.category || matchedCamp?.category || 'others';
+  let resolvedVeng = donorVeng || existingStoreRec?.donorVeng || matchedCamp?.location || '';
+  let resolvedDonor = donorName || existingStoreRec?.donorName || 'Valued Donor';
+  let resolvedPhone = donorPhone || existingStoreRec?.donorPhone || '';
+  let resolvedMemberId = memberId || existingStoreRec?.memberId;
+
+  if (!isAnonymous) {
+    let matchedMem = null;
+    if (resolvedMemberId) {
+      matchedMem = (db.members || []).find((m: any) => m && m.id && String(m.id).toLowerCase().trim() === String(resolvedMemberId).toLowerCase().trim());
+    }
+    if (!matchedMem && resolvedPhone) {
+      const cleanP = resolvedPhone.replace(/\D/g, '').slice(-10);
+      if (cleanP.length === 10) {
+        matchedMem = (db.members || []).find((m: any) => m && m.phone && String(m.phone).replace(/\D/g, '').slice(-10) === cleanP);
+      }
+    }
+    if (matchedMem) {
+      if (!resolvedMemberId) resolvedMemberId = matchedMem.id;
+      if (!resolvedDonor || resolvedDonor === 'Valued Donor') resolvedDonor = matchedMem.name;
+      if (!resolvedPhone && matchedMem.phone) resolvedPhone = matchedMem.phone;
+      if (!resolvedVeng && (matchedMem.section || matchedMem.veng || matchedMem.address)) {
+        resolvedVeng = matchedMem.section || matchedMem.veng || matchedMem.address;
+      }
+    }
   }
 
   let record = transactionStore[merchantTransactionId];
@@ -1275,16 +1403,31 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
       baseAmountRupees: baseAmountInRupees !== undefined ? Number(baseAmountInRupees) : (rawAmt - (feePaise / 100)),
       platformFeeRupees: feePaise / 100,
       feeOption: feeOption || 'ADD_ON',
-      campaignId: campaignId || '',
-      campaignTitle: campaignTitle || 'RonPay Community Bawm',
-      category: category || 'others',
-      donorName: donorName || 'Valued Donor',
-      donorPhone: donorPhone || '',
+      campaignId: campaignId || matchedCamp?.id || '',
+      campaignTitle: resolvedTitle,
+      category: resolvedCat,
+      donorName: resolvedDonor,
+      donorPhone: resolvedPhone,
+      donorVeng: resolvedVeng || undefined,
+      donorType: donorType || undefined,
+      groupName: groupName || undefined,
+      memberId: resolvedMemberId || undefined,
+      subId: subId || undefined,
+      isDependent: Boolean(isDependent),
       isAnonymous: Boolean(isAnonymous),
+      subCategory: subCategory || (subCategoryBreakdown ? Object.keys(subCategoryBreakdown)[0] : undefined),
+      subCategoryBreakdown: subCategoryBreakdown || (subCategory ? { [subCategory]: rawAmt } : undefined),
+      periodType: periodType || undefined,
+      periodMonth: periodMonth || undefined,
+      periodYear: periodYear || undefined,
+      periodLabel: periodLabel || undefined,
+      remark: remark || undefined,
+      date: date || new Date().toISOString().slice(0, 10),
       paymentMethod: paymentMethod || 'PhonePe UPI',
       status: status || 'PAYMENT_SUCCESS',
       createdAt: new Date().toISOString(),
       phonePeTransactionId: `T${Date.now()}`,
+      utr: utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000)),
       splitDetails: {
         merchantShare: amountInPaise - feePaise,
         platformShare: feePaise
@@ -1293,11 +1436,30 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
     transactionStore[merchantTransactionId] = record;
   } else {
     if (amountInRupees) record.amountRupees = Number(amountInRupees);
-    if (campaignTitle) record.campaignTitle = campaignTitle;
+    if (baseAmountInRupees !== undefined) record.baseAmountRupees = Number(baseAmountInRupees);
+    if (platformFeeRupees !== undefined) record.platformFeeRupees = Number(platformFeeRupees);
+    if (campaignTitle) record.campaignTitle = resolvedTitle;
     if (campaignId) record.campaignId = campaignId;
-    if (donorName) record.donorName = donorName;
-    if (category) record.category = category;
+    if (donorName) record.donorName = resolvedDonor;
+    if (donorPhone) record.donorPhone = resolvedPhone;
+    if (resolvedVeng) record.donorVeng = resolvedVeng;
+    if (donorType) record.donorType = donorType;
+    if (groupName) record.groupName = groupName;
+    if (resolvedMemberId) record.memberId = resolvedMemberId;
+    if (subId) record.subId = subId;
+    if (isDependent !== undefined) record.isDependent = Boolean(isDependent);
+    if (isAnonymous !== undefined) record.isAnonymous = Boolean(isAnonymous);
+    if (category) record.category = resolvedCat;
+    if (subCategory) record.subCategory = subCategory;
+    if (subCategoryBreakdown) record.subCategoryBreakdown = subCategoryBreakdown;
+    if (periodType) record.periodType = periodType;
+    if (periodMonth) record.periodMonth = periodMonth;
+    if (periodYear) record.periodYear = periodYear;
+    if (periodLabel) record.periodLabel = periodLabel;
+    if (remark) record.remark = remark;
+    if (date) record.date = date;
     if (paymentMethod) record.paymentMethod = paymentMethod;
+    if (utr) record.utr = utr;
   }
 
   record.status = status;
@@ -1308,7 +1470,7 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
   // Persist successful payment to central database so it is visible across all devices and in Sulhnu
   if (status === 'PAYMENT_SUCCESS') {
     try {
-      const db = getDatabase();
+      const nowIso = new Date().toISOString();
       const newTx = {
         id: merchantTransactionId,
         campaignId: record.campaignId || 'cmp-1788107291420',
@@ -1316,20 +1478,55 @@ app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {
         category: record.category || 'kumtluang',
         donorName: record.donorName || 'Valued Donor',
         donorPhone: record.donorPhone || '',
+        donorVeng: record.donorVeng || undefined,
+        donorType: record.donorType || undefined,
+        groupName: record.groupName || undefined,
+        memberId: record.memberId || undefined,
+        subId: record.subId || undefined,
+        isDependent: Boolean(record.isDependent),
+        isAnonymous: Boolean(record.isAnonymous),
         amount: record.baseAmountRupees || record.amountRupees || (record.amount / 100),
         platformFee: record.platformFeeRupees || 0,
         totalAmount: record.amountRupees || (record.amount / 100),
         paymentMethod: record.paymentMethod || 'phonepe',
         status: 'completed',
-        isAnonymous: Boolean(record.isAnonymous),
-        timestamp: record.createdAt || new Date().toISOString(),
+        timestamp: record.createdAt || nowIso,
+        createdAt: record.createdAt || nowIso,
+        updatedAt: nowIso,
+        date: record.date || nowIso.slice(0, 10),
         utr: record.utr,
+        referenceNo: record.utr || merchantTransactionId,
+        txHash: 'RPAY' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase(),
         feeOption: record.feeOption || 'ADD_ON',
         campaignNetReceived: record.baseAmountRupees || record.amountRupees || (record.amount / 100),
-        createdAt: record.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        subCategory: record.subCategory || (record.subCategoryBreakdown ? Object.keys(record.subCategoryBreakdown)[0] : undefined),
+        subCategoryBreakdown: record.subCategoryBreakdown || undefined,
+        periodType: record.periodType || undefined,
+        periodMonth: record.periodMonth || undefined,
+        periodYear: record.periodYear || undefined,
+        periodLabel: record.periodLabel || undefined,
+        remark: record.remark || undefined,
+        isSynced: true
       };
+
+      const titleL = String(newTx.campaignTitle || '').toLowerCase();
+      const cleanTitle = titleL.replace(/,+$/, '').trim();
+      const isBmp = newTx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (newTx.memberId && String(newTx.memberId).startsWith('BMPSHL'));
+      if (isBmp) {
+        newTx.category = 'kumtluang';
+        newTx.campaignId = 'cmp-1788107291420';
+        newTx.campaignTitle = 'BMP Shillong';
+        if (!newTx.donorVeng) newTx.donorVeng = 'Shillong Unit';
+        if (!newTx.subCategory) newTx.subCategory = newTx.donorType === 'general' ? (newTx.remark || 'General Thawhlawm') : 'BMP Fund';
+        if (!newTx.subCategoryBreakdown || Object.keys(newTx.subCategoryBreakdown).length === 0) {
+          const subKey = newTx.subCategory || 'BMP Fund';
+          newTx.subCategoryBreakdown = { [subKey]: newTx.amount };
+        }
+      }
+
       db.transactions = mergeCollections(db.transactions || [], [newTx], 'id');
+      const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delSet);
       saveDatabase(db);
     } catch (saveErr) {
       console.warn('Failed to save to central db during confirm-paid in server.ts:', saveErr);
@@ -2848,7 +3045,23 @@ app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'],
   const baseRupees = record.baseAmountRupees || (record.splitDetails?.merchantShare ? record.splitDetails.merchantShare / 100 : totalRupees);
   const feeRupees = record.platformFeeRupees !== undefined ? record.platformFeeRupees : (record.splitDetails?.platformShare ? record.splitDetails.platformShare / 100 : 0);
 
-  const receiptUrl = `${effectiveBase}/?view=app&screen=success&receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=PAYMENT_SUCCESS&amt=${totalRupees.toFixed(2)}&baseAmt=${baseRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(record.feeOption || 'ADD_ON')}&cid=${encodeURIComponent(record.campaignId || '')}&ctitle=${encodeURIComponent(record.campaignTitle || '')}&cat=${encodeURIComponent(record.category || '')}&donor=${encodeURIComponent(record.donorName || '')}&donorPhone=${encodeURIComponent(record.donorPhone || '')}&anon=${record.isAnonymous ? '1' : '0'}`;
+  let receiptParams = `receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=PAYMENT_SUCCESS&amt=${totalRupees.toFixed(2)}&baseAmt=${baseRupees.toFixed(2)}&fee=${feeRupees.toFixed(2)}&feeOpt=${encodeURIComponent(record.feeOption || 'ADD_ON')}&cid=${encodeURIComponent(record.campaignId || '')}&ctitle=${encodeURIComponent(record.campaignTitle || '')}&cat=${encodeURIComponent(record.category || '')}&donor=${encodeURIComponent(record.donorName || '')}&donorPhone=${encodeURIComponent(record.donorPhone || '')}&anon=${record.isAnonymous ? '1' : '0'}`;
+  if (record.donorVeng) receiptParams += `&veng=${encodeURIComponent(record.donorVeng)}`;
+  if (record.memberId) receiptParams += `&memId=${encodeURIComponent(record.memberId)}`;
+  if (record.subId) receiptParams += `&subId=${encodeURIComponent(record.subId)}`;
+  if (record.donorType) receiptParams += `&dtype=${encodeURIComponent(record.donorType)}`;
+  if (record.groupName) receiptParams += `&grp=${encodeURIComponent(record.groupName)}`;
+  if (record.subCategory) receiptParams += `&subcat=${encodeURIComponent(record.subCategory)}`;
+  if (record.subCategoryBreakdown) receiptParams += `&subcats=${encodeURIComponent(JSON.stringify(record.subCategoryBreakdown))}`;
+  if (record.periodType) receiptParams += `&ptype=${encodeURIComponent(record.periodType)}`;
+  if (record.periodMonth) receiptParams += `&pmonth=${encodeURIComponent(record.periodMonth)}`;
+  if (record.periodYear) receiptParams += `&pyear=${encodeURIComponent(record.periodYear)}`;
+  if (record.periodLabel) receiptParams += `&plabel=${encodeURIComponent(record.periodLabel)}`;
+  if (record.remark) receiptParams += `&rem=${encodeURIComponent(record.remark)}`;
+  if (record.date) receiptParams += `&dt=${encodeURIComponent(record.date)}`;
+  if (record.utr) receiptParams += `&utr=${encodeURIComponent(record.utr)}`;
+
+  const receiptUrl = `${effectiveBase}/?view=app&screen=success&${receiptParams}`;
   const homeUrl = `${effectiveBase}/?view=app&screen=home`;
   const mercuryUrl = record.mercuryUrl || `https://mercury-uat.phonepe.com/transact/uat_v3`;
 
@@ -3533,7 +3746,7 @@ app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'],
       status.textContent = 'Authorizing payment of ₹${totalRupees.toFixed(2)}...';
 
       try {
-        // Step 1: Confirm payment on server
+        // Step 1: Confirm payment on server with full metadata
         await fetch('/api/phonepe/confirm-paid', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3541,8 +3754,30 @@ app.get(['/api/phonepe/checkout', '/api/phonepe/checkout/', '/api/pg/checkout'],
             merchantTransactionId: '${effectiveTxnId}',
             status: 'PAYMENT_SUCCESS',
             amountInRupees: ${totalRupees},
+            baseAmountInRupees: ${baseRupees},
+            platformFeeRupees: ${feeRupees},
+            feeOption: '${record.feeOption || 'ADD_ON'}',
+            campaignId: '${(record.campaignId || '').replace(/'/g, "\\'")}',
             campaignTitle: '${(record.campaignTitle || 'RonPay Community Bawm').replace(/'/g, "\\'")}',
-            donorName: '${(record.donorName || 'Valued Donor').replace(/'/g, "\\'")}'
+            category: '${(record.category || 'others').replace(/'/g, "\\'")}',
+            donorName: '${(record.donorName || 'Valued Donor').replace(/'/g, "\\'")}',
+            donorPhone: '${(record.donorPhone || '').replace(/'/g, "\\'")}',
+            donorVeng: '${(record.donorVeng || '').replace(/'/g, "\\'")}',
+            donorType: '${(record.donorType || '').replace(/'/g, "\\'")}',
+            groupName: '${(record.groupName || '').replace(/'/g, "\\'")}',
+            memberId: '${(record.memberId || '').replace(/'/g, "\\'")}',
+            subId: '${(record.subId || '').replace(/'/g, "\\'")}',
+            isDependent: ${Boolean(record.isDependent)},
+            isAnonymous: ${Boolean(record.isAnonymous)},
+            subCategory: '${(record.subCategory || '').replace(/'/g, "\\'")}',
+            subCategoryBreakdown: ${JSON.stringify(record.subCategoryBreakdown || null)},
+            periodType: '${(record.periodType || '').replace(/'/g, "\\'")}',
+            periodMonth: '${(record.periodMonth || '').replace(/'/g, "\\'")}',
+            periodYear: '${(record.periodYear || '').replace(/'/g, "\\'")}',
+            periodLabel: '${(record.periodLabel || '').replace(/'/g, "\\'")}',
+            remark: '${(record.remark || '').replace(/'/g, "\\'")}',
+            date: '${(record.date || '').replace(/'/g, "\\'")}',
+            paymentMethod: 'PhonePe UPI'
           })
         });
       } catch (e) {
@@ -3696,27 +3931,96 @@ app.all([
       const db = getDatabase();
       const rec = transactionStore[effectiveTxnId];
       if (rec) {
+        let matchedCamp = null;
+        if (rec.campaignId) {
+          matchedCamp = (db.campaigns || []).find((c: any) => c && String(c.id).toLowerCase().trim() === String(rec.campaignId).toLowerCase().trim());
+        }
+
+        let resolvedTitle = rec.campaignTitle || matchedCamp?.title || 'RonPay Community Bawm';
+        let resolvedCat = rec.category || matchedCamp?.category || 'others';
+        let resolvedVeng = rec.donorVeng || matchedCamp?.location || '';
+        let resolvedDonor = rec.donorName || 'Valued Donor';
+        let resolvedPhone = rec.donorPhone || '';
+        let resolvedMemberId = rec.memberId;
+
+        if (!rec.isAnonymous) {
+          let matchedMem = null;
+          if (resolvedMemberId) {
+            matchedMem = (db.members || []).find((m: any) => m && m.id && String(m.id).toLowerCase().trim() === String(resolvedMemberId).toLowerCase().trim());
+          }
+          if (!matchedMem && resolvedPhone) {
+            const cleanP = resolvedPhone.replace(/\D/g, '').slice(-10);
+            if (cleanP.length === 10) {
+              matchedMem = (db.members || []).find((m: any) => m && m.phone && String(m.phone).replace(/\D/g, '').slice(-10) === cleanP);
+            }
+          }
+          if (matchedMem) {
+            if (!resolvedMemberId) resolvedMemberId = matchedMem.id;
+            if (!resolvedDonor || resolvedDonor === 'Valued Donor') resolvedDonor = matchedMem.name;
+            if (!resolvedPhone && matchedMem.phone) resolvedPhone = matchedMem.phone;
+            if (!resolvedVeng && (matchedMem.section || matchedMem.veng || matchedMem.address)) {
+              resolvedVeng = matchedMem.section || matchedMem.veng || matchedMem.address;
+            }
+          }
+        }
+
+        const nowIso = new Date().toISOString();
         const newTx = {
           id: effectiveTxnId,
-          campaignId: rec.campaignId || 'cmp-1788107291420',
-          campaignTitle: rec.campaignTitle || 'BMP Shillong',
-          category: rec.category || 'kumtluang',
-          donorName: rec.donorName || 'Valued Donor',
-          donorPhone: rec.donorPhone || '',
+          campaignId: rec.campaignId || matchedCamp?.id || 'cmp-custom',
+          campaignTitle: resolvedTitle,
+          category: resolvedCat,
+          donorName: resolvedDonor,
+          donorPhone: resolvedPhone,
+          donorVeng: resolvedVeng || undefined,
+          donorType: rec.donorType || undefined,
+          groupName: rec.groupName || undefined,
+          memberId: resolvedMemberId || undefined,
+          subId: rec.subId || undefined,
+          isDependent: Boolean(rec.isDependent),
+          isAnonymous: Boolean(rec.isAnonymous),
           amount: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
           platformFee: rec.platformFeeRupees || 0,
           totalAmount: rec.amountRupees || (rec.amount / 100),
-          paymentMethod: 'phonepe',
+          paymentMethod: rec.paymentMethod || 'phonepe',
           status: 'completed',
-          isAnonymous: Boolean(rec.isAnonymous),
-          timestamp: rec.createdAt || new Date().toISOString(),
-          utr: rec.utr || phonePeUtr,
+          timestamp: rec.createdAt || nowIso,
+          createdAt: rec.createdAt || nowIso,
+          updatedAt: nowIso,
+          date: rec.date || nowIso.slice(0, 10),
+          utr: rec.utr || phonePeUtr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000)),
+          referenceNo: rec.utr || phonePeUtr || effectiveTxnId,
+          txHash: 'RPAY' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase(),
           feeOption: rec.feeOption || 'ADD_ON',
           campaignNetReceived: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
-          createdAt: rec.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          subCategory: rec.subCategory || (rec.subCategoryBreakdown ? Object.keys(rec.subCategoryBreakdown)[0] : undefined),
+          subCategoryBreakdown: rec.subCategoryBreakdown || undefined,
+          periodType: rec.periodType || undefined,
+          periodMonth: rec.periodMonth || undefined,
+          periodYear: rec.periodYear || undefined,
+          periodLabel: rec.periodLabel || undefined,
+          remark: rec.remark || undefined,
+          isSynced: true
         };
+
+        const titleL = String(newTx.campaignTitle || '').toLowerCase();
+        const cleanTitle = titleL.replace(/,+$/, '').trim();
+        const isBmp = newTx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (newTx.memberId && String(newTx.memberId).startsWith('BMPSHL'));
+        if (isBmp) {
+          newTx.category = 'kumtluang';
+          newTx.campaignId = 'cmp-1788107291420';
+          newTx.campaignTitle = 'BMP Shillong';
+          if (!newTx.donorVeng) newTx.donorVeng = 'Shillong Unit';
+          if (!newTx.subCategory) newTx.subCategory = newTx.donorType === 'general' ? (newTx.remark || 'General Thawhlawm') : 'BMP Fund';
+          if (!newTx.subCategoryBreakdown || Object.keys(newTx.subCategoryBreakdown).length === 0) {
+            const subKey = newTx.subCategory || 'BMP Fund';
+            newTx.subCategoryBreakdown = { [subKey]: newTx.amount };
+          }
+        }
+
         db.transactions = mergeCollections(db.transactions || [], [newTx], 'id');
+        const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+        db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delSet);
         saveDatabase(db);
       }
     } catch (saveErr) {
@@ -3746,6 +4050,20 @@ app.all([
   let receiptParams = `receipt=${encodeURIComponent(effectiveTxnId)}&phonepe_txn_id=${encodeURIComponent(effectiveTxnId)}&status=${encodeURIComponent(finalStatus)}`;
   if (record) {
     receiptParams += `&amt=${record.amountRupees || (record.amount / 100).toFixed(2)}&baseAmt=${record.baseAmountRupees || ((record.splitDetails?.merchantShare || record.amount) / 100).toFixed(2)}&fee=${record.platformFeeRupees || ((record.splitDetails?.platformShare || 0) / 100).toFixed(2)}&feeOpt=${encodeURIComponent(record.feeOption || 'ADD_ON')}&cid=${encodeURIComponent(record.campaignId || '')}&ctitle=${encodeURIComponent(record.campaignTitle || '')}&cat=${encodeURIComponent(record.category || '')}&donor=${encodeURIComponent(record.donorName || '')}&donorPhone=${encodeURIComponent(record.donorPhone || '')}&anon=${record.isAnonymous ? '1' : '0'}`;
+    if (record.donorVeng) receiptParams += `&veng=${encodeURIComponent(record.donorVeng)}`;
+    if (record.memberId) receiptParams += `&memId=${encodeURIComponent(record.memberId)}`;
+    if (record.subId) receiptParams += `&subId=${encodeURIComponent(record.subId)}`;
+    if (record.donorType) receiptParams += `&dtype=${encodeURIComponent(record.donorType)}`;
+    if (record.groupName) receiptParams += `&grp=${encodeURIComponent(record.groupName)}`;
+    if (record.subCategory) receiptParams += `&subcat=${encodeURIComponent(record.subCategory)}`;
+    if (record.subCategoryBreakdown) receiptParams += `&subcats=${encodeURIComponent(JSON.stringify(record.subCategoryBreakdown))}`;
+    if (record.periodType) receiptParams += `&ptype=${encodeURIComponent(record.periodType)}`;
+    if (record.periodMonth) receiptParams += `&pmonth=${encodeURIComponent(record.periodMonth)}`;
+    if (record.periodYear) receiptParams += `&pyear=${encodeURIComponent(record.periodYear)}`;
+    if (record.periodLabel) receiptParams += `&plabel=${encodeURIComponent(record.periodLabel)}`;
+    if (record.remark) receiptParams += `&rem=${encodeURIComponent(record.remark)}`;
+    if (record.date) receiptParams += `&dt=${encodeURIComponent(record.date)}`;
+    if (record.utr) receiptParams += `&utr=${encodeURIComponent(record.utr)}`;
   }
 
   const receiptUrl = `${effectiveBase}/?view=app&screen=success&${receiptParams}`;
@@ -4164,6 +4482,107 @@ app.post('/api/phonepe/simulate-callback', (req: Request, res: Response) => {
     },
     payload: webhookPayload
   });
+
+  // Persist successful payment to central database so it is visible across all devices and in Sulhnu
+  if (status === 'PAYMENT_SUCCESS') {
+    try {
+      const db = getDatabase();
+      const rec = record;
+      let matchedCamp = null;
+      if (rec.campaignId) {
+        matchedCamp = (db.campaigns || []).find((c: any) => c && String(c.id).toLowerCase().trim() === String(rec.campaignId).toLowerCase().trim());
+      }
+
+      let resolvedTitle = rec.campaignTitle || matchedCamp?.title || 'RonPay Community Bawm';
+      let resolvedCat = rec.category || matchedCamp?.category || 'others';
+      let resolvedVeng = rec.donorVeng || matchedCamp?.location || '';
+      let resolvedDonor = rec.donorName || 'Valued Donor';
+      let resolvedPhone = rec.donorPhone || '';
+      let resolvedMemberId = rec.memberId;
+
+      if (!rec.isAnonymous) {
+        let matchedMem = null;
+        if (resolvedMemberId) {
+          matchedMem = (db.members || []).find((m: any) => m && m.id && String(m.id).toLowerCase().trim() === String(resolvedMemberId).toLowerCase().trim());
+        }
+        if (!matchedMem && resolvedPhone) {
+          const cleanP = resolvedPhone.replace(/\D/g, '').slice(-10);
+          if (cleanP.length === 10) {
+            matchedMem = (db.members || []).find((m: any) => m && m.phone && String(m.phone).replace(/\D/g, '').slice(-10) === cleanP);
+          }
+        }
+        if (matchedMem) {
+          if (!resolvedMemberId) resolvedMemberId = matchedMem.id;
+          if (!resolvedDonor || resolvedDonor === 'Valued Donor') resolvedDonor = matchedMem.name;
+          if (!resolvedPhone && matchedMem.phone) resolvedPhone = matchedMem.phone;
+          if (!resolvedVeng && (matchedMem.section || matchedMem.veng || matchedMem.address)) {
+            resolvedVeng = matchedMem.section || matchedMem.veng || matchedMem.address;
+          }
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const newTx: any = {
+        id: rec.merchantTransactionId,
+        campaignId: rec.campaignId || matchedCamp?.id || 'cmp-custom',
+        campaignTitle: resolvedTitle,
+        category: resolvedCat,
+        donorName: resolvedDonor,
+        donorPhone: resolvedPhone,
+        donorVeng: resolvedVeng || undefined,
+        donorType: rec.donorType || undefined,
+        groupName: rec.groupName || undefined,
+        memberId: resolvedMemberId || undefined,
+        subId: rec.subId || undefined,
+        isDependent: Boolean(rec.isDependent),
+        isAnonymous: Boolean(rec.isAnonymous),
+        amount: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
+        platformFee: rec.platformFeeRupees || 0,
+        totalAmount: rec.amountRupees || (rec.amount / 100),
+        paymentMethod: rec.paymentMethod || 'phonepe',
+        status: 'completed',
+        timestamp: rec.createdAt || nowIso,
+        createdAt: rec.createdAt || nowIso,
+        updatedAt: nowIso,
+        date: rec.date || nowIso.slice(0, 10),
+        utr: utrNumber,
+        referenceNo: utrNumber,
+        txHash: 'RPAY' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase(),
+        feeOption: rec.feeOption || 'ADD_ON',
+        campaignNetReceived: rec.baseAmountRupees || rec.amountRupees || (rec.amount / 100),
+        subCategory: rec.subCategory || (rec.subCategoryBreakdown ? Object.keys(rec.subCategoryBreakdown)[0] : undefined),
+        subCategoryBreakdown: rec.subCategoryBreakdown || undefined,
+        periodType: rec.periodType || undefined,
+        periodMonth: rec.periodMonth || undefined,
+        periodYear: rec.periodYear || undefined,
+        periodLabel: rec.periodLabel || undefined,
+        remark: rec.remark || undefined,
+        isSynced: true
+      };
+
+      const titleL = String(newTx.campaignTitle || '').toLowerCase();
+      const cleanTitle = titleL.replace(/,+$/, '').trim();
+      const isBmp = newTx.campaignId === 'cmp-1788107291420' || cleanTitle.includes('bmp') || cleanTitle.includes('shillong') || (newTx.memberId && String(newTx.memberId).startsWith('BMPSHL'));
+      if (isBmp) {
+        newTx.category = 'kumtluang';
+        newTx.campaignId = 'cmp-1788107291420';
+        newTx.campaignTitle = 'BMP Shillong';
+        if (!newTx.donorVeng) newTx.donorVeng = 'Shillong Unit';
+        if (!newTx.subCategory) newTx.subCategory = newTx.donorType === 'general' ? (newTx.remark || 'General Thawhlawm') : 'BMP Fund';
+        if (!newTx.subCategoryBreakdown || Object.keys(newTx.subCategoryBreakdown).length === 0) {
+          const subKey = newTx.subCategory || 'BMP Fund';
+          newTx.subCategoryBreakdown = { [subKey]: newTx.amount };
+        }
+      }
+
+      db.transactions = mergeCollections(db.transactions || [], [newTx], 'id');
+      const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delSet);
+      saveDatabase(db);
+    } catch (saveErr) {
+      console.warn('Failed to save to central db during simulate-callback in server.ts:', saveErr);
+    }
+  }
 
   res.json({
     success: true,
@@ -5333,6 +5752,38 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       }
     }
 
+    // Canonical member enrichment if memberId or donorPhone is available
+    if (!tx.isAnonymous) {
+      let matchedMem = null;
+      if (tx.memberId) {
+        matchedMem = (db.members || []).find((m: any) => m && m.id && String(m.id).toLowerCase().trim() === String(tx.memberId).toLowerCase().trim());
+      }
+      if (!matchedMem && tx.donorPhone) {
+        const cleanP = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
+        if (cleanP.length === 10) {
+          matchedMem = (db.members || []).find((m: any) => m && m.phone && String(m.phone).replace(/\D/g, '').slice(-10) === cleanP);
+        }
+      }
+      if (matchedMem) {
+        if (!tx.memberId) tx.memberId = matchedMem.id;
+        if (!tx.donorName || tx.donorName === 'Valued Donor') tx.donorName = matchedMem.name;
+        if (!tx.donorPhone && matchedMem.phone) tx.donorPhone = matchedMem.phone;
+        if (!tx.donorVeng && (matchedMem.section || matchedMem.veng || matchedMem.address)) {
+          tx.donorVeng = matchedMem.section || matchedMem.veng || matchedMem.address;
+        }
+        if (!tx.donorType) tx.donorType = 'member';
+      }
+    }
+
+    // Ensure subCategory and subCategoryBreakdown consistency
+    if (tx.subCategoryBreakdown && Object.keys(tx.subCategoryBreakdown).length > 0) {
+      if (!tx.subCategory) {
+        tx.subCategory = Object.keys(tx.subCategoryBreakdown)[0];
+      }
+    } else if (tx.subCategory) {
+      tx.subCategoryBreakdown = { [tx.subCategory]: tx.amount };
+    }
+
     // If this transaction was previously deleted, resurrect or clean it from tombstone
     const cleanId = String(tx.id).toLowerCase().trim();
     db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
@@ -5345,7 +5796,7 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       tx.campaignId = 'cmp-1788107291420';
       tx.campaignTitle = 'BMP Shillong';
       if (!tx.donorVeng) {
-        tx.donorVeng = 'General';
+        tx.donorVeng = 'Shillong Unit';
       }
       if (!tx.subCategory) {
         tx.subCategory = tx.donorType === 'general' ? (tx.remark || 'General Thawhlawm') : 'BMP Fund';
@@ -5358,6 +5809,8 @@ app.post('/api/transactions', (req: Request, res: Response) => {
         tx.remark = tx.remark.replace('[Pathian Ram Zauna]', '[BMP Fund]');
       }
     }
+
+    tx.isSynced = true;
 
     const merged = mergeCollections(db.transactions || [], [tx], 'id');
     const delSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));

@@ -94,6 +94,25 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
   const donorPhone = queryParams.get('donorPhone') || '';
   const isAnonymous = queryParams.get('anon') === '1' || queryParams.get('anon') === 'true';
   const category = (queryParams.get('cat') as any) || campaign?.category || 'others';
+  const donorVeng = queryParams.get('veng') || '';
+  const memberId = queryParams.get('memId') || '';
+  const subId = queryParams.get('subId') || '';
+  const donorType = queryParams.get('dtype') || '';
+  const groupName = queryParams.get('grp') || '';
+  const subCategory = queryParams.get('subcat') || '';
+  const subCategoryBreakdown = useMemo(() => {
+    const raw = queryParams.get('subcats');
+    if (raw) {
+      try { return JSON.parse(raw); } catch {}
+    }
+    return undefined;
+  }, [queryParams]);
+  const periodType = queryParams.get('ptype') || '';
+  const periodMonth = queryParams.get('pmonth') || '';
+  const periodYear = queryParams.get('pyear') || '';
+  const periodLabel = queryParams.get('plabel') || '';
+  const remark = queryParams.get('rem') || '';
+  const customDate = queryParams.get('dt') || '';
 
   // Environment detection: Android device or WebView
   const isAndroid = useMemo(() => {
@@ -273,6 +292,19 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
       category,
       donorName: isAnonymous ? 'Anonymous' : (donorName || 'Valued Donor'),
       donorPhone: isAnonymous ? undefined : (donorPhone || undefined),
+      donorVeng: isAnonymous ? undefined : (donorVeng || undefined),
+      memberId: isAnonymous ? undefined : (memberId || undefined),
+      subId: isAnonymous ? undefined : (subId || undefined),
+      donorType: donorType || undefined,
+      groupName: groupName || undefined,
+      subCategory: subCategory || (subCategoryBreakdown ? Object.keys(subCategoryBreakdown)[0] : undefined),
+      subCategoryBreakdown: subCategoryBreakdown || undefined,
+      periodType: periodType || undefined,
+      periodMonth: periodMonth || undefined,
+      periodYear: periodYear || undefined,
+      periodLabel: periodLabel || undefined,
+      remark: remark || undefined,
+      date: customDate || new Date().toISOString().slice(0, 10),
       isAnonymous,
       amount: baseAmount,
       platformFee,
@@ -287,8 +319,41 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
       utr: utrNumber
     };
 
-    // 1. Notify server webhook simulation so status queries return PAYMENT_SUCCESS immediately
+    // 1. Notify server webhook & confirm-paid so authoritative status is immediately persisted in database
     try {
+      fetch('/api/phonepe/confirm-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantTransactionId: completedTx.id,
+          status: 'PAYMENT_SUCCESS',
+          amountInRupees: totalAmount,
+          baseAmountInRupees: baseAmount,
+          platformFeeRupees: platformFee,
+          feeOption: completedTx.feeOption,
+          campaignId: completedTx.campaignId,
+          campaignTitle: completedTx.campaignTitle,
+          category: completedTx.category,
+          donorName: completedTx.donorName,
+          donorPhone: completedTx.donorPhone,
+          donorVeng: completedTx.donorVeng,
+          donorType: completedTx.donorType,
+          groupName: completedTx.groupName,
+          memberId: completedTx.memberId,
+          subId: completedTx.subId,
+          isAnonymous: completedTx.isAnonymous,
+          subCategory: completedTx.subCategory,
+          subCategoryBreakdown: completedTx.subCategoryBreakdown,
+          periodType: completedTx.periodType,
+          periodMonth: completedTx.periodMonth,
+          periodYear: completedTx.periodYear,
+          periodLabel: completedTx.periodLabel,
+          remark: completedTx.remark,
+          date: completedTx.date,
+          utr: utrNumber
+        })
+      }).catch(() => {});
+
       await fetch('/api/phonepe/simulate-callback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -339,8 +404,21 @@ export const PhonePeStandardCheckout: React.FC<PhonePeStandardCheckoutProps> = (
         if (onSuccess) {
           onSuccess(completedTx);
         } else {
-          // Direct navigation back to the official RonPay receipt screen
-          const redirectUrl = `/?view=app&screen=success&receipt=${encodeURIComponent(txnId)}&phonepe_txn_id=${encodeURIComponent(txnId)}&status=PAYMENT_SUCCESS&amt=${totalAmount.toFixed(2)}&baseAmt=${baseAmount.toFixed(2)}&fee=${platformFee.toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&cat=${encodeURIComponent(category)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(donorPhone)}&anon=${isAnonymous ? '1' : '0'}&utr=${encodeURIComponent(utrNumber)}`;
+          // Direct navigation back to the official RonPay receipt screen with all details
+          let redirectUrl = `/?view=app&screen=success&receipt=${encodeURIComponent(txnId)}&phonepe_txn_id=${encodeURIComponent(txnId)}&status=PAYMENT_SUCCESS&amt=${totalAmount.toFixed(2)}&baseAmt=${baseAmount.toFixed(2)}&fee=${platformFee.toFixed(2)}&feeOpt=${encodeURIComponent(feeOption)}&cid=${encodeURIComponent(campaignId)}&ctitle=${encodeURIComponent(campaignTitle)}&cat=${encodeURIComponent(category)}&donor=${encodeURIComponent(donorName)}&donorPhone=${encodeURIComponent(donorPhone)}&anon=${isAnonymous ? '1' : '0'}&utr=${encodeURIComponent(utrNumber)}`;
+          if (donorVeng) redirectUrl += `&veng=${encodeURIComponent(donorVeng)}`;
+          if (memberId) redirectUrl += `&memId=${encodeURIComponent(memberId)}`;
+          if (subId) redirectUrl += `&subId=${encodeURIComponent(subId)}`;
+          if (donorType) redirectUrl += `&dtype=${encodeURIComponent(donorType)}`;
+          if (groupName) redirectUrl += `&grp=${encodeURIComponent(groupName)}`;
+          if (subCategory) redirectUrl += `&subcat=${encodeURIComponent(subCategory)}`;
+          if (subCategoryBreakdown) redirectUrl += `&subcats=${encodeURIComponent(JSON.stringify(subCategoryBreakdown))}`;
+          if (periodType) redirectUrl += `&ptype=${encodeURIComponent(periodType)}`;
+          if (periodMonth) redirectUrl += `&pmonth=${encodeURIComponent(periodMonth)}`;
+          if (periodYear) redirectUrl += `&pyear=${encodeURIComponent(periodYear)}`;
+          if (periodLabel) redirectUrl += `&plabel=${encodeURIComponent(periodLabel)}`;
+          if (remark) redirectUrl += `&rem=${encodeURIComponent(remark)}`;
+          if (customDate) redirectUrl += `&dt=${encodeURIComponent(customDate)}`;
           window.location.href = redirectUrl;
         }
       }, 700);
