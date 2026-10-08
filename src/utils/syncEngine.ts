@@ -348,87 +348,51 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           const currentTxs = getStoredTransactions();
           const txMap = new Map<string, any>();
 
-          // 1. First add current local transactions so local user edits are preserved
+          // 1. Authoritative server transactions FIRST
+          for (const st of serverData.transactions) {
+            if (st && st.id) {
+              const k = String(st.id).toLowerCase().trim();
+              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
+              txMap.set(k, { ...st, isSynced: true });
+            }
+          }
+
+          // 2. Reconcile with local transactions:
+          const newLocalTxsToPush: Transaction[] = [];
+          const nowMs = Date.now();
           for (const ct of currentTxs) {
             if (ct && ct.id) {
               const k = String(ct.id).toLowerCase().trim();
-              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
-                txMap.set(k, ct);
-              }
-            }
-          }
-
-          // 2. Overlay authoritative server transactions for items not marked deleted
-          for (const t of serverData.transactions) {
-            if (t && t.id) {
-              const k = String(t.id).toLowerCase().trim();
               if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
-                continue; // Do NOT resurrect deleted transactions!
+                txMap.delete(k);
+                continue;
               }
+              const amt = Number(ct.amount);
+              if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
 
               const existing = txMap.get(k);
-              if (!existing) {
-                txMap.set(k, t);
-              } else {
-                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
-                const serverTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
-                if (serverTime >= existingTime) {
-                  txMap.set(k, { ...existing, ...t });
-                } else {
-                  txMap.set(k, { ...t, ...existing });
-                }
-              }
-            }
-          }
-
-          // Check if local storage was corrupted / inflated (e.g. ₹13,00,950 vs server ₹2,77,875.9)
-          const serverConfirmedSum = serverData.transactions
-            .filter((t: any) => {
-              const s = (t.status || '').toLowerCase().trim();
-              return s === 'completed' || s === 'success' || s === 'verified';
-            })
-            .reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
-
-          const localConfirmedSum = currentTxs
-            .filter(t => {
-              const s = (t.status || '').toLowerCase().trim();
-              return s === 'completed' || s === 'success' || s === 'verified';
-            })
-            .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-          
-          const isLocalInflated = localConfirmedSum > Math.max(1000000, serverConfirmedSum * 2);
-
-          // Preserve all genuine local transactions:
-          // Local transactions that are not deleted must ALWAYS be merged into txMap
-          // so real payments created on this device (Web or Mobile App) are NEVER wiped out by server fetches!
-          const newLocalTxsToPush: Transaction[] = [];
-          for (const t of currentTxs) {
-            if (t && t.id) {
-              const k = String(t.id).toLowerCase().trim();
-              if (deletedIds.has(k)) continue;
-              const amt = Number(t.amount);
-              if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
-
-              if (!txMap.has(k)) {
-                // Keep genuine local transactions and push to server
-                txMap.set(k, t);
-                newLocalTxsToPush.push(t);
-              } else {
-                const existing = txMap.get(k);
-                const localTime = new Date(t.updatedAt || t.timestamp || 0).getTime();
+              if (existing) {
+                const localTime = new Date(ct.updatedAt || ct.timestamp || 0).getTime();
                 const serverTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
-                const localStatus = (t.status || '').toLowerCase().trim();
-                const serverStatus = (existing.status || '').toLowerCase().trim();
-                // If local status is completed/verified while server is pending, or local has newer timestamp:
-                if ((localStatus === 'completed' && serverStatus === 'pending') || localTime > serverTime) {
-                  txMap.set(k, { ...existing, ...t });
-                  newLocalTxsToPush.push(t);
+                if (localTime > serverTime) {
+                  txMap.set(k, { ...existing, ...ct, isSynced: true });
+                }
+              } else {
+                // Not in serverData.transactions!
+                const isFreshOffline = ((ct as any).isOfflinePending === true || ct.isSynced === false) &&
+                  ct.createdAt ? (nowMs - new Date(ct.createdAt).getTime() < 5 * 60 * 1000) : false;
+                if (isFreshOffline) {
+                  txMap.set(k, ct);
+                  newLocalTxsToPush.push(ct);
+                } else {
+                  // Transaction not on server and not a fresh offline creation: item was deleted on server!
+                  markTransactionAsDeleted(k, false);
                 }
               }
             }
           }
 
-          // If there are genuine recent local transactions, push them to server immediately
+          // If there are genuine recent offline transactions created on this device, push them
           if (newLocalTxsToPush.length > 0) {
             safeApiFetch('/api/data/sync', {
               method: 'POST',
@@ -926,67 +890,67 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
           saveMembers(serverData.members, true);
         }
 
-        // 4. Transactions - merge with offline pending
-        // 4. Transactions - preserve all local records & merge authoritative server data
+        // 4. Transactions - merge authoritative server data with genuine offline creations
         if (Array.isArray(serverData.transactions)) {
           const currentTxs = getStoredTransactions();
           const deletedIds = getDeletedTransactionIds();
           const txMap = new Map<string, Transaction>();
+          const nowMs = Date.now();
 
-          // 1. Seed with all valid, non-deleted local transactions
-          for (const lt of currentTxs) {
-            if (lt && lt.id) {
-              const k = String(lt.id).toLowerCase().trim();
-              if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
-                txMap.set(k, lt);
-              }
-            }
-          }
-
-          // 2. Safely merge server transactions
+          // 1. Authoritative server transactions
           for (const st of serverData.transactions) {
             if (st && st.id) {
               const k = String(st.id).toLowerCase().trim();
               if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
-              const existing = txMap.get(k);
-              if (!existing) {
-                txMap.set(k, { ...st, isSynced: true });
-              } else {
-                const existingTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
-                const serverTime = new Date(st.updatedAt || st.timestamp || 0).getTime();
+              txMap.set(k, { ...st, isSynced: true });
+            }
+          }
+
+          // 2. Check local transactions: reconcile updates or detect fresh offline creations
+          const unpushedFreshOfflineTxs: Transaction[] = [];
+          for (const lt of currentTxs) {
+            if (lt && lt.id) {
+              const k = String(lt.id).toLowerCase().trim();
+              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) {
+                txMap.delete(k);
+                continue;
+              }
+              const amt = Number(lt.amount);
+              if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
+
+              const isFreshOffline = (lt.isSynced === false || (lt as any).isOfflinePending === true) &&
+                lt.createdAt ? (nowMs - new Date(lt.createdAt).getTime() < 5 * 60 * 1000) : false;
+
+              if (txMap.has(k)) {
+                const existing = txMap.get(k)!;
                 const existingStatus = (existing.status || '').toLowerCase().trim();
-                const serverStatus = (st.status || '').toLowerCase().trim();
-                
-                // If local status is confirmed completed, never demote back to pending
-                if (existingStatus === 'completed' && serverStatus === 'pending') {
-                  txMap.set(k, { ...st, ...existing, status: 'completed', isSynced: true });
-                } else if (serverTime >= existingTime) {
-                  txMap.set(k, { ...existing, ...st, isSynced: true });
+                const localStatus = (lt.status || '').toLowerCase().trim();
+                const localTime = new Date(lt.updatedAt || lt.timestamp || 0).getTime();
+                const serverTime = new Date(existing.updatedAt || existing.timestamp || 0).getTime();
+
+                if (localStatus === 'completed' && existingStatus === 'pending') {
+                  txMap.set(k, { ...existing, ...lt, status: 'completed', isSynced: true });
+                } else if (localTime > serverTime) {
+                  txMap.set(k, { ...existing, ...lt, isSynced: true });
+                }
+              } else {
+                if (isFreshOffline) {
+                  txMap.set(k, lt);
+                  unpushedFreshOfflineTxs.push(lt);
                 } else {
-                  txMap.set(k, { ...st, ...existing, isSynced: true });
+                  // Transaction not on server and was previously synced: item was deleted on server!
+                  markTransactionAsDeleted(k, false);
                 }
               }
             }
           }
 
-          // 3. Detect any genuine local transactions missing from server and queue push
-          const unpushedLocalTxs: Transaction[] = [];
-          for (const lt of currentTxs) {
-            if (lt && lt.id) {
-              const k = String(lt.id).toLowerCase().trim();
-              if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
-              const amt = Number(lt.amount);
-              if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
-              if (!serverData.transactions.some((st: any) => String(st?.id).toLowerCase().trim() === k)) {
-                unpushedLocalTxs.push(lt);
-              }
-            }
-          }
-          if (unpushedLocalTxs.length > 0) {
+          // Only push if there are genuinely unpushed offline transactions created right now
+          if (unpushedFreshOfflineTxs.length > 0) {
             safeApiFetch('/api/data/sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: unpushedLocalTxs })
+              body: JSON.stringify({ transactions: unpushedFreshOfflineTxs })
             }).catch(() => {});
           }
 

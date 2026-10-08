@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   FileSpreadsheet, 
@@ -69,8 +69,21 @@ import {
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
-import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions, saveMultipleTransactions } from '../utils/storage';
+import { 
+  getMembers, 
+  isCampaignCreator, 
+  isConfirmedTransaction, 
+  isTransactionForCampaign, 
+  deleteMultipleTransactions, 
+  deleteStoredTransaction,
+  saveMultipleTransactions,
+  getDeletedTransactionIds,
+  PERMANENTLY_PURGED_TX_IDS,
+  getStoredTransactions
+} from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
+import { collection, query, limit, orderBy, getDocsFromServer, getDocs, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { 
   formatDateDDMMYYYY, 
   formatDateTimeDDMMYYYY, 
@@ -202,6 +215,97 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   const { stats: publicPoolStats } = usePublicPoolStats();
 
+  // Server-side transaction fetch with real-time listener bypassing local IndexedDB cache for live breakdown sync across devices
+  const [serverTransactions, setServerTransactions] = useState<Transaction[] | null>(null);
+  const [isFetchingServerTxns, setIsFetchingServerTxns] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsFetchingServerTxns(true);
+
+    const txQuery = query(collection(db, 'transactions'), limit(5000));
+    
+    // Direct server fetch first to bypass cache immediately
+    getDocsFromServer(txQuery).then((snap) => {
+      if (!isMounted) return;
+      const txs: Transaction[] = [];
+      const deletedIds = getDeletedTransactionIds();
+      snap.forEach(docSnap => {
+        const data = docSnap.data() as Transaction;
+        const realId = (data?.id || docSnap.id || '').trim();
+        if (realId) {
+          const cleanId = realId.toLowerCase();
+          if (!deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
+            txs.push({ ...data, id: realId });
+          }
+        }
+      });
+      if (txs.length > 0) {
+        setServerTransactions(txs);
+      }
+      setIsFetchingServerTxns(false);
+    }).catch(() => {
+      if (isMounted) setIsFetchingServerTxns(false);
+    });
+
+    // Real-time listener with metadata changes so additions and deletions on mobile or other devices reflect instantly
+    const unsubscribe = onSnapshot(
+      txQuery,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (!isMounted) return;
+        const txs: Transaction[] = [];
+        const deletedIds = getDeletedTransactionIds();
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as Transaction;
+          const realId = (data?.id || docSnap.id || '').trim();
+          if (realId) {
+            const cleanId = realId.toLowerCase();
+            if (!deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
+              txs.push({ ...data, id: realId });
+            }
+          }
+        });
+        if (txs.length > 0) {
+          setServerTransactions(txs);
+        }
+        setIsFetchingServerTxns(false);
+      },
+      (err) => {
+        console.warn('[ReportsScreen] Real-time listener note:', err);
+        if (isMounted) setIsFetchingServerTxns(false);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // Listen to transaction updates/deletions dispatched from anywhere in the app
+  useEffect(() => {
+    const handleTxEvent = (e: any) => {
+      const deletedIds = getDeletedTransactionIds();
+      const rawList: Transaction[] = Array.isArray(e?.detail) ? e.detail : getStoredTransactions();
+      const filtered = rawList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
+      setServerTransactions(filtered);
+    };
+
+    window.addEventListener('ronpay_transactions_updated', handleTxEvent);
+    window.addEventListener('ronpay-transactions-updated', handleTxEvent);
+    return () => {
+      window.removeEventListener('ronpay_transactions_updated', handleTxEvent);
+      window.removeEventListener('ronpay-transactions-updated', handleTxEvent);
+    };
+  }, []);
+
+  const effectiveTransactions = useMemo(() => {
+    const deletedIds = getDeletedTransactionIds();
+    const source = serverTransactions || transactions;
+    return source.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
+  }, [serverTransactions, transactions]);
+
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
   const isAdmin = userRole === 'ADMIN' || creatorProfile?.isAdmin === true;
@@ -269,11 +373,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const baseTransactions = useMemo(() => {
     if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
 
-    return transactions.filter(t => {
-      // 0. Only verified and completed transactions count toward collection reports
-      if (!t || !isConfirmedTransaction(t)) return false;
+    return effectiveTransactions.filter(t => {
+      // 0. Only verified and completed transactions count toward collection reports (Unified status check)
+      if (!t) return false;
+      const s = (t.status || '').toUpperCase().trim();
+      const isConfirmed = s === 'SUCCESS' || s === 'COMPLETED' || s === 'PAID' || s === 'PAYMENT_SUCCESS' || s === 'VERIFIED' || !s;
+      if (!isConfirmed) return false;
+
       const amt = Number(t.amount);
-      if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+      if (!isFinite(amt) || isNaN(amt) || amt <= 0) return false;
 
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's authorized campaigns
       const matchesOwnership = isStaffFullAccess || 
@@ -322,7 +430,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [transactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
+  }, [effectiveTransactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {
@@ -349,9 +457,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       }
     });
 
-    const isGlobalUnfiltered = selectedFilter === 'all' && selectedCampaignId === 'all' && !startDate && !endDate && !searchQuery;
-    const allCount = isGlobalUnfiltered && publicPoolStats?.totalCount ? publicPoolStats.totalCount : baseTransactions.length;
-    const allSum = isGlobalUnfiltered && publicPoolStats?.totalAmount ? publicPoolStats.totalAmount : baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const allCount = baseTransactions.length;
+    const allSum = baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
     return {
       allCount,
@@ -966,33 +1073,45 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     if (!window.confirm(confirmMsg)) return;
 
     const idsToDelete = donorTxs.map(t => t.id).filter(Boolean);
+    const delSet = new Set(idsToDelete.map(id => String(id).toLowerCase().trim()));
+    setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
+
+    deleteMultipleTransactions(idsToDelete);
     if (onBatchUpdateTransactions) {
       onBatchUpdateTransactions([], idsToDelete);
-    } else {
-      deleteMultipleTransactions(idsToDelete);
-      if (onDeleteTransaction) {
-        idsToDelete.forEach(id => onDeleteTransaction(id));
-      }
+    }
+    if (onDeleteTransaction) {
+      idsToDelete.forEach(id => onDeleteTransaction(id));
     }
     showExportSuccessToast(`${cleanTarget} record (${idsToDelete.length} txns) paih fel a ni e!`, idsToDelete.length);
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
+    const delSet = new Set((deletedIds || []).map(id => String(id).toLowerCase().trim()));
+    setServerTransactions(prev => {
+      if (!prev) return null;
+      let next = prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim()));
+      if (updatedTxs && updatedTxs.length > 0) {
+        const updateMap = new Map(updatedTxs.map(u => [String(u.id).toLowerCase().trim(), u]));
+        next = next.map(t => updateMap.get(String(t.id).toLowerCase().trim()) || t);
+      }
+      return next;
+    });
+
+    if (deletedIds && deletedIds.length > 0) {
+      deleteMultipleTransactions(deletedIds);
+      if (onDeleteTransaction) {
+        deletedIds.forEach(id => onDeleteTransaction(id));
+      }
+    }
+    if (updatedTxs && updatedTxs.length > 0) {
+      saveMultipleTransactions(updatedTxs);
+      if (onUpdateTransaction) {
+        updatedTxs.forEach(tx => onUpdateTransaction(tx));
+      }
+    }
     if (onBatchUpdateTransactions) {
       onBatchUpdateTransactions(updatedTxs, deletedIds);
-    } else {
-      if (deletedIds && deletedIds.length > 0) {
-        deleteMultipleTransactions(deletedIds);
-        if (onDeleteTransaction) {
-          deletedIds.forEach(id => onDeleteTransaction(id));
-        }
-      }
-      if (updatedTxs.length > 0) {
-        saveMultipleTransactions(updatedTxs);
-        if (onUpdateTransaction) {
-          updatedTxs.forEach(tx => onUpdateTransaction(tx));
-        }
-      }
     }
     setEditingDonorGroup(null);
     showExportSuccessToast(
@@ -1009,9 +1128,27 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (onRefreshCloud) {
         await onRefreshCloud();
       }
+      const txQuery = query(collection(db, 'transactions'), limit(2000));
+      let snap;
+      try {
+        snap = await getDocsFromServer(txQuery);
+      } catch {
+        snap = await getDocs(txQuery);
+      }
+      const txs: Transaction[] = [];
+      snap.forEach(docSnap => {
+        const data = docSnap.data() as Transaction;
+        if (data && data.id) {
+          txs.push({ ...data, id: docSnap.id });
+        }
+      });
+      if (txs.length > 0) {
+        setServerTransactions(txs);
+      }
+      const totalCnt = publicPoolStats?.totalCount || effectiveTransactions.length;
       setExportFeedback({
-        message: `Cloud sync complete! ${transactions.length} transactions live in sync across all devices.`,
-        count: transactions.length
+        message: `Cloud sync complete! ${totalCnt} transactions live in sync across all devices.`,
+        count: totalCnt
       });
       setTimeout(() => setExportFeedback(null), 3500);
     } catch (err) {
@@ -1057,7 +1194,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 bg-indigo-50 px-2 sm:px-2.5 py-1 rounded-xl text-[10.5px] sm:text-[11px] font-bold text-indigo-700 border border-indigo-200" title="Transactions lo lut zat">
                 <span>💳</span>
-                <span>Txns: {filteredTransactions.length}</span>
+                <span>Txns: {countsByRecordType.allCount}</span>
               </div>
             </>
           )}
@@ -2609,14 +2746,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           onSaveAll={handleSaveDonorGroup}
           onDeleteAll={() => {
             const allIds = editingDonorGroup.donorTransactions.map(t => t.id).filter(Boolean);
+            const delSet = new Set(allIds.map(id => String(id).toLowerCase().trim()));
             if (allIds.length > 0) {
+              setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
+              deleteMultipleTransactions(allIds);
               if (onBatchUpdateTransactions) {
                 onBatchUpdateTransactions([], allIds);
-              } else {
-                deleteMultipleTransactions(allIds);
-                if (onDeleteTransaction) {
-                  allIds.forEach(id => onDeleteTransaction(id));
-                }
+              }
+              if (onDeleteTransaction) {
+                allIds.forEach(id => onDeleteTransaction(id));
               }
               showExportSuccessToast(`He donor records ${allIds.length} zawng zawng paih fai a ni ta.`, allIds.length);
             }
@@ -2635,9 +2773,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             if (onUpdateTransaction) {
               onUpdateTransaction(updatedTx);
             }
+            setServerTransactions(prev => prev ? prev.map(t => String(t.id).toLowerCase().trim() === String(updatedTx.id).toLowerCase().trim() ? updatedTx : t) : null);
             setEditingTransaction(null);
           }}
           onDelete={(id) => {
+            const cleanId = String(id).toLowerCase().trim();
+            setServerTransactions(prev => prev ? prev.filter(t => String(t.id).toLowerCase().trim() !== cleanId) : null);
+            deleteStoredTransaction(id);
             if (onDeleteTransaction) {
               onDeleteTransaction(id);
             }

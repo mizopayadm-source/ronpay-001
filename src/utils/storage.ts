@@ -1052,7 +1052,7 @@ export const getStoredTransactions = (): Transaction[] => {
           // 2. Authoritative baseline: active canonical database transactions are preserved
           if (canonicalTxMap.has(cleanId)) return true;
           const numAmt = Number(t.amount);
-          if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0 || numAmt > 500000) return false;
+          if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0) return false;
           
           // 2. Real user-created / completed / live transactions MUST BE KEPT!
           // Preserves all payments completed on web, mobile apps, QR scans, etc.
@@ -1146,7 +1146,7 @@ export const getStoredTransactions = (): Transaction[] => {
           return t;
         });
 
-        // Strict Deduplication Pass by unique transaction ID only (allows multiple real offerings in the same month/day/service without artificial locking)
+        // Strict Deduplication Pass by unique transaction ID only
         const seenTxIds = new Set<string>();
         const finalMerged: Transaction[] = [];
         for (const t of cleaned) {
@@ -1156,27 +1156,13 @@ export const getStoredTransactions = (): Transaction[] => {
             continue;
           }
           if (seenTxIds.has(cleanId)) {
-            // Drop duplicate transaction with identical ID
             continue;
           }
           seenTxIds.add(cleanId);
           finalMerged.push(t);
         }
 
-        // Authoritative baseline merge: guarantee any non-deleted verified records from INITIAL_TRANSACTIONS are present on web (ensures 471 confirmed transactions)
-        let hasNewFromBaseline = false;
-        for (const initTx of INITIAL_TRANSACTIONS) {
-          if (!initTx || !initTx.id) continue;
-          const initKey = String(initTx.id).toLowerCase().trim();
-          if (deletedIds.has(initKey) || PERMANENTLY_PURGED_TX_IDS.has(initKey)) continue;
-          if (!seenTxIds.has(initKey)) {
-            finalMerged.push(initTx);
-            seenTxIds.add(initKey);
-            hasNewFromBaseline = true;
-          }
-        }
-
-        if (finalMerged.length !== parsed.length || hasAttrChange || hasNewFromBaseline) {
+        if (finalMerged.length !== parsed.length) {
           localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(finalMerged));
         }
 

@@ -555,16 +555,19 @@ export default function App() {
       });
     });
 
-    // Gentle periodic background sync (every 12 seconds) without broadcasting loops
+    // Relaxed periodic background sync (every 60 seconds) as backup to SSE and Firestore listeners
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
         pullLatestServerState().then((res) => {
-          if (res?.transactions && res.transactions.length > 0) {
-            setTransactions(res.transactions);
+          if (res?.transactions && Array.isArray(res.transactions)) {
+            setTransactions(prev => {
+              if (prev.length !== res.transactions.length) return res.transactions;
+              return prev;
+            });
           }
         }).catch(() => {});
       }
-    }, 12000);
+    }, 60000);
 
     // Load local storage immediately on startup
     reloadLocalData();
@@ -2098,7 +2101,7 @@ export default function App() {
                 <AdminSyncDiagnosticView
                   localTransactions={transactions}
                   localCampaigns={campaigns}
-                  onRefreshParent={handleResetData}
+                  onRefreshParent={reloadLocalData}
                   onClose={() => setIsSyncDiagnosticOpen(false)}
                 />
               </div>

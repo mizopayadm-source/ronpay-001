@@ -5134,7 +5134,7 @@ function reconcileAndDeduplicateTransactions(transactionsList: any[], serverDelT
     if (serverDelTxSet.has(cleanId)) continue;
     if (PURGED_SIMULATOR_TXS.has(cleanId)) continue;
     const amt = Number(t.amount);
-    if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) continue;
+    if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
 
     // Normalize Pocket Monye typo
     if (t.campaignTitle === 'Pocket Monye') {
@@ -5321,7 +5321,7 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         const cleanId = String(t.id).toLowerCase().trim();
         if (serverDelTxSet.has(cleanId)) return false;
         const amt = Number(t.amount);
-        if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
+        if (!isFinite(amt) || isNaN(amt) || amt <= 0) return false;
         return true;
       });
       const merged = mergeCollections(db.transactions || [], cleanTx, 'id', serverDelTxSet);

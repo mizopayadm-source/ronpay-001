@@ -20,6 +20,7 @@ import {
   Trash2,
   ExternalLink,
   ShieldAlert,
+  ShieldCheck,
   Info
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
@@ -36,6 +37,8 @@ import {
 import { 
   fetchFirestoreDiagnosticData, 
   FirestoreDiagnosticData, 
+  performDeepAuditAndAutoRepair,
+  DeepAuditResult,
   syncTransactionToFirestore, 
   syncCampaignToFirestore,
   deleteTransactionFromFirestore,
@@ -112,6 +115,10 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
   const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Deep Audit & Auto-Repair state
+  const [auditResult, setAuditResult] = useState<DeepAuditResult | null>(null);
+  const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
+
   // Copy helper
   const handleCopyId = (id: string) => {
     navigator.clipboard?.writeText(id);
@@ -147,10 +154,10 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         setServerStatus('offline');
       }
 
-      // 3. Fetch Cloud Firestore Production Layer
+      // 3. Fetch Cloud Firestore Production Layer (Direct server bypass)
       try {
         setCloudStatus('checking');
-        const firestoreDiag = await fetchFirestoreDiagnosticData(300);
+        const firestoreDiag = await fetchFirestoreDiagnosticData(5000);
         setCloudTxList(firestoreDiag.firestoreTransactions || []);
         setCloudCampList(firestoreDiag.firestoreCampaigns || []);
         setCloudTombstones(firestoreDiag.deletedTransactionIds || []);
@@ -168,6 +175,61 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       setIsScanning(false);
     }
   }, []);
+
+  // Automated Deep Audit & Auto-Repair Engine Trigger
+  const handleDeepAuditAndRepair = async () => {
+    setIsScanning(true);
+    setScanError(null);
+    setActionNotice(null);
+
+    try {
+      // 1. Run Server-Authoritative Deep Audit & Auto-Repair
+      const result = await performDeepAuditAndAutoRepair();
+      setAuditResult(result);
+      setShowAuditModal(true);
+
+      // 2. Update local state with the single verified source of truth
+      setLocalTxList(result.reconciledTransactions);
+      setCloudTxList(result.reconciledTransactions);
+      setCloudStatus('connected');
+      setLastScannedTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+      // 3. Update server state
+      try {
+        setServerStatus('checking');
+        const serverState = await syncAllWithServer(false);
+        if (serverState) {
+          setServerTxList(serverState.transactions || []);
+          setServerCampList(serverState.campaigns || []);
+          setServerStatus('online');
+        } else {
+          setServerStatus('offline');
+        }
+      } catch {
+        setServerStatus('offline');
+      }
+
+      // 4. Update Toast notification
+      setActionNotice({
+        message: result.message,
+        type: 'success'
+      });
+
+      // 5. Notify parent component to reload state across all screens
+      if (onRefreshParent) {
+        onRefreshParent();
+      }
+    } catch (err: any) {
+      console.error('Deep audit error:', err);
+      setScanError(err?.message || 'Failed to complete Deep Audit & Auto-Repair');
+      setActionNotice({
+        message: `❌ Audit failed: ${err?.message || 'Network error'}`,
+        type: 'error'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   // Run initial scan on mount
   useEffect(() => {
@@ -679,12 +741,13 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={runDiagnosticScan}
+            onClick={handleDeepAuditAndRepair}
             disabled={isScanning}
-            className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Automated Deep Audit & Auto-Repair Engine"
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>{isScanning ? 'Scanning...' : 'Scan Now'}</span>
+            <span>{isScanning ? 'Auditing & Repairing...' : 'Scan Now'}</span>
           </button>
 
           {discrepancies.length > 0 && (
@@ -703,22 +766,163 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
       {/* Action Notification Toast */}
       {actionNotice && (
-        <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all shadow-xs ${
+        <div className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-bold transition-all shadow-xs ${
           actionNotice.type === 'success' 
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-            : 'bg-rose-50 border-rose-200 text-rose-800'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+            : 'bg-rose-50 border-rose-300 text-rose-900'
         }`}>
-          <div className="flex items-center gap-2">
-            {actionNotice.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
-            <span>{actionNotice.message}</span>
+          <div className="flex items-center gap-2.5">
+            {actionNotice.type === 'success' ? (
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4.5 h-4.5 text-rose-600 shrink-0" />
+            )}
+            <div>
+              <p className="font-black">{actionNotice.message}</p>
+              {auditResult && actionNotice.type === 'success' && (
+                <p className="text-[11px] font-extrabold text-emerald-700 italic">
+                  "{auditResult.messageMizo}"
+                </p>
+              )}
+            </div>
           </div>
-          <button 
-            type="button" 
-            onClick={() => setActionNotice(null)}
-            className="text-xs opacity-60 hover:opacity-100 cursor-pointer"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {auditResult && actionNotice.type === 'success' && (
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(true)}
+                className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer"
+              >
+                View Report
+              </button>
+            )}
+            <button 
+              type="button" 
+              onClick={() => setActionNotice(null)}
+              className="text-xs opacity-60 hover:opacity-100 cursor-pointer p-1"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Automated Deep Audit & Auto-Repair Summary Modal */}
+      {showAuditModal && auditResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-5 shadow-2xl border border-indigo-100 space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-200 shrink-0">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    Deep Sync & Auto-Repair Complete
+                  </h3>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-emerald-700">
+                    Cloud & Local State 100% Synchronized
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Main Result Banners */}
+            <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-1.5">
+              <div className="flex items-center gap-2 text-emerald-900 font-black text-xs">
+                <Zap className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{auditResult.message}</span>
+              </div>
+              <p className="text-[11px] font-extrabold text-emerald-800 italic pl-6">
+                "{auditResult.messageMizo}"
+              </p>
+            </div>
+
+            {/* Audit Verified Metrics Breakdown Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-[9px] font-bold uppercase text-slate-400 block">Verified Cloud Txns</span>
+                <span className="text-base font-black text-slate-900">{auditResult.totalValidTxns}</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-[9px] font-bold uppercase text-slate-400 block">True Public Pool</span>
+                <span className="text-base font-black text-emerald-700">₹{auditResult.totalValidAmount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 col-span-2 sm:col-span-1">
+                <span className="text-[9px] font-bold uppercase text-slate-400 block">Today's Txns</span>
+                <span className="text-base font-black text-indigo-700">{auditResult.todayTxns}</span>
+              </div>
+            </div>
+
+            {/* Restored Records Section */}
+            {auditResult.restoredCount > 0 ? (
+              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-black text-amber-900">
+                  <span>✨ Missing Records Restored ({auditResult.restoredCount}):</span>
+                  <span className="text-[10px] text-amber-700 font-bold">Force Injected & Unblocked</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                  {auditResult.restoredIds.map(id => (
+                    <span key={id} className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-amber-300 text-amber-900 shadow-2xs">
+                      {id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2 text-[11px] text-slate-600 font-bold">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Zero missing records: All cloud records already present locally.</span>
+              </div>
+            )}
+
+            {/* Pruned Records Section */}
+            {auditResult.prunedCount > 0 && (
+              <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-black text-rose-900">
+                  <span>🗑️ Ghost/Orphan Records Pruned ({auditResult.prunedCount}):</span>
+                  <span className="text-[10px] text-rose-700 font-bold">Wiped Out from Local Cache</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                  {auditResult.prunedIds.map(id => (
+                    <span key={id} className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-rose-300 text-rose-800 shadow-2xs">
+                      {id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Screen Re-render & Counter Confirmation */}
+            <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10.5px]">
+              <span className="font-bold text-indigo-950 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                <span>stats/public_pool Overwrite & Screen Re-render:</span>
+              </span>
+              <span className="font-extrabold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200 text-center">
+                100% Synced across Home, Reports & Tabs
+              </span>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition active:scale-95 cursor-pointer"
+              >
+                Khawl Siamthatna Pawm / Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
