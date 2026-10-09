@@ -1164,6 +1164,7 @@ function startLeaderFirestoreListeners(): void {
  * Other open tabs receive live updates over BroadcastChannel with ZERO extra reads.
  */
 export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
+  return () => {};
   activeSubscribers.add(callbacks);
 
   if (callbacks.onStatusChange) {
