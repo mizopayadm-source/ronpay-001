@@ -2213,32 +2213,45 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {/* KUMTLUANG SPECIFIC: Member ID & Phone Lookup, Auto-Registration & Dual User Selection */}
           {category === 'kumtluang' && !isAnonymous ? (
             <div className="space-y-3 pt-1">
-              {/* 2-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold border border-slate-200">
+              {/* 3-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) vs General (Inkhawm) */}
+              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl text-[11px] font-bold border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setKumtluangDonorType('member')}
-                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1 ${
                     kumtluangDonorType === 'member'
                       ? 'bg-blue-600 text-white font-black shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
                 >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Mimal (Roll)</span>
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Mimal</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setKumtluangDonorType('group')}
-                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1 ${
                     kumtluangDonorType === 'group'
                       ? 'bg-indigo-600 text-white font-black shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Group / Unit</span>
-                  {!isOfficerAuthorized && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Group</span>
+                  {!isOfficerAuthorized && <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKumtluangDonorType('general')}
+                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1 ${
+                    kumtluangDonorType === 'general'
+                      ? 'bg-emerald-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <Landmark className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">General</span>
+                  {!isOfficerAuthorized && <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
                 </button>
               </div>
 
