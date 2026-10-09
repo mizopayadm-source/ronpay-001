@@ -792,7 +792,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
             sseReconnectTimer = setTimeout(() => {
               sseReconnectTimer = null;
               connectSSE();
-            }, 10000);
+            }, 3000);
           }
         };
       } catch (err) {
@@ -807,7 +807,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
         if (!eventSource) {
           connectSSE();
         }
-        syncAllWithServer().then(res => {
+        syncAllWithServer(true).then(res => {
           if (res && onSyncUpdate) onSyncUpdate(res);
         }).catch(() => {});
       }

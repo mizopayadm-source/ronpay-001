@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, 
   FileSpreadsheet, 
@@ -65,25 +65,12 @@ import {
   computeMonthlyDistribution,
   MonthRangeConfig,
   ALL_MONTH_NAMES_SHORT,
-  TargetExportInfo
+  TargetExportInfo,
+  MatrixRow
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
-import { 
-  getMembers, 
-  isCampaignCreator, 
-  isConfirmedTransaction, 
-  isTransactionForCampaign, 
-  deleteMultipleTransactions, 
-  deleteStoredTransaction,
-  saveMultipleTransactions,
-  getDeletedTransactionIds,
-  PERMANENTLY_PURGED_TX_IDS,
-  getStoredTransactions
-} from '../utils/storage';
+import { getMembers, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, deleteMultipleTransactions, saveMultipleTransactions, deleteStoredTransaction } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
-import { collection, query, limit, orderBy, getDocsFromServer, getDocs, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { 
   formatDateDDMMYYYY, 
   formatDateTimeDDMMYYYY, 
@@ -189,6 +176,20 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     memberRecord?: MemberRecord | null;
     donorTransactions: Transaction[];
   } | null>(null);
+
+  // In-app confirmation dialog for deleting a donor row (all payments of a donor)
+  const [confirmDeleteDonor, setConfirmDeleteDonor] = useState<{
+    donorName: string;
+    totalAmount?: number;
+    txIds: string[];
+    txs: Transaction[];
+  } | null>(null);
+
+  // In-app confirmation dialog for deleting a single transaction
+  const [confirmDeleteSingleTx, setConfirmDeleteSingleTx] = useState<Transaction | null>(null);
+
+  // View Mode in Kumtluang: 'matrix' (summary table) or 'detailed' (individual transaction cards)
+  const [kumtluangViewMode, setKumtluangViewMode] = useState<'matrix' | 'detailed'>('matrix');
   
   // CSV / Excel Export Feedback Toast State
   const [exportFeedback, setExportFeedback] = useState<{ message: string; count: number } | null>(null);
@@ -212,99 +213,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     startMonth: chartStartMonth,
     endMonth: chartEndMonth,
   }), [chartStartMonth, chartEndMonth]);
-
-  const { stats: publicPoolStats } = usePublicPoolStats();
-
-  // Server-side transaction fetch with real-time listener bypassing local IndexedDB cache for live breakdown sync across devices
-  const [serverTransactions, setServerTransactions] = useState<Transaction[] | null>(null);
-  const [isFetchingServerTxns, setIsFetchingServerTxns] = useState<boolean>(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    setIsFetchingServerTxns(true);
-
-    const txQuery = query(collection(db, 'transactions'), limit(5000));
-    
-    // Direct server fetch first to bypass cache immediately
-    getDocsFromServer(txQuery).then((snap) => {
-      if (!isMounted) return;
-      const txs: Transaction[] = [];
-      const deletedIds = getDeletedTransactionIds();
-      snap.forEach(docSnap => {
-        const data = docSnap.data() as Transaction;
-        const realId = (data?.id || docSnap.id || '').trim();
-        if (realId) {
-          const cleanId = realId.toLowerCase();
-          if (!deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
-            txs.push({ ...data, id: realId });
-          }
-        }
-      });
-      if (txs.length > 0) {
-        setServerTransactions(txs);
-      }
-      setIsFetchingServerTxns(false);
-    }).catch(() => {
-      if (isMounted) setIsFetchingServerTxns(false);
-    });
-
-    // Real-time listener with metadata changes so additions and deletions on mobile or other devices reflect instantly
-    const unsubscribe = onSnapshot(
-      txQuery,
-      { includeMetadataChanges: true },
-      (snapshot) => {
-        if (!isMounted) return;
-        const txs: Transaction[] = [];
-        const deletedIds = getDeletedTransactionIds();
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data() as Transaction;
-          const realId = (data?.id || docSnap.id || '').trim();
-          if (realId) {
-            const cleanId = realId.toLowerCase();
-            if (!deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
-              txs.push({ ...data, id: realId });
-            }
-          }
-        });
-        if (txs.length > 0) {
-          setServerTransactions(txs);
-        }
-        setIsFetchingServerTxns(false);
-      },
-      (err) => {
-        console.warn('[ReportsScreen] Real-time listener note:', err);
-        if (isMounted) setIsFetchingServerTxns(false);
-      }
-    );
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  // Listen to transaction updates/deletions dispatched from anywhere in the app
-  useEffect(() => {
-    const handleTxEvent = (e: any) => {
-      const deletedIds = getDeletedTransactionIds();
-      const rawList: Transaction[] = Array.isArray(e?.detail) ? e.detail : getStoredTransactions();
-      const filtered = rawList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
-      setServerTransactions(filtered);
-    };
-
-    window.addEventListener('ronpay_transactions_updated', handleTxEvent);
-    window.addEventListener('ronpay-transactions-updated', handleTxEvent);
-    return () => {
-      window.removeEventListener('ronpay_transactions_updated', handleTxEvent);
-      window.removeEventListener('ronpay-transactions-updated', handleTxEvent);
-    };
-  }, []);
-
-  const effectiveTransactions = useMemo(() => {
-    const deletedIds = getDeletedTransactionIds();
-    const source = serverTransactions || transactions;
-    return source.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
-  }, [serverTransactions, transactions]);
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
@@ -373,15 +281,11 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const baseTransactions = useMemo(() => {
     if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
 
-    return effectiveTransactions.filter(t => {
-      // 0. Only verified and completed transactions count toward collection reports (Unified status check)
-      if (!t) return false;
-      const s = (t.status || '').toUpperCase().trim();
-      const isConfirmed = s === 'SUCCESS' || s === 'COMPLETED' || s === 'PAID' || s === 'PAYMENT_SUCCESS' || s === 'VERIFIED' || !s;
-      if (!isConfirmed) return false;
-
+    return transactions.filter(t => {
+      // 0. Only verified and completed transactions count toward collection reports
+      if (!t || !isConfirmedTransaction(t)) return false;
       const amt = Number(t.amount);
-      if (!isFinite(amt) || isNaN(amt) || amt <= 0) return false;
+      if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
 
       // 1. Creator Security Barrier: Only show transactions belonging to Creator's authorized campaigns
       const matchesOwnership = isStaffFullAccess || 
@@ -430,7 +334,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [effectiveTransactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
+  }, [transactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {
@@ -457,11 +361,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       }
     });
 
-    const allCount = baseTransactions.length;
     const allSum = baseTransactions.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
     return {
-      allCount,
+      allCount: baseTransactions.length,
       allSum,
       memberCount,
       memberSum,
@@ -470,7 +373,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       generalCount,
       generalSum
     };
-  }, [baseTransactions, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery, publicPoolStats]);
+  }, [baseTransactions]);
 
   // Filter transactions with Record Type Filter applied
   const filteredTransactions = useMemo(() => {
@@ -547,10 +450,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, [filteredTransactions, sortOrder]);
 
   // Calculate totals (Platform Fee is completely excluded from Reports)
-  const isUnfiltered = selectedFilter === 'all' && selectedCampaignId === 'all' && !startDate && !endDate && !searchQuery && recordTypeFilter === 'all';
-  const totalCount = isUnfiltered && publicPoolStats?.totalCount ? publicPoolStats.totalCount : filteredTransactions.length;
+  const totalCount = filteredTransactions.length;
   const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
-  const grandTotal = isUnfiltered && publicPoolStats?.totalAmount ? publicPoolStats.totalAmount : filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  const grandTotal = filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Selected campaign display name
   const currentCampaignDisplayName = selectedCampaignObj 
@@ -558,7 +460,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     : (selectedFilter === 'all' ? 'All My Campaigns' : `${selectedFilter.toUpperCase()} BAWM (All My Campaigns)`);
 
   // Kumtluang matrix computation (Hming | Cat1 | Cat2 | Cat3 | Total)
-  const isKumtluang = selectedFilter === 'kumtluang';
+  const isKumtluang = selectedFilter === 'kumtluang' || selectedCampaignObj?.category === 'kumtluang' || (selectedFilter === 'all' && creatorCampaigns.length === 1 && creatorCampaigns[0]?.category === 'kumtluang');
   const kumtluangMatrix = useMemo(() => {
     return buildKumtluangMatrix(baseTransactions, sortOrder, selectedCampaignObj);
   }, [baseTransactions, sortOrder, selectedCampaignObj]);
@@ -992,127 +894,144 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   };
 
   // Find all transactions by donor name for Kumtluang matrix row edit (View & Edit all payments across months/dates)
-  const handleEditDonorRow = (donorName: string) => {
+  const handleEditDonorRow = (donorName: string, row?: MatrixRow) => {
     const cleanTarget = (donorName || '').trim();
     const cleanLower = cleanTarget.toLowerCase();
 
     const matchedMember = scopedMembers.find(m => 
+      (row?.memberId && m.id && m.id.toLowerCase().trim() === row.memberId.toLowerCase().trim()) ||
       m.name.toLowerCase().trim() === cleanLower
     );
 
-    // Get all transactions belonging to this donor / offering head
-    const donorTxs = transactions.filter(t => {
-      // Must match current campaign scope if selected
-      const matchCampaign = selectedCampaignId === 'all' || 
-        t.campaignId === selectedCampaignId || 
-        (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
-      if (!matchCampaign) return false;
+    // Prefer directly attached transactions from matrix row if present
+    let donorTxs = (row?.transactions && row.transactions.length > 0)
+      ? [...row.transactions]
+      : [];
 
-      const tDonor = (t.donorName || '').toLowerCase().trim();
-      const isUnknownDonorTarget = cleanLower === 'unknown donor' || cleanLower === 'unknown';
-      const matchUnknown = isUnknownDonorTarget && (!t.donorName || tDonor === '' || tDonor === 'unknown donor' || tDonor === 'unknown');
-      const matchName = tDonor === cleanLower ||
-        matchUnknown ||
-        (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
-        (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
-      const matchMember = matchedMember && (
-        (t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim()) ||
-        (t.remark && t.remark.includes(matchedMember.id))
-      );
-      return matchName || matchMember;
-    });
+    if (donorTxs.length === 0) {
+      // Get all transactions belonging to this donor / offering head matching current scope
+      donorTxs = transactions.filter(t => {
+        const matchCampaign = selectedCampaignId === 'all' || 
+          t.campaignId === selectedCampaignId || 
+          (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
+        if (!matchCampaign) return false;
+
+        const tDonor = (t.donorName || '').toLowerCase().trim();
+        const isUnknownDonorTarget = cleanLower === 'unknown donor' || cleanLower === 'unknown';
+        const matchUnknown = isUnknownDonorTarget && (!t.donorName || tDonor === '' || tDonor === 'unknown donor' || tDonor === 'unknown');
+        const matchName = tDonor === cleanLower ||
+          matchUnknown ||
+          (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
+          (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
+        const matchMember = matchedMember && (
+          (t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim()) ||
+          (t.remark && t.remark.includes(matchedMember.id))
+        );
+        return matchName || matchMember;
+      });
+    }
+
+    // Secondary fallback without campaign restriction if still empty
+    if (donorTxs.length === 0) {
+      donorTxs = transactions.filter(t => {
+        const tDonor = (t.donorName || '').toLowerCase().trim();
+        const matchName = tDonor === cleanLower || (t.donorType === 'general' && tDonor.includes(cleanLower));
+        const matchMember = matchedMember && t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim();
+        return matchName || matchMember;
+      });
+    }
 
     if (donorTxs.length > 0 || matchedMember) {
       setEditingDonorGroup({
-        donorName: matchedMember?.name || cleanTarget,
-        donorMemberId: matchedMember?.id || donorTxs[0]?.memberId,
-        donorPhone: matchedMember?.fullPhone || matchedMember?.phoneLast4 || donorTxs[0]?.donorPhone,
-        donorSection: matchedMember?.section || donorTxs[0]?.donorVeng,
+        donorName: row?.donorName || matchedMember?.name || cleanTarget,
+        donorMemberId: row?.memberId || matchedMember?.id || donorTxs[0]?.memberId,
+        donorPhone: row?.phone || matchedMember?.fullPhone || matchedMember?.phoneLast4 || donorTxs[0]?.donorPhone,
+        donorSection: row?.section || matchedMember?.section || donorTxs[0]?.donorVeng,
         memberRecord: matchedMember || null,
         donorTransactions: donorTxs
       });
     } else {
-      alert(`He donor (${cleanTarget}) payment record hi hmuh a ni lo.`);
+      showExportSuccessToast(`He donor (${cleanTarget}) payment record hi hmuh a ni rih lo.`, 0);
     }
   };
 
-  const handleDeleteDonorRow = (donorName: string, totalAmount?: number) => {
-    const cleanTarget = (donorName || '').trim();
-    const cleanLower = cleanTarget.toLowerCase();
+  // Trigger in-app confirmation modal for deleting all records of a donor row in Kumtluang matrix
+  const handlePromptDeleteDonorRow = (row: MatrixRow) => {
+    let txIds = (row.transactionIds && row.transactionIds.length > 0) ? [...row.transactionIds] : [];
+    let txs = (row.transactions && row.transactions.length > 0) ? [...row.transactions] : [];
+    
+    if (txIds.length === 0) {
+      const cleanLower = (row.donorName || '').toLowerCase().trim();
+      txs = transactions.filter(t => {
+        const tDonor = (t.donorName || '').toLowerCase().trim();
+        return tDonor === cleanLower || (row.memberId && t.memberId === row.memberId);
+      });
+      txIds = txs.map(t => t.id).filter(Boolean);
+    }
 
-    const matchedMember = scopedMembers.find(m => 
-      m.name.toLowerCase().trim() === cleanLower
-    );
-
-    const donorTxs = transactions.filter(t => {
-      const matchCampaign = selectedCampaignId === 'all' || 
-        t.campaignId === selectedCampaignId || 
-        (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
-      if (!matchCampaign) return false;
-
-      const tDonor = (t.donorName || '').toLowerCase().trim();
-      const isUnknownDonorTarget = cleanLower === 'unknown donor' || cleanLower === 'unknown';
-      const matchUnknown = isUnknownDonorTarget && (!t.donorName || tDonor === '' || tDonor === 'unknown donor' || tDonor === 'unknown');
-      const matchName = tDonor === cleanLower ||
-        matchUnknown ||
-        (t.donorType === 'general' && (tDonor.includes(cleanLower) || cleanLower.includes(tDonor))) ||
-        (t.subCategory && t.subCategory.toLowerCase().trim() === cleanLower);
-      const matchMember = matchedMember && (
-        (t.memberId && t.memberId.toLowerCase().trim() === matchedMember.id.toLowerCase().trim()) ||
-        (t.remark && t.remark.includes(matchedMember.id))
-      );
-      return matchName || matchMember;
+    setConfirmDeleteDonor({
+      donorName: row.donorName,
+      totalAmount: row.total,
+      txIds,
+      txs
     });
+  };
 
-    if (donorTxs.length === 0) {
-      console.warn('No transactions found for donor:', cleanTarget, { transactionsCount: transactions.length, selectedCampaignId });
-      alert(`He donor (${cleanTarget}) payment record hi paih tur hmuh a ni lo.`);
+  // Execute deletion confirmed by user in in-app modal
+  const handleExecuteDeleteDonor = () => {
+    if (!confirmDeleteDonor) return;
+    const { donorName, txIds } = confirmDeleteDonor;
+    if (txIds.length === 0) {
+      setConfirmDeleteDonor(null);
       return;
     }
 
-    const confirmMsg = `${cleanTarget}${totalAmount ? ` (₹${totalAmount.toLocaleString('en-IN')})` : ''} pekna zawng zawng (${donorTxs.length} entries) hi paih hlen i chiang em?\n\n(Hriattirna: Entry thenkhat/pakhat chauh siamtha emaw paih duh chuan 'Ennawn / Edit' hmang rawh le)`;
-    if (!window.confirm(confirmMsg)) return;
-
-    const idsToDelete = donorTxs.map(t => t.id).filter(Boolean);
-    const delSet = new Set(idsToDelete.map(id => String(id).toLowerCase().trim()));
-    setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
-
-    deleteMultipleTransactions(idsToDelete);
     if (onBatchUpdateTransactions) {
-      onBatchUpdateTransactions([], idsToDelete);
+      onBatchUpdateTransactions([], txIds);
+    } else {
+      deleteMultipleTransactions(txIds);
+      if (onDeleteTransaction) {
+        txIds.forEach(id => onDeleteTransaction(id));
+      }
     }
+    showExportSuccessToast(`${donorName} thawhlawm record (${txIds.length} txns) paih fel a ni e!`, txIds.length);
+    setConfirmDeleteDonor(null);
+  };
+
+  // Trigger in-app confirmation modal for deleting a single transaction
+  const handlePromptDeleteSingleTx = (tx: Transaction) => {
+    setConfirmDeleteSingleTx(tx);
+  };
+
+  // Execute single transaction deletion confirmed by user
+  const handleExecuteDeleteSingleTx = () => {
+    if (!confirmDeleteSingleTx) return;
+    const tx = confirmDeleteSingleTx;
     if (onDeleteTransaction) {
-      idsToDelete.forEach(id => onDeleteTransaction(id));
+      onDeleteTransaction(tx.id);
+    } else {
+      deleteStoredTransaction(tx.id);
     }
-    showExportSuccessToast(`${cleanTarget} record (${idsToDelete.length} txns) paih fel a ni e!`, idsToDelete.length);
+    showExportSuccessToast(`Transaction (₹${tx.amount}) paih fel a ni e!`, 1);
+    setConfirmDeleteSingleTx(null);
   };
 
   const handleSaveDonorGroup = (updatedTxs: Transaction[], deletedIds: string[]) => {
-    const delSet = new Set((deletedIds || []).map(id => String(id).toLowerCase().trim()));
-    setServerTransactions(prev => {
-      if (!prev) return null;
-      let next = prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim()));
-      if (updatedTxs && updatedTxs.length > 0) {
-        const updateMap = new Map(updatedTxs.map(u => [String(u.id).toLowerCase().trim(), u]));
-        next = next.map(t => updateMap.get(String(t.id).toLowerCase().trim()) || t);
-      }
-      return next;
-    });
-
-    if (deletedIds && deletedIds.length > 0) {
-      deleteMultipleTransactions(deletedIds);
-      if (onDeleteTransaction) {
-        deletedIds.forEach(id => onDeleteTransaction(id));
-      }
-    }
-    if (updatedTxs && updatedTxs.length > 0) {
-      saveMultipleTransactions(updatedTxs);
-      if (onUpdateTransaction) {
-        updatedTxs.forEach(tx => onUpdateTransaction(tx));
-      }
-    }
     if (onBatchUpdateTransactions) {
       onBatchUpdateTransactions(updatedTxs, deletedIds);
+    } else {
+      if (deletedIds && deletedIds.length > 0) {
+        deleteMultipleTransactions(deletedIds);
+        if (onDeleteTransaction) {
+          deletedIds.forEach(id => onDeleteTransaction(id));
+        }
+      }
+      if (updatedTxs.length > 0) {
+        saveMultipleTransactions(updatedTxs);
+        if (onUpdateTransaction) {
+          updatedTxs.forEach(tx => onUpdateTransaction(tx));
+        }
+      }
     }
     setEditingDonorGroup(null);
     showExportSuccessToast(
@@ -1129,27 +1048,9 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (onRefreshCloud) {
         await onRefreshCloud();
       }
-      const txQuery = query(collection(db, 'transactions'), limit(2000));
-      let snap;
-      try {
-        snap = await getDocsFromServer(txQuery);
-      } catch {
-        snap = await getDocs(txQuery);
-      }
-      const txs: Transaction[] = [];
-      snap.forEach(docSnap => {
-        const data = docSnap.data() as Transaction;
-        if (data && data.id) {
-          txs.push({ ...data, id: docSnap.id });
-        }
-      });
-      if (txs.length > 0) {
-        setServerTransactions(txs);
-      }
-      const totalCnt = publicPoolStats?.totalCount || effectiveTransactions.length;
       setExportFeedback({
-        message: `Cloud sync complete! ${totalCnt} transactions live in sync across all devices.`,
-        count: totalCnt
+        message: `Cloud sync complete! ${transactions.length} transactions live in sync across all devices.`,
+        count: transactions.length
       });
       setTimeout(() => setExportFeedback(null), 3500);
     } catch (err) {
@@ -1195,7 +1096,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 bg-indigo-50 px-2 sm:px-2.5 py-1 rounded-xl text-[10.5px] sm:text-[11px] font-bold text-indigo-700 border border-indigo-200" title="Transactions lo lut zat">
                 <span>💳</span>
-                <span>Txns: {countsByRecordType.allCount}</span>
+                <span>Txns: {filteredTransactions.length}</span>
               </div>
             </>
           )}
@@ -2335,14 +2236,42 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       {availableCampaigns.length > 0 && (
         <>
           {/* KUMTLUANG MATRIX TABLE VIEW */}
-          {isKumtluang ? (
+          {isKumtluang && kumtluangViewMode === 'matrix' ? (
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
               <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Table className="w-4 h-4 text-indigo-600" />
-                  <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                    Kumtluang Bawm Matrix View
-                  </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <Table className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                      Kumtluang Bawm Matrix View
+                    </h3>
+                  </div>
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setKumtluangViewMode('matrix')}
+                      className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                        kumtluangViewMode === 'matrix'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Table className="w-3 h-3" />
+                      <span>Matrix</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKumtluangViewMode('detailed')}
+                      className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                        (kumtluangViewMode as string) === 'detailed'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Receipt className="w-3 h-3" />
+                      <span>Detailed ({sortedTransactions.length})</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {onOpenMemberRoll && (
@@ -2523,14 +2452,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                           <td className="py-2 px-2.5 text-center">
                             <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                               <button
-                                onClick={() => handleEditDonorRow(row.donorName)}
+                                onClick={() => handleEditDonorRow(row.donorName, row)}
                                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-indigo-200 shadow-2xs whitespace-nowrap"
                                 title="Pek ni, pek dan (Cash/Online), thla bi leh category breakdown ennawn leh siamtha rawh"
                               >
                                 <Edit3 className="w-3 h-3" /> Ennawn / Edit
                               </button>
                               <button
-                                onClick={() => handleDeleteDonorRow(row.donorName, row.total)}
+                                onClick={() => handlePromptDeleteDonorRow(row)}
                                 className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10.5px] font-extrabold transition flex items-center gap-1 cursor-pointer border border-rose-200 shadow-2xs whitespace-nowrap"
                                 title="He donor / thawhlawm record hi paih hlen rawh"
                               >
@@ -2564,11 +2493,41 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             /* STANDARD DETAILED TRANSACTIONS LIST VIEW */
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
               <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-indigo-600" />
-                  <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                    Transaction Records ({sortedTransactions.length})
-                  </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <Receipt className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                      Transaction Records ({sortedTransactions.length})
+                    </h3>
+                  </div>
+                  {isKumtluang && (
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangViewMode('matrix')}
+                        className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                          kumtluangViewMode === 'matrix'
+                            ? 'bg-white text-indigo-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Table className="w-3 h-3" />
+                        <span>Matrix</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setKumtluangViewMode('detailed')}
+                        className={`px-2 py-0.5 rounded font-bold transition flex items-center gap-1 cursor-pointer ${
+                          kumtluangViewMode === 'detailed'
+                            ? 'bg-white text-indigo-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <Receipt className="w-3 h-3" />
+                        <span>Detailed ({sortedTransactions.length})</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -2653,13 +2612,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                               </span>
                             ) : null}
                           </div>
-                          <button
-                            onClick={() => setEditingTransaction(tx)}
-                            className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                            title="Edit transaction / categories"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setEditingTransaction(tx)}
+                              className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer border border-indigo-100 hover:border-indigo-200"
+                              title="Edit transaction / categories"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handlePromptDeleteSingleTx(tx)}
+                              className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition cursor-pointer border border-rose-100 hover:border-rose-200"
+                              title="Paih (Delete this transaction record)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -2747,15 +2715,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
           onSaveAll={handleSaveDonorGroup}
           onDeleteAll={() => {
             const allIds = editingDonorGroup.donorTransactions.map(t => t.id).filter(Boolean);
-            const delSet = new Set(allIds.map(id => String(id).toLowerCase().trim()));
             if (allIds.length > 0) {
-              setServerTransactions(prev => prev ? prev.filter(t => !delSet.has(String(t.id).toLowerCase().trim())) : null);
-              deleteMultipleTransactions(allIds);
               if (onBatchUpdateTransactions) {
                 onBatchUpdateTransactions([], allIds);
-              }
-              if (onDeleteTransaction) {
-                allIds.forEach(id => onDeleteTransaction(id));
+              } else {
+                deleteMultipleTransactions(allIds);
+                if (onDeleteTransaction) {
+                  allIds.forEach(id => onDeleteTransaction(id));
+                }
               }
               showExportSuccessToast(`He donor records ${allIds.length} zawng zawng paih fai a ni ta.`, allIds.length);
             }
@@ -2774,19 +2741,139 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             if (onUpdateTransaction) {
               onUpdateTransaction(updatedTx);
             }
-            setServerTransactions(prev => prev ? prev.map(t => String(t.id).toLowerCase().trim() === String(updatedTx.id).toLowerCase().trim() ? updatedTx : t) : null);
+            showExportSuccessToast(`${updatedTx.donorName || 'Transaction'} siamthat fel a ni e!`, 1);
             setEditingTransaction(null);
           }}
           onDelete={(id) => {
-            const cleanId = String(id).toLowerCase().trim();
-            setServerTransactions(prev => prev ? prev.filter(t => String(t.id).toLowerCase().trim() !== cleanId) : null);
-            deleteStoredTransaction(id);
             if (onDeleteTransaction) {
               onDeleteTransaction(id);
             }
+            showExportSuccessToast('Transaction record paih fel a ni e!', 1);
             setEditingTransaction(null);
           }}
         />
+      )}
+
+      {/* IN-APP CONFIRMATION MODAL: DELETE DONOR ROW & ALL RELATED TRANSACTIONS */}
+      {confirmDeleteDonor && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-sm">Thawhlawm Record Paih Hlenna</h3>
+                <p className="text-[11px] text-slate-500 font-medium">He action hi tihlet (undo) theih a ni lo</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Petu Hming:</span>
+                <span className="font-black text-slate-900 text-sm">{confirmDeleteDonor.donorName}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Belhkhawm Zat (Total):</span>
+                <span className="font-black font-mono text-rose-700 text-sm">
+                  ₹{Number(confirmDeleteDonor.totalAmount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Transaction Record Zat:</span>
+                <span className="font-bold text-slate-900">
+                  {confirmDeleteDonor.txIds.length} payments
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              <strong>{confirmDeleteDonor.donorName}</strong> thawhlawm record zawng zawng ({confirmDeleteDonor.txIds.length} entries) hi database, server, leh report atangin paih hlen i chiang chiah em?
+            </p>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteDonor(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+              >
+                Thulh (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDeleteDonor}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/30"
+              >
+                <Trash2 className="w-4 h-4" /> Paih Hlen Rawh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IN-APP CONFIRMATION MODAL: DELETE SINGLE TRANSACTION */}
+      {confirmDeleteSingleTx && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 text-sm">Transaction Paih Hlenna</h3>
+                <p className="text-[10px] text-slate-500 font-mono">ID: {confirmDeleteSingleTx.id}</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Petu (Donor):</span>
+                <span className="font-black text-slate-900">
+                  {confirmDeleteSingleTx.isAnonymous ? 'Anonymous' : (confirmDeleteSingleTx.donorName || 'Unknown Donor')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Pek Zat (Amount):</span>
+                <span className="font-black font-mono text-rose-700 text-sm">
+                  ₹{Number(confirmDeleteSingleTx.amount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Pek Ni (Date):</span>
+                <span className="font-bold text-slate-900">
+                  {formatDateTimeDDMMYYYY(confirmDeleteSingleTx.timestamp)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="font-bold">Bawm:</span>
+                <span className="font-bold text-slate-900 truncate max-w-[200px]">
+                  {confirmDeleteSingleTx.campaignTitle || 'Donation'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              He transaction hi database, server, leh reports zawng zawng atangin paih hlen i chiang em?
+            </p>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteSingleTx(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+              >
+                Thulh (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDeleteSingleTx}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/30"
+              >
+                <Trash2 className="w-4 h-4" /> Paih Hlen Rawh
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2817,6 +2904,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>((transaction.paymentMethod as any) || 'online');
   const [status, setStatus] = useState<string>(transaction.status || 'completed');
   const [remark, setRemark] = useState<string>(transaction.remark || '');
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
   
   // Date & Period state for auditing and correcting records
   const [paymentDate, setPaymentDate] = useState<string>(() => {
@@ -2900,9 +2989,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     e.preventDefault();
 
     if (currentSubtotal <= 0) {
-      alert('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
+      setFormError('Pek zat (Amount) hi ₹0 aia tam a ni tur a ni.');
       return;
     }
+    setFormError('');
 
     let updatedTimestamp = transaction.timestamp;
     if (paymentDate) {
@@ -2937,9 +3027,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   };
 
   const handleDeleteClick = () => {
-    if (window.confirm(`I chiang maw? He transaction (Donor: ${transaction.donorName}, Amount: ₹${transaction.amount}) hi paih hlen a ni dawn e.`)) {
-      onDelete(transaction.id);
-    }
+    setIsConfirmingDelete(true);
   };
 
   return (
@@ -3189,6 +3277,12 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
           {/* Actions: Save & Delete */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
+            {formError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold text-center">
+                {formError}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <button
                 type="button"
@@ -3205,13 +3299,40 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleDeleteClick}
-              className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
-            </button>
+            {!isConfirmingDelete ? (
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-1 border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> He Transaction Record hi paih rawh (Delete)
+              </button>
+            ) : (
+              <div className="bg-rose-50 border border-rose-300 p-3 rounded-2xl space-y-2 animate-fadeIn">
+                <p className="text-rose-900 font-extrabold text-xs text-center">
+                  ⚠️ I chiang maw? He transaction (Donor: {transaction.donorName || 'Mimal'}, Amount: ₹{transaction.amount}) hi paih hlen a ni dawn e.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(false)}
+                    className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-xl text-xs cursor-pointer"
+                  >
+                    Thulh (Cancel)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete(transaction.id);
+                      onClose();
+                    }}
+                    className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black py-2 rounded-xl text-xs cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Paih Hlen Rawh
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </div>

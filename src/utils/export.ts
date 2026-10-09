@@ -14,6 +14,10 @@ export interface MatrixRow {
   paymentMethods: ('online' | 'cash')[];
   paymentMethodLabel: 'ONLINE' | 'CASH' | 'ONLINE + CASH';
   remarks?: string[];
+  transactionIds?: string[];
+  transactions?: Transaction[];
+  memberId?: string;
+  phone?: string;
 }
 
 export interface KumtluangMatrixData {
@@ -319,6 +323,9 @@ export const buildKumtluangMatrix = (
   const donorTypeMap = new Map<string, 'member' | 'group' | 'general'>();
   const donorGroupNameMap = new Map<string, string>();
   const donorSectionMap = new Map<string, string>();
+  const donorTransactionsMap = new Map<string, Transaction[]>();
+  const donorMemberIdMap = new Map<string, string>();
+  const donorPhoneMap = new Map<string, string>();
 
   let onlineTotal = 0;
   let cashTotal = 0;
@@ -414,6 +421,18 @@ export const buildKumtluangMatrix = (
 
     if (resolvedSection && !donorSectionMap.has(donor)) {
       donorSectionMap.set(donor, resolvedSection);
+    }
+
+    if (!donorTransactionsMap.has(donor)) {
+      donorTransactionsMap.set(donor, []);
+    }
+    donorTransactionsMap.get(donor)!.push(t);
+
+    if (t.memberId && !donorMemberIdMap.has(donor)) {
+      donorMemberIdMap.set(donor, t.memberId);
+    }
+    if (t.donorPhone && !donorPhoneMap.has(donor)) {
+      donorPhoneMap.set(donor, t.donorPhone);
     }
 
     const method: 'online' | 'cash' = t.paymentMethod === 'cash' ? 'cash' : 'online';
@@ -647,6 +666,10 @@ export const buildKumtluangMatrix = (
     const remarksList = donorRemarks.get(donorName);
 
     const dType = donorTypeMap.get(donorName) || 'member';
+    const txList = donorTransactionsMap.get(donorName) || [];
+    const txIds = txList.map(t => t.id).filter(Boolean);
+    const mId = donorMemberIdMap.get(donorName);
+    const dPhone = donorPhoneMap.get(donorName);
 
     rows.push({
       donorName,
@@ -658,6 +681,10 @@ export const buildKumtluangMatrix = (
       paymentMethods: methodsArr,
       paymentMethodLabel: methodLabel,
       remarks: remarksList && remarksList.length > 0 ? remarksList : undefined,
+      transactionIds: txIds,
+      transactions: txList,
+      memberId: mId,
+      phone: dPhone,
     });
   });
 

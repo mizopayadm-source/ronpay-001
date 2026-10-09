@@ -3541,6 +3541,12 @@ export const saveMultipleTransactions = (txs: Transaction[]): void => {
       }).catch(() => {});
     });
   });
+
+  safeApiFetch('/api/data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions: txs })
+  }).catch(() => {});
 };
 
 export const deleteMembersOfCampaign = (campaignId: string): void => {

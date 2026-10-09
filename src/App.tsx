@@ -10,7 +10,6 @@ import {
   AuditLog,
   MemberRecord,
   BillService,
-  PublicPoolStats,
 } from './types';
 import { Language, getCampaignCauseTitle } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
@@ -60,14 +59,13 @@ import {
   syncPricingConfigToFirestore,
   syncAnnouncementToFirestore,
   forceRefreshFirestore,
-  getStoredPublicPoolStats,
 } from './services/firestoreSync';
 import {
   subscribeCrossTabSync,
   setupWindowFocusSync,
   invalidateCacheOnAuthOrBoot
 } from './services/crossTabSync';
-import { syncAllWithServer, subscribeServerEvents, saveTransactionToServer, pullLatestServerState } from './utils/syncEngine';
+import { syncAllWithServer, subscribeServerEvents } from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS } from './data/initialData';
 
 // Components
@@ -194,7 +192,6 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStoredAuditLogs());
   const [members, setMembersState] = useState<MemberRecord[]>(() => getMembers());
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
-  const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>(() => getStoredPublicPoolStats());
 
   // Modals Visibility
   const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
@@ -358,11 +355,6 @@ export default function App() {
           window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: updatedExpenses }));
         } catch {}
       },
-      onStatsUpdate: (updatedStats) => {
-        if (updatedStats) {
-          setPublicPoolStats(updatedStats);
-        }
-      },
     });
 
     const handleBeforeUnload = () => {
@@ -466,20 +458,10 @@ export default function App() {
       }
     };
 
-    const handleStatsSync = (e: any) => {
-      if (e && e.detail && typeof e.detail === 'object') {
-        setPublicPoolStats(e.detail);
-      } else {
-        setPublicPoolStats(getStoredPublicPoolStats());
-      }
-    };
-
     window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
     window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
     window.addEventListener('ronpay-transactions-updated', handleTransactionsSync);
-    window.addEventListener('ronpay_stats_updated', handleStatsSync);
-    window.addEventListener('ronpay-stats-updated', handleStatsSync);
     window.addEventListener('ronpay_user_paid_updated', handleUserPaidSync);
     window.addEventListener('ronpay-creator-updated', handleCreatorSync);
     window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
@@ -532,42 +514,27 @@ export default function App() {
     });
 
     // Window Focus / Tab Re-activation Refetch:
-    // Performs a light check to sync the latest state whenever user switches back to tab or opens new window
+    // Performs a light check or invalidates stale localStorage/in-memory cache
+    // to sync the latest state whenever the user switches back to the tab or opens a new window.
     const unsubFocus = setupWindowFocusSync(() => {
       reloadLocalData();
-      pullLatestServerState().then((res) => {
-        if (res?.transactions && res.transactions.length > 0) {
-          setTransactions(res.transactions);
-        }
-      }).catch(() => {});
+      syncAllWithServer().catch(() => {});
     });
 
     // Real-time Server-Sent Events (SSE) for instant sub-second cross-device, phone, & multi-user sync
     const unsubSSE = subscribeServerEvents(() => {
-      reloadLocalData();
-      pullLatestServerState().then((res) => {
-        if (res?.transactions && res.transactions.length > 0) {
-          setTransactions(res.transactions);
-        }
+      syncAllWithServer(true).then(() => {
         reloadLocalData();
-      }).catch(() => {
-        reloadLocalData();
-      });
+      }).catch(() => {});
     });
 
-    // Relaxed periodic background sync (every 60 seconds) as backup to SSE and Firestore listeners
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
-        pullLatestServerState().then((res) => {
-          if (res?.transactions && Array.isArray(res.transactions)) {
-            setTransactions(prev => {
-              if (prev.length !== res.transactions.length) return res.transactions;
-              return prev;
-            });
-          }
+        syncAllWithServer().then(() => {
+          reloadLocalData();
         }).catch(() => {});
       }
-    }, 60000);
+    }, 15000);
 
     // Load local storage immediately on startup
     reloadLocalData();
@@ -586,8 +553,6 @@ export default function App() {
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
       window.removeEventListener('ronpay-transactions-updated', handleTransactionsSync);
-      window.removeEventListener('ronpay_stats_updated', handleStatsSync);
-      window.removeEventListener('ronpay-stats-updated', handleStatsSync);
       window.removeEventListener('ronpay_user_paid_updated', handleUserPaidSync);
       window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
       window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);
@@ -883,30 +848,14 @@ export default function App() {
           campaignTitle: resolvedCampTitle,
           donorName: baseTx?.donorName || (meta?.isAnonymous ? 'Anonymous' : (meta?.donorName || 'Valued Donor')),
           donorPhone: baseTx?.donorPhone || meta?.donorPhone,
-          donorVeng: baseTx?.donorVeng || meta?.donorVeng,
-          donorType: baseTx?.donorType || meta?.donorType,
-          groupName: baseTx?.groupName || meta?.groupName,
-          memberId: baseTx?.memberId || meta?.memberId,
-          subId: baseTx?.subId || meta?.subId,
-          isDependent: Boolean(baseTx?.isDependent || meta?.isDependent),
           isAnonymous: Boolean(baseTx?.isAnonymous || meta?.isAnonymous),
           amount: base,
           platformFee: fee,
           totalAmount: total,
           category: (baseTx?.category || meta?.category || matchedCamp?.category || 'others') as any,
-          paymentMethod: baseTx?.paymentMethod || 'phonepe',
+          paymentMethod: 'phonepe',
           status: 'completed',
-          remark: baseTx?.remark || meta?.remark,
-          subCategory: baseTx?.subCategory || meta?.subCategory,
-          subCategoryBreakdown: baseTx?.subCategoryBreakdown || meta?.subCategoryBreakdown,
-          periodType: baseTx?.periodType || meta?.periodType,
-          periodMonth: baseTx?.periodMonth || meta?.periodMonth,
-          periodYear: baseTx?.periodYear || meta?.periodYear,
-          periodLabel: baseTx?.periodLabel || meta?.periodLabel,
           timestamp: baseTx?.timestamp || new Date().toISOString(),
-          createdAt: baseTx?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          date: baseTx?.date || meta?.date || new Date().toISOString().slice(0, 10),
           referenceNo: statusRes.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
           verifiedAt: new Date().toISOString(),
           feeOption: feeOption,
@@ -1209,14 +1158,10 @@ export default function App() {
       markCampaignPaidInSession(transaction.campaignId);
     }
     setCompletedTransaction(transaction);
-    setTransactions(prev => [transaction, ...prev.filter(t => t.id !== transaction.id)]);
-    setUserPaidIds(prev => Array.from(new Set([transaction.id, ...prev])));
     setSelectedCampaign(null);
     setAutoOpenPhonePeCheckout(false);
     cleanPaymentUrlParams();
     reloadLocalData();
-    saveTransactionToServer(transaction).catch(() => {});
-    syncAllWithServer(true).catch(() => {});
     handleNavigate('success', { replace: true });
   };
 
@@ -1325,11 +1270,13 @@ export default function App() {
   const handleUpdateTransaction = (transaction: Transaction) => {
     saveTransaction(transaction);
     setTransactions(getStoredTransactions());
+    syncAllWithServer(true).catch(() => {});
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
     deleteStoredTransaction(transactionId);
     setTransactions(getStoredTransactions());
+    syncAllWithServer(true).catch(() => {});
   };
 
   const handleBatchUpdateTransactions = (updatedTxs: Transaction[], deletedIds: string[]) => {
@@ -1340,6 +1287,7 @@ export default function App() {
       saveMultipleTransactions(updatedTxs);
     }
     setTransactions(getStoredTransactions());
+    syncAllWithServer(true).catch(() => {});
   };
 
   const handleUpdateCreator = (creator: CreatorProfile) => {
@@ -1583,10 +1531,8 @@ export default function App() {
             <HomeScreen
               campaigns={campaigns}
               transactions={transactions}
-              userPaidIds={userPaidIds}
               creatorProfile={creatorProfile}
               announcement={announcement}
-              publicPoolStats={publicPoolStats}
               onStartScanner={handleStartScanner}
               onCreateQRClick={() => {
                 if (creatorProfile.isApproved && creatorProfile.phone) {
@@ -1793,8 +1739,6 @@ export default function App() {
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);
                 cleanPaymentUrlParams();
-                reloadLocalData();
-                pullLatestServerState().catch(() => {});
                 handleNavigate('home', { replace: true });
               }}
               onExploreMore={() => {
@@ -1805,8 +1749,6 @@ export default function App() {
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);
                 cleanPaymentUrlParams();
-                reloadLocalData();
-                pullLatestServerState().catch(() => {});
                 handleNavigate('explorer', { replace: true });
               }}
             />
@@ -2101,7 +2043,7 @@ export default function App() {
                 <AdminSyncDiagnosticView
                   localTransactions={transactions}
                   localCampaigns={campaigns}
-                  onRefreshParent={reloadLocalData}
+                  onRefreshParent={handleResetData}
                   onClose={() => setIsSyncDiagnosticOpen(false)}
                 />
               </div>

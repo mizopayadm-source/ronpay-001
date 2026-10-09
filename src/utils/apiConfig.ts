@@ -1,20 +1,38 @@
 // Central API Endpoint & Base URL Resolver
-// Ensures external custom domains (ronpay.app, www.ronpay.app), mobile browsers, 
+// Ensures external custom domains (ronpay.app, www.ronpay.app), GitHub Pages, mobile browsers, 
 // Android WebViews, and standalone PWAs connect directly to the central backend.
 
-export const CLOUD_BACKEND_URL = 'https://ronpay.app';
+export const CLOUD_BACKEND_URL = 
+  (typeof import.meta !== 'undefined' && ((import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.VITE_BACKEND_URL)) ||
+  'https://ronpay.app';
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  const protocol = (window.location.protocol || '').toLowerCase();
   
-  // 1. Any web browser, iframe preview, mobile web browser, or PWA running over http or https:
+  // Custom server override from localStorage (e.g. if configured by admin for self-hosted instance)
+  try {
+    const customUrl = localStorage.getItem('ronpay_server_url') || localStorage.getItem('ronpay_backend_url');
+    if (customUrl && customUrl.startsWith('http')) {
+      return customUrl.replace(/\/+$/, '');
+    }
+  } catch {}
+
+  const protocol = (window.location.protocol || '').toLowerCase();
+  const hostname = (window.location.hostname || '').toLowerCase();
+
+  // If statically hosted on GitHub Pages (e.g. username.github.io) where no backend runs:
+  // Route to the authoritative central backend so web & mobile sync seamlessly!
+  if (hostname.endsWith('github.io')) {
+    return CLOUD_BACKEND_URL;
+  }
+
+  // 1. Any standard web browser, iframe preview, mobile web browser, or PWA running over http or https:
   // ALWAYS use relative path so API requests hit the exact server hosting the app!
   if (protocol === 'http:' || protocol === 'https:') {
     return '';
   }
   
-  // 2. On standalone native hybrid wrappers (e.g. capacitor://, ionic://, file://):
+  // 2. On standalone native hybrid wrappers (e.g. capacitor://, ionic://, file://, content://):
   // route to the production backend server https://ronpay.app
   return CLOUD_BACKEND_URL;
 }
