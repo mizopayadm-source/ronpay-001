@@ -198,7 +198,7 @@ export async function purgeSystemUpdatedTransactions(): Promise<number> {
   if (idsToPurge.length === 0) return 0;
 
   // Perform purge (e.g., deleteMultipleTransactions)
-  await deleteMultipleTransactions(idsToPurge);
+  await deleteMultipleTransactionsFromFirestore(idsToPurge);
   return idsToPurge.length;
 }
 
@@ -1317,12 +1317,18 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
  * Helper to get currently stored public pool stats
  */
 export function getStoredPublicPoolStats(): PublicPoolStats {
-  return getLocalJson<PublicPoolStats>('ronpay_public_pool_stats_v1', {
-    totalAmount: 367481.9,
-    totalCount: 534,
-    todayCount: 12,
+  const stats = getLocalJson<PublicPoolStats>('ronpay_public_pool_stats_v1', {
+    totalAmount: 262125.9,
+    totalCount: 39,
+    todayCount: 0,
     lastUpdated: new Date().toISOString(),
   });
+  return {
+    totalAmount: Math.max(0, Number(stats?.totalAmount) || 0),
+    totalCount: Math.max(0, Number(stats?.totalCount) || 0),
+    todayCount: Math.max(0, Number(stats?.todayCount) || 0),
+    lastUpdated: stats?.lastUpdated || new Date().toISOString(),
+  };
 }
 
 export function setStoredPublicPoolStats(stats: PublicPoolStats): void {
@@ -1357,46 +1363,81 @@ function markIncrementedStats(txId: string): void {
 export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicPoolStats | null> {
   if (!isNetworkOnline) return null;
   try {
+    const deletedIds = getDeletedTransactionIds();
+    const map = new Map<string, Transaction>();
+
+    // 1. Seed from verified local transactions first
+    const localTxs = getStoredTransactions();
+    for (const t of localTxs) {
+      if (t && t.id) {
+        const k = String(t.id).toLowerCase().trim();
+        if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+          map.set(k, t);
+        }
+      }
+    }
+
+    // 2. Fetch server transactions and merge
     const txQuery = query(collection(db, 'transactions'), limit(2000));
     let snap;
     try {
-      // Force direct server fetch bypassing local IndexedDB cache completely
       snap = await getDocsFromServer(txQuery);
     } catch {
       snap = await getDocs(txQuery);
     }
+
+    if (snap && !snap.empty) {
+      snap.forEach((d) => {
+        const data = d.data() as Transaction;
+        if (data && data.id) {
+          const k = String(data.id).toLowerCase().trim();
+          if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
+            const existing = map.get(k);
+            if (!existing) {
+              map.set(k, data);
+            } else {
+              const dTime = new Date(data.updatedAt || data.createdAt || data.timestamp || 0).getTime();
+              const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
+              map.set(k, dTime >= eTime ? data : existing);
+            }
+          }
+        }
+      });
+    }
+
     let totalAmt = 0;
     let totalCnt = 0;
     const todayStr = new Date().toISOString().slice(0, 10);
     let todayCnt = 0;
 
-    snap.forEach((d) => {
-      const data = d.data() as Transaction;
+    for (const data of map.values()) {
       const s = (data.status || '').toUpperCase().trim();
       // Strict SUCCESS check identical for Guest, Admin, Chrome, and App
       const isConfirmed = s === 'SUCCESS' || s === 'COMPLETED' || s === 'PAID' || s === 'PAYMENT_SUCCESS' || s === 'VERIFIED' || !s;
-      if (isConfirmed) {
-        totalAmt += Number(data.amount) || 0;
+      const amt = Number(data.amount) || 0;
+      if (isConfirmed && amt > 0) {
+        totalAmt += amt;
         totalCnt += 1;
         const txDate = (data.timestamp || data.createdAt || data.date || '').slice(0, 10);
         if (txDate === todayStr) {
           todayCnt += 1;
         }
       }
-    });
+    }
 
-    // Calculate exact totals of active valid transactions
+    // Calculate exact totals of active valid transactions (never negative)
     const statsRef = doc(db, 'stats', 'public_pool');
     const freshStats: PublicPoolStats & { totalTxns: number; todayTxns: number } = {
-      totalAmount: Math.round(totalAmt * 100) / 100,
-      totalCount: totalCnt,
-      totalTxns: totalCnt,
-      todayCount: todayCnt,
-      todayTxns: todayCnt,
+      totalAmount: Math.max(0, Math.round(totalAmt * 100) / 100),
+      totalCount: Math.max(0, totalCnt),
+      totalTxns: Math.max(0, totalCnt),
+      todayCount: Math.max(0, todayCnt),
+      todayTxns: Math.max(0, todayCnt),
       lastUpdated: new Date().toISOString(),
     };
     await setDoc(statsRef, freshStats, { merge: true });
     setLocalJson('ronpay_public_pool_stats_v1', freshStats);
+    setStoredPublicPoolStats(freshStats);
     broadcast('onStatsUpdate', freshStats);
     try {
       window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: freshStats }));
@@ -1765,6 +1806,8 @@ export async function deleteTransactionFromFirestore(
           window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: nextStats }));
           window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: nextStats }));
         } catch {}
+        // Recalibrate authoritative stats to guarantee exact sync and prevent negative drift
+        recalibratePublicPoolStatsFromFirestore().catch(() => {});
       } catch (err) {
         logFirestoreNetworkNote('Decrement public_pool stats', err);
       }
@@ -1900,6 +1943,8 @@ export async function deleteMultipleTransactionsFromFirestore(
     }, { merge: true });
   } catch (err) {
     logFirestoreNetworkNote('Batch tombstones update', err);
+  } finally {
+    recalibratePublicPoolStatsFromFirestore().catch(() => {});
   }
 }
 

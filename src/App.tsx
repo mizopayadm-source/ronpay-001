@@ -1527,7 +1527,7 @@ export default function App() {
 
         {/* Main Body Screen Router */}
         <main className={currentScreen === 'phonepe_checkout' ? "flex-1 w-full max-w-full p-0 overflow-y-auto overflow-x-hidden" : "flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden"}>
-          {currentScreen === 'home' && (
+          {(currentScreen === 'home' || !['explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'failed', 'cash_pending', 'phonepe_checkout'].includes(currentScreen)) && (
             <HomeScreen
               campaigns={campaigns}
               transactions={transactions}
@@ -1583,7 +1583,7 @@ export default function App() {
           {currentScreen === 'checkout' && (
             <CheckoutScreen
               category={selectedCategory || selectedCampaign?.category || 'others'}
-              campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0]}
+              campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0] || INITIAL_CAMPAIGNS[0]}
               pricingConfig={pricingConfig}
               onUpdateCampaign={handleUpdateCampaign}
               onBack={() => {

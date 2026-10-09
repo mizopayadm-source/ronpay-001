@@ -31,12 +31,17 @@ export function usePublicPoolStats(): {
           if (serverSnap.exists()) {
             const data = serverSnap.data();
             const serverStats: PublicPoolStats = {
-              totalAmount: typeof data?.totalAmount === 'number' ? data.totalAmount : (Number(data?.totalAmount) || 0),
-              totalCount: typeof data?.totalCount === 'number' ? data.totalCount : (Number(data?.totalCount) || 0),
-              todayCount: typeof data?.todayCount === 'number' ? data.todayCount : (Number(data?.todayCount) || 0),
+              totalAmount: Math.max(0, typeof data?.totalAmount === 'number' ? data.totalAmount : (Number(data?.totalAmount) || 0)),
+              totalCount: Math.max(0, typeof data?.totalCount === 'number' ? data.totalCount : (Number(data?.totalCount) || 0)),
+              todayCount: Math.max(0, typeof data?.todayCount === 'number' ? data.todayCount : (Number(data?.todayCount) || 0)),
               lastUpdated: data?.lastUpdated || new Date().toISOString(),
             };
-            setStats(serverStats);
+            setStats(prev => {
+              if (prev.totalAmount === serverStats.totalAmount && prev.totalCount === serverStats.totalCount && prev.todayCount === serverStats.todayCount) {
+                return prev;
+              }
+              return serverStats;
+            });
             setLoading(false);
             try {
               localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(serverStats));
@@ -57,19 +62,24 @@ export function usePublicPoolStats(): {
       // 2. REAL-TIME LISTENER with Metadata Changes
       const unsubscribe = onSnapshot(
         statsDocRef,
-        { includeMetadataChanges: true },
+        { includeMetadataChanges: false },
         (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.data();
             const poolData: PublicPoolStats = {
-              totalAmount: typeof data?.totalAmount === 'number' ? data.totalAmount : (Number(data?.totalAmount) || 0),
-              totalCount: typeof data?.totalCount === 'number' ? data.totalCount : (Number(data?.totalCount) || 0),
-              todayCount: typeof data?.todayCount === 'number' ? data.todayCount : (Number(data?.todayCount) || 0),
+              totalAmount: Math.max(0, typeof data?.totalAmount === 'number' ? data.totalAmount : (Number(data?.totalAmount) || 0)),
+              totalCount: Math.max(0, typeof data?.totalCount === 'number' ? data.totalCount : (Number(data?.totalCount) || 0)),
+              todayCount: Math.max(0, typeof data?.todayCount === 'number' ? data.todayCount : (Number(data?.todayCount) || 0)),
               lastUpdated: data?.lastUpdated || new Date().toISOString(),
             };
 
-            // Update state with server data
-            setStats(poolData);
+            // Update state with server data only if changed
+            setStats(prev => {
+              if (prev.totalAmount === poolData.totalAmount && prev.totalCount === poolData.totalCount && prev.todayCount === poolData.todayCount) {
+                return prev;
+              }
+              return poolData;
+            });
             setLoading(false);
             setError(null);
             try {
@@ -89,7 +99,21 @@ export function usePublicPoolStats(): {
       // 3. Multi-Tab Synchronous Events
       const handleCustomEvent = (e: any) => {
         if (e.detail && typeof e.detail === 'object' && e.detail.totalAmount !== undefined) {
-          setStats(e.detail);
+          const newAmt = Math.max(0, Number(e.detail.totalAmount) || 0);
+          const newCnt = Math.max(0, Number(e.detail.totalCount) || 0);
+          const newToday = Math.max(0, Number(e.detail.todayCount) || 0);
+          setStats(prev => {
+            if (prev.totalAmount === newAmt && prev.totalCount === newCnt && prev.todayCount === newToday) {
+              return prev;
+            }
+            return {
+              ...prev,
+              totalAmount: newAmt,
+              totalCount: newCnt,
+              todayCount: newToday,
+              lastUpdated: e.detail.lastUpdated || new Date().toISOString(),
+            };
+          });
         }
       };
       window.addEventListener('ronpay_stats_updated', handleCustomEvent);

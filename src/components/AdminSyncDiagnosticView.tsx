@@ -53,6 +53,7 @@ import {
   saveCampaignToServer 
 } from '../utils/syncEngine';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
+import { SupabaseSyncModal } from './SupabaseSyncModal';
 
 export type DiscrepancyType = 
   | 'missing_in_cloud' 
@@ -121,6 +122,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
   // Deep Audit & Auto-Repair state
   const [auditResult, setAuditResult] = useState<DeepAuditResult | null>(null);
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
 
   // Copy helper
   const handleCopyId = (id: string) => {
@@ -805,6 +807,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <span>Purge System-Updated</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => setShowSupabaseModal(true)}
+            title="Supabase PostgREST Database Manager"
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Supabase DB</span>
+          </button>
+
           {discrepancies.length > 0 && (
             <button
               type="button"
@@ -1365,6 +1377,11 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           </span>
         </div>
       </div>
+
+      <SupabaseSyncModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+      />
     </div>
   );
 };

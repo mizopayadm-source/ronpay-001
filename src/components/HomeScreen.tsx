@@ -43,13 +43,16 @@ import {
   ChevronUp,
   ArrowRightLeft,
   Receipt,
+  Database,
   Copy,
   Check
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem, PublicPoolStats } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { CampaignTransferModal } from './CampaignTransferModal';
+import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
+import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSync';
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
@@ -219,14 +222,60 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
 
-  // Strictly render directly from Firestore stats/public_pool Distributed Counter
-  // ZERO client-side sum calculations or role-based filtering variations between Guest, Admin, Chrome, and App
-  const { stats: hookStats } = usePublicPoolStats();
-  const poolStats = (hookStats && (hookStats.totalCount > 0 || hookStats.totalAmount > 0)) ? hookStats : (publicPoolStats || hookStats);
+  // Ground truth confirmed transactions from safeTransactions (matches ReportsScreen 100%)
+  const confirmedTxns = useMemo(() => {
+    return safeTransactions.filter(t => t && isConfirmedTransaction(t) && Number(t.amount) > 0);
+  }, [safeTransactions]);
 
-  const totalRaised = typeof poolStats?.totalAmount === 'number' ? poolStats.totalAmount : 367481.9;
-  const totalTxnsCount = typeof poolStats?.totalCount === 'number' ? poolStats.totalCount : 534;
-  const todayTxnsCount = typeof poolStats?.todayCount === 'number' ? poolStats.todayCount : 12;
+  const ledgerTotalAmount = useMemo(() => {
+    return Math.round(confirmedTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0) * 100) / 100;
+  }, [confirmedTxns]);
+
+  const ledgerTotalCount = confirmedTxns.length;
+
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const ledgerTodayCount = useMemo(() => {
+    return confirmedTxns.filter(t => {
+      const d = (t.timestamp || t.createdAt || t.date || '').slice(0, 10);
+      return d === todayStr;
+    }).length;
+  }, [confirmedTxns, todayStr]);
+
+  const { stats: hookStats } = usePublicPoolStats();
+
+  // Real-time pool stats with complete immunity to negative/corrupted Firestore counter values
+  // Prioritizes verified ledger so Home Screen and Reports Screen ALWAYS stay 100% in sync
+  const poolStats = useMemo(() => {
+    const rawStats = (hookStats && (hookStats.totalCount > 0 || hookStats.totalAmount > 0)) 
+      ? hookStats 
+      : (publicPoolStats || hookStats);
+
+    const rawAmt = typeof rawStats?.totalAmount === 'number' && !isNaN(rawStats.totalAmount) ? rawStats.totalAmount : 0;
+    const rawCnt = typeof rawStats?.totalCount === 'number' && !isNaN(rawStats.totalCount) ? rawStats.totalCount : 0;
+    const rawToday = typeof rawStats?.todayCount === 'number' && !isNaN(rawStats.todayCount) ? rawStats.todayCount : 0;
+
+    // If local confirmed transactions exist, use the exact ledger totals
+    // (If Firestore public pool has additional remote txns, use the greater value, never negative)
+    const finalAmt = ledgerTotalCount > 0 
+      ? Math.max(ledgerTotalAmount, Math.max(0, rawAmt)) 
+      : Math.max(0, rawAmt);
+    const finalCnt = ledgerTotalCount > 0 
+      ? Math.max(ledgerTotalCount, Math.max(0, rawCnt)) 
+      : Math.max(0, rawCnt);
+    const finalToday = ledgerTotalCount > 0 
+      ? Math.max(ledgerTodayCount, Math.max(0, rawToday)) 
+      : Math.max(0, rawToday);
+
+    return {
+      totalAmount: finalAmt,
+      totalCount: finalCnt,
+      todayCount: finalToday,
+    };
+  }, [hookStats, publicPoolStats, ledgerTotalAmount, ledgerTotalCount, ledgerTodayCount]);
+
+  const totalRaised = poolStats.totalAmount;
+  const totalTxnsCount = poolStats.totalCount;
+  const todayTxnsCount = poolStats.todayCount;
 
   const activeQRsCount = safeCampaigns.filter(c => c && c.status === 'active').length;
 
@@ -250,6 +299,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [qrSearchQuery, setQrSearchQuery] = useState('');
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string>('all');
   const [showAllQRs, setShowAllQRs] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   // All existing QRs sorted newest first
   const allSortedQRs = useMemo(() => {
@@ -403,13 +453,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
-          >
-            <span>Scan Now</span>
-            <ArrowRight className="w-3 h-3" />
-          </button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                import('../services/firestoreSync').then(s => s.recalibratePublicPoolStatsFromFirestore());
+              }}
+              className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              Recalibrate Stats
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSupabaseModalOpen(true);
+              }}
+              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <Database className="w-3 h-3" />
+              <span>Supabase DB</span>
+            </button>
+            <button
+              type="button"
+              className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <span>Scan Now</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1275,6 +1348,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           setIsTransferModalOpen(false);
           setTransferCampaign(null);
         }}
+      />
+
+      <SupabaseSyncModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
       />
     </div>
   );

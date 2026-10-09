@@ -255,9 +255,9 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
     const text = `🎉 *RonPay Official Digital Receipt*\n\n` +
       `🏛️ *Bawm:* ${displayCampaignTitle}\n` +
       `👤 *Donor:* ${transaction?.isAnonymous ? 'Anonymous' : (transaction?.donorName || 'Consumer User')}\n` +
-      `💰 *Amount:* ₹${transaction?.amount.toFixed(2) || '0.00'}\n` +
-      `💳 *Platform Fee:* ₹${transaction?.platformFee.toFixed(2) || '0.00'}\n` +
-      `✅ *Total Settled:* ₹${transaction?.totalAmount.toFixed(2) || '0.00'}\n` +
+      `💰 *Amount:* ₹${(Number(transaction?.amount) || 0).toFixed(2)}\n` +
+      `💳 *Platform Fee:* ₹${(Number(transaction?.platformFee) || 0).toFixed(2)}\n` +
+      `✅ *Total Settled:* ₹${(Number(transaction?.totalAmount) || 0).toFixed(2)}\n` +
       `🔖 *TXN ID:* ${transaction?.id || 'RPAY2026'}\n` +
       `🕒 *Date & Time:* ${formatDateTimeDDMMYYYY(transaction?.timestamp || Date.now())}\n\n` +
       `🌐 *View Verified Digital Receipt Online:*\n${receiptLink}\n\n` +
@@ -525,21 +525,21 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           <div className="flex justify-between items-center pt-1 border-t border-slate-200/70">
             <span className="text-slate-600 font-medium">Principal Amount:</span>
             <span className="font-black text-emerald-700 text-sm sm:text-base">
-              ₹{transaction?.amount.toFixed(2) || '0.00'}
+              ₹{(Number(transaction?.amount) || 0).toFixed(2)}
             </span>
           </div>
 
           <div className="flex justify-between items-center text-slate-500 text-[11px]">
             <span className="font-medium">Platform Fee:</span>
             <span className="font-bold text-slate-700">
-              ₹{transaction?.platformFee.toFixed(2) || '0.00'}
+              ₹{(Number(transaction?.platformFee) || 0).toFixed(2)}
             </span>
           </div>
 
           <div className="flex justify-between items-center border-t-2 border-dashed border-emerald-300 pt-2 font-black text-slate-900 bg-emerald-100/50 p-2 rounded-xl">
             <span className="text-xs uppercase tracking-wider text-emerald-950">Total Amount Settled:</span>
             <span className="text-base text-emerald-800 font-black">
-              ₹{transaction?.totalAmount.toFixed(2) || '0.00'}
+              ₹{(Number(transaction?.totalAmount) || 0).toFixed(2)}
             </span>
           </div>
         </div>

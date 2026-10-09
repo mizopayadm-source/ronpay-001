@@ -17,7 +17,7 @@ export const addAuditLog = async (
       targetType,
       targetId,
       performedBy,
-      timestamp: Timestamp.now().toISOString(),
+      timestamp: Timestamp.now().toDate().toISOString(),
     });
   } catch (error) {
     console.error('Error adding audit log:', error);

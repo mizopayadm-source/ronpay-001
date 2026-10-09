@@ -2213,8 +2213,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           {/* KUMTLUANG SPECIFIC: Member ID & Phone Lookup, Auto-Registration & Dual User Selection */}
           {category === 'kumtluang' && !isAnonymous ? (
             <div className="space-y-3 pt-1">
-              {/* 3-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) vs General (Inkhawm Thawhlawm) */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold border border-slate-200">
+              {/* 2-Mode Selector: Mimal (Member Roll) vs Group (Sum Tuak) */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setKumtluangDonorType('member')}
@@ -2238,19 +2238,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>Group / Unit</span>
-                  {!isOfficerAuthorized && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKumtluangDonorType('general')}
-                  className={`py-2 px-1 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5 ${
-                    kumtluangDonorType === 'general'
-                      ? 'bg-emerald-600 text-white font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                  }`}
-                >
-                  <Landmark className="w-3.5 h-3.5" />
-                  <span>General / Inkhawm</span>
                   {!isOfficerAuthorized && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                 </button>
               </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSync';
 import { 
   X, 
   Maximize2,
@@ -77,6 +78,7 @@ import {
   Activity
 } from 'lucide-react';
 import { AdminSyncDiagnosticView } from './AdminSyncDiagnosticView';
+import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { 
   Campaign, 
   CreatorProfile, 
@@ -218,7 +220,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Creators sub-filter
@@ -1420,6 +1422,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   id: 'sync_diagnostic' as const, 
                   label: 'Sync Diagnostic', 
                   icon: Activity,
+                  minRole: 'ADMIN' as UserRole
+                },
+                { 
+                  id: 'supabase' as const, 
+                  label: 'Supabase DB', 
+                  icon: Database,
                   minRole: 'ADMIN' as UserRole
                 },
                 { 
@@ -3370,6 +3378,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <p className="text-xs text-slate-500">
                       Export full system data snapshots (campaigns, transactions, profiles, audit records) to JSON or restore existing backups.
                     </p>
+                    <button
+                      onClick={async () => {
+                        await recalibratePublicPoolStatsFromFirestore();
+                        alert('✅ Stats recalibrated successfully!');
+                      }}
+                      className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold mt-2"
+                    >
+                      Recalibrate Public Pool Stats
+                    </button>
                   </div>
 
                   {restoreNotice && (
@@ -4057,6 +4074,13 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   localCampaigns={campaigns}
                   onRefreshParent={onResetData}
                   onClose={onClose}
+                />
+              )}
+
+              {activeTab === 'supabase' && (
+                <SupabaseSyncModal
+                  isOpen={true}
+                  onClose={() => setActiveTab('campaigns')}
                 />
               )}
 
