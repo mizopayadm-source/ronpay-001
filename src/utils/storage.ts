@@ -519,12 +519,8 @@ export const getStoredCampaigns = (): Campaign[] => {
                 updated.subCategories = ['BMP Fund'];
                 changed = true;
               }
-              if (updated.generalPresets && updated.generalPresets.includes('Inkhawm Thawhlawm')) {
-                updated.generalPresets = updated.generalPresets.filter(p => p !== 'Inkhawm Thawhlawm');
-                changed = true;
-              }
-              if (!updated.generalPresets || updated.generalPresets.length === 0) {
-                updated.generalPresets = ['General Hnathlang'];
+              if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {
+                updated.generalPresets = ['Inkhawm Thawhlawm', 'General Hnathlang', 'Pathianni Chawhma Thawhlawm', 'Pathianni Chawhnu Thawhlawm', 'Pathianni Zan Thawhlawm', 'Nilai Zan Thawhlawm', 'Buhfaiṭham Thawhlawm'];
                 changed = true;
               }
             }

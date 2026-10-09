@@ -397,10 +397,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const [generalPresets, setGeneralPresets] = useState<string[]>(() => {
-    const isBmp = campaign?.id === 'cmp-1788107291420' || String(campaign?.title || '').toLowerCase().includes('bmp');
     if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
-      const filtered = isBmp ? campaign.generalPresets.filter(p => p !== 'Inkhawm Thawhlawm') : campaign.generalPresets;
-      return filtered.length > 0 ? filtered : ['General Hnathlang'];
+      return campaign.generalPresets;
     }
     const key = `ronpay_general_presets_${campaign?.id || 'default'}`;
     const saved = localStorage.getItem(key) || localStorage.getItem('ronpay_general_presets_global');
@@ -408,12 +406,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = isBmp ? parsed.filter(p => p !== 'Inkhawm Thawhlawm') : parsed;
-          return filtered.length > 0 ? filtered : ['General Hnathlang'];
+          return parsed;
         }
       } catch (e) {}
     }
-    return isBmp ? ['General Hnathlang'] : [
+    return [
+      'Inkhawm Thawhlawm',
       'General Hnathlang',
       'Pathianni Chawhma Thawhlawm',
       'Pathianni Chawhnu Thawhlawm',
@@ -427,18 +425,16 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   // Sync presets whenever campaign changes or is updated by creator
   useEffect(() => {
-    const isBmp = campaign?.id === 'cmp-1788107291420' || String(campaign?.title || '').toLowerCase().includes('bmp');
     if (campaign?.groupPresets && campaign.groupPresets.length > 0) {
       setGroupPresets(campaign.groupPresets);
       if (!groupName || (!campaign.groupPresets.includes(groupName) && !isCustomGroup)) {
         setGroupName(campaign.groupPresets[0]);
       }
     }
-    if (campaign?.generalPresets) {
-      const filtered = isBmp ? campaign.generalPresets.filter(p => p !== 'Inkhawm Thawhlawm') : campaign.generalPresets;
-      setGeneralPresets(filtered);
-      if (!generalTitle || (!filtered.includes(generalTitle) && !isCustomGeneral)) {
-        setGeneralTitle(filtered[0] || '');
+    if (campaign?.generalPresets && campaign.generalPresets.length > 0) {
+      setGeneralPresets(campaign.generalPresets);
+      if (!generalTitle || (!campaign.generalPresets.includes(generalTitle) && !isCustomGeneral)) {
+        setGeneralTitle(campaign.generalPresets[0] || '');
       }
     }
   }, [campaign?.id, campaign?.groupPresets, campaign?.generalPresets]);
