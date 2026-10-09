@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
 -- 3. TRANSACTIONS TABLE
 CREATE TABLE IF NOT EXISTS public.transactions (
     id TEXT PRIMARY KEY,
-    campaign_id TEXT NOT NULL REFERENCES public.campaigns(id) ON DELETE CASCADE,
+    campaign_id TEXT NOT NULL,
     campaign_title TEXT,
     category TEXT,
     donor_name TEXT NOT NULL,
@@ -187,6 +187,47 @@ CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
 CREATE INDEX IF NOT EXISTS idx_transactions_campaign_id ON public.transactions(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON public.transactions(status);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON public.transactions(timestamp DESC);
+
+ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_campaign_id_fkey;
+
+-- AUTOMATIC FUND POOL RECALIBRATION TRIGGER
+CREATE OR REPLACE FUNCTION public.recalibrate_fund_pools_trigger()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_total_amt NUMERIC(14,2);
+    v_total_cnt INTEGER;
+    v_today_cnt INTEGER;
+    v_today_str TEXT;
+BEGIN
+    v_today_str := to_char(timezone('utc'::text, now()), 'YYYY-MM-DD');
+
+    SELECT 
+        COALESCE(SUM(amount), 0),
+        COUNT(*),
+        COUNT(*) FILTER (WHERE to_char(timestamp, 'YYYY-MM-DD') = v_today_str)
+    INTO 
+        v_total_amt, 
+        v_total_cnt, 
+        v_today_cnt
+    FROM public.transactions
+    WHERE status IN ('completed', 'SUCCESS', 'COMPLETED', 'paid', 'verified');
+
+    INSERT INTO public.fund_pools (id, name, total_amount, total_count, today_count, last_updated)
+    VALUES ('public_pool', 'RonPay Public Fund Pool', v_total_amt, v_total_cnt, v_today_cnt, timezone('utc'::text, now()))
+    ON CONFLICT (id) DO UPDATE SET
+        total_amount = EXCLUDED.total_amount,
+        total_count = EXCLUDED.total_count,
+        today_count = EXCLUDED.today_count,
+        last_updated = timezone('utc'::text, now());
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_recalibrate_fund_pools ON public.transactions;
+CREATE TRIGGER trg_recalibrate_fund_pools
+    AFTER INSERT OR UPDATE OR DELETE ON public.transactions
+    FOR EACH STATEMENT EXECUTE FUNCTION public.recalibrate_fund_pools_trigger();
 
 -- RLS POLICIES
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;

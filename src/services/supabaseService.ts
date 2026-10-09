@@ -193,15 +193,47 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
 }
 
 export async function insertSupabaseTransaction(tx: Transaction): Promise<boolean> {
-  const supabase = getSupabase();
-  if (!supabase || !tx || !tx.id) return false;
+  if (!tx || !tx.id) return false;
 
+  const supabase = getSupabase();
+  if (!supabase) {
+    // Queue for automatic synchronization when Supabase credentials connect
+    try {
+      const qRaw = localStorage.getItem('ronpay_supabase_pending_txs');
+      const q: Record<string, Transaction> = qRaw ? JSON.parse(qRaw) : {};
+      q[tx.id] = tx;
+      localStorage.setItem('ronpay_supabase_pending_txs', JSON.stringify(q));
+    } catch {}
+    return false;
+  }
+
+  // 1. Ensure parent campaign row exists to prevent any foreign key constraint issues
+  if (tx.campaignId) {
+    try {
+      const campRow = {
+        id: tx.campaignId,
+        title: tx.campaignTitle || 'RonPay Community Bawm',
+        category: tx.category || 'ralna',
+        target_upi_id: 'ronpay@upi',
+        status: 'active',
+        created_by: 'system',
+        is_approved: true,
+        allow_public_group_deposits: true,
+        created_at: tx.timestamp || new Date().toISOString()
+      };
+      await supabase.from('campaigns').upsert(campRow, { onConflict: 'id', ignoreDuplicates: true });
+    } catch (cErr) {
+      // Ignore if campaigns table doesn't enforce strict FK
+    }
+  }
+
+  // 2. Prepare canonical transaction row
   const row = {
     id: tx.id,
     campaign_id: tx.campaignId || 'cmp-default',
     campaign_title: tx.campaignTitle || 'RonPay Community Cause',
     category: tx.category || 'ralna',
-    donor_name: tx.donorName || 'Donor',
+    donor_name: tx.donorName || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
     donor_phone: tx.donorPhone || null,
     donor_veng: tx.donorVeng || null,
     member_id: tx.memberId || null,
@@ -220,12 +252,15 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
     period_year: tx.periodYear || null,
     period_label: tx.periodLabel || null,
     utr: tx.utr || null,
-    reference_no: tx.referenceNo || null,
-    timestamp: tx.timestamp || new Date().toISOString(),
+    reference_no: tx.referenceNo || tx.utr || null,
+    timestamp: tx.timestamp || tx.createdAt || new Date().toISOString(),
+    created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     metadata: {
       subCategoryBreakdown: tx.subCategoryBreakdown,
       feeOption: tx.feeOption,
       payerUPI: tx.payerUPI,
+      txHash: tx.txHash,
     }
   };
 
@@ -235,8 +270,27 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
 
   if (error) {
     console.error('[Supabase] Error inserting transaction:', error.message);
+    // Queue on failure
+    try {
+      const qRaw = localStorage.getItem('ronpay_supabase_pending_txs');
+      const q: Record<string, Transaction> = qRaw ? JSON.parse(qRaw) : {};
+      q[tx.id] = tx;
+      localStorage.setItem('ronpay_supabase_pending_txs', JSON.stringify(q));
+    } catch {}
     return false;
   }
+
+  // Remove from pending queue if present
+  try {
+    const qRaw = localStorage.getItem('ronpay_supabase_pending_txs');
+    if (qRaw) {
+      const q: Record<string, Transaction> = JSON.parse(qRaw);
+      if (q[tx.id]) {
+        delete q[tx.id];
+        localStorage.setItem('ronpay_supabase_pending_txs', JSON.stringify(q));
+      }
+    }
+  } catch {}
 
   // Recalibrate fund pool atomically after insert
   recalibrateSupabaseFundPool().catch(() => {});
@@ -749,4 +803,43 @@ export async function syncAllLocalToSupabase(): Promise<{
       error: err.message || 'Sync failed',
     };
   }
+}
+
+/**
+ * Specifically synchronizes all local transactions directly to Supabase transactions table
+ * and processes any offline queued items
+ */
+export async function syncPendingTransactionsToSupabase(): Promise<{
+  total: number;
+  synced: number;
+  failed: number;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { total: 0, synced: 0, failed: 0 };
+  }
+
+  const allTxns = getStoredTransactions();
+  let synced = 0;
+  let failed = 0;
+
+  for (const tx of allTxns) {
+    if (tx && tx.id) {
+      const ok = await insertSupabaseTransaction(tx);
+      if (ok) {
+        synced++;
+      } else {
+        failed++;
+      }
+    }
+  }
+
+  // Recalibrate fund pools in Supabase
+  await recalibrateSupabaseFundPool('public_pool').catch(() => {});
+
+  return {
+    total: allTxns.length,
+    synced,
+    failed,
+  };
 }

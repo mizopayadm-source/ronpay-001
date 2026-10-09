@@ -3170,6 +3170,11 @@ export const saveTransaction = (tx: Transaction): void => {
 
   // Push to server & mark synced
   syncTransactionToFirestore(tx).catch(() => {});
+  import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+    insertSupabaseTransaction(tx).catch((err) => {
+      console.warn('[Supabase] Live transaction direct insert note:', err);
+    });
+  }).catch(() => {});
   safeApiFetch('/api/transactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

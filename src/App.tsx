@@ -112,6 +112,7 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
+import { insertSupabaseTransaction, syncPendingTransactionsToSupabase } from './services/supabaseService';
 import { 
   getUrlRoute, 
   updateBrowserUrl, 
@@ -300,6 +301,11 @@ export default function App() {
       reloadLocalData();
     }).catch(() => {});
   }, [reloadLocalData]);
+
+  // Real-time Supabase background synchronization on startup
+  useEffect(() => {
+    syncPendingTransactionsToSupabase().catch(() => {});
+  }, []);
 
   // Real-time Firestore Sync initialization
   useEffect(() => {
@@ -1145,6 +1151,7 @@ export default function App() {
     };
     saveTransaction(newTx);
     recordUserPaidTxId(newTx.id);
+    insertSupabaseTransaction(newTx).catch(() => {});
     setCompletedTransaction(newTx);
     reloadLocalData();
     setIsBillModalOpen(false);
@@ -1154,6 +1161,7 @@ export default function App() {
   const handlePaymentSuccess = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
+    insertSupabaseTransaction(transaction).catch(() => {});
     if (transaction.campaignId) {
       markCampaignPaidInSession(transaction.campaignId);
     }
@@ -1176,6 +1184,7 @@ export default function App() {
   const handleCashPending = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
+    insertSupabaseTransaction(transaction).catch(() => {});
     setCompletedTransaction(transaction);
     try {
       localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
