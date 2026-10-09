@@ -2864,6 +2864,16 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
   }
 };
 
+let memberSupabaseSyncTimer: any = null;
+function debouncedSyncMembersToSupabase(): void {
+  if (memberSupabaseSyncTimer) clearTimeout(memberSupabaseSyncTimer);
+  memberSupabaseSyncTimer = setTimeout(() => {
+    import('../services/supabaseService').then(({ syncAllMembersToSupabase }) => {
+      syncAllMembersToSupabase().catch(() => {});
+    }).catch(() => {});
+  }, 3000);
+}
+
 export const saveMembers = (members: MemberRecord[], skipServerPush: boolean = false): void => {
   try {
     localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(members));
@@ -2882,6 +2892,9 @@ export const saveMembers = (members: MemberRecord[], skipServerPush: boolean = f
         body: JSON.stringify({ members })
       }).catch(() => {});
     }
+
+    // Safely sync to Supabase with debounce
+    debouncedSyncMembersToSupabase();
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
   }
@@ -2937,6 +2950,9 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
   if (stamped && stamped.id) {
     syncMemberToFirestore(stamped).catch(() => {});
   }
+  import('../services/supabaseService').then(({ upsertSupabaseMember }) => {
+    upsertSupabaseMember(stamped).catch(() => {});
+  }).catch(() => {});
   safeApiFetch('/api/members', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2962,6 +2978,9 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   });
   saveMembers(filtered);
   deleteMemberFromFirestore(cleanMid).catch(() => {});
+  import('../services/supabaseService').then(({ deleteSupabaseMember }) => {
+    deleteSupabaseMember(cleanMid).catch(() => {});
+  }).catch(() => {});
   safeApiFetch(`/api/members/${encodeURIComponent(cleanMid)}`, {
     method: 'DELETE'
   });
@@ -3417,6 +3436,11 @@ export const deleteStoredTransaction = (transactionId: string): void => {
   // Delete from Firestore with known tx details to atomically decrement stats/public_pool
   deleteTransactionFromFirestore(cleanId, targetTx).catch(() => {});
 
+  // Delete from Supabase
+  import('../services/supabaseService').then(({ deleteSupabaseTransaction }) => {
+    deleteSupabaseTransaction(cleanId).catch(() => {});
+  }).catch(() => {});
+
   // Delete from Server immediately
   safeApiFetch(`/api/transactions/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
   safeApiFetch('/api/data/sync', {
@@ -3452,6 +3476,11 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
   deleteMultipleTransactionsFromFirestore(cleanIds, targetTxs).catch((err) => {
     console.error('Failed to delete transactions from Firestore:', err);
   });
+
+  // Delete from Supabase
+  import('../services/supabaseService').then(({ deleteMultipleSupabaseTransactions }) => {
+    deleteMultipleSupabaseTransactions(cleanIds).catch(() => {});
+  }).catch(() => {});
 
   safeApiFetch('/api/transactions/delete-batch', {
     method: 'POST',

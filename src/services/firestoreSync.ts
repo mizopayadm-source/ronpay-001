@@ -658,12 +658,11 @@ function startLeaderFirestoreListeners(): void {
         const txMap = new Map<string, Transaction>();
         const remoteIdSet = new Set(cleanRemote.map(t => String(t.id).toLowerCase().trim()));
 
-        // 1. Remote Firestore transactions are authoritative - clear any accidental tombstone
+        // 1. Remote Firestore transactions are authoritative, unless marked as deleted locally
         for (const t of cleanRemote) {
           if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
-            if (!PERMANENTLY_PURGED_TX_IDS.has(k)) {
-              clearDeletedTransactionId(t.id);
+            if (!PERMANENTLY_PURGED_TX_IDS.has(k) && !deletedIds.has(k)) {
               txMap.set(k, t);
             }
           }

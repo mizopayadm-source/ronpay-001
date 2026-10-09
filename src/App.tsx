@@ -302,10 +302,54 @@ export default function App() {
     }).catch(() => {});
   }, [reloadLocalData]);
 
-  // Real-time Supabase background synchronization on startup
+  // Real-time Supabase background synchronization on startup with lazy timeout
   useEffect(() => {
-    syncPendingTransactionsToSupabase().catch(() => {});
+    const timer = setTimeout(() => {
+      syncPendingTransactionsToSupabase().catch(() => {});
+    }, 2500);
+    return () => clearTimeout(timer);
   }, []);
+
+  // Centralized Transaction Observer: Monitors 'transactions' state and auto-inserts new transactions to Supabase
+  const knownTxIdsRef = useRef<Set<string>>(new Set());
+  const isInitialTxMountRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+      return;
+    }
+
+    // On initial mount, register current known IDs to prevent false-positive startup floods
+    if (isInitialTxMountRef.current) {
+      isInitialTxMountRef.current = false;
+      transactions.forEach(tx => {
+        if (tx && tx.id) {
+          knownTxIdsRef.current.add(String(tx.id).toLowerCase().trim());
+        }
+      });
+      return;
+    }
+
+    // Detect genuinely new transactions added during this session
+    const freshNewTxns: Transaction[] = [];
+    transactions.forEach(tx => {
+      if (tx && tx.id) {
+        const key = String(tx.id).toLowerCase().trim();
+        if (!knownTxIdsRef.current.has(key)) {
+          knownTxIdsRef.current.add(key);
+          freshNewTxns.push(tx);
+        }
+      }
+    });
+
+    if (freshNewTxns.length > 0) {
+      freshNewTxns.forEach(tx => {
+        insertSupabaseTransaction(tx).catch(err => {
+          console.warn(`[Supabase Observer] Auto-insert note for tx ${tx.id}:`, err);
+        });
+      });
+    }
+  }, [transactions]);
 
   // Real-time Firestore Sync initialization
   useEffect(() => {

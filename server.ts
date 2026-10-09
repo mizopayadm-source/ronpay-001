@@ -5225,6 +5225,42 @@ app.post('/api/members', (req: Request, res: Response) => {
       db.members.push(member);
     }
     saveDatabase(db);
+
+    // Forward member to Supabase
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      const sbRow = {
+        id: member.id,
+        campaign_id: member.campaignId || 'cmp-default',
+        name: member.name || 'Member',
+        father_name: member.fatherName || null,
+        org_code: member.orgCode || null,
+        phone: member.phone || member.fullPhone || null,
+        full_phone: member.fullPhone || member.phone || null,
+        phone_last4: member.phoneLast4 || (member.phone ? member.phone.slice(-4) : null),
+        section: member.section || null,
+        is_family_head: Boolean(member.isFamilyHead),
+        pledge_amount: Number(member.pledgeAmount) || 0,
+        paid_amount: Number(member.paidAmount) || 0,
+        status: member.status || 'pending',
+        dependents: member.dependents || [],
+        created_at: member.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      fetch(`${sbUrl}/rest/v1/members`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(sbRow)
+      }).catch((e: any) => console.warn('[Server Supabase Member Note]:', e?.message));
+    }
+
     res.json({ success: true, member, data: db });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -5293,6 +5329,36 @@ app.post('/api/audit-logs', (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/supabase/config', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const config = (db as any).supabaseConfig || {};
+    res.json({
+      success: true,
+      url: config.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co',
+      anonKey: config.anonKey || process.env.VITE_SUPABASE_ANON_KEY || ''
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/supabase/config', (req: Request, res: Response) => {
+  try {
+    const { url, anonKey } = req.body;
+    const db = getDatabase();
+    (db as any).supabaseConfig = {
+      url: url || 'https://aqrplcmpealgruduwnhw.supabase.co',
+      anonKey: anonKey || '',
+      updatedAt: new Date().toISOString()
+    };
+    saveDatabase(db);
+    res.json({ success: true, message: 'Supabase configuration saved permanently' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/transactions', (req: Request, res: Response) => {
   try {
     const tx = req.body;
@@ -5306,6 +5372,52 @@ app.post('/api/transactions', (req: Request, res: Response) => {
     // If this transaction was previously deleted, resurrect or clean it from tombstone
     const cleanId = String(tx.id).toLowerCase().trim();
     db.deletedTransactionIds = (db.deletedTransactionIds || []).filter(id => id !== cleanId);
+
+    // Forward transaction directly to Supabase PostgREST
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      const sbRow = {
+        id: tx.id,
+        campaign_id: tx.campaignId || 'cmp-default',
+        campaign_title: tx.campaignTitle || 'RonPay Community Cause',
+        category: tx.category || 'ralna',
+        donor_name: tx.donorName || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
+        donor_phone: tx.donorPhone || null,
+        donor_veng: tx.donorVeng || null,
+        member_id: tx.memberId || null,
+        sub_id: tx.subId || null,
+        donor_type: tx.donorType || 'member',
+        group_name: tx.groupName || null,
+        is_anonymous: Boolean(tx.isAnonymous),
+        amount: Number(tx.amount) || 0,
+        platform_fee: Number(tx.platformFee) || 0,
+        total_amount: Number(tx.totalAmount) || Number(tx.amount) || 0,
+        payment_method: tx.paymentMethod || 'cash',
+        status: tx.status || 'completed',
+        remark: tx.remark || null,
+        period_type: tx.periodType || 'one_time',
+        period_month: tx.periodMonth || null,
+        period_year: tx.periodYear || null,
+        period_label: tx.periodLabel || null,
+        utr: tx.utr || null,
+        reference_no: tx.referenceNo || null,
+        timestamp: tx.timestamp || new Date().toISOString(),
+        created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      fetch(`${sbUrl}/rest/v1/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(sbRow)
+      }).catch((e: any) => console.warn('[Server Supabase Sync Note]:', e?.message));
+    }
 
     const titleL = String(tx.campaignTitle || '').toLowerCase();
     const cleanTitle = titleL.replace(/,+$/, '').trim();
@@ -5400,6 +5512,21 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     db.transactions = (db.transactions || []).filter((t: any) => String(t.id).toLowerCase().trim() !== cleanId);
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), cleanId]));
     saveDatabase(db);
+
+    // Delete from Supabase
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(cleanId)}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        }
+      }).catch((e: any) => console.warn('[Server Supabase Delete Note]:', e?.message));
+    }
+
     res.json({ success: true, message: `Transaction ${id} deleted successfully` });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
@@ -5416,6 +5543,22 @@ app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
       db.transactions = (db.transactions || []).filter((t: any) => !idSet.has(String(t.id).toLowerCase().trim()));
       db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...cleanIds]));
       saveDatabase(db);
+
+      // Delete from Supabase
+      const sbConfig = (db as any).supabaseConfig || {};
+      const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+      const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+      if (sbUrl && sbKey) {
+        const inFilter = `(${cleanIds.map(x => `"${encodeURIComponent(x)}"`).join(',')})`;
+        fetch(`${sbUrl}/rest/v1/transactions?id=in.${inFilter}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          }
+        }).catch((e: any) => console.warn('[Server Supabase Batch Delete Note]:', e?.message));
+      }
+
       return res.json({ success: true, deletedCount: ids.length });
     }
     res.json({ success: true, deletedCount: 0 });

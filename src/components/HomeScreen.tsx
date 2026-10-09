@@ -254,17 +254,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const rawCnt = typeof rawStats?.totalCount === 'number' && !isNaN(rawStats.totalCount) ? rawStats.totalCount : 0;
     const rawToday = typeof rawStats?.todayCount === 'number' && !isNaN(rawStats.todayCount) ? rawStats.todayCount : 0;
 
-    // If local confirmed transactions exist, use the exact ledger totals
-    // (If Firestore public pool has additional remote txns, use the greater value, never negative)
-    const finalAmt = ledgerTotalCount > 0 
-      ? Math.max(ledgerTotalAmount, Math.max(0, rawAmt)) 
-      : Math.max(0, rawAmt);
-    const finalCnt = ledgerTotalCount > 0 
-      ? Math.max(ledgerTotalCount, Math.max(0, rawCnt)) 
-      : Math.max(0, rawCnt);
-    const finalToday = ledgerTotalCount > 0 
-      ? Math.max(ledgerTodayCount, Math.max(0, rawToday)) 
-      : Math.max(0, rawToday);
+    // If local confirmed transactions exist, use the exact ledger totals as authoritative truth
+    const finalAmt = ledgerTotalCount > 0 ? ledgerTotalAmount : Math.max(0, rawAmt);
+    const finalCnt = ledgerTotalCount > 0 ? ledgerTotalCount : Math.max(0, rawCnt);
+    const finalToday = ledgerTotalCount > 0 ? ledgerTodayCount : Math.max(0, rawToday);
 
     return {
       totalAmount: finalAmt,

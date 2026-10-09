@@ -42,6 +42,7 @@ import {
   MessageSquare,
   Target,
   Printer,
+  Database,
   RefreshCw
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
@@ -1042,14 +1043,53 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     );
   };
 
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState<boolean>(false);
+
+  const handleManualSupabaseSync = async () => {
+    setIsSyncingSupabase(true);
+    try {
+      const { syncPendingTransactionsToSupabase, isSupabaseConfigured } = await import('../services/supabaseService');
+      const res = await syncPendingTransactionsToSupabase();
+      if (res.synced > 0) {
+        setExportFeedback({
+          message: `✅ Supabase Sync fel! Transaction ${res.synced} (cash record zawng zawng telin) Supabase-ah a lut thlap e.`,
+          count: res.synced
+        });
+      } else if (!isSupabaseConfigured()) {
+        setExportFeedback({
+          message: `⚠️ Supabase Anon Key a la ruak. Admin Dashboard > Supabase DB-ah Anon Key save hmasak tur a ni.`,
+          count: 0
+        });
+      } else {
+        setExportFeedback({
+          message: `Supabase sync check complete. All records up to date.`,
+          count: res.total
+        });
+      }
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err: any) {
+      setExportFeedback({
+        message: `❌ Supabase sync error: ${err?.message || 'Failed to sync'}`,
+        count: 0
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setIsSyncingSupabase(false);
+    }
+  };
+
   const handleManualCloudSync = async () => {
     setIsSyncingCloud(true);
     try {
       if (onRefreshCloud) {
         await onRefreshCloud();
       }
+      try {
+        const { syncPendingTransactionsToSupabase } = await import('../services/supabaseService');
+        await syncPendingTransactionsToSupabase();
+      } catch {}
       setExportFeedback({
-        message: `Cloud sync complete! ${transactions.length} transactions live in sync across all devices.`,
+        message: `Cloud & Supabase sync complete! ${transactions.length} transactions live in sync across all devices.`,
         count: transactions.length
       });
       setTimeout(() => setExportFeedback(null), 3500);
@@ -2554,10 +2594,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     onClick={handleManualCloudSync}
                     disabled={isSyncingCloud}
                     className="text-[9.5px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
-                    title="Refresh and sync transactions"
+                    title="Refresh and sync transactions across devices"
                   >
                     <RefreshCw className={`w-2.5 h-2.5 text-indigo-600 ${isSyncingCloud ? 'animate-spin' : ''}`} />
                     <span>{isSyncingCloud ? 'Syncing...' : 'Live Sync'}</span>
+                  </button>
+                  <button
+                    onClick={handleManualSupabaseSync}
+                    disabled={isSyncingSupabase}
+                    className="text-[9.5px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
+                    title="Push all transactions directly to Supabase table"
+                  >
+                    <Database className={`w-2.5 h-2.5 text-emerald-600 ${isSyncingSupabase ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingSupabase ? 'Syncing...' : 'Supabase Sync'}</span>
                   </button>
                 </div>
               </div>

@@ -156,6 +156,29 @@ CREATE TABLE IF NOT EXISTS public.fund_pools (
 );
 
 -- =========================================================================
+-- 7. MEMBERS TABLE (KUMTLUANG / KOHHRAN / PAWL ROLL LIST)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.members (
+    id TEXT PRIMARY KEY, -- e.g. "BMPSHL-001", "EBE-1460"
+    campaign_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    father_name TEXT,
+    org_code TEXT,
+    phone TEXT,
+    full_phone TEXT,
+    phone_last4 TEXT,
+    section TEXT,
+    is_family_head BOOLEAN DEFAULT false,
+    pledge_amount NUMERIC(12,2) DEFAULT 0.00,
+    paid_amount NUMERIC(12,2) DEFAULT 0.00,
+    status TEXT DEFAULT 'pending',
+    dependents JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- =========================================================================
 -- INDEXES FOR FAST PERFORMANCE
 -- =========================================================================
 CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
@@ -254,6 +277,7 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wallet_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fund_pools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read access to active campaigns and public pool stats
 CREATE POLICY "Public Read Campaigns" ON public.campaigns FOR SELECT USING (true);
@@ -262,6 +286,7 @@ CREATE POLICY "Public Read Transactions" ON public.transactions FOR SELECT USING
 CREATE POLICY "Public Read Users" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Public Read Wallets" ON public.wallets FOR SELECT USING (true);
 CREATE POLICY "Public Read Wallet Transactions" ON public.wallet_transactions FOR SELECT USING (true);
+CREATE POLICY "Public Read Members" ON public.members FOR SELECT USING (true);
 
 -- Permissive write policies for anon key (client app interactions)
 CREATE POLICY "Anon Insert Transactions" ON public.transactions FOR INSERT WITH CHECK (true);
@@ -273,6 +298,7 @@ CREATE POLICY "Anon Upsert Campaigns" ON public.campaigns FOR ALL USING (true) W
 CREATE POLICY "Anon Upsert Wallets" ON public.wallets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Anon Upsert Fund Pools" ON public.fund_pools FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Anon Upsert Wallet Txns" ON public.wallet_transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Anon Upsert Members" ON public.members FOR ALL USING (true) WITH CHECK (true);
 
 -- =========================================================================
 -- SEED INITIAL DATA: RONPAY PUBLIC FUND POOL (39 TXNS / ₹262,125.90)

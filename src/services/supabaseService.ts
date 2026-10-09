@@ -1,6 +1,7 @@
 import { getSupabase, isSupabaseConfigured, getSupabaseUrl } from '../lib/supabase';
-import { Transaction, CreatorProfile, RonPayWallet, WalletTransaction, PublicPoolStats, Campaign } from '../types';
-import { getStoredTransactions, getStoredCreatorsList, getStoredWallet, getStoredCampaigns } from '../utils/storage';
+export { isSupabaseConfigured } from '../lib/supabase';
+import { Transaction, CreatorProfile, RonPayWallet, WalletTransaction, PublicPoolStats, Campaign, MemberRecord } from '../types';
+import { getStoredTransactions, getStoredCreatorsList, getStoredWallet, getStoredCampaigns, getMembers } from '../utils/storage';
 import { getStoredPublicPoolStats } from './firestoreSync';
 
 export interface SupabaseTableStatus {
@@ -192,6 +193,17 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
   }));
 }
 
+// Debounced pool recalibration to prevent main-thread freezing and API flooding
+let poolRecalibrateDebounceTimer: any = null;
+export function scheduleDebouncedPoolRecalibration(): void {
+  if (poolRecalibrateDebounceTimer) {
+    clearTimeout(poolRecalibrateDebounceTimer);
+  }
+  poolRecalibrateDebounceTimer = setTimeout(() => {
+    recalibrateSupabaseFundPool().catch(() => {});
+  }, 3500);
+}
+
 export async function insertSupabaseTransaction(tx: Transaction): Promise<boolean> {
   if (!tx || !tx.id) return false;
 
@@ -292,8 +304,8 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
     }
   } catch {}
 
-  // Recalibrate fund pool atomically after insert
-  recalibrateSupabaseFundPool().catch(() => {});
+  // Recalibrate fund pool with safe debouncing
+  scheduleDebouncedPoolRecalibration();
   return true;
 }
 
@@ -320,7 +332,7 @@ export async function updateSupabaseTransaction(tx: Partial<Transaction> & { id:
     return false;
   }
 
-  recalibrateSupabaseFundPool().catch(() => {});
+  scheduleDebouncedPoolRecalibration();
   return true;
 }
 
@@ -338,7 +350,25 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
     return false;
   }
 
-  recalibrateSupabaseFundPool().catch(() => {});
+  scheduleDebouncedPoolRecalibration();
+  return true;
+}
+
+export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !ids || ids.length === 0) return false;
+
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .in('id', ids);
+
+  if (error) {
+    console.error('[Supabase] Error deleting multiple transactions:', error.message);
+    return false;
+  }
+
+  scheduleDebouncedPoolRecalibration();
   return true;
 }
 
@@ -653,7 +683,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealthCheckResult> 
   const startTime = Date.now();
   const supabase = getSupabase();
 
-  const tablesToCheck = ['users', 'campaigns', 'transactions', 'wallets', 'fund_pools', 'wallet_transactions'];
+  const tablesToCheck = ['users', 'campaigns', 'transactions', 'members', 'wallets', 'fund_pools', 'wallet_transactions'];
   const tableResults: Record<string, SupabaseTableStatus> = {};
 
   if (!supabase || !isSupabaseConfigured()) {
@@ -739,6 +769,7 @@ export async function syncAllLocalToSupabase(): Promise<{
   campaignsSynced: number;
   transactionsSynced: number;
   walletsSynced: number;
+  membersSynced?: number;
   poolSynced: boolean;
   error?: string;
 }> {
@@ -784,6 +815,14 @@ export async function syncAllLocalToSupabase(): Promise<{
     const localPool = getStoredPublicPoolStats();
     const poolSynced = await upsertSupabaseFundPool(localPool, 'public_pool');
 
+    // 6. Sync Members
+    const localMembers = getMembers();
+    let membersSynced = 0;
+    for (const m of localMembers) {
+      const ok = await upsertSupabaseMember(m);
+      if (ok) membersSynced++;
+    }
+
     return {
       success: true,
       usersSynced,
@@ -791,6 +830,7 @@ export async function syncAllLocalToSupabase(): Promise<{
       transactionsSynced,
       walletsSynced,
       poolSynced,
+      membersSynced,
     };
   } catch (err: any) {
     return {
@@ -799,6 +839,7 @@ export async function syncAllLocalToSupabase(): Promise<{
       campaignsSynced: 0,
       transactionsSynced: 0,
       walletsSynced: 0,
+      membersSynced: 0,
       poolSynced: false,
       error: err.message || 'Sync failed',
     };
@@ -820,26 +861,212 @@ export async function syncPendingTransactionsToSupabase(): Promise<{
   }
 
   const allTxns = getStoredTransactions();
+  if (!allTxns || allTxns.length === 0) {
+    return { total: 0, synced: 0, failed: 0 };
+  }
+
   let synced = 0;
   let failed = 0;
 
-  for (const tx of allTxns) {
-    if (tx && tx.id) {
-      const ok = await insertSupabaseTransaction(tx);
-      if (ok) {
-        synced++;
-      } else {
-        failed++;
+  // Batch in chunks of 50 in single network requests
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < allTxns.length; i += CHUNK_SIZE) {
+    const chunk = allTxns.slice(i, i + CHUNK_SIZE);
+    const rows = chunk.map(tx => ({
+      id: tx.id,
+      campaign_id: tx.campaignId || 'cmp-default',
+      campaign_title: tx.campaignTitle || 'RonPay Community Cause',
+      category: tx.category || 'ralna',
+      donor_name: tx.donorName || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
+      donor_phone: tx.donorPhone || null,
+      donor_veng: tx.donorVeng || null,
+      member_id: tx.memberId || null,
+      sub_id: tx.subId || null,
+      donor_type: tx.donorType || 'member',
+      group_name: tx.groupName || null,
+      is_anonymous: Boolean(tx.isAnonymous),
+      amount: Number(tx.amount) || 0,
+      platform_fee: Number(tx.platformFee) || 0,
+      total_amount: Number(tx.totalAmount) || Number(tx.amount) || 0,
+      payment_method: tx.paymentMethod || 'upi',
+      status: tx.status || 'completed',
+      remark: tx.remark || null,
+      period_type: tx.periodType || 'one_time',
+      period_month: tx.periodMonth || null,
+      period_year: tx.periodYear || null,
+      period_label: tx.periodLabel || null,
+      utr: tx.utr || null,
+      reference_no: tx.referenceNo || tx.utr || null,
+      timestamp: tx.timestamp || tx.createdAt || new Date().toISOString(),
+      created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: {
+        subCategoryBreakdown: tx.subCategoryBreakdown,
+        feeOption: tx.feeOption,
+        payerUPI: tx.payerUPI,
+        txHash: tx.txHash,
       }
+    }));
+
+    try {
+      const { error } = await supabase.from('transactions').upsert(rows, { onConflict: 'id' });
+      if (!error) {
+        synced += rows.length;
+      } else {
+        failed += rows.length;
+      }
+    } catch {
+      failed += rows.length;
     }
   }
 
-  // Recalibrate fund pools in Supabase
-  await recalibrateSupabaseFundPool('public_pool').catch(() => {});
+  // Recalibrate fund pools in Supabase once after all batches
+  scheduleDebouncedPoolRecalibration();
 
   return {
     total: allTxns.length,
     synced,
     failed,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 7. MEMBERS (PostgREST SDK)
+// ---------------------------------------------------------------------------
+
+export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberRecord[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  let query = supabase.from('members').select('*');
+  if (campaignId && campaignId !== 'all') {
+    query = query.eq('campaign_id', campaignId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((row: any) => ({
+    id: row.id,
+    campaignId: row.campaign_id,
+    name: row.name,
+    fatherName: row.father_name,
+    orgCode: row.org_code,
+    phone: row.phone,
+    fullPhone: row.full_phone || row.phone,
+    phoneLast4: row.phone_last4,
+    section: row.section,
+    isFamilyHead: row.is_family_head,
+    pledgeAmount: Number(row.pledge_amount) || 0,
+    paidAmount: Number(row.paid_amount) || 0,
+    status: row.status,
+    dependents: row.dependents || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ...(row.metadata || {})
+  }));
+}
+
+export async function upsertSupabaseMember(member: MemberRecord): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !member || !member.id) return false;
+
+  const row = {
+    id: member.id,
+    campaign_id: member.campaignId || 'cmp-default',
+    name: member.name || 'Member',
+    father_name: member.fatherName || null,
+    org_code: member.orgCode || null,
+    phone: member.phone || member.fullPhone || null,
+    full_phone: member.fullPhone || member.phone || null,
+    phone_last4: member.phoneLast4 || (member.phone ? member.phone.slice(-4) : null),
+    section: member.section || null,
+    is_family_head: Boolean(member.isFamilyHead),
+    pledge_amount: Number(member.pledgeAmount) || 0,
+    paid_amount: Number(member.paidAmount) || 0,
+    status: member.status || 'pending',
+    dependents: member.dependents || [],
+    created_at: member.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    metadata: {
+      notes: member.notes,
+      avatarUrl: member.avatarUrl,
+      enrollmentYear: member.enrollmentYear,
+      activeYears: member.activeYears,
+      yearStatus: member.yearStatus,
+    }
+  };
+
+  const { error } = await supabase
+    .from('members')
+    .upsert(row, { onConflict: 'id' });
+
+  if (error) {
+    console.warn('[Supabase] Member upsert note:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteSupabaseMember(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !id) return false;
+
+  const { error } = await supabase
+    .from('members')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.warn('[Supabase] Member delete note:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function syncAllMembersToSupabase(): Promise<{ total: number; synced: number }> {
+  const supabase = getSupabase();
+  if (!supabase) return { total: 0, synced: 0 };
+
+  const allMems = getMembers();
+  if (!allMems || allMems.length === 0) return { total: 0, synced: 0 };
+
+  const rows = allMems.map(member => ({
+    id: member.id,
+    campaign_id: member.campaignId || 'cmp-default',
+    name: member.name || 'Member',
+    father_name: member.fatherName || null,
+    org_code: member.orgCode || null,
+    phone: member.phone || member.fullPhone || null,
+    full_phone: member.fullPhone || member.phone || null,
+    phone_last4: member.phoneLast4 || (member.phone ? member.phone.slice(-4) : null),
+    section: member.section || null,
+    is_family_head: Boolean(member.isFamilyHead),
+    pledge_amount: Number(member.pledgeAmount) || 0,
+    paid_amount: Number(member.paidAmount) || 0,
+    status: member.status || 'pending',
+    dependents: member.dependents || [],
+    created_at: member.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    metadata: {
+      notes: member.notes,
+      avatarUrl: member.avatarUrl,
+      enrollmentYear: member.enrollmentYear,
+      activeYears: member.activeYears,
+      yearStatus: member.yearStatus,
+    }
+  }));
+
+  try {
+    const { error } = await supabase.from('members').upsert(rows, { onConflict: 'id' });
+    if (!error) {
+      return { total: allMems.length, synced: allMems.length };
+    }
+  } catch (err: any) {
+    console.warn('[Supabase Member Batch Warning]:', err?.message);
+  }
+
+  return { total: allMems.length, synced: 0 };
 }

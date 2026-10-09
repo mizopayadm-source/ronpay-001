@@ -41,11 +41,28 @@ export function getSupabaseAnonKey(): string {
   return '';
 }
 
+// Automatically bootstrap remote server Supabase config on startup
+if (typeof window !== 'undefined') {
+  fetch('/api/supabase/config')
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.anonKey && !localStorage.getItem(STORAGE_KEY_ANON_KEY)) {
+        localStorage.setItem(STORAGE_KEY_ANON_KEY, data.anonKey);
+        if (data.url) localStorage.setItem(STORAGE_KEY_URL, data.url);
+        cachedClient = null;
+      }
+    })
+    .catch(() => {});
+}
+
 /**
- * Persists Supabase credentials to localStorage for runtime configuration
+ * Persists Supabase credentials to localStorage and server for universal runtime configuration
  */
 export function setSupabaseConfig(url?: string, anonKey?: string): void {
   if (typeof window === 'undefined') return;
+  const finalUrl = url !== undefined ? url.trim() : getSupabaseUrl();
+  const finalKey = anonKey !== undefined ? anonKey.trim() : getSupabaseAnonKey();
+
   if (url !== undefined) {
     if (url.trim()) {
       localStorage.setItem(STORAGE_KEY_URL, url.trim());
@@ -60,6 +77,14 @@ export function setSupabaseConfig(url?: string, anonKey?: string): void {
       localStorage.removeItem(STORAGE_KEY_ANON_KEY);
     }
   }
+
+  // Persist to server backend so all mobile users and donors auto-inherit the key
+  fetch('/api/supabase/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: finalUrl, anonKey: finalKey })
+  }).catch(() => {});
+
   // Invalidate cached client
   cachedClient = null;
   lastUrl = '';

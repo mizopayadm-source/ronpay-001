@@ -1619,6 +1619,10 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isSynced: false,
       };
 
+      import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
+        insertSupabaseTransaction(transaction).catch(() => {});
+      }).catch(() => {});
+
       setTimeout(() => {
         setIsProcessing(false);
         onCashPending(transaction);
