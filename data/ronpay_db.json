@@ -42,7 +42,15 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": []
+      "generalPresets": [
+        "Pathianni Chawhma Thawhlawm",
+        "Pathianni Chawhnu Thawhlawm",
+        "Pathianni Zan Thawhlawm",
+        "Nilai Zan Thawhlawm",
+        "Buhfaiṭham Thawhlawm",
+        "Inrinni Zan Thawhlawm",
+        "Bial Inkhawmpui Thawhlawm"
+      ]
     },
     {
       "subCategories": [
@@ -586,18 +594,15 @@
       "definedSections": [
         "Shillong Unit"
       ],
-      "updatedAt": "2026-10-07T13:54:48.312Z",
+      "updatedAt": "2026-10-07T13:54:47.755Z",
       "orgCode": "BMPSHL",
       "subCategories": [
-        "BMP Fund",
-        "Inkhawm Thawhlawm"
+        "BMP Fund"
       ],
       "upiId": "mizopay@axl",
       "createdAt": "2026-08-30T16:28:11.420Z",
       "title": "BMP Shillong",
-      "generalPresets": [
-        "General Hnathlang"
-      ],
+      "generalPresets": [],
       "allowPublicGroupDeposits": false,
       "urgencyDeadline": "2026-09-06T23:59",
       "titleMizo": "BMP Shillong",
@@ -629,12 +634,12 @@
       "contactPhone": "7005153902",
       "transferHistory": [
         {
-          "reason": "Term inthlak / Annual Office Bearer Handover",
-          "fromPhone": "9862000001",
           "transferredAt": "2026-10-01T15:45:45.524Z",
-          "toName": "RC Lalliana (Treasurer)",
+          "toPhone": "7005153902",
           "fromName": "Super Admin (Master)",
-          "toPhone": "7005153902"
+          "reason": "Term inthlak / Annual Office Bearer Handover",
+          "toName": "RC Lalliana (Treasurer)",
+          "fromPhone": "9862000001"
         }
       ],
       "contactPerson": "RC Lalliana",
@@ -643,9 +648,9 @@
       "transferredTo": "7005153902",
       "authorizedOfficers": [
         {
-          "name": "Super Admin (Master)",
           "role": "Outgoing Officer / Co-Manager",
-          "phone": "9862000001"
+          "phone": "9862000001",
+          "name": "Super Admin (Master)"
         }
       ],
       "transferredFrom": "9862000001",
@@ -1782,96 +1787,6 @@
       "isSynced": false,
       "isDependent": false,
       "updatedAt": "2026-10-07T15:51:37.486Z"
-    },
-    {
-      "campaignNetReceived": 100,
-      "id": "RPAY_TXN_1789300822720_789",
-      "txHash": "UTR161909792984",
-      "isDependent": false,
-      "utr": "UTR161909792984",
-      "periodType": "monthly",
-      "isAnonymous": true,
-      "totalAmount": 101,
-      "donorName": "Anonymous",
-      "updatedAt": "2026-10-04T10:01:13.586Z",
-      "category": "kumtluang",
-      "paymentMethod": "phonepe",
-      "platformFee": 1,
-      "subCategoryBreakdown": {
-        "Chhiatni Fund": 100
-      },
-      "periodYear": "2026",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "amount": 100,
-      "campaignId": "cmp-1787829303143",
-      "timestamp": "2026-09-13T12:00:36.495Z",
-      "feeOption": "ADD_ON",
-      "periodLabel": "September 2026",
-      "periodMonth": "September",
-      "status": "completed",
-      "date": "2026-09-13"
-    },
-    {
-      "periodLabel": "September 2026",
-      "periodMonth": "September",
-      "status": "completed",
-      "periodType": "monthly",
-      "utr": "UTR736807445141",
-      "timestamp": "2026-09-13T17:44:33.664Z",
-      "subCategoryBreakdown": {
-        "Chhiatni Fund": 100
-      },
-      "feeOption": "ADD_ON",
-      "amount": 100,
-      "paymentMethod": "phonepe",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "platformFee": 1,
-      "updatedAt": "2026-10-04T10:01:13.219Z",
-      "donorName": "Anonymous",
-      "totalAmount": 101,
-      "campaignId": "cmp-1787829303143",
-      "donorVeng": "Zobawk, Lunglei",
-      "isAnonymous": true,
-      "isDependent": false,
-      "id": "RPAY_TXN_1789321417975_188",
-      "txHash": "UTR736807445141",
-      "periodYear": "2026",
-      "category": "kumtluang",
-      "campaignNetReceived": 100,
-      "date": "2026-09-13"
-    },
-    {
-      "platformFee": 15,
-      "periodLabel": "September 2026",
-      "feeOption": "ADD_ON",
-      "periodMonth": "September",
-      "category": "kumtluang",
-      "subCategoryBreakdown": {
-        "YMA Chhiatni Fund": 300,
-        "Building Fund": 400,
-        "Thawhlawm": 100,
-        "Youth & Sports": 500,
-        "Khawtlang Inrelbawlna": 200
-      },
-      "periodType": "monthly",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "isAnonymous": true,
-      "donorName": "Anonymous",
-      "amount": 1500,
-      "status": "completed",
-      "campaignNetReceived": 1500,
-      "paymentMethod": "phonepe",
-      "totalAmount": 1515,
-      "isDependent": false,
-      "campaignId": "cmp-1787829303143",
-      "id": "RPAY_TXN_1789571429796_534",
-      "utr": "UTR326302567845",
-      "referenceNo": "OMO2609162040326302567553",
-      "updatedAt": "2026-10-04T10:01:12.297Z",
-      "timestamp": "2026-09-16T15:10:29.796Z",
-      "periodYear": "2026",
-      "subCategory": "Chhiatni Fund",
-      "date": "2026-09-16"
     },
     {
       "memberId": "YMAVT-7654",
@@ -4693,10 +4608,10 @@
       "timestamp": "2026-09-12T14:55:20.426Z",
       "subCategoryBreakdown": {
         "Ramthianghlim": 200,
-        "Synod Mission": 300,
-        "Kohhran Hmeichhia": 400,
         "KTP Thawhlawm": 500,
-        "Biak In Sakna": 100
+        "Biak In Sakna": 100,
+        "Synod Mission": 300,
+        "Kohhran Hmeichhia": 400
       },
       "campaignTitle": "Khatla Presbyterian Kohhran",
       "isDependent": false,
@@ -4722,8 +4637,8 @@
       "subCategoryBreakdown": {
         "Pathian Ram Zauna": 1500,
         "Tualchhung": 400,
-        "Building Fund": 1300,
-        "Mission": 2000
+        "Mission": 2000,
+        "Building Fund": 1300
       },
       "category": "kumtluang",
       "amount": 5200,
@@ -10295,6 +10210,34 @@
       "date": "2026-09-12"
     },
     {
+      "campaignNetReceived": 100,
+      "id": "RPAY_TXN_1789300822720_789",
+      "txHash": "UTR161909792984",
+      "isDependent": false,
+      "utr": "UTR161909792984",
+      "periodType": "monthly",
+      "isAnonymous": true,
+      "totalAmount": 101,
+      "donorName": "Anonymous",
+      "updatedAt": "2026-09-17T08:54:11.917Z",
+      "category": "kumtluang",
+      "paymentMethod": "phonepe",
+      "platformFee": 1,
+      "subCategoryBreakdown": {
+        "Chhiatni Fund": 100
+      },
+      "periodYear": "2026",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "amount": 100,
+      "campaignId": "cmp-1787829303143",
+      "timestamp": "2026-09-13T12:00:36.495Z",
+      "feeOption": "ADD_ON",
+      "periodLabel": "September 2026",
+      "periodMonth": "September",
+      "status": "completed",
+      "date": "2026-09-13"
+    },
+    {
       "timestamp": "2026-09-13T11:48:50.169Z",
       "txHash": "UTR107731183774",
       "feeOption": "ADD_ON",
@@ -10488,6 +10431,35 @@
       "feeOption": "ADD_ON",
       "timestamp": "2026-09-13T12:36:20.904Z",
       "amount": 50,
+      "date": "2026-09-13"
+    },
+    {
+      "periodLabel": "September 2026",
+      "periodMonth": "September",
+      "status": "completed",
+      "periodType": "monthly",
+      "utr": "UTR736807445141",
+      "timestamp": "2026-09-13T17:44:33.664Z",
+      "subCategoryBreakdown": {
+        "Chhiatni Fund": 100
+      },
+      "feeOption": "ADD_ON",
+      "amount": 100,
+      "paymentMethod": "phonepe",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "platformFee": 1,
+      "updatedAt": "2026-09-17T08:54:11.914Z",
+      "donorName": "Anonymous",
+      "totalAmount": 101,
+      "campaignId": "cmp-1787829303143",
+      "donorVeng": "Zobawk, Lunglei",
+      "isAnonymous": true,
+      "isDependent": false,
+      "id": "RPAY_TXN_1789321417975_188",
+      "txHash": "UTR736807445141",
+      "periodYear": "2026",
+      "category": "kumtluang",
+      "campaignNetReceived": 100,
       "date": "2026-09-13"
     },
     {
@@ -11572,6 +11544,39 @@
       "utr": "OM2609161408518692567402",
       "feeOption": "ADD_ON",
       "verifiedAt": "2026-09-16T08:39:14.910Z",
+      "date": "2026-09-16"
+    },
+    {
+      "platformFee": 15,
+      "periodLabel": "September 2026",
+      "feeOption": "ADD_ON",
+      "periodMonth": "September",
+      "category": "kumtluang",
+      "subCategoryBreakdown": {
+        "Thawhlawm": 100,
+        "Building Fund": 400,
+        "Khawtlang Inrelbawlna": 200,
+        "Youth & Sports": 500,
+        "YMA Chhiatni Fund": 300
+      },
+      "periodType": "monthly",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "isAnonymous": true,
+      "donorName": "Anonymous",
+      "amount": 1500,
+      "status": "completed",
+      "campaignNetReceived": 1500,
+      "paymentMethod": "phonepe",
+      "totalAmount": 1515,
+      "isDependent": false,
+      "campaignId": "cmp-1787829303143",
+      "id": "RPAY_TXN_1789571429796_534",
+      "utr": "UTR326302567845",
+      "referenceNo": "OMO2609162040326302567553",
+      "updatedAt": "2026-09-17T08:54:11.898Z",
+      "timestamp": "2026-09-16T15:10:29.796Z",
+      "periodYear": "2026",
+      "subCategory": "Chhiatni Fund",
       "date": "2026-09-16"
     },
     {
@@ -12826,7 +12831,7 @@
     "qrCreationPrice": 49,
     "defaultFeeOptionRule": "ADD_ON",
     "allowDonorFeeChoice": true,
-    "lastUpdated": "2026-10-07T12:36:03.390Z",
+    "lastUpdated": "2026-10-06T20:34:16.307Z",
     "updatedBy": "RonPay Super Admin",
     "categories": {
       "ralna": {
@@ -15423,7 +15428,7 @@
       "assignedBy": "System Root",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-07T12:36:05.348Z",
+      "lastLogin": "2026-10-06T20:34:17.584Z",
       "createdAt": "2026-01-01T00:00:00.000Z"
     },
     {
@@ -15437,7 +15442,7 @@
       "assignedBy": "superadmin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-07T08:36:05.348Z",
+      "lastLogin": "2026-10-06T16:34:17.584Z",
       "createdAt": "2026-02-15T00:00:00.000Z"
     },
     {
@@ -15451,7 +15456,7 @@
       "assignedBy": "admin@ronpay.com",
       "isActive": true,
       "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
-      "lastLogin": "2026-10-07T10:36:05.348Z",
+      "lastLogin": "2026-10-06T18:34:17.584Z",
       "createdAt": "2026-03-01T00:00:00.000Z"
     }
   ],
@@ -15657,5 +15662,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-09T06:26:09.334Z"
+  "lastUpdated": "2026-10-09T13:21:43.725Z"
 }
