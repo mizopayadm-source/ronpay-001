@@ -63,7 +63,7 @@ import ronpayDb from "./ronpay_db.json";
 
 export const INITIAL_CAMPAIGNS: Campaign[] = (ronpayDb.campaigns || []) as unknown as Campaign[];
 
-export const INITIAL_TRANSACTIONS: Transaction[] = (ronpayDb.transactions || []) as unknown as Transaction[];
+export const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 export const BCM_EBENEZER_DEFAULT_LOGO: string =
   INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-kumtluang-1')?.imageUrl || '/images/bcm_ebenezer.jpg';

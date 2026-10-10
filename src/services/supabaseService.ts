@@ -559,19 +559,30 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
   const todayStr = new Date().toISOString().slice(0, 10);
 
   try {
-    const { data: txns, error, count } = await supabase
+    let query = supabase
       .from('transactions')
-      .select('amount, status, timestamp, created_at', { count: 'exact' })
-      .neq('status', 'deleted');
+      .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
+      .neq('status', 'deleted')
+      .or('campaign_title.ilike.%shillong%,campaign_id.ilike.%bmp%,campaign_title.ilike.%bmp%');
 
-    if (!error && txns) {
-      exactCount = count !== null && count !== undefined ? Number(count) : txns.length;
+    let { data: txns, error } = await query;
+
+    if (error || !txns || txns.length === 0) {
+      const fallbackRes = await supabase
+        .from('transactions')
+        .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
+        .neq('status', 'deleted');
+      txns = fallbackRes.data;
+    }
+
+    if (txns) {
       txns.forEach((t: any) => {
         const s = String(t.status || '').toLowerCase().trim();
         const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
         const amt = Number(t.amount) || 0;
         if (isConfirmed && amt > 0) {
           totalAmt += amt;
+          exactCount += 1;
           const d = String(t.timestamp || t.created_at || '').slice(0, 10);
           if (d === todayStr) {
             todayCnt += 1;
@@ -581,20 +592,8 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
     }
   } catch {}
 
-  let poolTotalAmt = totalAmt;
-  try {
-    const { data } = await supabase
-      .from('fund_pools')
-      .select('total_amount')
-      .eq('id', poolId)
-      .maybeSingle();
-    if (data && Number(data.total_amount) > 0) {
-      poolTotalAmt = Math.max(totalAmt, Number(data.total_amount));
-    }
-  } catch {}
-
   return {
-    totalAmount: Math.max(0, Math.round(poolTotalAmt * 100) / 100),
+    totalAmount: Math.max(0, Math.round(totalAmt * 100) / 100),
     totalCount: Math.max(0, exactCount),
     todayCount: Math.max(0, todayCnt),
     lastUpdated: new Date().toISOString(),
@@ -633,53 +632,59 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
   if (!supabase) return null;
 
   let exactCount = 0;
-  try {
-    const { count, error } = await supabase
-      .from('transactions')
-      .select('*', { count: 'exact', head: true })
-      .neq('status', 'deleted');
-    if (!error && count !== null && count !== undefined) {
-      exactCount = Number(count) || 0;
-    }
-  } catch {}
-
-  const { data: txns, error } = await supabase
-    .from('transactions')
-    .select('amount, status, timestamp, created_at')
-    .neq('status', 'deleted');
-
-  if (error) {
-    console.warn('[Supabase] Recalibration failed to query transactions:', error.message);
-    return null;
-  }
-
   let totalAmt = 0;
-  let totalCnt = exactCount > 0 ? exactCount : 0;
   let todayCnt = 0;
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  (txns || []).forEach((t: any) => {
-    const amt = Number(t.amount) || 0;
-    if (amt > 0) {
-      totalAmt += amt;
-      if (exactCount === 0) {
-        totalCnt += 1;
-      }
-      const d = String(t.timestamp || t.created_at || '').slice(0, 10);
-      if (d === todayStr) {
-        todayCnt += 1;
-      }
+  try {
+    let query = supabase
+      .from('transactions')
+      .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
+      .neq('status', 'deleted')
+      .or('campaign_title.ilike.%shillong%,campaign_id.ilike.%bmp%,campaign_title.ilike.%bmp%');
+
+    let { data: txns, error } = await query;
+
+    if (error || !txns || txns.length === 0) {
+      const fallbackRes = await supabase
+        .from('transactions')
+        .select('amount, status, timestamp, created_at, campaign_title, campaign_id')
+        .neq('status', 'deleted');
+      txns = fallbackRes.data;
     }
-  });
+
+    if (txns) {
+      txns.forEach((t: any) => {
+        const s = String(t.status || '').toLowerCase().trim();
+        const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
+        const amt = Number(t.amount) || 0;
+        if (isConfirmed && amt > 0) {
+          totalAmt += amt;
+          exactCount += 1;
+          const d = String(t.timestamp || t.created_at || '').slice(0, 10);
+          if (d === todayStr) {
+            todayCnt += 1;
+          }
+        }
+      });
+    }
+  } catch {}
 
   const freshStats: PublicPoolStats = {
     totalAmount: Math.max(0, Math.round(totalAmt * 100) / 100),
-    totalCount: Math.max(totalCnt, (txns || []).length, exactCount),
+    totalCount: Math.max(0, exactCount),
     todayCount: Math.max(0, todayCnt),
     lastUpdated: new Date().toISOString(),
   };
 
   await upsertSupabaseFundPool(freshStats, poolId);
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: freshStats }));
+      window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: freshStats }));
+    }
+  } catch {}
+
   return freshStats;
 }
 
@@ -912,13 +917,8 @@ export async function syncAllLocalToSupabase(): Promise<{
       if (ok) campaignsSynced++;
     }
 
-    // 3. Sync Transactions
-    const localTxns = getStoredTransactions();
+    // 3. Sync Transactions - COMPLETELY DISABLED to prevent mock data auto-insertion
     let transactionsSynced = 0;
-    for (const t of localTxns) {
-      const ok = await insertSupabaseTransaction(t);
-      if (ok) transactionsSynced++;
-    }
 
     // 4. Sync Wallet
     const localWallet = getStoredWallet();
@@ -972,79 +972,8 @@ export async function syncPendingTransactionsToSupabase(): Promise<{
   synced: number;
   failed: number;
 }> {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return { total: 0, synced: 0, failed: 0 };
-  }
-
-  const allTxns = getStoredTransactions();
-  if (!allTxns || allTxns.length === 0) {
-    return { total: 0, synced: 0, failed: 0 };
-  }
-
-  let synced = 0;
-  let failed = 0;
-
-  // Batch in chunks of 50 in single network requests
-  const CHUNK_SIZE = 50;
-  for (let i = 0; i < allTxns.length; i += CHUNK_SIZE) {
-    const chunk = allTxns.slice(i, i + CHUNK_SIZE);
-    const rows = chunk.map(tx => ({
-      id: tx.id,
-      campaign_id: tx.campaignId || 'cmp-default',
-      campaign_title: tx.campaignTitle || 'RonPay Community Cause',
-      category: tx.category || 'ralna',
-      donor_name: tx.donorName || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
-      donor_phone: tx.donorPhone || null,
-      donor_veng: tx.donorVeng || null,
-      member_id: tx.memberId || null,
-      sub_id: tx.subId || null,
-      donor_type: tx.donorType || 'member',
-      group_name: tx.groupName || null,
-      is_anonymous: Boolean(tx.isAnonymous),
-      amount: Number(tx.amount) || 0,
-      platform_fee: Number(tx.platformFee) || 0,
-      total_amount: Number(tx.totalAmount) || Number(tx.amount) || 0,
-      payment_method: tx.paymentMethod || 'upi',
-      status: tx.status || 'completed',
-      remark: tx.remark || null,
-      period_type: tx.periodType || 'one_time',
-      period_month: tx.periodMonth || null,
-      period_year: tx.periodYear || null,
-      period_label: tx.periodLabel || null,
-      utr: tx.utr || null,
-      reference_no: tx.referenceNo || tx.utr || null,
-      timestamp: tx.timestamp || tx.createdAt || new Date().toISOString(),
-      created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      metadata: {
-        subCategoryBreakdown: tx.subCategoryBreakdown,
-        feeOption: tx.feeOption,
-        payerUPI: tx.payerUPI,
-        txHash: tx.txHash,
-      }
-    }));
-
-    try {
-      const { error } = await supabase.from('transactions').upsert(rows, { onConflict: 'id' });
-      if (!error) {
-        synced += rows.length;
-      } else {
-        failed += rows.length;
-      }
-    } catch {
-      failed += rows.length;
-    }
-  }
-
-  // Recalibrate fund pools in Supabase once after all batches
-  scheduleDebouncedPoolRecalibration();
-
-  return {
-    total: allTxns.length,
-    synced,
-    failed,
-  };
+  // Completely disabled to prevent mock data auto-insertion.
+  return { total: 0, synced: 0, failed: 0 };
 }
 
 // ---------------------------------------------------------------------------
