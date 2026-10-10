@@ -12,7 +12,12 @@ export function usePublicPoolStats(): {
   loading: boolean;
   error: string | null;
 } {
-  const [stats, setStats] = useState<PublicPoolStats>(() => getStoredPublicPoolStats());
+  const [stats, setStats] = useState<PublicPoolStats>({
+    totalAmount: 0,
+    totalCount: 0,
+    todayCount: 0,
+    lastUpdated: new Date().toISOString(),
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 

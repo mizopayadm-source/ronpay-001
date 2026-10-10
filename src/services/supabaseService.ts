@@ -554,36 +554,50 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
   if (!supabase) return null;
 
   let exactCount = 0;
+  let totalAmt = 0;
+  let todayCnt = 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   try {
-    const { count, error } = await supabase
+    const { data: txns, error, count } = await supabase
       .from('transactions')
-      .select('*', { count: 'exact', head: true })
+      .select('amount, status, timestamp, created_at', { count: 'exact' })
       .neq('status', 'deleted');
-    if (!error && count !== null && count !== undefined) {
-      exactCount = Number(count) || 0;
+
+    if (!error && txns) {
+      exactCount = count !== null && count !== undefined ? Number(count) : txns.length;
+      txns.forEach((t: any) => {
+        const s = String(t.status || '').toLowerCase().trim();
+        const isConfirmed = s === '' || s === 'completed' || s === 'paid' || s === 'verified' || s === 'success' || s === 'payment_success';
+        const amt = Number(t.amount) || 0;
+        if (isConfirmed && amt > 0) {
+          totalAmt += amt;
+          const d = String(t.timestamp || t.created_at || '').slice(0, 10);
+          if (d === todayStr) {
+            todayCnt += 1;
+          }
+        }
+      });
     }
   } catch {}
 
-  const { data, error } = await supabase
-    .from('fund_pools')
-    .select('*')
-    .eq('id', poolId)
-    .maybeSingle();
-
-  if (error || !data) {
-    return {
-      totalAmount: 0,
-      totalCount: exactCount,
-      todayCount: 0,
-      lastUpdated: new Date().toISOString(),
-    };
-  }
+  let poolTotalAmt = totalAmt;
+  try {
+    const { data } = await supabase
+      .from('fund_pools')
+      .select('total_amount')
+      .eq('id', poolId)
+      .maybeSingle();
+    if (data && Number(data.total_amount) > 0) {
+      poolTotalAmt = Math.max(totalAmt, Number(data.total_amount));
+    }
+  } catch {}
 
   return {
-    totalAmount: Math.max(0, Number(data.total_amount) || 0),
-    totalCount: Math.max(exactCount, Number(data.total_count) || 0),
-    todayCount: Math.max(0, Number(data.today_count) || 0),
-    lastUpdated: data.last_updated,
+    totalAmount: Math.max(0, Math.round(poolTotalAmt * 100) / 100),
+    totalCount: Math.max(0, exactCount),
+    todayCount: Math.max(0, todayCnt),
+    lastUpdated: new Date().toISOString(),
   };
 }
 
