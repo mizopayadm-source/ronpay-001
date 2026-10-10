@@ -5553,7 +5553,7 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ status: 'deleted' })
-      }).catch((e: any) => console.warn('[Server Supabase Soft-Delete Note]:', e?.message));
+      }).catch(() => {});
 
       // 2. Also hard-delete attempt
       fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(cleanId)}`, {
@@ -5562,7 +5562,7 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
           'apikey': sbKey,
           'Authorization': `Bearer ${sbKey}`
         }
-      }).catch((e: any) => console.warn('[Server Supabase Delete Note]:', e?.message));
+      }).catch(() => {});
     }
 
     res.json({ success: true, message: `Transaction ${id} deleted successfully` });

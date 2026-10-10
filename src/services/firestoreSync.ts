@@ -1450,45 +1450,14 @@ export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicP
   }
 }
 
+const sessionDeletedTransactions = new Set<string>();
+
 /**
  * Direct write: Save single transaction to Firebase Firestore (transactions collection)
  * and atomically increment the Distributed Counter in stats/public_pool
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
-  if (!tx || !tx.id) return;
-  const cleanTxId = String(tx.id).toLowerCase().trim();
-  const deletedIds = getDeletedTransactionIds();
-  if (deletedIds.has(cleanTxId) || sessionDeletedTransactions.has(cleanTxId) || PERMANENTLY_PURGED_TX_IDS.has(cleanTxId)) {
-    return;
-  }
-  try {
-    const cleanTx = sanitizeForFirestore({
-      ...tx,
-      updatedAt: new Date().toISOString()
-    });
-    const docRef = doc(db, 'transactions', tx.id);
-    await setDoc(docRef, cleanTx, { merge: true });
-
-    // Atomic Distributed Counter update in stats/public_pool
-    const cleanTxId = String(tx.id).toLowerCase().trim();
-    if (!hasIncrementedStats(cleanTxId)) {
-      const s = (tx.status || '').toLowerCase().trim();
-      const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
-      const amt = Number(tx.amount) || 0;
-      if (isConfirmed && amt > 0) {
-        markIncrementedStats(cleanTxId);
-        const statsRef = doc(db, 'stats', 'public_pool');
-        await setDoc(statsRef, {
-          totalAmount: increment(amt),
-          totalCount: increment(1),
-          todayCount: increment(1),
-          lastUpdated: new Date().toISOString(),
-        }, { merge: true });
-      }
-    }
-  } catch (err) {
-    logFirestoreNetworkNote('Transaction sync', err);
-  }
+  // Firebase transaction writing has been completely removed. Transactions are recorded exclusively in Supabase.
 }
 
 /**
@@ -1746,99 +1715,11 @@ export async function deleteCampaignFromFirestore(campaignId: string): Promise<v
  * Direct delete: Delete transaction from Firestore, update tombstones,
  * and atomically decrement the Distributed Counter in stats/public_pool
  */
-const sessionDeletedTransactions = new Set<string>();
 export async function deleteTransactionFromFirestore(
   transactionId: string,
   txDetails?: Transaction | { amount?: number; status?: string; timestamp?: string }
 ): Promise<void> {
-  if (!transactionId) return;
-  const cleanId = String(transactionId).trim();
-  const idKey = cleanId.toLowerCase();
-
-  // 1. Resolve transaction details if not provided
-  let txToAnalyze = txDetails;
-  if (!txToAnalyze) {
-    const local = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
-    txToAnalyze = local.find(t => String(t.id).toLowerCase().trim() === idKey);
-  }
-
-  // If still not found, try reading from Firestore doc directly before delete
-  if (!txToAnalyze) {
-    try {
-      const snap = await getDoc(doc(db, 'transactions', cleanId));
-      if (snap.exists()) {
-        txToAnalyze = snap.data() as Transaction;
-      }
-    } catch {}
-  }
-
-  // 2. Atomically decrement stats/public_pool counter if confirmed
-  if (txToAnalyze) {
-    const s = (txToAnalyze.status || '').toLowerCase().trim();
-    const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
-    const amt = Number(txToAnalyze.amount) || 0;
-    if (isConfirmed && amt > 0) {
-      const txDate = (txToAnalyze.timestamp || (txToAnalyze as any).createdAt || (txToAnalyze as any).date || '').slice(0, 10);
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const isToday = txDate === todayStr;
-
-      try {
-        const statsRef = doc(db, 'stats', 'public_pool');
-        await setDoc(statsRef, {
-          totalAmount: increment(-amt),
-          totalCount: increment(-1),
-          ...(isToday ? { todayCount: increment(-1) } : {}),
-          lastUpdated: new Date().toISOString(),
-        }, { merge: true });
-
-        // Update local stats immediately
-        const cur = getStoredPublicPoolStats();
-        const nextStats: PublicPoolStats = {
-          ...cur,
-          totalAmount: Math.max(0, Math.round(((cur.totalAmount || 0) - amt) * 100) / 100),
-          totalCount: Math.max(0, (cur.totalCount || 0) - 1),
-          todayCount: isToday ? Math.max(0, (cur.todayCount || 0) - 1) : cur.todayCount,
-          lastUpdated: new Date().toISOString(),
-        };
-        setStoredPublicPoolStats(nextStats);
-        broadcast('onStatsUpdate', nextStats);
-        try {
-          window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: nextStats }));
-          window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: nextStats }));
-        } catch {}
-        // Recalibrate authoritative stats to guarantee exact sync and prevent negative drift
-        recalibratePublicPoolStatsFromFirestore().catch(() => {});
-      } catch (err) {
-        logFirestoreNetworkNote('Decrement public_pool stats', err);
-      }
-    }
-  }
-
-  // 3. Delete document from Firestore (both exact ID and lowercase variant)
-  sessionDeletedTransactions.add(idKey);
-  try {
-    const docRef = doc(db, 'transactions', cleanId);
-    await deleteDoc(docRef);
-    if (cleanId !== cleanId.toLowerCase()) {
-      await deleteDoc(doc(db, 'transactions', cleanId.toLowerCase())).catch(() => {});
-    }
-    if (cleanId !== cleanId.toUpperCase()) {
-      await deleteDoc(doc(db, 'transactions', cleanId.toUpperCase())).catch(() => {});
-    }
-  } catch (err) {
-    logFirestoreNetworkNote('Delete transaction', err);
-  }
-
-  // 4. Record in system_metadata tombstones
-  try {
-    const tombRef = doc(db, 'system_metadata', 'tombstones');
-    await setDoc(tombRef, {
-      deleted_transactions: arrayUnion(cleanId, cleanId.toLowerCase()),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (err) {
-    logFirestoreNetworkNote('Set deleted_transactions tombstone', err);
-  }
+  // Firebase transaction deletion has been completely removed.
 }
 
 /**

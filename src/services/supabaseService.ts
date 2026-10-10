@@ -66,7 +66,7 @@ export async function fetchSupabaseUsers(): Promise<CreatorProfile[]> {
     logoUrl: row.logo_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    ...(row.metadata || {})
+    ...(typeof row.metadata === 'object' && row.metadata !== null ? row.metadata : {})
   }));
 }
 
@@ -288,9 +288,16 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
     }
   };
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('transactions')
-    .upsert(row, { onConflict: 'id' });
+    .insert(row);
+
+  if (error) {
+    const res = await supabase
+      .from('transactions')
+      .upsert(row, { onConflict: 'id' });
+    error = res.error;
+  }
 
   if (error) {
     console.error('[Supabase] Error inserting transaction:', error.message);
@@ -316,8 +323,8 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
     }
   } catch {}
 
-  // Recalibrate fund pool with safe debouncing
-  scheduleDebouncedPoolRecalibration();
+  // Recalibrate fund pool immediately
+  await recalibrateSupabaseFundPool('public_pool');
   return true;
 }
 
@@ -344,7 +351,7 @@ export async function updateSupabaseTransaction(tx: Partial<Transaction> & { id:
     return false;
   }
 
-  scheduleDebouncedPoolRecalibration();
+  await recalibrateSupabaseFundPool('public_pool');
   return true;
 }
 
@@ -357,18 +364,13 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
   const upper = raw.toUpperCase();
   const matchFilter = `id.eq.${raw},id.eq.${lower},id.eq.${upper},id.ilike.${raw}`;
 
-  // 1. Soft-delete in Supabase by setting status='deleted'
-  // This is guaranteed to succeed with RLS UPDATE policy and triggers Supabase Realtime broadcast immediately
   try {
     await supabase
       .from('transactions')
       .update({ status: 'deleted', updated_at: new Date().toISOString() })
       .or(matchFilter);
-  } catch (err: any) {
-    console.warn('[Supabase] Soft-delete note:', err?.message);
-  }
+  } catch {}
 
-  // 2. Also attempt hard delete in case DELETE policy is permitted
   try {
     await supabase
       .from('transactions')
@@ -376,7 +378,7 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
       .or(matchFilter);
   } catch {}
 
-  scheduleDebouncedPoolRecalibration();
+  await recalibrateSupabaseFundPool('public_pool');
   return true;
 }
 
@@ -394,17 +396,13 @@ export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise
   });
   const idArray = Array.from(allVariants);
 
-  // 1. Soft-delete batch
   try {
     await supabase
       .from('transactions')
       .update({ status: 'deleted', updated_at: new Date().toISOString() })
       .in('id', idArray);
-  } catch (err: any) {
-    console.warn('[Supabase] Batch soft-delete note:', err?.message);
-  }
+  } catch {}
 
-  // 2. Hard-delete attempt
   try {
     await supabase
       .from('transactions')
@@ -412,7 +410,7 @@ export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise
       .in('id', idArray);
   } catch {}
 
-  scheduleDebouncedPoolRecalibration();
+  await recalibrateSupabaseFundPool('public_pool');
   return true;
 }
 
@@ -555,6 +553,17 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
   const supabase = getSupabase();
   if (!supabase) return null;
 
+  let exactCount = 0;
+  try {
+    const { count, error } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact', head: true })
+      .neq('status', 'deleted');
+    if (!error && count !== null && count !== undefined) {
+      exactCount = Number(count) || 0;
+    }
+  } catch {}
+
   const { data, error } = await supabase
     .from('fund_pools')
     .select('*')
@@ -562,12 +571,17 @@ export async function fetchSupabaseFundPool(poolId: string = 'public_pool'): Pro
     .maybeSingle();
 
   if (error || !data) {
-    return null;
+    return {
+      totalAmount: 0,
+      totalCount: exactCount,
+      todayCount: 0,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 
   return {
     totalAmount: Math.max(0, Number(data.total_amount) || 0),
-    totalCount: Math.max(0, Number(data.total_count) || 0),
+    totalCount: Math.max(exactCount, Number(data.total_count) || 0),
     todayCount: Math.max(0, Number(data.today_count) || 0),
     lastUpdated: data.last_updated,
   };
@@ -604,10 +618,21 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
   const supabase = getSupabase();
   if (!supabase) return null;
 
+  let exactCount = 0;
+  try {
+    const { count, error } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact', head: true })
+      .neq('status', 'deleted');
+    if (!error && count !== null && count !== undefined) {
+      exactCount = Number(count) || 0;
+    }
+  } catch {}
+
   const { data: txns, error } = await supabase
     .from('transactions')
     .select('amount, status, timestamp, created_at')
-    .in('status', ['completed', 'SUCCESS', 'COMPLETED', 'paid', 'verified']);
+    .neq('status', 'deleted');
 
   if (error) {
     console.warn('[Supabase] Recalibration failed to query transactions:', error.message);
@@ -615,7 +640,7 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
   }
 
   let totalAmt = 0;
-  let totalCnt = 0;
+  let totalCnt = exactCount > 0 ? exactCount : 0;
   let todayCnt = 0;
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -623,7 +648,9 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
     const amt = Number(t.amount) || 0;
     if (amt > 0) {
       totalAmt += amt;
-      totalCnt += 1;
+      if (exactCount === 0) {
+        totalCnt += 1;
+      }
       const d = String(t.timestamp || t.created_at || '').slice(0, 10);
       if (d === todayStr) {
         todayCnt += 1;
@@ -633,7 +660,7 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
 
   const freshStats: PublicPoolStats = {
     totalAmount: Math.max(0, Math.round(totalAmt * 100) / 100),
-    totalCount: Math.max(0, totalCnt),
+    totalCount: Math.max(totalCnt, (txns || []).length, exactCount),
     todayCount: Math.max(0, todayCnt),
     lastUpdated: new Date().toISOString(),
   };
