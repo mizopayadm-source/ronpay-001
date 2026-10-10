@@ -49,16 +49,8 @@ import {
   ensureCampaignImagesOptimizedAndSynced,
 } from './utils/storage';
 import {
-  initFirestoreRealtimeSync,
-  stopAllFirestoreListeners,
-  pushAllLocalDataToFirestore,
-  deleteCampaignFromFirestore,
-  deleteTransactionFromFirestore,
-  syncCampaignToFirestore,
-  syncCreatorToFirestore,
   syncPricingConfigToFirestore,
   syncAnnouncementToFirestore,
-  forceRefreshFirestore,
 } from './services/firestoreSync';
 import {
   subscribeCrossTabSync,
@@ -112,7 +104,13 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
-import { insertSupabaseTransaction, syncPendingTransactionsToSupabase } from './services/supabaseService';
+import { 
+  insertSupabaseTransaction, 
+  syncPendingTransactionsToSupabase, 
+  initSupabaseRealtimeSync, 
+  loadSupabaseInitialState,
+  upsertSupabaseUser
+} from './services/supabaseService';
 import { 
   getUrlRoute, 
   updateBrowserUrl, 
@@ -286,19 +284,25 @@ export default function App() {
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
 
-  // Cache Invalidation & Automatic Server Sync on Auth / Session Boot:
-  // Cleanly purge stale in-memory session guards and ensure fresh initial state across all tabs
+  // Cache Invalidation & Automatic Supabase Primary Store Load on Auth / Session Boot
   useEffect(() => {
     invalidateCacheOnAuthOrBoot('session_boot');
     reloadLocalData();
-    syncAllWithServer(true).then((res) => {
-      if (res?.transactions && res.transactions.length > 0) {
-        setTransactions(res.transactions);
+    // Load absolute ground truth state from Supabase Primary Store
+    loadSupabaseInitialState().then((state) => {
+      if (state.transactions && state.transactions.length > 0) {
+        setTransactions(state.transactions);
       }
-      if (res?.campaigns && res.campaigns.length > 0) {
-        setCampaigns(res.campaigns);
+      if (state.campaigns && state.campaigns.length > 0) {
+        campaignsRef.current = state.campaigns;
+        setCampaigns(state.campaigns);
       }
-      reloadLocalData();
+      if (state.members && state.members.length > 0) {
+        setMembersState(state.members);
+      }
+      if (state.creators && state.creators.length > 0) {
+        setCreators(state.creators);
+      }
     }).catch(() => {});
   }, [reloadLocalData]);
 
@@ -354,12 +358,18 @@ export default function App() {
     }
   }, [transactions]);
 
-  // Real-time Firestore Sync initialization
+  // Real-time Supabase Master WebSocket Synchronization via supabase.channel
   useEffect(() => {
-    const unsub = initFirestoreRealtimeSync({
+    const unsub = initSupabaseRealtimeSync({
       onCampaignsUpdate: (updatedCampaigns) => {
         if (updatedCampaigns && updatedCampaigns.length > 0) {
+          campaignsRef.current = updatedCampaigns;
           setCampaigns(updatedCampaigns);
+          setSelectedCampaign(prev => {
+            if (!prev) return null;
+            const matched = updatedCampaigns.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
+            return matched ? { ...prev, ...matched } : prev;
+          });
         }
       },
       onTransactionsUpdate: (updatedTransactions) => {
@@ -370,10 +380,6 @@ export default function App() {
       onMembersUpdate: (updatedMembers) => {
         if (Array.isArray(updatedMembers)) {
           setMembersState(updatedMembers);
-          try {
-            window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: updatedMembers }));
-            window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: updatedMembers }));
-          } catch {}
         }
       },
       onCreatorsUpdate: (updatedCreators) => {
@@ -388,36 +394,25 @@ export default function App() {
           }
         }
       },
-      onAnnouncementUpdate: (updatedAnn) => {
-        if (updatedAnn) {
-          setAnnouncement(updatedAnn);
+      onStatsUpdate: (updatedStats) => {
+        if (updatedStats) {
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: updatedStats }));
+            window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: updatedStats }));
+          } catch {}
         }
       },
-      onPricingConfigUpdate: (updatedPricing) => {
-        if (updatedPricing) {
-          setPricingConfig(updatedPricing);
+      onWalletUpdate: (updatedWallet) => {
+        if (updatedWallet) {
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_wallet_updated', { detail: updatedWallet }));
+          } catch {}
         }
-      },
-      onAuditLogsUpdate: (updatedLogs) => {
-        if (updatedLogs && updatedLogs.length > 0) {
-          setAuditLogs(updatedLogs);
-        }
-      },
-      onExpensesUpdate: (updatedExpenses) => {
-        try {
-          window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: updatedExpenses }));
-        } catch {}
       },
     });
 
-    const handleBeforeUnload = () => {
-      stopAllFirestoreListeners();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      unsub();
+      if (typeof unsub === 'function') unsub();
     };
   }, []);
 
@@ -618,19 +613,36 @@ export default function App() {
     };
   }, [reloadLocalData]);
 
-  // Force cloud refresh directly from Authoritative Server Database
+  // Force cloud refresh directly from Authoritative Supabase Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
-      const syncResult = await syncAllWithServer(true);
-      if (syncResult?.transactions && syncResult.transactions.length > 0) {
-        setTransactions(syncResult.transactions);
+      const state = await loadSupabaseInitialState();
+      if (state.transactions && state.transactions.length > 0) {
+        setTransactions(state.transactions);
       }
-      if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
-        setCampaigns(syncResult.campaigns);
+      if (state.campaigns && state.campaigns.length > 0) {
+        campaignsRef.current = state.campaigns;
+        setCampaigns(state.campaigns);
+      }
+      if (state.members && state.members.length > 0) {
+        setMembersState(state.members);
+      }
+      if (state.creators && state.creators.length > 0) {
+        setCreators(state.creators);
       }
       reloadLocalData();
     } catch (e) {
       console.warn('Cloud refresh note:', e);
+      try {
+        const syncResult = await syncAllWithServer(true);
+        if (syncResult?.transactions && syncResult.transactions.length > 0) {
+          setTransactions(syncResult.transactions);
+        }
+        if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
+          setCampaigns(syncResult.campaigns);
+        }
+        reloadLocalData();
+      } catch {}
     }
   }, [reloadLocalData]);
 
@@ -1361,7 +1373,7 @@ export default function App() {
     // 2. Update active creator profile
     setCreatorProfile(creator);
     saveStoredCreatorProfile(creator);
-    syncCreatorToFirestore(creator).catch(() => {});
+    upsertSupabaseUser(creator).catch(() => {});
 
     // 3. Update existing campaigns created by this creator so name & org changes sync instantly to Preview and Mobile views
     const currentCampaigns = getStoredCampaigns();
@@ -1549,8 +1561,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
-      {/* Animated Zero-White-Screen Splash Overlay */}
+    <ErrorBoundary name="RonPayRoot">
+      <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
+        {/* Animated Zero-White-Screen Splash Overlay */}
       {showSplash && (
         <SplashScreen onFinish={handleFinishSplash} minDurationMs={400} />
       )}
@@ -2280,6 +2293,7 @@ export default function App() {
         />
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 

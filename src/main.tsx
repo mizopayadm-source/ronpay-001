@@ -8,6 +8,33 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Safe alert safeguard for sandboxed iframe environments
 if (typeof window !== 'undefined') {
+  // Global Crash Prevention: Catch unhandled promise rejections and errors
+  window.addEventListener('unhandledrejection', (ev) => {
+    console.warn('[RonPay Crash Guard] Caught unhandled rejection:', ev.reason);
+    // Prevent unhandled promise rejection from crashing preview
+    if (ev && typeof ev.preventDefault === 'function') {
+      ev.preventDefault();
+    }
+  });
+
+  window.addEventListener('error', (ev) => {
+    console.warn('[RonPay Crash Guard] Caught runtime error:', ev.message);
+  });
+
+  // Automatically dismiss pre-mount splash screen once JS loads
+  try {
+    const splash = document.getElementById('instant-splash');
+    if (splash) {
+      splash.style.transition = 'opacity 0.25s ease';
+      splash.style.opacity = '0';
+      setTimeout(() => {
+        try {
+          if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+        } catch {}
+      }, 250);
+    }
+  } catch {}
+
   const originalAlert = window.alert;
   window.alert = function (msg?: any) {
     try {

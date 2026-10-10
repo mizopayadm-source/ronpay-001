@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { 
   initializeFirestore, 
   getFirestore, 
@@ -17,6 +18,9 @@ export const firebaseConfig = {
 };
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Firebase Authentication (Phone OTP / Login) is retained and exported
+export const auth = getAuth(app);
 
 // Suppress benign connection retry logs and offline warnings
 try {

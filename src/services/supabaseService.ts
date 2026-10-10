@@ -1,7 +1,16 @@
 import { getSupabase, isSupabaseConfigured, getSupabaseUrl } from '../lib/supabase';
 export { isSupabaseConfigured } from '../lib/supabase';
 import { Transaction, CreatorProfile, RonPayWallet, WalletTransaction, PublicPoolStats, Campaign, MemberRecord } from '../types';
-import { getStoredTransactions, getStoredCreatorsList, getStoredWallet, getStoredCampaigns, getMembers } from '../utils/storage';
+import { 
+  getStoredTransactions, 
+  saveStoredTransactions, 
+  getStoredCreatorsList, 
+  getStoredWallet, 
+  getStoredCampaigns, 
+  saveStoredCampaigns, 
+  getMembers, 
+  saveMembers 
+} from '../utils/storage';
 import { getStoredPublicPoolStats } from './firestoreSync';
 
 export interface SupabaseTableStatus {
@@ -674,6 +683,38 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
   return true;
 }
 
+export async function deleteSupabaseCampaign(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !id) return false;
+
+  const { error } = await supabase
+    .from('campaigns')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.warn('[Supabase] Error deleting campaign:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteMultipleSupabaseCampaigns(ids: string[]): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !ids || ids.length === 0) return false;
+
+  const { error } = await supabase
+    .from('campaigns')
+    .delete()
+    .in('id', ids);
+
+  if (error) {
+    console.warn('[Supabase] Error deleting multiple campaigns:', error.message);
+    return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // 6. HEALTH CHECK & TABLES VERIFICATION
 // ---------------------------------------------------------------------------
@@ -1069,4 +1110,256 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
   }
 
   return { total: allMems.length, synced: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// 8. SUPABASE REALTIME SYNCHRONIZATION (WEBSOCKETS via supabase.channel)
+// ---------------------------------------------------------------------------
+
+export interface SupabaseRealtimeCallbacks {
+  onTransactionsUpdate?: (txns: Transaction[]) => void;
+  onCampaignsUpdate?: (camps: Campaign[]) => void;
+  onMembersUpdate?: (members: MemberRecord[]) => void;
+  onStatsUpdate?: (stats: PublicPoolStats) => void;
+  onCreatorsUpdate?: (creators: CreatorProfile[]) => void;
+  onWalletUpdate?: (wallet: RonPayWallet) => void;
+}
+
+/**
+ * Loads the canonical initial state strictly from Supabase (Absolute Primary Store)
+ */
+export async function loadSupabaseInitialState(): Promise<{
+  transactions: Transaction[];
+  campaigns: Campaign[];
+  members: MemberRecord[];
+  creators: CreatorProfile[];
+  fundPool: PublicPoolStats | null;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {
+      transactions: getStoredTransactions(),
+      campaigns: getStoredCampaigns(),
+      members: getMembers(),
+      creators: getStoredCreatorsList(),
+      fundPool: null,
+    };
+  }
+
+  try {
+    const [txns, camps, mems, users, pool] = await Promise.all([
+      fetchSupabaseTransactions(),
+      fetchSupabaseCampaigns(),
+      fetchSupabaseMembers(),
+      fetchSupabaseUsers(),
+      fetchSupabaseFundPool(),
+    ]);
+
+    // Update secondary cache safely
+    if (txns && txns.length > 0) saveStoredTransactions(txns, true);
+    if (camps && camps.length > 0) saveStoredCampaigns(camps, true);
+    if (mems && mems.length > 0) saveMembers(mems, true);
+    if (pool) {
+      try {
+        localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(pool));
+      } catch {}
+    }
+
+    return {
+      transactions: txns && txns.length > 0 ? txns : getStoredTransactions(),
+      campaigns: camps && camps.length > 0 ? camps : getStoredCampaigns(),
+      members: mems && mems.length > 0 ? mems : getMembers(),
+      creators: users && users.length > 0 ? users : getStoredCreatorsList(),
+      fundPool: pool,
+    };
+  } catch (err) {
+    console.warn('[Supabase] Initial state load fallback note:', err);
+    return {
+      transactions: getStoredTransactions(),
+      campaigns: getStoredCampaigns(),
+      members: getMembers(),
+      creators: getStoredCreatorsList(),
+      fundPool: null,
+    };
+  }
+}
+
+/**
+ * Subscribes to Supabase Realtime Channels (PostgreSQL changes) for instantaneous,
+ * two-way synchronization across Mobile Apps, Browsers, and Web without page refresh
+ */
+export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): () => void {
+  const supabase = getSupabase();
+  if (!supabase || !isSupabaseConfigured()) {
+    console.info('[Supabase Realtime] Supabase credentials not ready yet; realtime standby.');
+    return () => {};
+  }
+
+  console.info('[Supabase Realtime] Starting Master Realtime Channel on schema: public');
+
+  let txDebounce: any = null;
+  let campDebounce: any = null;
+  let memDebounce: any = null;
+  let poolDebounce: any = null;
+  let usersDebounce: any = null;
+  let walletDebounce: any = null;
+
+  const refreshTxns = () => {
+    if (txDebounce) clearTimeout(txDebounce);
+    txDebounce = setTimeout(async () => {
+      try {
+        const fresh = await fetchSupabaseTransactions();
+        if (fresh && fresh.length > 0) {
+          saveStoredTransactions(fresh, true);
+          callbacks.onTransactionsUpdate?.(fresh);
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: fresh }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Tx refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const refreshCamps = () => {
+    if (campDebounce) clearTimeout(campDebounce);
+    campDebounce = setTimeout(async () => {
+      try {
+        const fresh = await fetchSupabaseCampaigns();
+        if (fresh && fresh.length > 0) {
+          saveStoredCampaigns(fresh, true);
+          callbacks.onCampaignsUpdate?.(fresh);
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: fresh }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Camp refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const refreshMems = () => {
+    if (memDebounce) clearTimeout(memDebounce);
+    memDebounce = setTimeout(async () => {
+      try {
+        const fresh = await fetchSupabaseMembers();
+        if (fresh && fresh.length > 0) {
+          saveMembers(fresh, true);
+          callbacks.onMembersUpdate?.(fresh);
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: fresh }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Member refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const refreshPool = () => {
+    if (poolDebounce) clearTimeout(poolDebounce);
+    poolDebounce = setTimeout(async () => {
+      try {
+        const fresh = await fetchSupabaseFundPool();
+        if (fresh) {
+          callbacks.onStatsUpdate?.(fresh);
+          try {
+            localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(fresh));
+            window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: fresh }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Pool refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const refreshUsers = () => {
+    if (usersDebounce) clearTimeout(usersDebounce);
+    usersDebounce = setTimeout(async () => {
+      try {
+        const fresh = await fetchSupabaseUsers();
+        if (fresh && fresh.length > 0) {
+          callbacks.onCreatorsUpdate?.(fresh);
+          try {
+            window.dispatchEvent(new CustomEvent('ronpay_creators_updated', { detail: fresh }));
+            window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: fresh[0] }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Users refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const refreshWallet = () => {
+    if (walletDebounce) clearTimeout(walletDebounce);
+    walletDebounce = setTimeout(async () => {
+      try {
+        const localWallet = getStoredWallet();
+        const fresh = await fetchSupabaseWallet(localWallet.walletId);
+        if (fresh) {
+          callbacks.onWalletUpdate?.(fresh);
+          try {
+            localStorage.setItem('ronpay_wallet_v1', JSON.stringify(fresh));
+            window.dispatchEvent(new CustomEvent('ronpay_wallet_updated', { detail: fresh }));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[Supabase Realtime] Wallet refresh note:', e);
+      }
+    }, 350);
+  };
+
+  const channel = supabase.channel('ronpay-realtime-master')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+      console.info('[Supabase Realtime] Transactions event:', payload.eventType);
+      refreshTxns();
+      refreshPool();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns' }, (payload) => {
+      console.info('[Supabase Realtime] Campaigns event:', payload.eventType);
+      refreshCamps();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
+      console.info('[Supabase Realtime] Members event:', payload.eventType);
+      refreshMems();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_pools' }, (payload) => {
+      console.info('[Supabase Realtime] Fund pools event:', payload.eventType);
+      refreshPool();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, (payload) => {
+      console.info('[Supabase Realtime] Wallets event:', payload.eventType);
+      refreshWallet();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_transactions' }, (payload) => {
+      console.info('[Supabase Realtime] Wallet transactions event:', payload.eventType);
+      refreshWallet();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+      console.info('[Supabase Realtime] Users event:', payload.eventType);
+      refreshUsers();
+    })
+    .subscribe((status) => {
+      console.info('[Supabase Realtime] Channel status:', status);
+    });
+
+  return () => {
+    if (txDebounce) clearTimeout(txDebounce);
+    if (campDebounce) clearTimeout(campDebounce);
+    if (memDebounce) clearTimeout(memDebounce);
+    if (poolDebounce) clearTimeout(poolDebounce);
+    if (usersDebounce) clearTimeout(usersDebounce);
+    if (walletDebounce) clearTimeout(walletDebounce);
+    try {
+      supabase.removeChannel(channel);
+    } catch {}
+  };
 }

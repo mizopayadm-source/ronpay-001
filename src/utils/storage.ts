@@ -718,9 +718,11 @@ export const saveCampaign = (camp: Campaign): void => {
     updated = [stamped, ...current];
   }
   saveStoredCampaigns(updated);
-  syncCampaignToFirestore(stamped).catch((err) => {
-    console.warn('[Firestore] Campaign sync note:', err);
-  });
+  import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
+    upsertSupabaseCampaign(stamped).catch((err) => {
+      console.warn('[Supabase] Live campaign direct insert note:', err);
+    });
+  }).catch(() => {});
   safeApiFetch('/api/campaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -850,7 +852,9 @@ export const deleteStoredCampaign = (
     saveStoredCampaigns(updated);
     const updatedCamp = updated.find(c => String(c.id).toLowerCase().trim() === cleanId);
     if (updatedCamp) {
-      syncCampaignToFirestore(updatedCamp).catch(() => {});
+      import('../services/supabaseService').then(({ upsertSupabaseCampaign }) => {
+        upsertSupabaseCampaign(updatedCamp).catch(() => {});
+      }).catch(() => {});
     }
     recordAuditLog(
       'Campaign Cancelled & Archived',
@@ -862,7 +866,9 @@ export const deleteStoredCampaign = (
     // Zero collections or Admin force hard delete
     const updated = current.filter(c => String(c.id).toLowerCase().trim() !== cleanId);
     saveStoredCampaigns(updated);
-    deleteCampaignFromFirestore(campaignId).catch(() => {});
+    import('../services/supabaseService').then(({ deleteSupabaseCampaign }) => {
+      deleteSupabaseCampaign(cleanId).catch(() => {});
+    }).catch(() => {});
     recordAuditLog(
       'Campaign Deleted',
       `Campaign "${target.title}" (${target.id}) was deleted permanently. Reason: ${reason || 'Admin deleted'}. Performed by: ${deletedBy || 'Admin'}`,
@@ -1397,7 +1403,9 @@ export const saveStoredCreatorProfile = (profile: CreatorProfile, skipServerPush
 
     if (!skipServerPush) {
       if (profile && profile.phone) {
-        syncCreatorToFirestore(profile).catch(() => {});
+        import('../services/supabaseService').then(({ upsertSupabaseUser }) => {
+          upsertSupabaseUser(profile).catch(() => {});
+        }).catch(() => {});
       }
 
       safeApiFetch('/api/data/sync', {
@@ -3183,8 +3191,7 @@ export const saveTransaction = (tx: Transaction): void => {
     window.dispatchEvent(new CustomEvent('ronpay_user_paid_updated', { detail: getStoredUserPaidTxIds() }));
   }
 
-  // Push to server & mark synced
-  syncTransactionToFirestore(tx).catch(() => {});
+  // Push to Supabase as Absolute Primary Store & mark synced
   import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
     insertSupabaseTransaction(tx).catch((err) => {
       console.warn('[Supabase] Live transaction direct insert note:', err);
@@ -3293,6 +3300,10 @@ export const saveStoredWallet = (wallet: RonPayWallet) => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay_wallet_updated', { detail: wallet }));
     }
+    // Sync to Supabase as primary store
+    import('../services/supabaseService').then(({ upsertSupabaseWallet }) => {
+      upsertSupabaseWallet(wallet).catch(() => {});
+    }).catch(() => {});
   } catch (e) {
     console.error('Failed to save wallet to storage', e);
   }
@@ -3429,12 +3440,11 @@ export const deleteStoredTransaction = (transactionId: string): void => {
     }
   } catch (e) {}
 
-  // Delete from Firestore with known tx details to atomically decrement stats/public_pool
-  deleteTransactionFromFirestore(cleanId, targetTx).catch(() => {});
-
-  // Delete from Supabase
-  import('../services/supabaseService').then(({ deleteSupabaseTransaction }) => {
-    deleteSupabaseTransaction(cleanId).catch(() => {});
+  // Delete from Supabase Primary Store & recalibrate fund pool
+  import('../services/supabaseService').then(({ deleteSupabaseTransaction, recalibrateSupabaseFundPool }) => {
+    deleteSupabaseTransaction(cleanId).then(() => {
+      recalibrateSupabaseFundPool().catch(() => {});
+    }).catch(() => {});
   }).catch(() => {});
 
   // Delete from Server immediately
@@ -3468,14 +3478,11 @@ export const deleteMultipleTransactions = (transactionIds: string[]): void => {
     }
   } catch (e) {}
 
-  // Atomic batch delete & distributed counter decrement in stats/public_pool
-  deleteMultipleTransactionsFromFirestore(cleanIds, targetTxs).catch((err) => {
-    console.error('Failed to delete transactions from Firestore:', err);
-  });
-
-  // Delete from Supabase
-  import('../services/supabaseService').then(({ deleteMultipleSupabaseTransactions }) => {
-    deleteMultipleSupabaseTransactions(cleanIds).catch(() => {});
+  // Delete from Supabase Primary Store & recalibrate fund pool
+  import('../services/supabaseService').then(({ deleteMultipleSupabaseTransactions, recalibrateSupabaseFundPool }) => {
+    deleteMultipleSupabaseTransactions(cleanIds).then(() => {
+      recalibrateSupabaseFundPool().catch(() => {});
+    }).catch(() => {});
   }).catch(() => {});
 
   safeApiFetch('/api/transactions/delete-batch', {

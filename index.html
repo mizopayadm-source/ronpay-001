@@ -202,6 +202,21 @@
         </div>
       </div>
     </div>
+    <script>
+      // Instant Splash Safety Watchdog: Ensure splash is never stuck even if scripts fail
+      setTimeout(function() {
+        try {
+          var sp = document.getElementById('instant-splash');
+          if (sp) {
+            sp.style.transition = 'opacity 0.35s ease';
+            sp.style.opacity = '0';
+            setTimeout(function() {
+              if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
+            }, 350);
+          }
+        } catch(e) {}
+      }, 2500);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
