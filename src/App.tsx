@@ -377,6 +377,18 @@ export default function App() {
           setTransactions(updatedTransactions);
         }
       },
+      onTransactionDeleted: (deletedTxId) => {
+        if (!deletedTxId) return;
+        const cleanDelId = String(deletedTxId).toLowerCase().trim();
+        knownTxIdsRef.current.add(cleanDelId);
+        setTransactions(prev => {
+          const filtered = prev.filter(t => String(t.id).toLowerCase().trim() !== cleanDelId);
+          try {
+            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(filtered));
+          } catch {}
+          return filtered;
+        });
+      },
       onMembersUpdate: (updatedMembers) => {
         if (Array.isArray(updatedMembers)) {
           setMembersState(updatedMembers);

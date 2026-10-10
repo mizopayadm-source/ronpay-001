@@ -4826,6 +4826,32 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
         ...Array.from(delSet)
       ]));
       hasChanges = true;
+
+      // Forward deletions to Supabase as soft-delete and hard-delete
+      const sbConfig = (db as any).supabaseConfig || {};
+      const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+      const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+      if (sbUrl && sbKey) {
+        deletedTransactionIds.forEach((dId: any) => {
+          const clean = String(dId).trim();
+          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(clean)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: 'deleted' })
+          }).catch(() => {});
+          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(clean)}`, {
+            method: 'DELETE',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`
+            }
+          }).catch(() => {});
+        });
+      }
     }
 
     if (Array.isArray(deletedMemberIds) && deletedMemberIds.length > 0) {
@@ -5518,7 +5544,19 @@ app.delete('/api/transactions/:id', (req: Request, res: Response) => {
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
     if (sbUrl && sbKey) {
-      fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(cleanId)}`, {
+      // 1. Soft-delete via PATCH status='deleted'
+      fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(cleanId)}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'deleted' })
+      }).catch((e: any) => console.warn('[Server Supabase Soft-Delete Note]:', e?.message));
+
+      // 2. Also hard-delete attempt
+      fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(cleanId)}`, {
         method: 'DELETE',
         headers: {
           'apikey': sbKey,
@@ -5549,14 +5587,24 @@ app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
       const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
       const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
       if (sbUrl && sbKey) {
-        const inFilter = `(${cleanIds.map(x => `"${encodeURIComponent(x)}"`).join(',')})`;
-        fetch(`${sbUrl}/rest/v1/transactions?id=in.${inFilter}`, {
-          method: 'DELETE',
-          headers: {
-            'apikey': sbKey,
-            'Authorization': `Bearer ${sbKey}`
-          }
-        }).catch((e: any) => console.warn('[Server Supabase Batch Delete Note]:', e?.message));
+        cleanIds.forEach((cId: string) => {
+          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(cId)}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: 'deleted' })
+          }).catch(() => {});
+          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(cId)}`, {
+            method: 'DELETE',
+            headers: {
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`
+            }
+          }).catch(() => {});
+        });
       }
 
       return res.json({ success: true, deletedCount: ids.length });

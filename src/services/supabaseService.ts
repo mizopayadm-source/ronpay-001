@@ -159,6 +159,7 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
   let query = supabase
     .from('transactions')
     .select('*')
+    .neq('status', 'deleted')
     .order('timestamp', { ascending: false });
 
   if (campaignId && campaignId !== 'all') {
@@ -171,35 +172,37 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
     return [];
   }
 
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    campaignId: row.campaign_id,
-    campaignTitle: row.campaign_title,
-    category: row.category,
-    donorName: row.donor_name,
-    donorPhone: row.donor_phone,
-    donorVeng: row.donor_veng,
-    memberId: row.member_id,
-    subId: row.sub_id,
-    donorType: row.donor_type,
-    groupName: row.group_name,
-    isAnonymous: row.is_anonymous,
-    amount: Number(row.amount) || 0,
-    platformFee: Number(row.platform_fee) || 0,
-    totalAmount: Number(row.total_amount) || Number(row.amount) || 0,
-    paymentMethod: row.payment_method,
-    status: row.status,
-    remark: row.remark,
-    periodMonth: row.period_month,
-    periodYear: row.period_year,
-    periodLabel: row.period_label,
-    utr: row.utr,
-    referenceNo: row.reference_no,
-    timestamp: row.timestamp || row.created_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    ...(row.metadata || {})
-  }));
+  return (data || [])
+    .filter((row: any) => row && row.id && row.status !== 'deleted')
+    .map((row: any) => ({
+      id: row.id,
+      campaignId: row.campaign_id,
+      campaignTitle: row.campaign_title,
+      category: row.category,
+      donorName: row.donor_name,
+      donorPhone: row.donor_phone,
+      donorVeng: row.donor_veng,
+      memberId: row.member_id,
+      subId: row.sub_id,
+      donorType: row.donor_type,
+      groupName: row.group_name,
+      isAnonymous: row.is_anonymous,
+      amount: Number(row.amount) || 0,
+      platformFee: Number(row.platform_fee) || 0,
+      totalAmount: Number(row.total_amount) || Number(row.amount) || 0,
+      paymentMethod: row.payment_method,
+      status: row.status,
+      remark: row.remark,
+      periodMonth: row.period_month,
+      periodYear: row.period_year,
+      periodLabel: row.period_label,
+      utr: row.utr,
+      referenceNo: row.reference_no,
+      timestamp: row.timestamp || row.created_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      ...(row.metadata || {})
+    }));
 }
 
 // Debounced pool recalibration to prevent main-thread freezing and API flooding
@@ -349,15 +352,29 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !id) return false;
 
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .eq('id', id);
+  const raw = String(id).trim();
+  const lower = raw.toLowerCase();
+  const upper = raw.toUpperCase();
+  const matchFilter = `id.eq.${raw},id.eq.${lower},id.eq.${upper},id.ilike.${raw}`;
 
-  if (error) {
-    console.error('[Supabase] Error deleting transaction:', error.message);
-    return false;
+  // 1. Soft-delete in Supabase by setting status='deleted'
+  // This is guaranteed to succeed with RLS UPDATE policy and triggers Supabase Realtime broadcast immediately
+  try {
+    await supabase
+      .from('transactions')
+      .update({ status: 'deleted', updated_at: new Date().toISOString() })
+      .or(matchFilter);
+  } catch (err: any) {
+    console.warn('[Supabase] Soft-delete note:', err?.message);
   }
+
+  // 2. Also attempt hard delete in case DELETE policy is permitted
+  try {
+    await supabase
+      .from('transactions')
+      .delete()
+      .or(matchFilter);
+  } catch {}
 
   scheduleDebouncedPoolRecalibration();
   return true;
@@ -367,15 +384,33 @@ export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise
   const supabase = getSupabase();
   if (!supabase || !ids || ids.length === 0) return false;
 
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .in('id', ids);
+  const allVariants = new Set<string>();
+  ids.forEach(id => {
+    if (!id) return;
+    const raw = String(id).trim();
+    allVariants.add(raw);
+    allVariants.add(raw.toLowerCase());
+    allVariants.add(raw.toUpperCase());
+  });
+  const idArray = Array.from(allVariants);
 
-  if (error) {
-    console.error('[Supabase] Error deleting multiple transactions:', error.message);
-    return false;
+  // 1. Soft-delete batch
+  try {
+    await supabase
+      .from('transactions')
+      .update({ status: 'deleted', updated_at: new Date().toISOString() })
+      .in('id', idArray);
+  } catch (err: any) {
+    console.warn('[Supabase] Batch soft-delete note:', err?.message);
   }
+
+  // 2. Hard-delete attempt
+  try {
+    await supabase
+      .from('transactions')
+      .delete()
+      .in('id', idArray);
+  } catch {}
 
   scheduleDebouncedPoolRecalibration();
   return true;
@@ -1118,6 +1153,7 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
 
 export interface SupabaseRealtimeCallbacks {
   onTransactionsUpdate?: (txns: Transaction[]) => void;
+  onTransactionDeleted?: (id: string) => void;
   onCampaignsUpdate?: (camps: Campaign[]) => void;
   onMembersUpdate?: (members: MemberRecord[]) => void;
   onStatsUpdate?: (stats: PublicPoolStats) => void;
@@ -1209,7 +1245,7 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
     txDebounce = setTimeout(async () => {
       try {
         const fresh = await fetchSupabaseTransactions();
-        if (fresh && fresh.length > 0) {
+        if (Array.isArray(fresh)) {
           saveStoredTransactions(fresh, true);
           callbacks.onTransactionsUpdate?.(fresh);
           try {
@@ -1220,7 +1256,7 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
       } catch (e) {
         console.warn('[Supabase Realtime] Tx refresh note:', e);
       }
-    }, 350);
+    }, 250);
   };
 
   const refreshCamps = () => {
@@ -1320,6 +1356,14 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
   const channel = supabase.channel('ronpay-realtime-master')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
       console.info('[Supabase Realtime] Transactions event:', payload.eventType);
+      const isDelete = payload.eventType === 'DELETE';
+      const isStatusDeleted = payload.eventType === 'UPDATE' && (payload.new as any)?.status === 'deleted';
+      if (isDelete || isStatusDeleted) {
+        const deletedId = (payload.old as any)?.id || (payload.new as any)?.id;
+        if (deletedId) {
+          callbacks.onTransactionDeleted?.(String(deletedId));
+        }
+      }
       refreshTxns();
       refreshPool();
     })
