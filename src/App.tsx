@@ -315,6 +315,7 @@ export default function App() {
   const isInitialTxMountRef = useRef<boolean>(true);
 
   useEffect(() => {
+    console.log('[Observer] Transaction state changed, checking for new syncs...');
     if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
       return;
     }
@@ -327,6 +328,7 @@ export default function App() {
           knownTxIdsRef.current.add(String(tx.id).toLowerCase().trim());
         }
       });
+      console.log('[Observer] Initialized known IDs:', knownTxIdsRef.current.size);
       return;
     }
 
@@ -343,6 +345,7 @@ export default function App() {
     });
 
     if (freshNewTxns.length > 0) {
+      console.log(`[Observer] Syncing ${freshNewTxns.length} new transactions to Supabase.`);
       freshNewTxns.forEach(tx => {
         insertSupabaseTransaction(tx).catch(err => {
           console.warn(`[Supabase Observer] Auto-insert note for tx ${tx.id}:`, err);
