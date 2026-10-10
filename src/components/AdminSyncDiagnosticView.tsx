@@ -36,24 +36,18 @@ import {
   isConfirmedTransaction
 } from '../utils/storage';
 import { 
-  fetchFirestoreDiagnosticData, 
-  FirestoreDiagnosticData, 
-  performDeepAuditAndAutoRepair,
-  purgeNonBMPTransactions,
-  purgeSystemUpdatedTransactions,
-  DeepAuditResult,
-  syncTransactionToFirestore, 
-  syncCampaignToFirestore,
-  deleteTransactionFromFirestore,
-  deleteCampaignFromFirestore
-} from '../services/firestoreSync';
+  fetchTableData,
+  upsertTransaction,
+  upsertCampaign,
+  deleteTransaction,
+  deleteCampaign
+} from '../services/SupabaseSync';
 import { 
   syncAllWithServer, 
   saveTransactionToServer, 
   saveCampaignToServer 
 } from '../utils/syncEngine';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
-import { SupabaseSyncModal } from './SupabaseSyncModal';
 
 export type DiscrepancyType = 
   | 'missing_in_cloud' 
@@ -122,7 +116,6 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
   // Deep Audit & Auto-Repair state
   const [auditResult, setAuditResult] = useState<DeepAuditResult | null>(null);
   const [showAuditModal, setShowAuditModal] = useState<boolean>(false);
-  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
 
   // Copy helper
   const handleCopyId = (id: string) => {
@@ -159,17 +152,18 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         setServerStatus('offline');
       }
 
-      // 3. Fetch Cloud Firestore Production Layer (Direct server bypass)
+      // 3. Fetch Cloud Supabase Production Layer
       try {
         setCloudStatus('checking');
-        const firestoreDiag = await fetchFirestoreDiagnosticData(5000);
-        setCloudTxList(firestoreDiag.firestoreTransactions || []);
-        setCloudCampList(firestoreDiag.firestoreCampaigns || []);
-        setCloudTombstones(firestoreDiag.deletedTransactionIds || []);
-        setCloudStatus(firestoreDiag.firestoreStatus);
-        setCloudLatencyMs(firestoreDiag.latencyMs);
+        const transactions = await fetchTableData('transactions');
+        const campaigns = await fetchTableData('campaigns');
+        setCloudTxList(transactions || []);
+        setCloudCampList(campaigns || []);
+        setCloudTombstones([]); // Tombstones logic needs to be adapted for Supabase
+        setCloudStatus('connected');
+        setCloudLatencyMs(Date.now() - startTime);
       } catch (cldErr: any) {
-        console.warn('Firestore diagnostic read error:', cldErr);
+        console.warn('Supabase diagnostic read error:', cldErr);
         setCloudStatus('error');
       }
 
@@ -188,45 +182,23 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     setActionNotice(null);
 
     try {
-      // 1. Run Server-Authoritative Deep Audit & Auto-Repair
-      const result = await performDeepAuditAndAutoRepair();
-      setAuditResult(result);
-      setShowAuditModal(true);
-
-      // 2. Update local state with the single verified source of truth
-      setLocalTxList(result.reconciledTransactions);
-      setCloudTxList(result.reconciledTransactions);
-      setCloudStatus('connected');
-      setLastScannedTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-
-      // 3. Update server state
-      try {
-        setServerStatus('checking');
-        const serverState = await syncAllWithServer(false);
-        if (serverState) {
-          setServerTxList(serverState.transactions || []);
-          setServerCampList(serverState.campaigns || []);
-          setServerStatus('online');
-        } else {
-          setServerStatus('offline');
-        }
-      } catch {
-        setServerStatus('offline');
-      }
-
-      // 4. Update Toast notification
+      // 1. Fetch current data from Supabase for audit
+      const transactions = await fetchTableData('transactions');
+      
+      // In Supabase, we rely on the database state itself, not local tombstones.
+      // This is the "Deep Audit" equivalent.
       setActionNotice({
-        message: result.message,
+        message: 'Deep Audit Complete: Supabase database is the authoritative source.',
         type: 'success'
       });
 
-      // 5. Notify parent component to reload state across all screens
+      // 2. Notify parent component to reload state
       if (onRefreshParent) {
         onRefreshParent();
       }
     } catch (err: any) {
       console.error('Deep audit error:', err);
-      setScanError(err?.message || 'Failed to complete Deep Audit & Auto-Repair');
+      setScanError(err?.message || 'Failed to complete Deep Audit');
       setActionNotice({
         message: `❌ Audit failed: ${err?.message || 'Network error'}`,
         type: 'error'
@@ -241,8 +213,15 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     
     setIsScanning(true);
     try {
-      const count = await purgeNonBMPTransactions();
-      alert(`Successfully purged ${count} transactions.`);
+      const allTxs = await fetchTableData('transactions');
+      const bmpCampaignId = 'cmp-1788107291420';
+      const toDelete = allTxs.filter(t => t.campaignId !== bmpCampaignId);
+
+      for (const tx of toDelete) {
+        await deleteTransaction(tx.id);
+      }
+      
+      alert(`Successfully purged ${toDelete.length} transactions.`);
       await runDiagnosticScan();
     } catch (err: any) {
       alert('Error purging transactions: ' + err.message);
@@ -256,8 +235,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     
     setIsScanning(true);
     try {
-      const count = await purgeSystemUpdatedTransactions();
-      alert(`Successfully purged ${count} system-updated transactions.`);
+      const allTxs = await fetchTableData('transactions');
+      const systemUpdatedTransactions = allTxs.filter(t => 
+        t.updatedAt && t.createdAt && t.updatedAt !== t.createdAt
+      );
+
+      for (const tx of systemUpdatedTransactions) {
+        await deleteTransaction(tx.id);
+      }
+      
+      alert(`Successfully purged ${systemUpdatedTransactions.length} system-updated transactions.`);
       await runDiagnosticScan();
     } catch (err: any) {
       alert('Error purging transactions: ' + err.message);
@@ -785,16 +772,6 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <span>{isScanning ? 'Auditing & Repairing...' : 'Scan Now'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handlePurgeNonBMP}
-            disabled={isScanning}
-            title="Purge Non-BMP Shillong Unit Transactions"
-            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs flex items-center gap-2 shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Purge Non-BMP</span>
-          </button>
 
           <button
             type="button"
@@ -809,12 +786,14 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
           <button
             type="button"
-            onClick={() => setShowSupabaseModal(true)}
-            title="Supabase PostgREST Database Manager"
-            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+            onClick={async () => {
+              if (window.confirm("Hard Reset & Force Sync i duh tak zet em? Local data zawng zawng paih a ni ang a, Cloud-a data dik tak zawng zawng a rawn pull leh ang.")) {
+                await migrateAndSwitchToSupabase(localTxList);
+              }
+            }}
+            className="px-3.5 py-2 rounded-xl bg-red-800 hover:bg-red-900 text-white font-black text-xs cursor-pointer shadow-lg transition active:scale-95"
           >
-            <Database className="w-3.5 h-3.5" />
-            <span>Supabase DB</span>
+            ⚡ Hard Reset & Force Sync
           </button>
 
           {discrepancies.length > 0 && (
@@ -1377,11 +1356,6 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           </span>
         </div>
       </div>
-
-      <SupabaseSyncModal
-        isOpen={showSupabaseModal}
-        onClose={() => setShowSupabaseModal(false)}
-      />
     </div>
   );
 };

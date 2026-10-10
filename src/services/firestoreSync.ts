@@ -198,7 +198,7 @@ export async function purgeSystemUpdatedTransactions(): Promise<number> {
   if (idsToPurge.length === 0) return 0;
 
   // Perform purge (e.g., deleteMultipleTransactions)
-  await deleteMultipleTransactionsFromFirestore(idsToPurge);
+  await deleteMultipleTransactions(idsToPurge);
   return idsToPurge.length;
 }
 
@@ -645,24 +645,23 @@ function startLeaderFirestoreListeners(): void {
               data.createdAt = data.timestamp;
             }
           }
-          if (!(data as any).isDeleted) {
-            remoteTxList.push(data);
-          }
+          remoteTxList.push(data);
         }
       });
 
       if (remoteTxList.length > 0) {
         const deletedIds = getLocalDeletedTxIds();
-        const cleanRemote = remoteTxList.filter(t => t && t.id && !(t as any).isDeleted);
+        const cleanRemote = remoteTxList.filter(t => t && t.id);
         const localTx = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
         const txMap = new Map<string, Transaction>();
         const remoteIdSet = new Set(cleanRemote.map(t => String(t.id).toLowerCase().trim()));
 
-        // 1. Remote Firestore transactions are authoritative, unless marked as deleted locally
+        // 1. Remote Firestore transactions are authoritative - clear any accidental tombstone
         for (const t of cleanRemote) {
           if (t && t.id) {
             const k = String(t.id).toLowerCase().trim();
-            if (!PERMANENTLY_PURGED_TX_IDS.has(k) && !deletedIds.has(k)) {
+            if (!PERMANENTLY_PURGED_TX_IDS.has(k)) {
+              clearDeletedTransactionId(t.id);
               txMap.set(k, t);
             }
           }
@@ -1164,7 +1163,6 @@ function startLeaderFirestoreListeners(): void {
  * Other open tabs receive live updates over BroadcastChannel with ZERO extra reads.
  */
 export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): () => void {
-  return () => {};
   activeSubscribers.add(callbacks);
 
   if (callbacks.onStatusChange) {
@@ -1317,18 +1315,12 @@ export function initFirestoreRealtimeSync(callbacks: FirestoreSyncCallbacks): ()
  * Helper to get currently stored public pool stats
  */
 export function getStoredPublicPoolStats(): PublicPoolStats {
-  const stats = getLocalJson<PublicPoolStats>('ronpay_public_pool_stats_v1', {
-    totalAmount: 262125.9,
-    totalCount: 39,
+  return getLocalJson<PublicPoolStats>('ronpay_public_pool_stats_v1', {
+    totalAmount: 0,
+    totalCount: 0,
     todayCount: 0,
     lastUpdated: new Date().toISOString(),
   });
-  return {
-    totalAmount: Math.max(0, Number(stats?.totalAmount) || 0),
-    totalCount: Math.max(0, Number(stats?.totalCount) || 0),
-    todayCount: Math.max(0, Number(stats?.todayCount) || 0),
-    lastUpdated: stats?.lastUpdated || new Date().toISOString(),
-  };
 }
 
 export function setStoredPublicPoolStats(stats: PublicPoolStats): void {
@@ -1361,83 +1353,47 @@ function markIncrementedStats(txId: string): void {
  * Recalibrates stats/public_pool document in Firestore from authoritative transactions
  */
 export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicPoolStats | null> {
-  if (!isNetworkOnline) return null;
   try {
-    const deletedIds = getDeletedTransactionIds();
-    const map = new Map<string, Transaction>();
-
-    // 1. Seed from verified local transactions first
-    const localTxs = getStoredTransactions();
-    for (const t of localTxs) {
-      if (t && t.id) {
-        const k = String(t.id).toLowerCase().trim();
-        if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
-          map.set(k, t);
-        }
-      }
-    }
-
-    // 2. Fetch server transactions and merge
     const txQuery = query(collection(db, 'transactions'), limit(2000));
     let snap;
     try {
+      // Force direct server fetch bypassing local IndexedDB cache completely
       snap = await getDocsFromServer(txQuery);
     } catch {
       snap = await getDocs(txQuery);
     }
-
-    if (snap && !snap.empty) {
-      snap.forEach((d) => {
-        const data = d.data() as Transaction;
-        if (data && data.id) {
-          const k = String(data.id).toLowerCase().trim();
-          if (!deletedIds.has(k) && !PERMANENTLY_PURGED_TX_IDS.has(k)) {
-            const existing = map.get(k);
-            if (!existing) {
-              map.set(k, data);
-            } else {
-              const dTime = new Date(data.updatedAt || data.createdAt || data.timestamp || 0).getTime();
-              const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-              map.set(k, dTime >= eTime ? data : existing);
-            }
-          }
-        }
-      });
-    }
-
     let totalAmt = 0;
     let totalCnt = 0;
     const todayStr = new Date().toISOString().slice(0, 10);
     let todayCnt = 0;
 
-    for (const data of map.values()) {
+    snap.forEach((d) => {
+      const data = d.data() as Transaction;
       const s = (data.status || '').toUpperCase().trim();
       // Strict SUCCESS check identical for Guest, Admin, Chrome, and App
       const isConfirmed = s === 'SUCCESS' || s === 'COMPLETED' || s === 'PAID' || s === 'PAYMENT_SUCCESS' || s === 'VERIFIED' || !s;
-      const amt = Number(data.amount) || 0;
-      if (isConfirmed && amt > 0) {
-        totalAmt += amt;
+      if (isConfirmed) {
+        totalAmt += Number(data.amount) || 0;
         totalCnt += 1;
         const txDate = (data.timestamp || data.createdAt || data.date || '').slice(0, 10);
         if (txDate === todayStr) {
           todayCnt += 1;
         }
       }
-    }
+    });
 
-    // Calculate exact totals of active valid transactions (never negative)
+    // Calculate exact totals of active valid transactions
     const statsRef = doc(db, 'stats', 'public_pool');
     const freshStats: PublicPoolStats & { totalTxns: number; todayTxns: number } = {
-      totalAmount: Math.max(0, Math.round(totalAmt * 100) / 100),
-      totalCount: Math.max(0, totalCnt),
-      totalTxns: Math.max(0, totalCnt),
-      todayCount: Math.max(0, todayCnt),
-      todayTxns: Math.max(0, todayCnt),
+      totalAmount: Math.round(totalAmt * 100) / 100,
+      totalCount: totalCnt,
+      totalTxns: totalCnt,
+      todayCount: todayCnt,
+      todayTxns: todayCnt,
       lastUpdated: new Date().toISOString(),
     };
     await setDoc(statsRef, freshStats, { merge: true });
     setLocalJson('ronpay_public_pool_stats_v1', freshStats);
-    setStoredPublicPoolStats(freshStats);
     broadcast('onStatsUpdate', freshStats);
     try {
       window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: freshStats }));
@@ -1450,14 +1406,45 @@ export async function recalibratePublicPoolStatsFromFirestore(): Promise<PublicP
   }
 }
 
-const sessionDeletedTransactions = new Set<string>();
-
 /**
  * Direct write: Save single transaction to Firebase Firestore (transactions collection)
  * and atomically increment the Distributed Counter in stats/public_pool
  */
 export async function syncTransactionToFirestore(tx: Transaction): Promise<void> {
-  // Firebase transaction writing has been completely removed. Transactions are recorded exclusively in Supabase.
+  if (!tx || !tx.id) return;
+  const cleanTxId = String(tx.id).toLowerCase().trim();
+  const deletedIds = getDeletedTransactionIds();
+  if (deletedIds.has(cleanTxId) || sessionDeletedTransactions.has(cleanTxId) || PERMANENTLY_PURGED_TX_IDS.has(cleanTxId)) {
+    return;
+  }
+  try {
+    const cleanTx = sanitizeForFirestore({
+      ...tx,
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = doc(db, 'transactions', tx.id);
+    await setDoc(docRef, cleanTx, { merge: true });
+
+    // Atomic Distributed Counter update in stats/public_pool
+    const cleanTxId = String(tx.id).toLowerCase().trim();
+    if (!hasIncrementedStats(cleanTxId)) {
+      const s = (tx.status || '').toLowerCase().trim();
+      const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
+      const amt = Number(tx.amount) || 0;
+      if (isConfirmed && amt > 0) {
+        markIncrementedStats(cleanTxId);
+        const statsRef = doc(db, 'stats', 'public_pool');
+        await setDoc(statsRef, {
+          totalAmount: increment(amt),
+          totalCount: increment(1),
+          todayCount: increment(1),
+          lastUpdated: new Date().toISOString(),
+        }, { merge: true });
+      }
+    }
+  } catch (err) {
+    logFirestoreNetworkNote('Transaction sync', err);
+  }
 }
 
 /**
@@ -1715,11 +1702,97 @@ export async function deleteCampaignFromFirestore(campaignId: string): Promise<v
  * Direct delete: Delete transaction from Firestore, update tombstones,
  * and atomically decrement the Distributed Counter in stats/public_pool
  */
+const sessionDeletedTransactions = new Set<string>();
 export async function deleteTransactionFromFirestore(
   transactionId: string,
   txDetails?: Transaction | { amount?: number; status?: string; timestamp?: string }
 ): Promise<void> {
-  // Firebase transaction deletion has been completely removed.
+  if (!transactionId) return;
+  const cleanId = String(transactionId).trim();
+  const idKey = cleanId.toLowerCase();
+
+  // 1. Resolve transaction details if not provided
+  let txToAnalyze = txDetails;
+  if (!txToAnalyze) {
+    const local = getLocalJson<Transaction[]>('ronpay_transactions_v2', []);
+    txToAnalyze = local.find(t => String(t.id).toLowerCase().trim() === idKey);
+  }
+
+  // If still not found, try reading from Firestore doc directly before delete
+  if (!txToAnalyze) {
+    try {
+      const snap = await getDoc(doc(db, 'transactions', cleanId));
+      if (snap.exists()) {
+        txToAnalyze = snap.data() as Transaction;
+      }
+    } catch {}
+  }
+
+  // 2. Atomically decrement stats/public_pool counter if confirmed
+  if (txToAnalyze) {
+    const s = (txToAnalyze.status || '').toLowerCase().trim();
+    const isConfirmed = s === 'completed' || s === 'paid' || s === 'payment_success' || s === 'success' || s === 'verified' || !s;
+    const amt = Number(txToAnalyze.amount) || 0;
+    if (isConfirmed && amt > 0) {
+      const txDate = (txToAnalyze.timestamp || (txToAnalyze as any).createdAt || (txToAnalyze as any).date || '').slice(0, 10);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const isToday = txDate === todayStr;
+
+      try {
+        const statsRef = doc(db, 'stats', 'public_pool');
+        await setDoc(statsRef, {
+          totalAmount: increment(-amt),
+          totalCount: increment(-1),
+          ...(isToday ? { todayCount: increment(-1) } : {}),
+          lastUpdated: new Date().toISOString(),
+        }, { merge: true });
+
+        // Update local stats immediately
+        const cur = getStoredPublicPoolStats();
+        const nextStats: PublicPoolStats = {
+          ...cur,
+          totalAmount: Math.max(0, Math.round(((cur.totalAmount || 0) - amt) * 100) / 100),
+          totalCount: Math.max(0, (cur.totalCount || 0) - 1),
+          todayCount: isToday ? Math.max(0, (cur.todayCount || 0) - 1) : cur.todayCount,
+          lastUpdated: new Date().toISOString(),
+        };
+        setStoredPublicPoolStats(nextStats);
+        broadcast('onStatsUpdate', nextStats);
+        try {
+          window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: nextStats }));
+          window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: nextStats }));
+        } catch {}
+      } catch (err) {
+        logFirestoreNetworkNote('Decrement public_pool stats', err);
+      }
+    }
+  }
+
+  // 3. Delete document from Firestore (both exact ID and lowercase variant)
+  sessionDeletedTransactions.add(idKey);
+  try {
+    const docRef = doc(db, 'transactions', cleanId);
+    await deleteDoc(docRef);
+    if (cleanId !== cleanId.toLowerCase()) {
+      await deleteDoc(doc(db, 'transactions', cleanId.toLowerCase())).catch(() => {});
+    }
+    if (cleanId !== cleanId.toUpperCase()) {
+      await deleteDoc(doc(db, 'transactions', cleanId.toUpperCase())).catch(() => {});
+    }
+  } catch (err) {
+    logFirestoreNetworkNote('Delete transaction', err);
+  }
+
+  // 4. Record in system_metadata tombstones
+  try {
+    const tombRef = doc(db, 'system_metadata', 'tombstones');
+    await setDoc(tombRef, {
+      deleted_transactions: arrayUnion(cleanId, cleanId.toLowerCase()),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    logFirestoreNetworkNote('Set deleted_transactions tombstone', err);
+  }
 }
 
 /**
@@ -1824,8 +1897,6 @@ export async function deleteMultipleTransactionsFromFirestore(
     }, { merge: true });
   } catch (err) {
     logFirestoreNetworkNote('Batch tombstones update', err);
-  } finally {
-    recalibratePublicPoolStatsFromFirestore().catch(() => {});
   }
 }
 
@@ -2252,10 +2323,6 @@ export async function fetchFirestoreDiagnosticData(transactionLimit: number = 50
  * 3. Returns comprehensive audit summary for modal & toast UI feedback.
  */
 export async function performDeepAuditAndAutoRepair(): Promise<DeepAuditResult> {
-  if (!isNetworkOnline) {
-    throw new Error('Internet connection offline a ni. Cloud Firestore deep audit ti turin network connection mamawh a ni.');
-  }
-
   // 1. DIRECT SERVER FETCH (Cache Bypass: source == 'server')
   let snap;
   const txCol = collection(db, 'transactions');

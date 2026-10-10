@@ -56,7 +56,8 @@ import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSy
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
-import { isCampaignCreator, DEFAULT_ANNOUNCEMENT_ITEMS, isConfirmedTransaction, isTransactionForCampaign, getStoredTransactions, getDeletedTransactionIds } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds } from '../utils/storage';
+import { subscribeToTable, fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
@@ -95,7 +96,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectBawm,
   onOpenBillService,
   campaigns = [],
-  transactions = [],
+  transactions: propTransactions = [],
   creatorProfile,
   announcement,
   publicPoolStats,
@@ -115,6 +116,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenSyncDiagnostic,
   onOpenWebsite,
 }) => {
+  const [transactions, setTransactions] = useState<Transaction[]>(propTransactions);
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.mizo;
   const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
@@ -191,33 +193,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await fetchTableData('transactions') as Transaction[];
+      setTransactions(data);
+    };
+    loadData();
+
+    const subscription = subscribeToTable('transactions', loadData);
+    return () => { subscription.unsubscribe(); };
+  }, []);
+
   const safeTransactions = useMemo(() => {
-    const listFromProps = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-    const listFromStorage = getStoredTransactions();
-    const deletedIds = getDeletedTransactionIds();
-    const map = new Map<string, Transaction>();
-    for (const t of listFromStorage) {
-      if (t && t.id) {
-        const k = String(t.id).toLowerCase().trim();
-        if (!deletedIds.has(k)) map.set(k, t);
-      }
-    }
-    for (const t of listFromProps) {
-      if (t && t.id) {
-        const k = String(t.id).toLowerCase().trim();
-        if (!deletedIds.has(k)) {
-          const existing = map.get(k);
-          if (!existing) {
-            map.set(k, t);
-          } else {
-            const tTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
-            const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-            map.set(k, tTime >= eTime ? t : existing);
-          }
-        }
-      }
-    }
-    return Array.from(map.values());
+    return Array.isArray(transactions) ? transactions.filter(Boolean) : [];
   }, [transactions]);
 
   const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];

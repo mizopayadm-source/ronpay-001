@@ -41,8 +41,7 @@ import {
   getDeletedTransactionIds,
   PERMANENTLY_PURGED_TX_IDS
 } from '../utils/storage';
-import { deleteTransactionFromFirestore } from '../services/firestoreSync';
-import { syncAllWithServer } from '../utils/syncEngine';
+import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
 import { 
   getCampaignCauseTitle, 
   getEffectiveCategory, 
@@ -102,7 +101,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       if (onRefreshData) {
         onRefreshData();
       }
-      syncAllWithServer(true).then(() => {
+      fetchTableData('transactions').then((txs) => {
+        if (Array.isArray(txs)) setSupabaseTxns(txs);
         if (onRefreshData) onRefreshData();
       }).catch(() => {});
     }
@@ -112,7 +112,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     setIsRefreshing(true);
     setDeletedTxIds(getDeletedTransactionIds());
     try {
-      await syncAllWithServer(true);
+      const txs = await fetchTableData('transactions');
+      if (Array.isArray(txs)) setSupabaseTxns(txs);
     } catch (e) {
       console.warn('PeknaSulhnu manual refresh error:', e);
     }
@@ -127,32 +128,60 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }, 600);
   };
 
-  // Defensive array checks - combines incoming props with local storage to never miss newly recorded transactions
-  const safeTransactions = useMemo(() => {
-    const listFromProps = Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-    const listFromStorage = getStoredTransactions();
-    const map = new Map<string, Transaction>();
-    for (const t of listFromStorage) {
-      if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
-    }
-    for (const t of listFromProps) {
-      if (t && t.id) {
-        const k = String(t.id).toLowerCase().trim();
-        const existing = map.get(k);
-        if (!existing) {
-          map.set(k, t);
-        } else {
-          const tTime = new Date(t.updatedAt || t.createdAt || t.timestamp || 0).getTime();
-          const eTime = new Date(existing.updatedAt || existing.createdAt || existing.timestamp || 0).getTime();
-          map.set(k, tTime >= eTime ? t : existing);
-        }
+  const [supabaseTxns, setSupabaseTxns] = useState<Transaction[]>([]);
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const data = await fetchTableData('transactions') as Transaction[];
+        if (isMounted && Array.isArray(data)) setSupabaseTxns(data);
+      } catch (e) {
+        console.warn('PeknaSulhnuModal Supabase load error:', e);
       }
+    };
+    load();
+    const unsub = subscribeToTable('transactions', load);
+    return () => { isMounted = false; unsub.unsubscribe(); };
+  }, []);
+
+  // Defensive array checks - uses Supabase transactions exclusively when loaded
+  const safeTransactions = useMemo(() => {
+    const combined = supabaseTxns.length > 0
+      ? supabaseTxns
+      : (Array.isArray(transactions) ? transactions.filter(Boolean) : []);
+    const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
+    
+    // Identify owned campaigns first for creator check
+    const ownedIds = new Set<string>();
+    const ownedTitles = new Set<string>();
+    if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
+      const campList = Array.isArray(campaigns) ? campaigns : [];
+      campList.forEach(c => {
+        if (c && isCampaignCreator(c, creatorProfile)) {
+          if (c.id) ownedIds.add(c.id);
+          if (c.title) ownedTitles.add(String(c.title).toLowerCase().trim());
+        }
+      });
     }
-    const combined = Array.from(map.values());
+    const isSuperAdmin = isSuperAdminOrAdminProfile(creatorProfile);
+    const isCreator = Boolean(
+      isSuperAdmin || 
+      creatorProfile?.isApproved || 
+      ownedIds.size > 0
+    );
+
     const valid = combined.filter(t => {
       if (!t || !t.id) return false;
-      const clean = String(t.id).toLowerCase().trim();
-      return !deletedTxIds.has(clean) && !PERMANENTLY_PURGED_TX_IDS.has(clean);
+
+      // If NOT a creator/admin, ordinary user should ONLY see their own paid/sent transactions!
+      if (!isCreator) {
+        const txPhone = t.donorPhone ? String(t.donorPhone).replace(/\D/g, '').slice(-10) : '';
+        const isDonorPhone = Boolean(profilePhone && txPhone && profilePhone === txPhone);
+        const isPaidOnDevice = safeUserPaidIds.includes(t.id);
+        return isDonorPhone || isPaidOnDevice;
+      }
+
+      return true;
     });
 
     // CRITICAL: Sort by latest activity (updatedAt -> createdAt -> timestamp) so newly entered transactions ALWAYS appear right at the top
@@ -163,7 +192,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     });
 
     return valid;
-  }, [transactions, deletedTxIds, isOpen]);
+  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, campaigns, userPaidIds]);
 
   const safeCampaigns = useMemo(() => {
     return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];

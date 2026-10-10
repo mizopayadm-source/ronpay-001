@@ -10,6 +10,7 @@ import {
   AuditLog,
   MemberRecord,
   BillService,
+  PublicPoolStats,
 } from './types';
 import { Language, getCampaignCauseTitle } from './utils/translations';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
@@ -49,15 +50,18 @@ import {
   ensureCampaignImagesOptimizedAndSynced,
 } from './utils/storage';
 import {
-  syncPricingConfigToFirestore,
-  syncAnnouncementToFirestore,
+  fetchTableData,
+  subscribeToTable
+} from './services/SupabaseSync';
+import {
+  getStoredPublicPoolStats,
 } from './services/firestoreSync';
 import {
   subscribeCrossTabSync,
   setupWindowFocusSync,
   invalidateCacheOnAuthOrBoot
 } from './services/crossTabSync';
-import { syncAllWithServer, subscribeServerEvents } from './utils/syncEngine';
+import { syncAllWithServer, subscribeServerEvents, saveTransactionToServer, pullLatestServerState } from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS } from './data/initialData';
 
 // Components
@@ -104,13 +108,6 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
-import { 
-  insertSupabaseTransaction, 
-  syncPendingTransactionsToSupabase, 
-  initSupabaseRealtimeSync, 
-  loadSupabaseInitialState,
-  upsertSupabaseUser
-} from './services/supabaseService';
 import { 
   getUrlRoute, 
   updateBrowserUrl, 
@@ -182,8 +179,8 @@ export default function App() {
   const [notificationCount, setNotificationCount] = useState<number>(3);
 
   // App Core Data States
-  const [campaigns, setCampaigns] = useState<Campaign[]>(() => getStoredCampaigns());
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredTransactions());
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [creators, setCreators] = useState<CreatorProfile[]>(() => getStoredCreatorsList());
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>(() => getStoredCreatorProfile());
   const [pricingConfig, setPricingConfig] = useState<SystemPricingConfig>(() => getStoredPricingConfig());
@@ -191,6 +188,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStoredAuditLogs());
   const [members, setMembersState] = useState<MemberRecord[]>(() => getMembers());
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
+  const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>(() => getStoredPublicPoolStats());
 
   // Modals Visibility
   const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
@@ -274,7 +272,6 @@ export default function App() {
     const freshCampaigns = getStoredCampaigns();
     campaignsRef.current = freshCampaigns;
     setCampaigns(freshCampaigns);
-    setTransactions(getStoredTransactions());
     setCreators(getStoredCreatorsList());
     setCreatorProfile(getStoredCreatorProfile());
     setPricingConfig(getStoredPricingConfig());
@@ -284,147 +281,57 @@ export default function App() {
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
 
-  // Cache Invalidation & Automatic Supabase Primary Store Load on Auth / Session Boot
+  // Cache Invalidation & Automatic Server Sync on Auth / Session Boot:
   useEffect(() => {
     invalidateCacheOnAuthOrBoot('session_boot');
     reloadLocalData();
-    // Load absolute ground truth state from Supabase Primary Store
-    loadSupabaseInitialState().then((state) => {
-      if (state.transactions && state.transactions.length > 0) {
-        setTransactions(state.transactions);
-      }
-      if (state.campaigns && state.campaigns.length > 0) {
-        campaignsRef.current = state.campaigns;
-        setCampaigns(state.campaigns);
-      }
-      if (state.members && state.members.length > 0) {
-        setMembersState(state.members);
-      }
-      if (state.creators && state.creators.length > 0) {
-        setCreators(state.creators);
-      }
-    }).catch(() => {});
   }, [reloadLocalData]);
 
-  // Real-time Supabase background synchronization on startup with lazy timeout
+  // Real-time Supabase Sync initialization
   useEffect(() => {
-    const timer = setTimeout(() => {
-      syncPendingTransactionsToSupabase().catch(() => {});
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, []);
+    let isMounted = true;
 
-  // Centralized Transaction Observer: Monitors 'transactions' state and auto-inserts new transactions to Supabase
-  const knownTxIdsRef = useRef<Set<string>>(new Set());
-  const isInitialTxMountRef = useRef<boolean>(true);
-
-  useEffect(() => {
-    console.log('[Observer] Transaction state changed, checking for new syncs...');
-    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
-      return;
-    }
-
-    // On initial mount, register current known IDs to prevent false-positive startup floods
-    if (isInitialTxMountRef.current) {
-      isInitialTxMountRef.current = false;
-      transactions.forEach(tx => {
-        if (tx && tx.id) {
-          knownTxIdsRef.current.add(String(tx.id).toLowerCase().trim());
+    const loadSupabaseData = async () => {
+      try {
+        const txs = await fetchTableData('transactions') as Transaction[];
+        const camps = await fetchTableData('campaigns') as Campaign[];
+        if (isMounted) {
+          if (Array.isArray(txs)) {
+            setTransactions(txs);
+            try {
+              localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+            } catch {}
+          }
+          if (Array.isArray(camps) && camps.length > 0) setCampaigns(camps);
         }
-      });
-      console.log('[Observer] Initialized known IDs:', knownTxIdsRef.current.size);
-      return;
-    }
-
-    // Detect genuinely new transactions added during this session
-    const freshNewTxns: Transaction[] = [];
-    transactions.forEach(tx => {
-      if (tx && tx.id) {
-        const key = String(tx.id).toLowerCase().trim();
-        if (!knownTxIdsRef.current.has(key)) {
-          knownTxIdsRef.current.add(key);
-          freshNewTxns.push(tx);
-        }
+      } catch (err) {
+        console.warn('[App] Supabase initial load error:', err);
       }
+    };
+
+    loadSupabaseData();
+
+    const unsubTx = subscribeToTable('transactions', () => {
+      fetchTableData('transactions').then(txs => {
+        if (isMounted && Array.isArray(txs)) {
+          setTransactions(txs);
+          try {
+            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+          } catch {}
+        }
+      }).catch(() => {});
     });
 
-    if (freshNewTxns.length > 0) {
-      console.log(`[Observer] Syncing ${freshNewTxns.length} new transactions to Supabase.`);
-      freshNewTxns.forEach(tx => {
-        insertSupabaseTransaction(tx).catch(err => {
-          console.warn(`[Supabase Observer] Auto-insert note for tx ${tx.id}:`, err);
-        });
-      });
-    }
-  }, [transactions]);
-
-  // Real-time Supabase Master WebSocket Synchronization via supabase.channel
-  useEffect(() => {
-    const unsub = initSupabaseRealtimeSync({
-      onCampaignsUpdate: (updatedCampaigns) => {
-        if (updatedCampaigns && updatedCampaigns.length > 0) {
-          campaignsRef.current = updatedCampaigns;
-          setCampaigns(updatedCampaigns);
-          setSelectedCampaign(prev => {
-            if (!prev) return null;
-            const matched = updatedCampaigns.find(c => c.id.toLowerCase() === prev.id.toLowerCase());
-            return matched ? { ...prev, ...matched } : prev;
-          });
-        }
-      },
-      onTransactionsUpdate: (updatedTransactions) => {
-        if (updatedTransactions && updatedTransactions.length > 0) {
-          setTransactions(updatedTransactions);
-        }
-      },
-      onTransactionDeleted: (deletedTxId) => {
-        if (!deletedTxId) return;
-        const cleanDelId = String(deletedTxId).toLowerCase().trim();
-        knownTxIdsRef.current.add(cleanDelId);
-        setTransactions(prev => {
-          const filtered = prev.filter(t => String(t.id).toLowerCase().trim() !== cleanDelId);
-          try {
-            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(filtered));
-          } catch {}
-          return filtered;
-        });
-      },
-      onMembersUpdate: (updatedMembers) => {
-        if (Array.isArray(updatedMembers)) {
-          setMembersState(updatedMembers);
-        }
-      },
-      onCreatorsUpdate: (updatedCreators) => {
-        if (updatedCreators && updatedCreators.length > 0) {
-          setCreators(updatedCreators);
-          const current = getStoredCreatorProfile();
-          if (current && current.phone) {
-            const matched = updatedCreators.find(c => c.phone === current.phone);
-            if (matched) {
-              setCreatorProfile(matched);
-            }
-          }
-        }
-      },
-      onStatsUpdate: (updatedStats) => {
-        if (updatedStats) {
-          try {
-            window.dispatchEvent(new CustomEvent('ronpay_stats_updated', { detail: updatedStats }));
-            window.dispatchEvent(new CustomEvent('ronpay-stats-updated', { detail: updatedStats }));
-          } catch {}
-        }
-      },
-      onWalletUpdate: (updatedWallet) => {
-        if (updatedWallet) {
-          try {
-            window.dispatchEvent(new CustomEvent('ronpay_wallet_updated', { detail: updatedWallet }));
-          } catch {}
-        }
-      },
+    const unsubCamp = subscribeToTable('campaigns', () => {
+      fetchTableData('campaigns').then(camps => {
+        if (isMounted && Array.isArray(camps)) setCampaigns(camps);
+      }).catch(() => {});
     });
 
     return () => {
-      if (typeof unsub === 'function') unsub();
+      isMounted = false;
+      unsubTx.unsubscribe();
+      unsubCamp.unsubscribe();
     };
   }, []);
 
@@ -518,10 +425,20 @@ export default function App() {
       }
     };
 
+    const handleStatsSync = (e: any) => {
+      if (e && e.detail && typeof e.detail === 'object') {
+        setPublicPoolStats(e.detail);
+      } else {
+        setPublicPoolStats(getStoredPublicPoolStats());
+      }
+    };
+
     window.addEventListener('ronpay_campaigns_updated', handleCampaignsSync);
     window.addEventListener('ronpay-campaigns-updated', handleCampaignsSync);
     window.addEventListener('ronpay_transactions_updated', handleTransactionsSync);
     window.addEventListener('ronpay-transactions-updated', handleTransactionsSync);
+    window.addEventListener('ronpay_stats_updated', handleStatsSync);
+    window.addEventListener('ronpay-stats-updated', handleStatsSync);
     window.addEventListener('ronpay_user_paid_updated', handleUserPaidSync);
     window.addEventListener('ronpay-creator-updated', handleCreatorSync);
     window.addEventListener('ronpay_creator_profile_updated', handleCreatorSync);
@@ -574,27 +491,42 @@ export default function App() {
     });
 
     // Window Focus / Tab Re-activation Refetch:
-    // Performs a light check or invalidates stale localStorage/in-memory cache
-    // to sync the latest state whenever the user switches back to the tab or opens a new window.
+    // Performs a light check to sync the latest state whenever user switches back to tab or opens new window
     const unsubFocus = setupWindowFocusSync(() => {
       reloadLocalData();
-      syncAllWithServer().catch(() => {});
+      pullLatestServerState().then((res) => {
+        if (res?.transactions && res.transactions.length > 0) {
+          setTransactions(res.transactions);
+        }
+      }).catch(() => {});
     });
 
     // Real-time Server-Sent Events (SSE) for instant sub-second cross-device, phone, & multi-user sync
     const unsubSSE = subscribeServerEvents(() => {
-      syncAllWithServer(true).then(() => {
+      reloadLocalData();
+      pullLatestServerState().then((res) => {
+        if (res?.transactions && res.transactions.length > 0) {
+          setTransactions(res.transactions);
+        }
         reloadLocalData();
-      }).catch(() => {});
+      }).catch(() => {
+        reloadLocalData();
+      });
     });
 
+    // Relaxed periodic background sync (every 60 seconds) as backup to SSE and Firestore listeners
     const syncInterval = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
-        syncAllWithServer().then(() => {
-          reloadLocalData();
+        pullLatestServerState().then((res) => {
+          if (res?.transactions && Array.isArray(res.transactions)) {
+            setTransactions(prev => {
+              if (prev.length !== res.transactions.length) return res.transactions;
+              return prev;
+            });
+          }
         }).catch(() => {});
       }
-    }, 15000);
+    }, 60000);
 
     // Load local storage immediately on startup
     reloadLocalData();
@@ -613,6 +545,8 @@ export default function App() {
       window.removeEventListener('ronpay-campaigns-updated', handleCampaignsSync);
       window.removeEventListener('ronpay_transactions_updated', handleTransactionsSync);
       window.removeEventListener('ronpay-transactions-updated', handleTransactionsSync);
+      window.removeEventListener('ronpay_stats_updated', handleStatsSync);
+      window.removeEventListener('ronpay-stats-updated', handleStatsSync);
       window.removeEventListener('ronpay_user_paid_updated', handleUserPaidSync);
       window.removeEventListener('ronpay-creator-updated', handleCreatorSync);
       window.removeEventListener('ronpay_creator_profile_updated', handleCreatorSync);
@@ -625,36 +559,19 @@ export default function App() {
     };
   }, [reloadLocalData]);
 
-  // Force cloud refresh directly from Authoritative Supabase Database
+  // Force cloud refresh directly from Authoritative Server Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
-      const state = await loadSupabaseInitialState();
-      if (state.transactions && state.transactions.length > 0) {
-        setTransactions(state.transactions);
+      const syncResult = await syncAllWithServer(true);
+      if (syncResult?.transactions && syncResult.transactions.length > 0) {
+        setTransactions(syncResult.transactions);
       }
-      if (state.campaigns && state.campaigns.length > 0) {
-        campaignsRef.current = state.campaigns;
-        setCampaigns(state.campaigns);
-      }
-      if (state.members && state.members.length > 0) {
-        setMembersState(state.members);
-      }
-      if (state.creators && state.creators.length > 0) {
-        setCreators(state.creators);
+      if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
+        setCampaigns(syncResult.campaigns);
       }
       reloadLocalData();
     } catch (e) {
       console.warn('Cloud refresh note:', e);
-      try {
-        const syncResult = await syncAllWithServer(true);
-        if (syncResult?.transactions && syncResult.transactions.length > 0) {
-          setTransactions(syncResult.transactions);
-        }
-        if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
-          setCampaigns(syncResult.campaigns);
-        }
-        reloadLocalData();
-      } catch {}
     }
   }, [reloadLocalData]);
 
@@ -925,14 +842,30 @@ export default function App() {
           campaignTitle: resolvedCampTitle,
           donorName: baseTx?.donorName || (meta?.isAnonymous ? 'Anonymous' : (meta?.donorName || 'Valued Donor')),
           donorPhone: baseTx?.donorPhone || meta?.donorPhone,
+          donorVeng: baseTx?.donorVeng || meta?.donorVeng,
+          donorType: baseTx?.donorType || meta?.donorType,
+          groupName: baseTx?.groupName || meta?.groupName,
+          memberId: baseTx?.memberId || meta?.memberId,
+          subId: baseTx?.subId || meta?.subId,
+          isDependent: Boolean(baseTx?.isDependent || meta?.isDependent),
           isAnonymous: Boolean(baseTx?.isAnonymous || meta?.isAnonymous),
           amount: base,
           platformFee: fee,
           totalAmount: total,
           category: (baseTx?.category || meta?.category || matchedCamp?.category || 'others') as any,
-          paymentMethod: 'phonepe',
+          paymentMethod: baseTx?.paymentMethod || 'phonepe',
           status: 'completed',
+          remark: baseTx?.remark || meta?.remark,
+          subCategory: baseTx?.subCategory || meta?.subCategory,
+          subCategoryBreakdown: baseTx?.subCategoryBreakdown || meta?.subCategoryBreakdown,
+          periodType: baseTx?.periodType || meta?.periodType,
+          periodMonth: baseTx?.periodMonth || meta?.periodMonth,
+          periodYear: baseTx?.periodYear || meta?.periodYear,
+          periodLabel: baseTx?.periodLabel || meta?.periodLabel,
           timestamp: baseTx?.timestamp || new Date().toISOString(),
+          createdAt: baseTx?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          date: baseTx?.date || meta?.date || new Date().toISOString().slice(0, 10),
           referenceNo: statusRes.transactionId || baseTx?.referenceNo || `T${Date.now()}`,
           verifiedAt: new Date().toISOString(),
           feeOption: feeOption,
@@ -1222,7 +1155,6 @@ export default function App() {
     };
     saveTransaction(newTx);
     recordUserPaidTxId(newTx.id);
-    insertSupabaseTransaction(newTx).catch(() => {});
     setCompletedTransaction(newTx);
     reloadLocalData();
     setIsBillModalOpen(false);
@@ -1232,15 +1164,18 @@ export default function App() {
   const handlePaymentSuccess = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
-    insertSupabaseTransaction(transaction).catch(() => {});
     if (transaction.campaignId) {
       markCampaignPaidInSession(transaction.campaignId);
     }
     setCompletedTransaction(transaction);
+    setTransactions(prev => [transaction, ...prev.filter(t => t.id !== transaction.id)]);
+    setUserPaidIds(prev => Array.from(new Set([transaction.id, ...prev])));
     setSelectedCampaign(null);
     setAutoOpenPhonePeCheckout(false);
     cleanPaymentUrlParams();
     reloadLocalData();
+    saveTransactionToServer(transaction).catch(() => {});
+    syncAllWithServer(true).catch(() => {});
     handleNavigate('success', { replace: true });
   };
 
@@ -1255,7 +1190,6 @@ export default function App() {
   const handleCashPending = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
-    insertSupabaseTransaction(transaction).catch(() => {});
     setCompletedTransaction(transaction);
     try {
       localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
@@ -1350,13 +1284,11 @@ export default function App() {
   const handleUpdateTransaction = (transaction: Transaction) => {
     saveTransaction(transaction);
     setTransactions(getStoredTransactions());
-    syncAllWithServer(true).catch(() => {});
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
     deleteStoredTransaction(transactionId);
     setTransactions(getStoredTransactions());
-    syncAllWithServer(true).catch(() => {});
   };
 
   const handleBatchUpdateTransactions = (updatedTxs: Transaction[], deletedIds: string[]) => {
@@ -1367,7 +1299,6 @@ export default function App() {
       saveMultipleTransactions(updatedTxs);
     }
     setTransactions(getStoredTransactions());
-    syncAllWithServer(true).catch(() => {});
   };
 
   const handleUpdateCreator = (creator: CreatorProfile) => {
@@ -1385,7 +1316,7 @@ export default function App() {
     // 2. Update active creator profile
     setCreatorProfile(creator);
     saveStoredCreatorProfile(creator);
-    upsertSupabaseUser(creator).catch(() => {});
+    syncCreatorToFirestore(creator).catch(() => {});
 
     // 3. Update existing campaigns created by this creator so name & org changes sync instantly to Preview and Mobile views
     const currentCampaigns = getStoredCampaigns();
@@ -1573,9 +1504,8 @@ export default function App() {
   }
 
   return (
-    <ErrorBoundary name="RonPayRoot">
-      <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
-        {/* Animated Zero-White-Screen Splash Overlay */}
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-100 text-slate-900 font-sans antialiased flex flex-col items-center">
+      {/* Animated Zero-White-Screen Splash Overlay */}
       {showSplash && (
         <SplashScreen onFinish={handleFinishSplash} minDurationMs={400} />
       )}
@@ -1608,12 +1538,14 @@ export default function App() {
 
         {/* Main Body Screen Router */}
         <main className={currentScreen === 'phonepe_checkout' ? "flex-1 w-full max-w-full p-0 overflow-y-auto overflow-x-hidden" : "flex-1 w-full max-w-full px-3 sm:px-4 pt-3.5 pb-3 overflow-y-auto overflow-x-hidden"}>
-          {(currentScreen === 'home' || !['explorer', 'checkout', 'create_qr', 'creator_reg', 'reports', 'success', 'failed', 'cash_pending', 'phonepe_checkout'].includes(currentScreen)) && (
+          {currentScreen === 'home' && (
             <HomeScreen
               campaigns={campaigns}
               transactions={transactions}
+              userPaidIds={userPaidIds}
               creatorProfile={creatorProfile}
               announcement={announcement}
+              publicPoolStats={publicPoolStats}
               onStartScanner={handleStartScanner}
               onCreateQRClick={() => {
                 if (creatorProfile.isApproved && creatorProfile.phone) {
@@ -1664,7 +1596,7 @@ export default function App() {
           {currentScreen === 'checkout' && (
             <CheckoutScreen
               category={selectedCategory || selectedCampaign?.category || 'others'}
-              campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0] || INITIAL_CAMPAIGNS[0]}
+              campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0]}
               pricingConfig={pricingConfig}
               onUpdateCampaign={handleUpdateCampaign}
               onBack={() => {
@@ -1820,6 +1752,8 @@ export default function App() {
                 setAutoOpenPhonePeCheckout(false);
                 setSelectedCampaign(null);
                 cleanPaymentUrlParams();
+                reloadLocalData();
+                pullLatestServerState().catch(() => {});
                 handleNavigate('home', { replace: true });
               }}
               onExploreMore={() => {
@@ -1830,6 +1764,8 @@ export default function App() {
                 setCompletedTransaction(null);
                 setAutoOpenPhonePeCheckout(false);
                 cleanPaymentUrlParams();
+                reloadLocalData();
+                pullLatestServerState().catch(() => {});
                 handleNavigate('explorer', { replace: true });
               }}
             />
@@ -2124,7 +2060,7 @@ export default function App() {
                 <AdminSyncDiagnosticView
                   localTransactions={transactions}
                   localCampaigns={campaigns}
-                  onRefreshParent={handleResetData}
+                  onRefreshParent={reloadLocalData}
                   onClose={() => setIsSyncDiagnosticOpen(false)}
                 />
               </div>
@@ -2305,7 +2241,6 @@ export default function App() {
         />
       </div>
     </div>
-    </ErrorBoundary>
   );
 }
 

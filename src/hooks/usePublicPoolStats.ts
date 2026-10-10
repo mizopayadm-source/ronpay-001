@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { PublicPoolStats } from '../types';
-import { fetchSupabaseFundPool } from '../services/supabaseService';
-import { getStoredPublicPoolStats } from '../services/firestoreSync';
 
 /**
- * React Hook: Authoritative Real-Time Public Fund Pool Statistics
- * Powered by Supabase as Absolute Primary Store with instantaneous multi-tab event sync
+ * React Hook: Compute live stats directly from Supabase transactions table with safe Realtime sync
  */
 export function usePublicPoolStats(): {
   stats: PublicPoolStats;
@@ -16,7 +14,7 @@ export function usePublicPoolStats(): {
     totalAmount: 0,
     totalCount: 0,
     todayCount: 0,
-    lastUpdated: new Date().toISOString(),
+    lastUpdated: new Date().toISOString()
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,61 +22,79 @@ export function usePublicPoolStats(): {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. DIRECT FETCH FROM SUPABASE PRIMARY STORE
-    fetchSupabaseFundPool('public_pool')
-      .then((poolData) => {
-        if (!isMounted) return;
-        if (poolData) {
-          setStats(prev => {
-            if (prev.totalAmount === poolData.totalAmount && 
-                prev.totalCount === poolData.totalCount && 
-                prev.todayCount === poolData.todayCount) {
-              return prev;
+    try {
+      localStorage.removeItem('ronpay_public_pool_stats_v1');
+    } catch {}
+
+    const fetchLiveStatsFromSupabase = async () => {
+      try {
+        const { data, error, count } = await supabase
+          .from('transactions')
+          .select('amount, timestamp, created_at, status', { count: 'exact' });
+
+        if (error) throw error;
+
+        let totalAmount = 0;
+        let todayCount = 0;
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        if (data && Array.isArray(data)) {
+          data.forEach((tx: any) => {
+            const amt = Number(tx.amount) || Number(tx.total_amount) || 0;
+            totalAmount += amt;
+
+            const txDate = (tx.timestamp || tx.created_at || '').slice(0, 10);
+            if (txDate === todayStr) {
+              todayCount += 1;
             }
-            return poolData;
           });
+        }
+
+        if (isMounted) {
+          const liveStats: PublicPoolStats = {
+            totalAmount: Math.round(totalAmount * 100) / 100,
+            totalCount: count !== null ? count : (data ? data.length : 0),
+            todayCount,
+            lastUpdated: new Date().toISOString(),
+          };
+
+          setStats(liveStats);
+          setLoading(false);
+          
+          // Clear stale cache so it never flashes old numbers on next reload
           try {
-            localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(poolData));
+            localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(liveStats));
           } catch {}
         }
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        console.warn('[usePublicPoolStats] Supabase fund pool note:', err);
-        setLoading(false);
-      });
-
-    // 2. REAL-TIME MULTI-TAB & SUPABASE WEBSOCKET EVENT LISTENER
-    const handleStatsEvent = (e: any) => {
-      if (e?.detail && typeof e.detail === 'object' && e.detail.totalAmount !== undefined) {
-        const newAmt = Math.max(0, Number(e.detail.totalAmount) || 0);
-        const newCnt = Math.max(0, Number(e.detail.totalCount) || 0);
-        const newToday = Math.max(0, Number(e.detail.todayCount) || 0);
-
-        setStats(prev => {
-          if (prev.totalAmount === newAmt && prev.totalCount === newCnt && prev.todayCount === newToday) {
-            return prev;
-          }
-          return {
-            ...prev,
-            totalAmount: newAmt,
-            totalCount: newCnt,
-            todayCount: newToday,
-            lastUpdated: e.detail.lastUpdated || new Date().toISOString(),
-          };
-        });
-        setLoading(false);
+      } catch (err: any) {
+        console.error('[usePublicPoolStats] Error fetching from Supabase:', err);
+        if (isMounted) {
+          setError(err.message);
+          setLoading(false);
+        }
       }
     };
 
-    window.addEventListener('ronpay_stats_updated', handleStatsEvent);
-    window.addEventListener('ronpay-stats-updated', handleStatsEvent);
+    fetchLiveStatsFromSupabase();
+
+    // Safe Real-time subscription with unique channel name to prevent callback collision errors
+    const uniqueChannelName = `public-transactions-${Math.random().toString(36).substring(2, 9)}`;
+    const channel = supabase
+      .channel(uniqueChannelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        () => {
+          if (isMounted) {
+            fetchLiveStatsFromSupabase();
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
       isMounted = false;
-      window.removeEventListener('ronpay_stats_updated', handleStatsEvent);
-      window.removeEventListener('ronpay-stats-updated', handleStatsEvent);
+      supabase.removeChannel(channel);
     };
   }, []);
 
