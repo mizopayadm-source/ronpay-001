@@ -42,6 +42,7 @@ import {
   PERMANENTLY_PURGED_TX_IDS
 } from '../utils/storage';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
+import { deleteTransactionFromFirestore } from '../services/firestoreSync';
 import { 
   getCampaignCauseTitle, 
   getEffectiveCategory, 
@@ -102,7 +103,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
         onRefreshData();
       }
       fetchTableData('transactions').then((txs) => {
-        if (Array.isArray(txs)) setSupabaseTxns(txs);
+        if (Array.isArray(txs)) setSupabaseTxns(txs as Transaction[]);
         if (onRefreshData) onRefreshData();
       }).catch(() => {});
     }
@@ -113,7 +114,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     setDeletedTxIds(getDeletedTransactionIds());
     try {
       const txs = await fetchTableData('transactions');
-      if (Array.isArray(txs)) setSupabaseTxns(txs);
+      if (Array.isArray(txs)) setSupabaseTxns(txs as Transaction[]);
     } catch (e) {
       console.warn('PeknaSulhnu manual refresh error:', e);
     }

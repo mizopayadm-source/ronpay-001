@@ -56,7 +56,7 @@ import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSy
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
-import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
 import { subscribeToTable, fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
@@ -120,6 +120,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const t = TRANSLATIONS[language] || TRANSLATIONS.mizo;
   const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
+  const [isSyncBannerDismissed, setIsSyncBannerDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ronpay_hide_sync_diagnostic_banner') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [currentAnnounceIdx, setCurrentAnnounceIdx] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
@@ -413,55 +420,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Admin Sync Diagnostic Quick Action Banner - strictly restricted to Admin / Super Admin */}
-      {Boolean(creatorProfile?.isAdmin === true || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') && onOpenSyncDiagnostic && (
+      {!isSyncBannerDismissed && Boolean(creatorProfile?.isAdmin === true || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') && onOpenSyncDiagnostic && (
         <div 
           onClick={onOpenSyncDiagnostic}
-          className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/40 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
+          className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/30 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-xl bg-indigo-600 text-amber-300 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600/50 border border-indigo-400/30 text-amber-300 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
               <Activity className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-black text-xs text-white">Admin Sync Diagnostic</span>
-                <span className="text-[8px] font-black uppercase bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 px-1.5 py-0.2 rounded-full">
-                  Firestore vs Local
+                <span className="text-[8.5px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full">
+                  Live
                 </span>
               </div>
               <p className="text-[10px] text-slate-300 truncate">
-                Compare counts, detect ID discrepancies & one-click re-sync
+                Cross-device consistency & database health monitor
               </p>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1.5 shrink-0 pl-2">
+            <div className="px-3 py-1.5 bg-indigo-600 group-hover:bg-indigo-500 text-white text-[11px] font-black rounded-xl shadow-2xs transition flex items-center gap-1.5">
+              <span>Enfiah Rawh</span>
+              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <button
               type="button"
-              onClick={async (e) => {
-                e.stopPropagation();
-                import('../services/firestoreSync').then(s => s.recalibratePublicPoolStatsFromFirestore());
-              }}
-              className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
-            >
-              Recalibrate Stats
-            </button>
-            <button
-              type="button"
+              title="Dah bo / Dismiss (Hide from Home)"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsSupabaseModalOpen(true);
+                setIsSyncBannerDismissed(true);
+                try {
+                  localStorage.setItem('ronpay_hide_sync_diagnostic_banner', 'true');
+                } catch {}
               }}
-              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
             >
-              <Database className="w-3 h-3" />
-              <span>Supabase DB</span>
-            </button>
-            <button
-              type="button"
-              className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
-            >
-              <span>Scan Now</span>
-              <ArrowRight className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

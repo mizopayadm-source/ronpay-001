@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
-let supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+const env = (import.meta as any).env || {};
+let supabaseUrl = env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+let supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
 
 export let supabase = createClient(supabaseUrl, supabaseAnonKey);
 

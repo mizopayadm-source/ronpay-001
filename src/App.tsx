@@ -55,6 +55,9 @@ import {
 } from './services/SupabaseSync';
 import {
   getStoredPublicPoolStats,
+  syncCreatorToFirestore,
+  syncPricingConfigToFirestore,
+  syncAnnouncementToFirestore,
 } from './services/firestoreSync';
 import {
   subscribeCrossTabSync,
@@ -179,8 +182,8 @@ export default function App() {
   const [notificationCount, setNotificationCount] = useState<number>(3);
 
   // App Core Data States
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => getStoredCampaigns());
+  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredTransactions());
   const [creators, setCreators] = useState<CreatorProfile[]>(() => getStoredCreatorsList());
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>(() => getStoredCreatorProfile());
   const [pricingConfig, setPricingConfig] = useState<SystemPricingConfig>(() => getStoredPricingConfig());
@@ -314,7 +317,7 @@ export default function App() {
     const unsubTx = subscribeToTable('transactions', () => {
       fetchTableData('transactions').then(txs => {
         if (isMounted && Array.isArray(txs)) {
-          setTransactions(txs);
+          setTransactions(txs as Transaction[]);
           try {
             localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
           } catch {}
@@ -324,7 +327,7 @@ export default function App() {
 
     const unsubCamp = subscribeToTable('campaigns', () => {
       fetchTableData('campaigns').then(camps => {
-        if (isMounted && Array.isArray(camps)) setCampaigns(camps);
+        if (isMounted && Array.isArray(camps)) setCampaigns(camps as Campaign[]);
       }).catch(() => {});
     });
 

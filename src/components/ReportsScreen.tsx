@@ -83,6 +83,8 @@ import {
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
+import { db } from '../lib/firebase';
+import { collection, query, limit, getDocs, getDocsFromServer } from 'firebase/firestore';
 import { 
   formatDateDDMMYYYY, 
   formatDateTimeDDMMYYYY, 
@@ -251,11 +253,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Listen to transaction updates/deletions dispatched from anywhere in the app
   useEffect(() => {
-    const handleTxEvent = (e: any) => {
-      const deletedIds = getDeletedTransactionIds();
-      const rawList: Transaction[] = Array.isArray(e?.detail) ? e.detail : getStoredTransactions();
-      const filtered = rawList.filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
-      setServerTransactions(filtered);
+    const handleTxEvent = () => {
+      fetchTableData('transactions').then((txs) => {
+        if (Array.isArray(txs)) {
+          setServerTransactions(txs as Transaction[]);
+        }
+      }).catch(() => {});
     };
 
     window.addEventListener('ronpay_transactions_updated', handleTxEvent);
@@ -267,9 +270,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, []);
 
   const effectiveTransactions = useMemo(() => {
-    const source = serverTransactions !== null ? serverTransactions : [];
-    return source.filter(t => t && t.id);
-  }, [serverTransactions]);
+    const source = serverTransactions !== null ? serverTransactions : transactions;
+    const deletedIds = getDeletedTransactionIds();
+    return (source || []).filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
+  }, [serverTransactions, transactions]);
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
@@ -502,11 +506,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     });
   }, [filteredTransactions, sortOrder]);
 
-  // Calculate totals (Platform Fee is completely excluded from Reports)
-  const isUnfiltered = selectedFilter === 'all' && selectedCampaignId === 'all' && !startDate && !endDate && !searchQuery && recordTypeFilter === 'all';
-  const totalCount = isUnfiltered && publicPoolStats?.totalCount ? publicPoolStats.totalCount : filteredTransactions.length;
-  const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName)).size;
-  const grandTotal = isUnfiltered && publicPoolStats?.totalAmount ? publicPoolStats.totalAmount : filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  // Calculate totals directly from filteredTransactions so report counts are always 100% accurate
+  const totalCount = filteredTransactions.length;
+  const uniqueDonorsCount = new Set(filteredTransactions.map(t => t.donorName).filter(Boolean)).size;
+  const grandTotal = filteredTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Selected campaign display name
   const currentCampaignDisplayName = selectedCampaignObj 

@@ -197,8 +197,11 @@ export async function purgeSystemUpdatedTransactions(): Promise<number> {
   const idsToPurge = systemUpdatedTransactions.map(t => t.id);
   if (idsToPurge.length === 0) return 0;
 
-  // Perform purge (e.g., deleteMultipleTransactions)
-  await deleteMultipleTransactions(idsToPurge);
+  for (const id of idsToPurge) {
+    try {
+      await deleteTransactionFromFirestore(id);
+    } catch {}
+  }
   return idsToPurge.length;
 }
 

@@ -1359,108 +1359,166 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               </div>
             </div>
 
-            {/* Tab Navigation Bar */}
-            <div className="bg-slate-100/80 border-b border-slate-200/90 px-3 pt-2 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-              {[
-                { 
-                  id: 'staff' as const, 
-                  label: 'Staff & Roles', 
-                  icon: Crown,
-                  badge: staffList.length > 0 ? staffList.length : undefined,
-                  badgeColor: 'bg-purple-600 text-white',
-                  minRole: 'SUPER_ADMIN' as UserRole
-                },
-                { 
-                  id: 'creators' as const, 
-                  label: 'Creator KYC & Approval', 
-                  icon: Users,
-                  badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
-                  badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white',
-                  minRole: 'MODERATOR' as UserRole
-                },
-                { 
-                  id: 'campaigns' as const, 
-                  label: 'Campaigns & Moderation', 
-                  icon: Layers,
-                  badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
-                  badgeColor: 'bg-amber-500 text-white',
-                  minRole: 'MODERATOR' as UserRole
-                },
-                { 
-                  id: 'finances' as const, 
-                  label: 'Finances & Reports', 
-                  icon: DollarSign,
-                  minRole: 'ADMIN' as UserRole
-                },
-                { 
-                  id: 'announcement' as const, 
-                  label: 'Announcement Banner', 
-                  icon: Megaphone,
-                  badge: localAnnouncement.isActive ? 'Active' : undefined,
-                  badgeColor: 'bg-emerald-600 text-white',
-                  minRole: 'ADMIN' as UserRole
-                },
-                { 
-                  id: 'audit' as const, 
-                  label: 'Audit & Activity Log', 
-                  icon: History,
-                  minRole: 'ADMIN' as UserRole
-                },
-                { 
-                  id: 'rates' as const, 
-                  label: 'Platform Rates & Fees', 
-                  icon: Percent,
-                  minRole: 'SUPER_ADMIN' as UserRole
-                },
-                { 
-                  id: 'backup' as const, 
-                  label: 'Backup & Restore', 
-                  icon: Database,
-                  minRole: 'SUPER_ADMIN' as UserRole
-                },
-                { 
-                  id: 'sync_diagnostic' as const, 
-                  label: 'Sync Diagnostic', 
-                  icon: Activity,
-                  minRole: 'ADMIN' as UserRole
-                },
-                { 
-                  id: 'supabase' as const, 
-                  label: 'Supabase DB', 
-                  icon: Database,
-                  minRole: 'ADMIN' as UserRole
-                },
-                { 
-                  id: 'gateway' as const, 
-                  label: 'PhonePe PG V2', 
-                  icon: Smartphone,
-                  minRole: 'SUPER_ADMIN' as UserRole
-                },
-              ]
-              .filter(tab => hasMinimumRole(currentRole, tab.minRole))
-              .map(tab => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
+            {/* Categorized Tab Navigation Bar */}
+            <div className="bg-slate-100/90 border-b border-slate-200/90 px-3 pt-2.5 flex flex-col gap-2 shrink-0">
+              {/* Category Pill Switcher */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex bg-slate-200/80 p-0.5 rounded-xl text-xs">
                   <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`px-3.5 py-2.5 rounded-t-2xl font-black text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer whitespace-nowrap ${
-                      isActive
-                        ? 'bg-white text-indigo-700 border-t-2 border-x border-slate-200/90 border-t-indigo-600 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    type="button"
+                    onClick={() => {
+                      if (['sync_diagnostic', 'supabase', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)) {
+                        setActiveTab('campaigns');
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      !['sync_diagnostic', 'supabase', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)
+                        ? 'bg-white text-indigo-700 shadow-2xs font-black' 
+                        : 'text-slate-600 hover:text-slate-900 font-bold'
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{tab.label}</span>
-                    {tab.badge !== undefined && (
-                      <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold ${tab.badgeColor}`}>
-                        {tab.badge}
-                      </span>
-                    )}
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Management</span>
                   </button>
-                );
-              })}
+                  {hasMinimumRole(currentRole, 'ADMIN') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!['sync_diagnostic', 'supabase', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)) {
+                          setActiveTab('sync_diagnostic');
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        ['sync_diagnostic', 'supabase', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)
+                          ? 'bg-white text-indigo-700 shadow-2xs font-black' 
+                          : 'text-slate-600 hover:text-slate-900 font-bold'
+                      }`}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>System & Diagnostics</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Category Tabs */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                {[
+                  { 
+                    id: 'campaigns' as const, 
+                    label: 'Campaigns & Moderation', 
+                    icon: Layers,
+                    badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
+                    badgeColor: 'bg-amber-500 text-white',
+                    minRole: 'MODERATOR' as UserRole,
+                    category: 'management' as const
+                  },
+                  { 
+                    id: 'creators' as const, 
+                    label: 'Creator KYC & Approval', 
+                    icon: Users,
+                    badge: pendingCreators.length > 0 ? pendingCreators.length : undefined,
+                    badgeColor: pendingCreators.length > 0 ? 'bg-rose-600 text-white animate-pulse' : 'bg-indigo-600 text-white',
+                    minRole: 'MODERATOR' as UserRole,
+                    category: 'management' as const
+                  },
+                  { 
+                    id: 'staff' as const, 
+                    label: 'Staff & Roles', 
+                    icon: Crown,
+                    badge: staffList.length > 0 ? staffList.length : undefined,
+                    badgeColor: 'bg-purple-600 text-white',
+                    minRole: 'SUPER_ADMIN' as UserRole,
+                    category: 'management' as const
+                  },
+                  { 
+                    id: 'finances' as const, 
+                    label: 'Finances & Reports', 
+                    icon: DollarSign,
+                    minRole: 'ADMIN' as UserRole,
+                    category: 'management' as const
+                  },
+                  { 
+                    id: 'announcement' as const, 
+                    label: 'Announcement Banner', 
+                    icon: Megaphone,
+                    badge: localAnnouncement.isActive ? 'Active' : undefined,
+                    badgeColor: 'bg-emerald-600 text-white',
+                    minRole: 'ADMIN' as UserRole,
+                    category: 'management' as const
+                  },
+                  { 
+                    id: 'sync_diagnostic' as const, 
+                    label: 'Sync Diagnostic', 
+                    icon: Activity,
+                    minRole: 'ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                  { 
+                    id: 'supabase' as const, 
+                    label: 'Supabase DB', 
+                    icon: Database,
+                    minRole: 'ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                  { 
+                    id: 'audit' as const, 
+                    label: 'Audit & Activity Log', 
+                    icon: History,
+                    minRole: 'ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                  { 
+                    id: 'rates' as const, 
+                    label: 'Platform Rates & Fees', 
+                    icon: Percent,
+                    minRole: 'SUPER_ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                  { 
+                    id: 'backup' as const, 
+                    label: 'Backup & Restore', 
+                    icon: Database,
+                    minRole: 'SUPER_ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                  { 
+                    id: 'gateway' as const, 
+                    label: 'PhonePe PG V2', 
+                    icon: Smartphone,
+                    minRole: 'SUPER_ADMIN' as UserRole,
+                    category: 'system' as const
+                  },
+                ]
+                .filter(tab => {
+                  const isSys = ['sync_diagnostic', 'supabase', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab);
+                  const inCategory = isSys ? tab.category === 'system' : tab.category === 'management';
+                  return inCategory && hasMinimumRole(currentRole, tab.minRole);
+                })
+                .map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`px-3.5 py-2 rounded-t-xl font-black text-xs transition-all flex items-center gap-2 shrink-0 cursor-pointer whitespace-nowrap ${
+                        isActive
+                          ? 'bg-white text-indigo-700 border-t-2 border-x border-slate-200/90 border-t-indigo-600 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{tab.label}</span>
+                      {tab.badge !== undefined && (
+                        <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold ${tab.badgeColor}`}>
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Main Content Area */}
