@@ -792,10 +792,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                             ₹{totalRaised.toLocaleString('en-IN')}
                           </span>
                           <span className="text-[10px] text-slate-500 font-medium">
-                            {language === 'english' ? 'Total collected' : 'Pek tlingkhawm zat'}
-                          </span>
-                          <span className="text-[7.5px] font-black uppercase text-slate-700 bg-slate-200 border border-slate-300 px-1 py-0.2 rounded ml-1">
-                            {language === 'english' ? 'Creator Only' : 'Creator View'}
+                            TT Amt
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -814,11 +811,8 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                             </span>
                             <span className="text-[10px] text-slate-500 font-medium">
                               {language === 'english' 
-                                ? `of ₹${target.toLocaleString('en-IN')}${targetPeriodText} goal` 
+                                ? `of ₹${target.toLocaleString('en-IN')}${targetPeriodText}` 
                                 : `tling tawh (Target: ₹${target.toLocaleString('en-IN')}${targetPeriodText})`}
-                            </span>
-                            <span className="text-[7.5px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded ml-1">
-                              {language === 'english' ? 'Creator Only' : 'Creator View'}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">

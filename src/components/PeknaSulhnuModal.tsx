@@ -145,6 +145,15 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return () => { isMounted = false; unsub.unsubscribe(); };
   }, []);
 
+  // Memoized dependencies
+  const safeUserPaidIds = useMemo(() => {
+    return Array.isArray(userPaidIds) ? userPaidIds : [];
+  }, [userPaidIds]);
+
+  const safeCampaigns = useMemo(() => {
+    return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
+  }, [campaigns]);
+
   // Defensive array checks - uses Supabase transactions exclusively when loaded
   const safeTransactions = useMemo(() => {
     const combined = supabaseTxns.length > 0
@@ -193,15 +202,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     });
 
     return valid;
-  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, campaigns, userPaidIds]);
-
-  const safeCampaigns = useMemo(() => {
-    return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
-  }, [campaigns]);
-
-  const safeUserPaidIds = useMemo(() => {
-    return Array.isArray(userPaidIds) ? userPaidIds : [];
-  }, [userPaidIds]);
+  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, campaigns, userPaidIds, safeUserPaidIds]);
 
   // Identify campaigns owned by active profile
   const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {
@@ -219,6 +220,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }
     return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
   }, [safeCampaigns, creatorProfile]);
+
 
   const isCreatorAccount = Boolean(
     isSuperAdminUser || 
