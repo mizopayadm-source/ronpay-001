@@ -974,7 +974,8 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay_txn_1790236637582_542',
   'rpay_txn_1790524654457_867',
   'rpay_txn_1790749698765_269',
-  'rpay-cash-738522'
+  'rpay-cash-738522',
+  'rpay_txn_1791688702224_953'
 ]);
 
 export const getDeletedTransactionIds = (): Set<string> => {
@@ -1178,6 +1179,17 @@ export const getStoredTransactions = (): Transaction[] => {
           }
           seenTxIds.add(cleanId);
           finalMerged.push(t);
+        }
+
+        // Seamlessly ensure any active canonical transactions from database are backfilled
+        for (const initTx of INITIAL_TRANSACTIONS) {
+          if (!initTx || !initTx.id) continue;
+          const cleanId = String(initTx.id).toLowerCase().trim();
+          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) continue;
+          if (!seenTxIds.has(cleanId)) {
+            seenTxIds.add(cleanId);
+            finalMerged.push(initTx);
+          }
         }
 
         if (finalMerged.length !== parsed.length) {

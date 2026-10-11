@@ -51,7 +51,9 @@ import {
 } from './utils/storage';
 import {
   fetchTableData,
-  subscribeToTable
+  subscribeToTable,
+  upsertTransaction,
+  deleteTransaction
 } from './services/SupabaseSync';
 import {
   getStoredPublicPoolStats,
@@ -303,6 +305,7 @@ export default function App() {
             setTransactions(txs);
             try {
               localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+              localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
             } catch {}
           }
           if (Array.isArray(camps) && camps.length > 0) setCampaigns(camps);
@@ -320,6 +323,7 @@ export default function App() {
           setTransactions(txs as Transaction[]);
           try {
             localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+            localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
           } catch {}
         }
       }).catch(() => {});
@@ -565,12 +569,19 @@ export default function App() {
   // Force cloud refresh directly from Authoritative Server Database
   const handleRefreshCloudData = useCallback(async () => {
     try {
-      const syncResult = await syncAllWithServer(true);
-      if (syncResult?.transactions && syncResult.transactions.length > 0) {
-        setTransactions(syncResult.transactions);
+      const [txs, camps] = await Promise.all([
+        fetchTableData('transactions').catch(() => []),
+        fetchTableData('campaigns').catch(() => [])
+      ]);
+      if (Array.isArray(txs) && txs.length > 0) {
+        setTransactions(txs as Transaction[]);
+        try {
+          localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+          localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
+        } catch {}
       }
-      if (syncResult?.campaigns && syncResult.campaigns.length > 0) {
-        setCampaigns(syncResult.campaigns);
+      if (Array.isArray(camps) && camps.length > 0) {
+        setCampaigns(camps as Campaign[]);
       }
       reloadLocalData();
     } catch (e) {
@@ -1286,20 +1297,24 @@ export default function App() {
 
   const handleUpdateTransaction = (transaction: Transaction) => {
     saveTransaction(transaction);
+    upsertTransaction(transaction).catch(err => console.warn('Supabase update tx error:', err));
     setTransactions(getStoredTransactions());
   };
 
   const handleDeleteTransaction = (transactionId: string) => {
     deleteStoredTransaction(transactionId);
+    deleteTransaction(transactionId).catch(err => console.warn('Supabase delete tx error:', err));
     setTransactions(getStoredTransactions());
   };
 
   const handleBatchUpdateTransactions = (updatedTxs: Transaction[], deletedIds: string[]) => {
     if (deletedIds && deletedIds.length > 0) {
       deleteMultipleTransactions(deletedIds);
+      deletedIds.forEach(id => deleteTransaction(id).catch(() => {}));
     }
     if (updatedTxs && updatedTxs.length > 0) {
       saveMultipleTransactions(updatedTxs);
+      updatedTxs.forEach(tx => upsertTransaction(tx).catch(() => {}));
     }
     setTransactions(getStoredTransactions());
   };

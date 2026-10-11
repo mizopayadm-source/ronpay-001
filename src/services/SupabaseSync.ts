@@ -84,21 +84,38 @@ export const normalizeCampaign = (row: any): Campaign => {
 
 // Authoritative Fetchers
 export const fetchTableData = async <T>(table: string): Promise<T[]> => {
-  const { data, error } = await supabase
-    .from(table)
-    .select('*');
-  if (error) {
-    console.error(`[SupabaseSync] Error fetching ${table}:`, error);
-    throw error;
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*');
+    if (!error && Array.isArray(data) && data.length > 0) {
+      if (table === 'transactions') {
+        return data.map(normalizeTransaction) as unknown as T[];
+      }
+      if (table === 'campaigns') {
+        return data.map(normalizeCampaign) as unknown as T[];
+      }
+      return data as T[];
+    }
+    if (error) {
+      console.warn(`[SupabaseSync] Warning fetching ${table}:`, error);
+    }
+  } catch (err) {
+    console.warn(`[SupabaseSync] Error fetching ${table}:`, err);
   }
-  if (!data) return [];
-  if (table === 'transactions') {
-    return data.map(normalizeTransaction) as unknown as T[];
-  }
-  if (table === 'campaigns') {
-    return data.map(normalizeCampaign) as unknown as T[];
-  }
-  return data as T[];
+
+  // Graceful fallback to backend server state
+  try {
+    const res = await fetch('/api/data/state');
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.data && Array.isArray(json.data[table]) && json.data[table].length > 0) {
+        return json.data[table] as T[];
+      }
+    }
+  } catch {}
+
+  return [];
 };
 
 // CRUD Operations for Transactions

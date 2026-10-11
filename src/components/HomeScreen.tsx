@@ -464,40 +464,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-      {/* Kumtluang Pawisa Hmanna (Expense Desk) Quick Banner - strictly restricted to Admin / Creator */}
-      {Boolean(creatorProfile?.isAdmin === true || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN' || creatorProfile?.isApproved) && onOpenMemberRoll && (
-        <div 
-          onClick={() => {
-            const firstKumtluang = campaigns.find(c => c.category === 'kumtluang');
-            onOpenMemberRoll('expenses', firstKumtluang?.id);
-          }}
-          className="bg-gradient-to-r from-rose-950 via-slate-900 to-indigo-950 p-2.5 px-3.5 rounded-2xl border border-rose-500/40 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-rose-400 transition group active:scale-[0.99]"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
-              <Receipt className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xs text-white">Pawisa Hman Chhuahna (Expense Desk)</span>
-                <span className="text-[8px] font-black uppercase bg-rose-500/30 text-rose-300 border border-rose-400/40 px-1.5 py-0.2 rounded-full">
-                  Admin & Creator Only
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-300 truncate">
-                Kumtluang bawm sum hmanna chipchiar, vouchers, custom heads & balance sheet
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="px-2.5 py-1 bg-rose-500 hover:bg-rose-400 text-white text-[10.5px] font-black rounded-lg shadow-2xs transition shrink-0 flex items-center gap-1 cursor-pointer"
-          >
-            <span>Hawng Rawh</span>
-            <ArrowRight className="w-3 h-3" />
-          </button>
-        </div>
-      )}
+
 
       {/* 1. Money Transfer, Quick Actions & UPI */}
       <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-indigo-100/80">
@@ -1126,18 +1093,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           className="p-1.5 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
                         >
                           <Users className="w-3 h-3" /> Roll
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenMemberRoll('expenses', camp.id);
-                          }}
-                          title="Pawisa Hman Chhuahna (Expenses & Vouchers)"
-                          className="p-1.5 px-2 rounded-lg bg-gradient-to-r from-rose-600 to-amber-600 text-white font-extrabold text-[9px] hover:from-rose-700 hover:to-amber-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                        >
-                          <Receipt className="w-3 h-3" /> Hmanna
                         </button>
                       </>
                     )}

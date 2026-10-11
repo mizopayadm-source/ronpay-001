@@ -385,8 +385,8 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                   txMap.set(k, ct);
                   newLocalTxsToPush.push(ct);
                 } else {
-                  // Transaction not on server and not a fresh offline creation: item was deleted on server!
-                  markTransactionAsDeleted(k, false);
+                  // Retain valid local transaction unless explicitly in serverData.deletedTransactionIds
+                  txMap.set(k, ct);
                 }
               }
             }

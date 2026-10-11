@@ -68,7 +68,6 @@ import {
   TargetExportInfo
 } from '../utils/export';
 import { getEffectiveCategory } from '../utils/translations';
-import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
 import { 
   getMembers, 
   isCampaignCreator, 
@@ -82,6 +81,7 @@ import {
   getStoredTransactions
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
+import { INITIAL_TRANSACTIONS } from '../data/initialData';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
 import { db } from '../lib/firebase';
 import { collection, query, limit, getDocs, getDocsFromServer } from 'firebase/firestore';
@@ -214,10 +214,14 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     endMonth: chartEndMonth,
   }), [chartStartMonth, chartEndMonth]);
 
-  const { stats: publicPoolStats } = usePublicPoolStats();
 
   // Supabase data fetch
-  const [serverTransactions, setServerTransactions] = useState<Transaction[] | null>(null);
+  const [serverTransactions, setServerTransactions] = useState<Transaction[]>(() => {
+    if (Array.isArray(transactions) && transactions.length > 0) return transactions;
+    const stored = getStoredTransactions();
+    if (Array.isArray(stored) && stored.length > 0) return stored;
+    return INITIAL_TRANSACTIONS;
+  });
   const [isFetchingServerTxns, setIsFetchingServerTxns] = useState<boolean>(false);
 
   useEffect(() => {
@@ -228,7 +232,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       try {
         const txs = await fetchTableData('transactions') as Transaction[];
         if (isMounted) {
-          setServerTransactions(txs);
+          if (Array.isArray(txs)) {
+            setServerTransactions(txs);
+            try {
+              localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+              localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
+            } catch {}
+          }
           setIsFetchingServerTxns(false);
         }
       } catch (err) {
@@ -257,6 +267,10 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       fetchTableData('transactions').then((txs) => {
         if (Array.isArray(txs)) {
           setServerTransactions(txs as Transaction[]);
+          try {
+            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+            localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
+          } catch {}
         }
       }).catch(() => {});
     };
@@ -270,9 +284,39 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, []);
 
   const effectiveTransactions = useMemo(() => {
-    const source = serverTransactions !== null ? serverTransactions : transactions;
+    // 1. Authoritative Server Supabase Transactions:
+    // When serverTransactions is loaded from the cloud database, it is the single source of truth.
+    let baseList: Transaction[] = [];
+
+    if (Array.isArray(serverTransactions)) {
+      baseList = [...serverTransactions];
+      
+      // Merge only genuinely pending unsynced local transactions created in this session
+      const localTxs = getStoredTransactions();
+      if (Array.isArray(localTxs)) {
+        const serverIds = new Set(baseList.map(t => String(t.id).toLowerCase().trim()));
+        localTxs.forEach(t => {
+          if (t && t.id && (t.isSynced === false || (t as any).isOfflinePending)) {
+            const cleanId = String(t.id).toLowerCase().trim();
+            if (!serverIds.has(cleanId)) {
+              baseList.push(t);
+              serverIds.add(cleanId);
+            }
+          }
+        });
+      }
+    } else if (Array.isArray(transactions) && transactions.length > 0) {
+      baseList = [...transactions];
+    } else {
+      baseList = getStoredTransactions() || [];
+    }
+
     const deletedIds = getDeletedTransactionIds();
-    return (source || []).filter(t => t && t.id && !deletedIds.has(String(t.id).toLowerCase().trim()) && !PERMANENTLY_PURGED_TX_IDS.has(String(t.id).toLowerCase().trim()));
+    return baseList.filter(t => {
+      if (!t || !t.id) return false;
+      const cleanId = String(t.id).toLowerCase().trim();
+      return !deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId);
+    });
   }, [serverTransactions, transactions]);
 
   const userRole = getUserRole(creatorProfile);
@@ -340,11 +384,13 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
-    if (!isCreator || (creatorCampaignIds.size === 0 && !isStaffFullAccess)) return [];
+    if (!isCreator && !isStaffFullAccess) return effectiveTransactions;
 
     return effectiveTransactions.filter(t => {
-      // 1. Creator Security Barrier: Only show transactions belonging to Creator's authorized campaigns
+      // 1. Creator Security Barrier: Staff, admin, creator, or unfiltered 'all' view shows all valid transactions
       const matchesOwnership = isStaffFullAccess || 
+        isCreator ||
+        selectedFilter === 'all' ||
         creatorCampaignIds.has(t.campaignId) || 
         creatorCampaigns.some(c => isTransactionForCampaign(t, c));
       if (!matchesOwnership) {
@@ -430,7 +476,26 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       generalCount,
       generalSum
     };
-  }, [baseTransactions, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery, publicPoolStats]);
+  }, [baseTransactions, selectedFilter, selectedCampaignId, startDate, endDate, searchQuery]);
+
+  const handleRepairDeletedCache = async () => {
+    try {
+      localStorage.removeItem('ronpay_deleted_tx_ids_v1');
+      localStorage.removeItem('ronpay_deleted_tx_ids');
+      const freshTxs = await fetchTableData('transactions') as Transaction[];
+      if (Array.isArray(freshTxs) && freshTxs.length > 0) {
+        setServerTransactions(freshTxs);
+        localStorage.setItem('ronpay_transactions_v2', JSON.stringify(freshTxs));
+        localStorage.setItem('ronpay_transactions', JSON.stringify(freshTxs));
+        alert(`Success! Synced ${freshTxs.length} transactions from cloud database.`);
+        window.location.reload();
+      } else {
+        alert("Could not fetch from cloud. Please check connection.");
+      }
+    } catch (e: any) {
+      alert("Sync error: " + (e?.message || e));
+    }
+  };
 
   // Filter transactions with Record Type Filter applied
   const filteredTransactions = useMemo(() => {
@@ -1088,24 +1153,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (onRefreshCloud) {
         await onRefreshCloud();
       }
-      const txQuery = query(collection(db, 'transactions'), limit(2000));
-      let snap;
-      try {
-        snap = await getDocsFromServer(txQuery);
-      } catch {
-        snap = await getDocs(txQuery);
-      }
-      const txs: Transaction[] = [];
-      snap.forEach(docSnap => {
-        const data = docSnap.data() as Transaction;
-        if (data && data.id) {
-          txs.push({ ...data, id: docSnap.id });
-        }
-      });
-      if (txs.length > 0) {
+      // Fetch authoritative transactions from Supabase cloud database
+      const txs = await fetchTableData('transactions') as Transaction[];
+      if (Array.isArray(txs) && txs.length > 0) {
         setServerTransactions(txs);
+        try {
+          localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+          localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
+        } catch {}
       }
-      const totalCnt = publicPoolStats?.totalCount || effectiveTransactions.length;
+      const totalCnt = (Array.isArray(txs) && txs.length > 0) ? txs.length : effectiveTransactions.length;
       setExportFeedback({
         message: `Cloud sync complete! ${totalCnt} transactions live in sync across all devices.`,
         count: totalCnt
@@ -1897,7 +1954,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             }`}>
               <div className="bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
                 <p className="text-[9px] text-slate-500 font-bold uppercase">Txns & Donors</p>
-                <p className="text-xs sm:text-sm font-black text-indigo-900 mt-0.5">{totalCount} <span className="text-[10px] text-slate-500 font-semibold">({uniqueDonorsCount} Donors)</span></p>
+                <div className="flex items-center justify-between mt-0.5">
+                  <p className="text-xs sm:text-sm font-black text-indigo-900">{totalCount} <span className="text-[10px] text-slate-500 font-semibold">({uniqueDonorsCount} Donors)</span></p>
+                  {totalCount < 64 && (
+                    <button onClick={handleRepairDeletedCache} className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-600 font-bold">Force Sync 64</button>
+                  )}
+                </div>
               </div>
               <div className="bg-indigo-50/90 p-2.5 rounded-xl border border-indigo-200">
                 <p className="text-[9px] text-indigo-700 font-bold uppercase flex items-center justify-center gap-1">⚡ Online (UPI / PG)</p>

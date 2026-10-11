@@ -4759,9 +4759,99 @@ app.get('/api/data/events', (req: Request, res: Response) => {
   });
 });
 
+async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
+  try {
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (!sbUrl || !sbKey) return false;
+
+    const res = await fetch(`${sbUrl}/rest/v1/transactions?select=*`, {
+      headers: {
+        'apikey': sbKey,
+        'Authorization': `Bearer ${sbKey}`
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) return false;
+    const supaRows: any[] = await res.json();
+    if (!Array.isArray(supaRows) || supaRows.length === 0) return false;
+
+    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+    const txMap = new Map<string, any>();
+    for (const t of (db.transactions || [])) {
+      if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
+    }
+
+    let hasNew = false;
+    for (const row of supaRows) {
+      if (!row || !row.id) continue;
+      const cleanId = String(row.id).toLowerCase().trim();
+      if (serverDelTxSet.has(cleanId) || PURGED_SIMULATOR_TXS.has(cleanId)) continue;
+      const normalized = {
+        id: row.id,
+        campaignId: row.campaign_id || row.campaignId || '',
+        campaignTitle: row.campaign_title || row.campaignTitle || '',
+        category: row.category || '',
+        donorName: row.donor_name || row.donorName || '',
+        donorPhone: row.donor_phone || row.donorPhone || '',
+        donorVeng: row.donor_veng || row.donorVeng || '',
+        memberId: row.member_id || row.memberId || '',
+        donorType: row.donor_type || row.donorType || 'member',
+        isAnonymous: row.is_anonymous ?? row.isAnonymous ?? false,
+        amount: Number(row.amount) || 0,
+        platformFee: Number(row.platform_fee ?? row.platformFee ?? 0),
+        totalAmount: Number(row.total_amount ?? row.totalAmount ?? row.amount ?? 0),
+        paymentMethod: row.payment_method || row.paymentMethod || 'cash',
+        status: row.status || 'completed',
+        remark: row.remark || '',
+        periodType: row.period_type || row.periodType || 'monthly',
+        periodMonth: row.period_month || row.periodMonth || '',
+        periodYear: row.period_year || row.periodYear || '',
+        periodLabel: row.period_label || row.periodLabel || '',
+        utr: row.utr || '',
+        referenceNo: row.reference_no || row.referenceNo || '',
+        timestamp: row.timestamp || row.created_at || new Date().toISOString(),
+        createdAt: row.created_at || row.timestamp || new Date().toISOString(),
+        updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+        metadata: row.metadata || {}
+      };
+
+      const existing = txMap.get(cleanId);
+      if (!existing) {
+        txMap.set(cleanId, normalized);
+        hasNew = true;
+      } else {
+        txMap.set(cleanId, { ...existing, ...normalized });
+      }
+    }
+
+    if (hasNew || txMap.size > db.transactions.length) {
+      db.transactions = Array.from(txMap.values());
+      db.transactions.sort((a: any, b: any) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+      saveDatabase(db);
+      return true;
+    }
+  } catch (err: any) {
+    // Graceful silent fallback to local database state when external Supabase is unreachable or times out
+    const msg = err?.message || String(err);
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError' || msg.includes('timeout') || msg.includes('fetch failed')) {
+      // Expected when server has no direct outbound route or connection times out
+      return false;
+    }
+    console.warn('Sync from Supabase in server note:', msg);
+  }
+  return false;
+}
+
 // GET /api/data/state - Fetch current central database state
-app.get('/api/data/state', (req: Request, res: Response) => {
+app.get('/api/data/state', async (req: Request, res: Response) => {
   const db = getDatabase();
+  await syncFromSupabase(db);
   res.json({
     success: true,
     data: db,
@@ -4770,7 +4860,7 @@ app.get('/api/data/state', (req: Request, res: Response) => {
 });
 
 // POST /api/data/sync - Bi-directional sync between App, Web Portal, & Multi-devices
-app.post('/api/data/sync', (req: Request, res: Response) => {
+app.post('/api/data/sync', async (req: Request, res: Response) => {
   try {
     const {
       campaigns,
@@ -5007,6 +5097,8 @@ app.post('/api/data/sync', (req: Request, res: Response) => {
     if (hasChanges) {
       saveDatabase(db);
     }
+
+    await syncFromSupabase(db);
 
     res.json({
       success: true,
