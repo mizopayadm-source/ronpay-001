@@ -59,8 +59,16 @@ import {
   saveCampaign
 } from '../utils/storage';
 import { fetchExpensesFromFirestore, syncAllLocalExpensesToFirestore } from '../services/firestoreSync';
+import { syncAllWithServer } from '../utils/syncEngine';
 import { formatDateDDMMYYYY, getTodayDateTimeLocal } from '../utils/date';
 import { compressDataUrl } from '../utils/imageCompressor';
+import { 
+  exportCashBookPrint, 
+  exportExpenditureStatementPrint, 
+  exportPaymentVoucherSlipPrint,
+  exportCashBookToCSV,
+  exportExpensesToCSV 
+} from '../utils/export';
 
 interface KumtluangExpenseManagerProps {
   campaign: Campaign;
@@ -188,11 +196,11 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   const handleManualCloudSync = async () => {
     setIsCloudSyncing(true);
     try {
-      await syncAllLocalExpensesToFirestore();
-      const freshFromCloud = await fetchExpensesFromFirestore(true);
-      const campExpenses = freshFromCloud.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
-      setExpenseList(campExpenses);
-      showToast('Cloud Firestore atangin live data sync fel a ni e!', 'success');
+      await syncAllWithServer(true).catch(() => {});
+      await syncAllLocalExpensesToFirestore().catch(() => {});
+      const freshLocal = getStoredExpenses(campaign.id);
+      setExpenseList(freshLocal);
+      showToast('Central database & Cloud sync fel a ni e!', 'success');
     } catch {
       showToast('Cloud sync timeout or offline', 'error');
     } finally {
@@ -201,7 +209,13 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   };
 
   useEffect(() => {
-    // When opened, fetch from Firestore in background to ensure fresh cloud data across Web, Mobile & Preview
+    // When opened, fetch from central sync server and Firestore in background to ensure 100% consistent data across Web, Mobile & Preview
+    syncAllWithServer(true).then(() => {
+      if (!isUserInteractingRef.current) {
+        const fresh = getStoredExpenses(campaign.id);
+        setExpenseList(fresh);
+      }
+    }).catch(() => {});
     fetchExpensesFromFirestore(true).then((fresh) => {
       if (Array.isArray(fresh) && !isUserInteractingRef.current) {
         const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
@@ -449,6 +463,57 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       percentage: totalExpenses > 0 ? ((data.total / totalExpenses) * 100).toFixed(1) : '0.0'
     })).sort((a, b) => b.total - a.total);
   }, [expenseHeads, expenseList, totalExpenses]);
+
+  // Direct Print & PDF Export handlers
+  const handlePrintCashBook = () => {
+    exportCashBookPrint({
+      campaign,
+      creatorProfile,
+      openingBalance,
+      totalCollections,
+      totalExpenses,
+      netBalance,
+      headLedgerSummary,
+      cashBookEntries,
+      dateRangeText: 'All Time Statement',
+      treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary'
+    });
+  };
+
+  const handleDownloadCashBookPDF = () => {
+    handlePrintCashBook();
+  };
+
+  const handlePrintExpenseStatement = () => {
+    const periodText = fromDateFilter || toDateFilter
+      ? `Period: ${fromDateFilter ? formatDateDDMMYYYY(fromDateFilter) : 'Start'} to ${toDateFilter ? formatDateDDMMYYYY(toDateFilter) : 'Till Date'}`
+      : 'All Time Statement';
+
+    exportExpenditureStatementPrint({
+      campaign,
+      creatorProfile,
+      expenses: filteredExpenses,
+      openingBalance,
+      totalCollections,
+      filteredTotalExpenses,
+      netBalance,
+      dateRangeText: periodText,
+      selectedHead: selectedHeadFilter === 'all' ? 'All Heads' : selectedHeadFilter,
+      treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary'
+    });
+  };
+
+  const handleDownloadExpenseStatementPDF = () => {
+    handlePrintExpenseStatement();
+  };
+
+  const handleExportCashBookCSV = () => {
+    exportCashBookToCSV(campaign, cashBookEntries, openingBalance);
+  };
+
+  const handleExportExpenseCSV = () => {
+    exportExpensesToCSV(campaign, filteredExpenses);
+  };
 
   // Handle Receipt Image Selection for New Expense
   const handleReceiptFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1376,13 +1441,38 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 Opening Balance, Sum Lut (Receipts), Sum Chhuak (Payments), leh Running Balance vawn felna.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrintCashBook}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Print official Cash Book with Running Balances"
+              >
+                <Printer className="w-3.5 h-3.5" /> Print Cash Book
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadCashBookPDF}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Download Cash Book as A4 PDF"
+              >
+                <Download className="w-3.5 h-3.5" /> PDF Download
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCashBookCSV}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                title="Export Cash Book to CSV / Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> CSV
+              </button>
               <button
                 type="button"
                 onClick={() => setSubTab('statement')}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                title="View Date-wise Expenditure Statement"
               >
-                <Printer className="w-3.5 h-3.5" /> Print Cash Statement
+                <FileText className="w-3.5 h-3.5 text-rose-600" /> Expense Statement
               </button>
             </div>
           </div>
@@ -1928,13 +2018,30 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 Official statement print chhuahna leh audit theih tura buatsaih (Date filter mil zelin).
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                onClick={handlePrintExpenseStatement}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Print or Preview Statement"
               >
                 <Printer className="w-3.5 h-3.5" /> Print Statement Now
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExpenseStatementPDF}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Download Statement as PDF"
+              >
+                <Download className="w-3.5 h-3.5" /> PDF Download
+              </button>
+              <button
+                type="button"
+                onClick={handleExportExpenseCSV}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                title="Export Vouchers to CSV / Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> CSV
               </button>
               <button
                 type="button"
@@ -2433,15 +2540,18 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
+                  onClick={() => {
+                    exportPaymentVoucherSlipPrint(campaign, creatorProfile, printingVoucher);
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  title="Print or Download PDF Voucher Slip"
                 >
-                  <Printer className="w-3 h-3" /> Print Voucher
+                  <Printer className="w-3.5 h-3.5" /> Print / PDF Slip
                 </button>
                 <button
                   type="button"
                   onClick={() => setPrintingVoucher(null)}
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-700"
+                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 cursor-pointer"
                 >
                   ✕
                 </button>

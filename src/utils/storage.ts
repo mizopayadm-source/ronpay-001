@@ -1,5 +1,5 @@
 import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense } from '../types';
-import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
+import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, INITIAL_EXPENSES, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
   syncCampaignToFirestore,
@@ -950,6 +950,7 @@ export const clearDeletedTransactionId = (txId: string): void => {
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay-test-123456',
   'test-123',
+  'rpay-cash-520699',
   'rpay-cash-800-web',
   'rpay-cash-800-app',
   'rpay_txn_1790753980087_908',
@@ -1745,7 +1746,7 @@ export const isUserPaidTransaction = (
  */
 export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
   if (!creatorProfile || !camp) return false;
-  if (creatorProfile.isAdmin) return true;
+  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') return true;
   if (!creatorProfile.phone && !creatorProfile.name) return false;
 
   const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
@@ -3765,7 +3766,7 @@ export const DEFAULT_KUMTLUANG_EXPENSE_HEADS: string[] = [
   'Thil Dang / Miscellaneous'
 ];
 
-export const INITIAL_KUMTLUANG_EXPENSES: KumtluangExpense[] = [];
+export const INITIAL_KUMTLUANG_EXPENSES: KumtluangExpense[] = (INITIAL_EXPENSES || []) as KumtluangExpense[];
 
 const KUMTLUANG_EXPENSES_KEY = 'ronpay_kumtluang_expenses_v1';
 const EXPENSE_HEADS_PREFIX = 'ronpay_expense_heads_';
@@ -3809,14 +3810,30 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KUMTLUANG_EXPENSES_KEY) : null;
     let list: KumtluangExpense[] = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(list)) {
-      list = [];
+    if (!Array.isArray(list) || list.length === 0) {
+      list = [...INITIAL_KUMTLUANG_EXPENSES];
+      if (typeof localStorage !== 'undefined' && list.length > 0) {
+        localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(list));
+      }
     }
     const delSet = getDeletedExpenseIds();
     const cleanList = list.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()) && !KNOWN_DUMMY_EXPENSE_IDS.has(String(e.id).toLowerCase().trim()));
     
-    // Self-heal: If dirty dummy records existed in localStorage, clean them up immediately
-    if (cleanList.length !== list.length && typeof localStorage !== 'undefined') {
+    // Backfill any active canonical expenses from INITIAL_KUMTLUANG_EXPENSES that may be missing from local storage
+    const seenIds = new Set(cleanList.map(e => String(e.id).toLowerCase().trim()));
+    let backfilled = false;
+    for (const initExp of INITIAL_KUMTLUANG_EXPENSES) {
+      if (!initExp || !initExp.id) continue;
+      const k = String(initExp.id).toLowerCase().trim();
+      if (!delSet.has(k) && !KNOWN_DUMMY_EXPENSE_IDS.has(k) && !seenIds.has(k)) {
+        cleanList.push(initExp);
+        seenIds.add(k);
+        backfilled = true;
+      }
+    }
+
+    // Self-heal: If dirty dummy records existed or canonical records backfilled, persist to localStorage
+    if ((backfilled || cleanList.length !== list.length) && typeof localStorage !== 'undefined') {
       localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(cleanList));
     }
 
@@ -3827,7 +3844,7 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
     return cleanList;
   } catch (e) {
     console.error('Failed to get stored expenses', e);
-    return [];
+    return [...INITIAL_KUMTLUANG_EXPENSES];
   }
 };
 

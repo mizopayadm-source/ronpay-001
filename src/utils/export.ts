@@ -1,4 +1,4 @@
-import { Transaction, MemberRecord, Campaign } from '../types';
+import { Transaction, MemberRecord, Campaign, KumtluangExpense, CreatorProfile } from '../types';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from './date';
 import { getTransactionMonthInfo } from './monthHelper';
 import { getMembers, getStoredCampaigns } from './storage';
@@ -3673,6 +3673,1028 @@ export const exportGeneralPassbookPrint = (
   const html = generateGeneralPassbookPrintHtml(generalTitle, categories, transactions, orgName, logoUrl, location, collector);
   const cleanName = generalTitle.replace(/[/\\?%*:|"<>]/g, '').trim().replace(/\s+/g, '_');
   printHtmlSafely(html, `General Passbook • ${generalTitle}`, `RonPay_General_Passbook_${cleanName}.pdf`);
+};
+
+/**
+ * Format Indian Rupees Amount in Words (e.g. "One Thousand Five Hundred Rupees Only")
+ */
+export const formatAmountInWords = (amount: number): string => {
+  if (isNaN(amount) || amount === 0) return 'Zero Rupees Only';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  
+  const numToWords = (n: number): string => {
+    if (n === 0) return '';
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
+    if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + numToWords(n % 100) : '');
+    if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + numToWords(n % 1000) : '');
+    if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + numToWords(n % 100000) : '');
+    return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + numToWords(n % 10000000) : '');
+  };
+
+  const integerPart = Math.floor(Math.abs(amount));
+  const decimalPart = Math.round((Math.abs(amount) - integerPart) * 100);
+
+  let result = numToWords(integerPart) + ' Rupees';
+  if (decimalPart > 0) {
+    result += ' and ' + numToWords(decimalPart) + ' Paise';
+  }
+  return result + ' Only';
+};
+
+export interface CashBookPrintEntry {
+  id: string;
+  date: string;
+  type: 'receipt' | 'payment';
+  refNo: string;
+  head: string;
+  particulars: string;
+  receiptAmount: number;
+  paymentAmount: number;
+  runningBalance: number;
+}
+
+export interface CashBookPrintOptions {
+  campaign: Campaign;
+  creatorProfile?: CreatorProfile | null;
+  openingBalance: number;
+  totalCollections: number;
+  totalExpenses: number;
+  netBalance: number;
+  headLedgerSummary: Array<{ head: string; count: number; total: number; percentage: string }>;
+  cashBookEntries: CashBookPrintEntry[];
+  dateRangeText?: string;
+  treasurerName?: string;
+  auditorName?: string;
+  chairmanName?: string;
+}
+
+/**
+ * Generates official Cash Book & Ledger HTML (Sum Vawnna & Hmanral Bu)
+ * Clean, multi-page print and high-res PDF generation with running balances.
+ */
+export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string => {
+  const {
+    campaign,
+    creatorProfile,
+    openingBalance,
+    totalCollections,
+    totalExpenses,
+    netBalance,
+    headLedgerSummary,
+    cashBookEntries,
+    dateRangeText = 'All Time Statement',
+    treasurerName = creatorProfile?.name || 'Treasurer / Fin. Secretary',
+    auditorName = 'Auditor / Accountant',
+    chairmanName = 'Chairman / President'
+  } = options;
+
+  const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
+  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
+  const todayStr = formatDateDDMMYYYY(new Date());
+
+  // Sort cashBookEntries chronologically (oldest to newest) for standard Cash Book reading
+  const sortedEntries = [...cashBookEntries].sort((a, b) => {
+    const timeA = new Date(a.date || 0).getTime();
+    const timeB = new Date(b.date || 0).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return a.type === 'receipt' ? -1 : 1;
+  });
+
+  // Build Head-wise breakdown cards HTML
+  const headCardsHtml = headLedgerSummary.slice(0, 9).map(item => `
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 10px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box;">
+      <div style="min-width: 0; padding-right: 6px;">
+        <span style="font-size: 10px; font-weight: 800; color: #1e293b; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.head}</span>
+        <span style="font-size: 8.5px; color: #64748b;">${item.count} voucher${item.count === 1 ? '' : 's'} (${item.percentage}%)</span>
+      </div>
+      <span style="font-size: 10.5px; font-weight: 900; color: #e11d48; white-space: nowrap;">₹${item.total.toLocaleString('en-IN')}</span>
+    </div>
+  `).join('');
+
+  // Rows of Cash Book Table
+  let rowsHtml = '';
+  let rowIdx = 1;
+
+  // Opening balance row
+  if (openingBalance > 0) {
+    rowsHtml += `
+      <tr style="background: #eff6ff; font-weight: bold; border-bottom: 1px solid #bfdbfe;">
+        <td style="text-align: center; padding: 8px 6px; font-family: monospace; font-size: 10px; color: #1e40af;">--</td>
+        <td style="padding: 8px 6px; font-family: monospace; font-size: 10px; color: #1e40af;">--</td>
+        <td style="text-align: center; padding: 8px 6px;">
+          <span style="background: #dbeafe; color: #1e40af; font-weight: 900; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #93c5fd;">OPENING B/F</span>
+        </td>
+        <td style="padding: 8px 6px; font-family: monospace; font-weight: 800; font-size: 10px; color: #1e40af;">B/F</td>
+        <td style="padding: 8px 6px; font-size: 10.5px; color: #1e3a8a; font-weight: 800;">
+          Opening Balance Brought Forward (Cash in Hand / Bank)
+        </td>
+        <td style="padding: 8px 6px; font-size: 9.5px; color: #1e40af; font-weight: 700;">Opening Balance</td>
+        <td style="text-align: right; padding: 8px 6px; font-family: monospace; font-weight: 900; color: #047857; font-size: 11px;">
+          ₹${openingBalance.toLocaleString('en-IN')}
+        </td>
+        <td style="text-align: center; padding: 8px 6px; font-family: monospace; color: #94a3b8; font-size: 10px;">--</td>
+        <td style="text-align: right; padding: 8px 6px; font-family: monospace; font-weight: 900; color: #1e1b4b; background: #e0e7ff; font-size: 11px;">
+          ₹${openingBalance.toLocaleString('en-IN')}
+        </td>
+      </tr>
+    `;
+  }
+
+  sortedEntries.forEach((entry) => {
+    const isReceipt = entry.type === 'receipt';
+    const typeBadge = isReceipt
+      ? `<span style="background: #dcfce7; color: #166534; font-weight: 900; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #86efac;">RECEIPT</span>`
+      : `<span style="background: #ffe4e6; color: #9f1239; font-weight: 900; font-size: 8.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid #fecdd3;">PAYMENT</span>`;
+
+    const rowBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+    rowsHtml += `
+      <tr style="background: ${rowBg}; border-bottom: 1px solid #e2e8f0;">
+        <td style="text-align: center; padding: 7px 6px; font-family: monospace; font-size: 9.5px; color: #64748b;">${rowIdx}</td>
+        <td style="padding: 7px 6px; font-family: monospace; font-size: 10px; color: #334155; white-space: nowrap;">${formatDateDDMMYYYY(entry.date)}</td>
+        <td style="text-align: center; padding: 7px 6px;">${typeBadge}</td>
+        <td style="padding: 7px 6px; font-family: monospace; font-weight: 800; font-size: 9.5px; color: #475569; white-space: nowrap;">${entry.refNo || '--'}</td>
+        <td style="padding: 7px 6px; font-size: 10.5px; color: #0f172a; line-height: 1.3;">
+          <div style="font-weight: 600;">${entry.particulars}</div>
+        </td>
+        <td style="padding: 7px 6px; font-size: 9.5px; font-weight: 700; color: #6366f1; white-space: nowrap;">${entry.head}</td>
+        <td style="text-align: right; padding: 7px 6px; font-family: monospace; font-weight: 800; color: #047857; font-size: 10.5px; white-space: nowrap;">
+          ${entry.receiptAmount > 0 ? `₹${entry.receiptAmount.toLocaleString('en-IN')}` : '--'}
+        </td>
+        <td style="text-align: right; padding: 7px 6px; font-family: monospace; font-weight: 800; color: #e11d48; font-size: 10.5px; white-space: nowrap;">
+          ${entry.paymentAmount > 0 ? `₹${entry.paymentAmount.toLocaleString('en-IN')}` : '--'}
+        </td>
+        <td style="text-align: right; padding: 7px 6px; font-family: monospace; font-weight: 900; color: #1e1b4b; background: ${rowIdx % 2 === 0 ? '#f1f5f9' : '#e2e8f0'}; font-size: 10.5px; white-space: nowrap;">
+          ₹${entry.runningBalance.toLocaleString('en-IN')}
+        </td>
+      </tr>
+    `;
+    rowIdx++;
+  });
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Cash Book & Ledger • ${orgDisplay}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 14px;
+            font-size: 11px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sheet {
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          .header-banner {
+            background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
+            border: 1.5px solid #312e81;
+            border-radius: 14px;
+            padding: 14px 18px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+            flex: 1;
+          }
+          .header-avatar {
+            width: 68px;
+            height: 68px;
+            border-radius: 12px;
+            object-fit: cover;
+            border: 2px solid #f59e0b;
+            flex-shrink: 0;
+          }
+          .header-avatar-fallback {
+            width: 68px;
+            height: 68px;
+            border-radius: 12px;
+            background: #1e293b;
+            border: 2px solid #f59e0b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .summary-card {
+            background: #f8fafc;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 9px 12px;
+            text-align: center;
+          }
+          .ledger-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 8px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+            margin-top: 8px;
+          }
+          thead th {
+            background: #1e1b4b;
+            color: #ffffff;
+            padding: 8px 6px;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            border: 1px solid #312e81;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .sign-grid {
+            margin-top: 36px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            text-align: center;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .sign-box {
+            border-top: 1.5px dashed #64748b;
+            padding-top: 6px;
+          }
+          .footer {
+            margin-top: 24px;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 8px;
+            font-size: 8.5px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          @media print {
+            body { padding: 0; }
+            .header-banner { margin-top: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <!-- Header Banner -->
+          <div class="header-banner">
+            <div class="header-left">
+              ${logoDisplay 
+                ? `<img src="${logoDisplay}" class="header-avatar" alt="Logo" />`
+                : `<div class="header-avatar-fallback">📖</div>`
+              }
+              <div style="min-width: 0;">
+                <h1 style="margin: 0; font-size: 19px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px;">${orgDisplay}</h1>
+                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 2px;">📍 ${locationDisplay}</div>
+                <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-top: 3px;">
+                  📖 CASH BOOK & LEDGER (SUM VAWNNA LEHKHABU)
+                </div>
+                <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">
+                  Bawm: <b>${campaign.title}</b> • Period: <b>${dateRangeText}</b>
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right; font-size: 9.5px; color: #94a3b8; flex-shrink: 0; border-left: 1px dashed rgba(255,255,255,0.2); padding-left: 14px;">
+              <div>RonPay Cash Desk</div>
+              <div style="color: #ffffff; font-weight: bold; margin-top: 2px;">Date: ${todayStr}</div>
+              <div style="color: #34d399; font-weight: 800; margin-top: 4px;">OFFICIAL LEDGER</div>
+            </div>
+          </div>
+
+          <!-- 4-Box Summary KPI Bar -->
+          <div class="summary-grid">
+            <div class="summary-card" style="border-color: #93c5fd; background: #eff6ff;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #1e40af; text-transform: uppercase; display: block;">1. Opening Balance (B/F)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #1e3a8a; margin-top: 2px; display: block;">₹${openingBalance.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #86efac; background: #f0fdf4;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #166534; text-transform: uppercase; display: block;">2. Total Receipts (+)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #15803d; margin-top: 2px; display: block;">₹${totalCollections.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #fecdd3; background: #fff1f2;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #9f1239; text-transform: uppercase; display: block;">3. Total Payments (-)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #be123c; margin-top: 2px; display: block;">₹${totalExpenses.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #c7d2fe; background: #eef2ff;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #3730a3; text-transform: uppercase; display: block;">4. Net Cash Balance (=)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #312e81; margin-top: 2px; display: block;">₹${netBalance.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          ${headLedgerSummary.length > 0 ? `
+            <!-- Head-wise Breakdown Strip -->
+            <div style="margin-bottom: 6px;">
+              <span style="font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">
+                🏷️ HEAD-WISE EXPENDITURE LEDGER SUMMARY (${headLedgerSummary.length} Heads):
+              </span>
+            </div>
+            <div class="ledger-grid">
+              ${headCardsHtml}
+            </div>
+          ` : ''}
+
+          <!-- Chronological Unified Cash Book Table -->
+          <div style="margin-bottom: 4px;">
+            <span style="font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">
+              📋 DAILY TRANSACTIONS & RUNNING CASH BALANCE (${cashBookEntries.length} Entries):
+            </span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32px; text-align: center;">SL</th>
+                <th style="width: 68px;">DATE</th>
+                <th style="width: 70px; text-align: center;">TYPE</th>
+                <th style="width: 72px;">VCH / REF</th>
+                <th>PARTICULARS / NARRATION</th>
+                <th style="width: 90px;">HEAD / ACCT</th>
+                <th style="width: 82px; text-align: right;">RECEIPT (₹)</th>
+                <th style="width: 82px; text-align: right;">PAYMENT (₹)</th>
+                <th style="width: 90px; text-align: right;">BALANCE (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <tr style="background: #1e1b4b; color: #ffffff; font-weight: 900;">
+                <td colspan="6" style="padding: 9px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;">
+                  GRAND TOTAL SUMMARY (ALL TRANSACTIONS)
+                </td>
+                <td style="padding: 9px 8px; text-align: right; color: #4ade80; font-family: monospace; font-size: 11px;">
+                  ₹${totalCollections.toLocaleString('en-IN')}
+                </td>
+                <td style="padding: 9px 8px; text-align: right; color: #fda4af; font-family: monospace; font-size: 11px;">
+                  ₹${totalExpenses.toLocaleString('en-IN')}
+                </td>
+                <td style="padding: 9px 8px; text-align: right; color: #ffffff; background: #312e81; font-family: monospace; font-size: 11.5px;">
+                  ₹${netBalance.toLocaleString('en-IN')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Official Signatures Area -->
+          <div class="sign-grid">
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${treasurerName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Prepared by (Treasurer / Fin. Secy)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${auditorName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Audited & Verified by (Auditor)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${chairmanName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Approved by (President / Secretary)</div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="footer">
+            <span>${orgDisplay} • Cash Book & Ledger Statement</span>
+            <span>Generated Date: ${todayStr} • RonPay Financial System</span>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+/**
+ * Triggers safe modal print preview & PDF download for Cash Book
+ */
+export const exportCashBookPrint = (options: CashBookPrintOptions) => {
+  const html = generateCashBookPrintHtml(options);
+  const cleanTarget = (options.campaign.title || options.campaign.orgName || 'CashBook')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Cash Book • ${options.campaign.orgName || options.campaign.title}`, `RonPay_CashBook_${cleanTarget}.pdf`);
+};
+
+export interface ExpenditureStatementPrintOptions {
+  campaign: Campaign;
+  creatorProfile?: CreatorProfile | null;
+  expenses: KumtluangExpense[];
+  openingBalance: number;
+  totalCollections: number;
+  filteredTotalExpenses: number;
+  netBalance: number;
+  dateRangeText?: string;
+  selectedHead?: string;
+  treasurerName?: string;
+  auditorName?: string;
+  chairmanName?: string;
+}
+
+/**
+ * Generates official Expenditure & Audit Statement HTML (Pawisa Hman Chhuahna Statement)
+ */
+export const generateExpenditureStatementPrintHtml = (options: ExpenditureStatementPrintOptions): string => {
+  const {
+    campaign,
+    creatorProfile,
+    expenses,
+    openingBalance,
+    totalCollections,
+    filteredTotalExpenses,
+    netBalance,
+    dateRangeText = 'All Time Statement',
+    selectedHead = 'All Heads',
+    treasurerName = creatorProfile?.name || 'Treasurer / Fin. Secretary',
+    auditorName = 'Auditor / Accountant',
+    chairmanName = 'Chairman / President'
+  } = options;
+
+  const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
+  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
+  const todayStr = formatDateDDMMYYYY(new Date());
+
+  const rowsHtml = expenses.length === 0 ? `
+    <tr>
+      <td colspan="8" style="padding: 18px; text-align: center; color: #94a3b8; font-style: italic;">
+        He date period chhung hian pawisa hmanral record a awm lo.
+      </td>
+    </tr>
+  ` : expenses.map((exp, idx) => `
+    <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+      <td style="text-align: center; padding: 7px 6px; font-family: monospace; font-size: 9.5px; color: #64748b;">${idx + 1}</td>
+      <td style="padding: 7px 6px; font-family: monospace; font-weight: 800; font-size: 10px; color: #334155; white-space: nowrap;">${exp.voucherNo || '--'}</td>
+      <td style="padding: 7px 6px; font-family: monospace; font-size: 10px; color: #475569; white-space: nowrap;">${formatDateDDMMYYYY(exp.spentDate)}</td>
+      <td style="padding: 7px 6px; font-size: 10px; font-weight: 800; color: #6366f1; white-space: nowrap;">${exp.head}</td>
+      <td style="padding: 7px 6px; font-size: 10.5px; color: #0f172a; line-height: 1.3;">
+        <div style="font-weight: 600;">${exp.purpose}</div>
+      </td>
+      <td style="padding: 7px 6px; font-size: 10px; color: #334155; font-weight: 700;">${exp.paidTo}</td>
+      <td style="padding: 7px 6px; text-align: center; font-size: 9.5px; color: #64748b; white-space: nowrap;">
+        <span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #cbd5e1;">${exp.paymentMode || 'Cash'}</span>
+      </td>
+      <td style="text-align: right; padding: 7px 6px; font-family: monospace; font-weight: 900; color: #e11d48; font-size: 11px; white-space: nowrap;">
+        ₹${exp.amount.toLocaleString('en-IN')}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Expenditure Statement • ${orgDisplay}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 14px;
+            font-size: 11px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sheet {
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          .header-banner {
+            background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
+            border: 1.5px solid #312e81;
+            border-radius: 14px;
+            padding: 14px 18px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+            flex: 1;
+          }
+          .header-avatar {
+            width: 68px;
+            height: 68px;
+            border-radius: 12px;
+            object-fit: cover;
+            border: 2px solid #f59e0b;
+            flex-shrink: 0;
+          }
+          .header-avatar-fallback {
+            width: 68px;
+            height: 68px;
+            border-radius: 12px;
+            background: #1e293b;
+            border: 2px solid #f59e0b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .summary-card {
+            background: #f8fafc;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 9px 12px;
+            text-align: center;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+            margin-top: 8px;
+          }
+          thead th {
+            background: #1e1b4b;
+            color: #ffffff;
+            padding: 8px 6px;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            border: 1px solid #312e81;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .sign-grid {
+            margin-top: 36px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            text-align: center;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .sign-box {
+            border-top: 1.5px dashed #64748b;
+            padding-top: 6px;
+          }
+          .footer {
+            margin-top: 24px;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 8px;
+            font-size: 8.5px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          @media print {
+            body { padding: 0; }
+            .header-banner { margin-top: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <!-- Header Banner -->
+          <div class="header-banner">
+            <div class="header-left">
+              ${logoDisplay 
+                ? `<img src="${logoDisplay}" class="header-avatar" alt="Logo" />`
+                : `<div class="header-avatar-fallback">🧾</div>`
+              }
+              <div style="min-width: 0;">
+                <h1 style="margin: 0; font-size: 19px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px;">${orgDisplay}</h1>
+                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 2px;">📍 ${locationDisplay}</div>
+                <div style="font-size: 11px; font-weight: 800; color: #f43f5e; text-transform: uppercase; margin-top: 3px;">
+                  🧾 EXPENDITURE & AUDIT STATEMENT (PAWISA HMAN CHHUAHNA)
+                </div>
+                <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">
+                  Bawm: <b>${campaign.title}</b> • Period: <b>${dateRangeText}</b> ${selectedHead !== 'All Heads' ? `• Head: <b>${selectedHead}</b>` : ''}
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right; font-size: 9.5px; color: #94a3b8; flex-shrink: 0; border-left: 1px dashed rgba(255,255,255,0.2); padding-left: 14px;">
+              <div>RonPay Expense Desk</div>
+              <div style="color: #ffffff; font-weight: bold; margin-top: 2px;">Date: ${todayStr}</div>
+              <div style="color: #fb7185; font-weight: 800; margin-top: 4px;">AUDITED RECORD</div>
+            </div>
+          </div>
+
+          <!-- Summary Strip -->
+          <div class="summary-grid">
+            <div class="summary-card">
+              <span style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Opening Bal (B/F)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #1e293b; margin-top: 2px; display: block;">₹${openingBalance.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card">
+              <span style="font-size: 8.5px; font-weight: 800; color: #166534; text-transform: uppercase; display: block;">Total Collections</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #15803d; margin-top: 2px; display: block;">₹${totalCollections.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #fda4af; background: #fff1f2;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #9f1239; text-transform: uppercase; display: block;">Period Expenses (-)</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #be123c; margin-top: 2px; display: block;">₹${filteredTotalExpenses.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #c7d2fe; background: #eef2ff;">
+              <span style="font-size: 8.5px; font-weight: 800; color: #3730a3; text-transform: uppercase; display: block;">Closing Balance</span>
+              <span style="font-size: 13.5px; font-weight: 900; color: #312e81; margin-top: 2px; display: block;">₹${netBalance.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          <!-- Detailed Expenditure Table -->
+          <div style="margin-bottom: 4px;">
+            <span style="font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">
+              📋 RECORDED PAYMENT VOUCHERS (${expenses.length} Vouchers):
+            </span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32px; text-align: center;">SL</th>
+                <th style="width: 80px;">VOUCHER NO</th>
+                <th style="width: 72px;">DATE</th>
+                <th style="width: 100px;">HEAD</th>
+                <th>PARTICULARS / PURPOSE</th>
+                <th style="width: 110px;">PAID TO</th>
+                <th style="width: 65px; text-align: center;">MODE</th>
+                <th style="width: 85px; text-align: right;">AMOUNT (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <tr style="background: #1e1b4b; color: #ffffff; font-weight: 900;">
+                <td colspan="7" style="padding: 9px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;">
+                  TOTAL EXPENDITURE FOR PERIOD:
+                </td>
+                <td style="padding: 9px 8px; text-align: right; color: #fda4af; font-family: monospace; font-size: 12px;">
+                  ₹${filteredTotalExpenses.toLocaleString('en-IN')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Signatures -->
+          <div class="sign-grid">
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${treasurerName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Prepared by (Treasurer / Fin. Secy)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${auditorName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Checked & Audited by (Auditor)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${chairmanName}</div>
+              <div style="font-size: 9px; color: #64748b; margin-top: 1px;">Approved by (President / Secretary)</div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="footer">
+            <span>${orgDisplay} • Official Expenditure Statement</span>
+            <span>Generated Date: ${todayStr} • RonPay Financial System</span>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+/**
+ * Triggers safe modal print preview & PDF download for Expenditure Statement
+ */
+export const exportExpenditureStatementPrint = (options: ExpenditureStatementPrintOptions) => {
+  const html = generateExpenditureStatementPrintHtml(options);
+  const cleanTarget = (options.campaign.title || options.campaign.orgName || 'Expenditure_Statement')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Expenditure Statement • ${options.campaign.orgName || options.campaign.title}`, `RonPay_Expense_${cleanTarget}.pdf`);
+};
+
+/**
+ * Generates official Payment Voucher Slip HTML
+ */
+export const generatePaymentVoucherSlipPrintHtml = (
+  campaign: Campaign,
+  creatorProfile: CreatorProfile | null | undefined,
+  expense: KumtluangExpense
+): string => {
+  const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
+  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
+  const amountWords = formatAmountInWords(expense.amount);
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Payment Voucher • ${expense.voucherNo}</title>
+        <style>
+          @page {
+            size: A5 landscape;
+            margin: 10mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 16px;
+            font-size: 12px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .slip-card {
+            width: 100%;
+            max-width: 680px;
+            margin: 0 auto;
+            border: 2px solid #0f172a;
+            border-radius: 12px;
+            padding: 16px 20px;
+          }
+          .slip-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+          }
+          .slip-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+          }
+          .field-box {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 6px 10px;
+          }
+          .sign-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 32px;
+            text-align: center;
+          }
+          .sign-line {
+            border-top: 1.5px dashed #475569;
+            padding-top: 6px;
+            font-size: 10px;
+            font-weight: 700;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="slip-card">
+          <!-- Header -->
+          <div class="slip-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${logoDisplay ? `<img src="${logoDisplay}" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1.5px solid #0f172a;" />` : ''}
+              <div>
+                <h1 style="margin: 0; font-size: 16px; font-weight: 900; text-transform: uppercase;">${orgDisplay}</h1>
+                <div style="font-size: 11px; color: #475569; font-weight: 600;">${locationDisplay} • ${campaign.title}</div>
+                <div style="font-size: 11.5px; font-weight: 900; color: #1e1b4b; text-transform: uppercase; margin-top: 2px; letter-spacing: 0.5px;">
+                  OFFICIAL PAYMENT VOUCHER
+                </div>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 10px; font-weight: 800; color: #64748b;">VOUCHER NO</div>
+              <div style="font-size: 14px; font-weight: 900; font-family: monospace; color: #0f172a;">${expense.voucherNo}</div>
+              <div style="font-size: 10px; color: #475569; margin-top: 2px;">Date: <b>${formatDateDDMMYYYY(expense.spentDate)}</b></div>
+            </div>
+          </div>
+
+          <!-- Body Fields -->
+          <div class="slip-grid">
+            <div class="field-box">
+              <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Paid To (Payee):</span>
+              <span style="font-size: 12px; font-weight: 900; color: #0f172a;">${expense.paidTo}</span>
+            </div>
+            <div class="field-box">
+              <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Debit Head of Account:</span>
+              <span style="font-size: 12px; font-weight: 900; color: #4338ca;">${expense.head}</span>
+            </div>
+          </div>
+
+          <div class="slip-grid">
+            <div class="field-box">
+              <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Payment Mode & Ref:</span>
+              <span style="font-size: 11.5px; font-weight: 800; color: #0f172a;">
+                ${expense.paymentMode} ${expense.referenceNo ? `(Ref: ${expense.referenceNo})` : ''}
+              </span>
+            </div>
+            <div class="field-box" style="background: #fff1f2; border-color: #fecdd3;">
+              <span style="font-size: 9px; font-weight: 800; color: #9f1239; text-transform: uppercase; display: block;">Amount Paid:</span>
+              <span style="font-size: 14px; font-weight: 900; color: #be123c; font-family: monospace;">₹${expense.amount.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          <div class="field-box" style="margin-bottom: 10px;">
+            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Amount in Words:</span>
+            <span style="font-size: 11.5px; font-weight: 800; color: #1e3a8a; font-style: italic;">${amountWords}</span>
+          </div>
+
+          <div class="field-box" style="margin-bottom: 12px;">
+            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Particulars / Purpose:</span>
+            <span style="font-size: 11.5px; font-weight: 600; color: #0f172a; line-height: 1.4;">${expense.purpose}</span>
+          </div>
+
+          <!-- Signatures -->
+          <div class="sign-grid">
+            <div class="sign-line">
+              Payee's Signature / Thumb<br />
+              <span style="font-size: 8.5px; color: #94a3b8; font-weight: normal;">(Received with thanks)</span>
+            </div>
+            <div class="sign-line">
+              Prepared by<br />
+              <span style="font-size: 8.5px; color: #94a3b8; font-weight: normal;">(Accountant / Assistant)</span>
+            </div>
+            <div class="sign-line">
+              Passed for Payment by<br />
+              <span style="font-size: 8.5px; color: #94a3b8; font-weight: normal;">(Treasurer / Signatory)</span>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+/**
+ * Triggers safe modal print preview & PDF download for Single Voucher Slip
+ */
+export const exportPaymentVoucherSlipPrint = (
+  campaign: Campaign,
+  creatorProfile: CreatorProfile | null | undefined,
+  expense: KumtluangExpense
+) => {
+  const html = generatePaymentVoucherSlipPrintHtml(campaign, creatorProfile, expense);
+  const cleanVoucherNo = (expense.voucherNo || expense.id).replace(/[/\\?%*:|"<>]/g, '').trim();
+  printHtmlSafely(html, `Payment Voucher • ${expense.voucherNo}`, `Voucher_${cleanVoucherNo}.pdf`);
+};
+
+/**
+ * Export Cash Book to CSV
+ */
+export const exportCashBookToCSV = (
+  campaign: Campaign,
+  cashBookEntries: CashBookPrintEntry[],
+  openingBalance: number
+) => {
+  const headers = ['SL NO', 'DATE', 'TYPE', 'VOUCHER / REF', 'PARTICULARS', 'HEAD / CATEGORY', 'RECEIPT (INR)', 'PAYMENT (INR)', 'RUNNING BALANCE (INR)'];
+  
+  const rows: string[][] = [];
+  
+  if (openingBalance > 0) {
+    rows.push([
+      '--',
+      '--',
+      'OPENING B/F',
+      'B/F',
+      '"Opening Balance (B/F)"',
+      '"Opening Balance"',
+      openingBalance.toFixed(2),
+      '--',
+      openingBalance.toFixed(2)
+    ]);
+  }
+
+  cashBookEntries.forEach((entry, idx) => {
+    rows.push([
+      String(idx + 1),
+      `"${formatDateDDMMYYYY(entry.date)}"`,
+      `"${entry.type.toUpperCase()}"`,
+      `"${(entry.refNo || '').replace(/"/g, '""')}"`,
+      `"${(entry.particulars || '').replace(/"/g, '""')}"`,
+      `"${(entry.head || '').replace(/"/g, '""')}"`,
+      entry.receiptAmount > 0 ? entry.receiptAmount.toFixed(2) : '--',
+      entry.paymentAmount > 0 ? entry.paymentAmount.toFixed(2) : '--',
+      entry.runningBalance.toFixed(2)
+    ]);
+  });
+
+  const csvContent = [
+    `"ORGANIZATION:","${(campaign.orgName || campaign.title).replace(/"/g, '""')}"`,
+    `"DOCUMENT:","CASH BOOK & LEDGER"`,
+    `"EXPORTED DATE:","${formatDateDDMMYYYY(new Date())}"`,
+    '',
+    headers.join(','),
+    ...rows.map(r => r.join(','))
+  ].join('\n');
+
+  const cleanTitle = (campaign.title || 'CashBook').replace(/[^a-zA-Z0-9_-]/g, '_');
+  downloadFileUniversal(csvContent, `RonPay_CashBook_${cleanTitle}.csv`, 'text/csv;charset=utf-8;', 'Cash Book CSV');
+};
+
+/**
+ * Export Expenses to CSV
+ */
+export const exportExpensesToCSV = (
+  campaign: Campaign,
+  expenses: KumtluangExpense[]
+) => {
+  const headers = ['SL NO', 'VOUCHER NO', 'DATE', 'HEAD / CATEGORY', 'PURPOSE / PARTICULARS', 'PAID TO', 'PAYMENT MODE', 'REFERENCE NO', 'AMOUNT (INR)'];
+  
+  const rows = expenses.map((exp, idx) => [
+    String(idx + 1),
+    `"${(exp.voucherNo || '').replace(/"/g, '""')}"`,
+    `"${formatDateDDMMYYYY(exp.spentDate)}"`,
+    `"${(exp.head || '').replace(/"/g, '""')}"`,
+    `"${(exp.purpose || '').replace(/"/g, '""')}"`,
+    `"${(exp.paidTo || '').replace(/"/g, '""')}"`,
+    `"${(exp.paymentMode || '').replace(/"/g, '""')}"`,
+    `"${(exp.referenceNo || '').replace(/"/g, '""')}"`,
+    exp.amount.toFixed(2)
+  ]);
+
+  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+  rows.push(['TOTAL', '""', '""', '""', `"${expenses.length} Vouchers"`, '""', '""', '""', total.toFixed(2)]);
+
+  const csvContent = [
+    `"ORGANIZATION:","${(campaign.orgName || campaign.title).replace(/"/g, '""')}"`,
+    `"DOCUMENT:","PAWISA HMAN CHHUAHNA (EXPENDITURE STATEMENT)"`,
+    `"EXPORTED DATE:","${formatDateDDMMYYYY(new Date())}"`,
+    '',
+    headers.join(','),
+    ...rows.map(r => r.join(','))
+  ].join('\n');
+
+  const cleanTitle = (campaign.title || 'Expenses').replace(/[^a-zA-Z0-9_-]/g, '_');
+  downloadFileUniversal(csvContent, `RonPay_Expenses_${cleanTitle}.csv`, 'text/csv;charset=utf-8;', 'Expenses CSV');
 };
 
 

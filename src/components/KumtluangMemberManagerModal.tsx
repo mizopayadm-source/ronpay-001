@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { getUserRole } from '../utils/rbac';
@@ -54,6 +54,8 @@ import {
   exportMemberPassbookVerticalPrint,
   exportGroupPassbookPrint,
   exportGeneralPassbookPrint,
+  exportCashBookPrint,
+  exportExpenditureStatementPrint,
   printTransactionsPDF,
   exportFormattedExcel,
   exportKumtluangMatrixToCSV
@@ -301,7 +303,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Print Styles & Configuration State
   const [printOrgScope, setPrintOrgScope] = useState<string>(() => initialCampaignId || 'cmp-kumtluang-1');
-  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style1_group_master' | 'style1_general_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit'>('style1_master');
+  const [printStyle, setPrintStyle] = useState<'style1_master' | 'style1_group_master' | 'style1_general_master' | 'style2_matrix' | 'style3_passbook' | 'style4_audit' | 'style5_cashbook' | 'style6_expenses'>('style1_master');
   const [printScopeType, setPrintScopeType] = useState<'member' | 'group' | 'general'>('member');
   const [printMemberId, setPrintMemberId] = useState<string>('');
   const [printGroupId, setPrintGroupId] = useState<string>('');
@@ -2140,6 +2142,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     <option value="style3_passbook">
                       💳 Format 4: Passbook Slip (Mimal / Group / General)
                     </option>
+                    <option value="style5_cashbook">
+                      📖 Format 5: Cash Book & Running Balance (Sum Vawnna & Hmanral Bu)
+                    </option>
+                    <option value="style6_expenses">
+                      🧾 Format 6: Date-Wise Expenditure & Voucher Statement (Pawisa Hmanral)
+                    </option>
                   </select>
                 </div>
 
@@ -2521,6 +2529,125 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           );
                         }
                       }
+                    } else if (printStyle === 'style5_cashbook') {
+                      const targetCamp = activeCamp || campaigns[0];
+                      if (!targetCamp) {
+                        alert('Khawngaihin Bawm thlang hmasa rawh le.');
+                        return;
+                      }
+                      const campExpenses = getStoredExpenses(targetCamp.id);
+                      const heads = getCampaignExpenseHeads(targetCamp.id, targetCamp.expenseHeads);
+                      const openBal = Number(targetCamp.openingBalance) || 0;
+                      
+                      const campTxns = transactions.filter(t => isTransactionForCampaign(t, targetCamp));
+                      const totalColl = campTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+                      const totalExp = campExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                      const netBal = openBal + totalColl - totalExp;
+
+                      const headMap = new Map<string, { count: number; total: number }>();
+                      heads.forEach(h => headMap.set(h, { count: 0, total: 0 }));
+                      campExpenses.forEach(e => {
+                        const h = e.head || 'Miscellaneous';
+                        const existing = headMap.get(h) || { count: 0, total: 0 };
+                        existing.count += 1;
+                        existing.total += Number(e.amount) || 0;
+                        headMap.set(h, existing);
+                      });
+                      const headSummary = Array.from(headMap.entries()).map(([head, data]) => ({
+                        head,
+                        count: data.count,
+                        total: data.total,
+                        percentage: totalExp > 0 ? ((data.total / totalExp) * 100).toFixed(1) : '0.0'
+                      })).sort((a, b) => b.total - a.total);
+
+                      type CashBookItem = {
+                        id: string;
+                        date: string;
+                        type: 'receipt' | 'payment';
+                        refNo: string;
+                        head: string;
+                        particulars: string;
+                        receiptAmount: number;
+                        paymentAmount: number;
+                        runningBalance: number;
+                      };
+                      const rawItems: Array<Omit<CashBookItem, 'runningBalance'>> = [];
+                      campTxns.forEach(t => {
+                        rawItems.push({
+                          id: t.id,
+                          date: t.timestamp ? t.timestamp.slice(0, 10) : '',
+                          type: 'receipt',
+                          refNo: t.id,
+                          head: t.category || 'Donation / Contribution',
+                          particulars: `${t.donorName || 'Donor'}${t.donorVeng ? ` (${t.donorVeng})` : ''}`,
+                          receiptAmount: Number(t.amount) || 0,
+                          paymentAmount: 0
+                        });
+                      });
+                      campExpenses.forEach(exp => {
+                        rawItems.push({
+                          id: exp.id,
+                          date: exp.spentDate || (exp.createdAt ? exp.createdAt.slice(0, 10) : ''),
+                          type: 'payment',
+                          refNo: exp.voucherNo || exp.id,
+                          head: exp.head || 'Expense',
+                          particulars: `${exp.purpose} (Paid to: ${exp.paidTo})`,
+                          receiptAmount: 0,
+                          paymentAmount: Number(exp.amount) || 0
+                        });
+                      });
+
+                      rawItems.sort((a, b) => {
+                        const timeA = new Date(a.date || 0).getTime();
+                        const timeB = new Date(b.date || 0).getTime();
+                        if (timeA !== timeB) return timeA - timeB;
+                        return a.type === 'receipt' ? -1 : 1;
+                      });
+
+                      let curBal = openBal;
+                      const computedItems: CashBookItem[] = [];
+                      for (const it of rawItems) {
+                        if (it.type === 'receipt') curBal += it.receiptAmount;
+                        else curBal -= it.paymentAmount;
+                        computedItems.push({ ...it, runningBalance: curBal });
+                      }
+
+                      exportCashBookPrint({
+                        campaign: targetCamp,
+                        creatorProfile,
+                        openingBalance: openBal,
+                        totalCollections: totalColl,
+                        totalExpenses: totalExp,
+                        netBalance: netBal,
+                        headLedgerSummary: headSummary,
+                        cashBookEntries: computedItems,
+                        dateRangeText: `Financial Year ${printYear}`,
+                        treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary'
+                      });
+                    } else if (printStyle === 'style6_expenses') {
+                      const targetCamp = activeCamp || campaigns[0];
+                      if (!targetCamp) {
+                        alert('Khawngaihin Bawm thlang hmasa rawh le.');
+                        return;
+                      }
+                      const campExpenses = getStoredExpenses(targetCamp.id);
+                      const openBal = Number(targetCamp.openingBalance) || 0;
+                      const campTxns = transactions.filter(t => isTransactionForCampaign(t, targetCamp));
+                      const totalColl = campTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+                      const totalExp = campExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                      const netBal = openBal + totalColl - totalExp;
+
+                      exportExpenditureStatementPrint({
+                        campaign: targetCamp,
+                        creatorProfile,
+                        expenses: campExpenses,
+                        openingBalance: openBal,
+                        totalCollections: totalColl,
+                        filteredTotalExpenses: totalExp,
+                        netBalance: netBal,
+                        dateRangeText: `Financial Year ${printYear}`,
+                        treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary'
+                      });
                     }
                   }}
                   className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 cursor-pointer active:scale-95"
@@ -2533,6 +2660,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     {printStyle === 'style4_audit' && 'Print Format 2: Official Financial Audit Statement (PDF)'}
                     {printStyle === 'style2_matrix' && `Print Format 3: ${printScopeType === 'group' ? 'Group Matrix' : printScopeType === 'general' ? 'General Matrix' : 'Mimal Category Matrix'}`}
                     {printStyle === 'style3_passbook' && `Print Format 4: ${printScopeType === 'group' ? 'Group Passbook' : printScopeType === 'general' ? 'General Passbook' : 'Mimal Passbook Card Slip'}`}
+                    {printStyle === 'style5_cashbook' && 'Print Format 5: Cash Book & Running Balance (A4 PDF)'}
+                    {printStyle === 'style6_expenses' && 'Print Format 6: Date-Wise Expenditure & Voucher Statement (A4 PDF)'}
                   </span>
                 </button>
               </div>

@@ -479,6 +479,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           serverData.expenses = finalExpenses;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: finalExpenses }));
+            broadcastTabSync('expenses');
           }
         }
 

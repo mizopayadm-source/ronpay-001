@@ -1019,6 +1019,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           ) : (
             displayedQRs.map(camp => {
             const isOwner = isCampaignCreator(camp, creatorProfile);
+            const canManage = Boolean(
+              isOwner || 
+              creatorProfile?.isAdmin || 
+              creatorProfile?.role === 'SUPER_ADMIN' || 
+              creatorProfile?.role === 'ADMIN' || 
+              canManageCampaignExpenses(camp, creatorProfile)
+            );
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const hasTarget = typeof camp.targetAmount === 'number' && camp.targetAmount > 0;
@@ -1128,12 +1135,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
-                {isOwner && (
+                {/* Visual Progress Bar Section (Creator & Admin Management Area) */}
+                {canManage && (
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
                     {!hasTarget ? (
-                      <div className="flex items-center justify-between text-[10px]">
-                        <div className="flex items-center gap-2 font-bold text-slate-700">
+                      <div className="flex items-center justify-between text-[10px] gap-2 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-700 flex-wrap">
                           <div>
                             <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
                             <span className="text-slate-500 font-medium ml-1">TT Amt</span>
@@ -1146,13 +1153,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 onOpenMemberRoll('members_list', camp.id);
                               }}
                               className="p-1 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                              title="Open Member Roll"
+                              title="Member Roll hawng rawh"
                             >
                               <Users className="w-3 h-3" /> Roll
                             </button>
                           )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
                           {camp.category === 'kumtluang' && onOpenMemberRoll && (
                             <button
                               type="button"
@@ -1160,13 +1165,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 e.stopPropagation();
                                 onOpenMemberRoll('expenses', camp.id);
                               }}
-                              className="text-[9px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
-                              title="Pawisa hman chhuahna (Expenses) en rawh"
+                              className="p-1 px-2 rounded-lg bg-amber-600 text-white font-extrabold text-[9px] hover:bg-amber-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                              title="Pawisa hman chhuahna (Expense desk) en rawh"
                             >
-                              <Receipt className="w-2.5 h-2.5 text-orange-600" />
+                              <Receipt className="w-3 h-3 text-white" />
                               <span>Hmanral</span>
                             </button>
                           )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1187,8 +1194,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                        <div className="flex items-center justify-between text-[10px] gap-2 flex-wrap sm:flex-nowrap">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-700 flex-wrap">
                             <div>
                               <span className="font-black text-slate-900">₹{totalRaised.toLocaleString('en-IN')}</span>
                               <span className="text-slate-400 font-normal">/ ₹{target.toLocaleString('en-IN')}</span>
@@ -1204,13 +1211,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                   onOpenMemberRoll('members_list', camp.id);
                                 }}
                                 className="p-1 px-2 rounded-lg bg-blue-600 text-white font-extrabold text-[9px] hover:bg-blue-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
-                                title="Open Member Roll"
+                                title="Member Roll hawng rawh"
                               >
                                 <Users className="w-3 h-3" /> Roll
                               </button>
                             )}
-                          </div>
-                          <div className="flex items-center gap-1.5">
                             {camp.category === 'kumtluang' && onOpenMemberRoll && (
                               <button
                                 type="button"
@@ -1218,13 +1223,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                   e.stopPropagation();
                                   onOpenMemberRoll('expenses', camp.id);
                                 }}
-                                className="text-[9px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
-                                title="Pawisa hman chhuahna (Expenses) en rawh"
+                                className="p-1 px-2 rounded-lg bg-amber-600 text-white font-extrabold text-[9px] hover:bg-amber-700 transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                                title="Pawisa hman chhuahna (Expense desk) en rawh"
                               >
-                                <Receipt className="w-2.5 h-2.5 text-orange-600" />
+                                <Receipt className="w-3 h-3 text-white" />
                                 <span>Hmanral</span>
                               </button>
                             )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                             <button
                               type="button"
                               onClick={(e) => {

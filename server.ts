@@ -4236,6 +4236,9 @@ const CANONICAL_BMP_RECEIPTS: any[] = [];
 const PURGED_SIMULATOR_TXS = new Set([
   'rpay-test-123456',
   'test-123',
+  'rpay-cash-520699',
+  'rpay-cash-800-web',
+  'rpay-cash-800-app',
   'rpay_txn_1789150125034_382',
   'rpay_txn_1789149531480_724',
   'rpay_txn_1789055627850_921',
@@ -4400,11 +4403,15 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Ensure BMP Shillong has both 'BMP Fund' and 'Inkhawm Thawhlawm' subcategories
+  // Ensure BMP Shillong has both 'BMP Fund' and 'Inkhawm Thawhlawm' subcategories and canonical collectedAmount: ₹42,210
   const bmpCamp = (db.campaigns || []).find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp')));
   if (bmpCamp) {
     if (!Array.isArray(bmpCamp.subCategories) || !bmpCamp.subCategories.includes('Inkhawm Thawhlawm')) {
       bmpCamp.subCategories = ['BMP Fund', 'Inkhawm Thawhlawm'];
+      changed = true;
+    }
+    if (bmpCamp.collectedAmount !== 42210) {
+      bmpCamp.collectedAmount = 42210;
       changed = true;
     }
   }
@@ -4518,6 +4525,31 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       changed = true;
     }
   });
+
+  // Ensure canonical 11th expense VCH-2026-011 (₹6,565) exists
+  const exp11 = (db.expenses || []).find((e: any) => e && (e.id === 'EXP-1791226950000' || e.voucherNo === 'VCH-2026-011'));
+  if (!exp11) {
+    db.expenses!.push({
+      id: 'EXP-1791226950000',
+      campaignId: 'cmp-1788107291420',
+      campaignTitle: 'BMP Shillong',
+      voucherNo: 'VCH-2026-011',
+      amount: 6565,
+      head: 'Bial BMP',
+      purpose: 'Bial BMP Inkhawmpui hmanna (Palai kal, Thingpui & Hmanral)',
+      paidTo: 'Bial Inkhawmpui Organising Committee',
+      paymentMode: 'Cash',
+      spentDate: '2026-10-04',
+      recordedBy: 'Super Admin (Master)',
+      recordedByPhone: '9862000001',
+      recordedAt: '2026-10-04T14:30:00.000Z',
+      createdAt: '2026-10-04T14:30:00.000Z',
+      updatedAt: '2026-10-11T18:00:00.000Z',
+      status: 'approved',
+      attachmentUrl: null
+    });
+    changed = true;
+  }
 
   // Ensure transactions are unique by ID and no purged test items exist
   if (Array.isArray(db.transactions)) {
@@ -5062,8 +5094,8 @@ app.post('/api/data/sync', async (req: Request, res: Response) => {
       const serverDelExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
       db.expenses = mergeCollections(db.expenses || [], expenses, 'id', serverDelExpSet);
       db.expenses.sort((a: any, b: any) => {
-        const timeA = new Date(a.date || a.createdAt || 0).getTime();
-        const timeB = new Date(b.date || b.createdAt || 0).getTime();
+        const timeA = new Date(a.spentDate || a.recordedAt || a.date || a.createdAt || 0).getTime();
+        const timeB = new Date(b.spentDate || b.recordedAt || b.date || b.createdAt || 0).getTime();
         return timeB - timeA;
       });
       hasChanges = true;
