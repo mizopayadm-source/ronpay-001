@@ -232,7 +232,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       try {
         const txs = await fetchTableData('transactions') as Transaction[];
         if (isMounted) {
-          if (Array.isArray(txs)) {
+          if (Array.isArray(txs) && txs.length > 0) {
             setServerTransactions(txs);
             try {
               localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
@@ -250,16 +250,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     loadData();
 
     // Supabase Real-time subscription
-    const subscription = subscribeToTable('transactions', (payload) => {
+    const subscription = subscribeToTable('transactions', () => {
       if (!isMounted) return;
-      loadData(); // Reload on change
+      loadData();
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [selectedFilter]);
 
   // Listen to transaction updates/deletions dispatched from anywhere in the app
   useEffect(() => {
