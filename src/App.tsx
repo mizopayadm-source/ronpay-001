@@ -521,30 +521,10 @@ export default function App() {
       });
     });
 
-    // Relaxed periodic background sync (every 60 seconds) as backup to SSE and Firestore listeners
-    const syncInterval = setInterval(() => {
-      if (typeof navigator !== 'undefined' && navigator.onLine && typeof document !== 'undefined' && !document.hidden) {
-        pullLatestServerState().then((res) => {
-          if (res?.transactions && Array.isArray(res.transactions)) {
-            setTransactions(prev => {
-              if (prev.length !== res.transactions.length) return res.transactions;
-              return prev;
-            });
-          }
-        }).catch(() => {});
-      }
-    }, 60000);
-
     // Load local storage immediately on startup
     reloadLocalData();
 
-    // Immediately fetch from server on boot/refresh so mobile apps & web browsers get fresh server data without waiting!
-    syncAllWithServer().then(() => {
-      reloadLocalData();
-    }).catch(() => {});
-
     return () => {
-      clearInterval(syncInterval);
       unsubCrossTab();
       unsubFocus();
       unsubSSE();
