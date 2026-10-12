@@ -58,7 +58,8 @@ import {
   exportExpenditureStatementPrint,
   printTransactionsPDF,
   exportFormattedExcel,
-  exportKumtluangMatrixToCSV
+  exportKumtluangMatrixToCSV,
+  getTransactionHead
 } from '../utils/export';
 import { compressImageFile } from '../utils/imageCompressor';
 import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getYearOptions } from '../utils/monthHelper';
@@ -2578,7 +2579,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                           date: t.timestamp ? t.timestamp.slice(0, 10) : '',
                           type: 'receipt',
                           refNo: t.id,
-                          head: t.category || 'Donation / Contribution',
+                          head: getTransactionHead(t, targetCamp),
                           particulars: `${t.donorName || 'Donor'}${t.donorVeng ? ` (${t.donorVeng})` : ''}`,
                           receiptAmount: Number(t.amount) || 0,
                           paymentAmount: 0

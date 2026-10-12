@@ -251,6 +251,89 @@ export const getMonthsListForConfig = (config?: MonthRangeConfig): string[] => {
 };
 
 /**
+ * Resolves the official Head / Account for a transaction.
+ * For Kumtluang Bawm / multi-category campaigns, prioritizes the specific Fund Head
+ * (e.g. 'BMP Fund', 'General Thawhlawm', 'Chhiatni Fund', etc.) over generic category names like 'Kumtluang'.
+ */
+export const getTransactionHead = (t: Transaction, campaign?: Campaign | null): string => {
+  if (!t) return 'Donation / Contribution';
+
+  // 1. If explicit subCategory is specified and not the raw generic string 'kumtluang'
+  if (t.subCategory && typeof t.subCategory === 'string' && t.subCategory.trim()) {
+    const cleanSub = t.subCategory.trim();
+    if (cleanSub.toLowerCase() !== 'kumtluang') {
+      return cleanSub;
+    }
+  }
+
+  // 2. Check subCategoryBreakdown if specific heads are present
+  if (t.subCategoryBreakdown && typeof t.subCategoryBreakdown === 'object') {
+    const validKeys = Object.keys(t.subCategoryBreakdown).filter(
+      k => (Number(t.subCategoryBreakdown[k]) || 0) > 0 && k.trim().toLowerCase() !== 'kumtluang'
+    );
+    if (validKeys.length === 1) {
+      return validKeys[0].trim();
+    } else if (validKeys.length > 1) {
+      return validKeys.join(', ');
+    }
+  }
+
+  // 3. Check (t as any).head or (t as any).sub_
+  const rawHead = (t as any).head || (t as any).sub_;
+  if (rawHead && String(rawHead).trim().toLowerCase() !== 'kumtluang') {
+    return String(rawHead).trim();
+  }
+
+  // 4. Check bracketed head in remark e.g. [BMP Fund]
+  if (t.remark) {
+    const bracketMatch = t.remark.match(/\[(.*?)\]/);
+    if (bracketMatch && bracketMatch[1]?.trim() && bracketMatch[1].trim().toLowerCase() !== 'kumtluang') {
+      return bracketMatch[1].trim();
+    }
+  }
+
+  // 5. Campaign-specific canonical resolution for BMP Shillong
+  const isBmp =
+    campaign?.id === 'cmp-1788107291420' ||
+    t.campaignId === 'cmp-1788107291420' ||
+    (campaign?.title && campaign.title.toLowerCase().includes('bmp')) ||
+    (t.campaignTitle && t.campaignTitle.toLowerCase().includes('bmp')) ||
+    (campaign?.orgName && campaign.orgName.toLowerCase().includes('bmp'));
+
+  if (isBmp) {
+    const donorLower = (t.donorName || '').toLowerCase().trim();
+    if (donorLower.includes('inkhawm') || donorLower.includes('inkawm') || t.donorType === 'general') {
+      return 'General Thawhlawm';
+    }
+    if (t.donorType === 'group' || (t.groupName && t.groupName.trim().length > 0)) {
+      return 'Group';
+    }
+    return 'BMP Fund';
+  }
+
+  // 6. Campaign declared subCategories (Fund Heads configured for this Bawm)
+  if (campaign?.subCategories && Array.isArray(campaign.subCategories) && campaign.subCategories.length > 0) {
+    const validSubs = campaign.subCategories.filter(
+      s => s && typeof s === 'string' && s.trim() && s.trim().toLowerCase() !== 'kumtluang'
+    );
+    if (validSubs.length > 0) {
+      return validSubs[0].trim();
+    }
+  }
+
+  // 7. For other Kumtluang or general campaigns, avoid showing 'kumtluang' as the head
+  const rawCat = t.category || campaign?.category || '';
+  if (rawCat.toLowerCase() === 'kumtluang') {
+    if (campaign?.title) {
+      return `${campaign.title} Fund`;
+    }
+    return 'BMP Fund';
+  }
+
+  return rawCat || 'Donation / Contribution';
+};
+
+/**
  * Builds a donor-by-category matrix specifically for Kumtluang Bawm / multi-category campaigns.
  */
 export const buildKumtluangMatrix = (
@@ -3751,7 +3834,7 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
   } = options;
 
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const todayStr = formatDateDDMMYYYY(new Date());
 
@@ -3811,6 +3894,23 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
 
     const rowBg = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
+    let entryHead = entry.head || '';
+    if (!entryHead || entryHead.trim().toLowerCase() === 'kumtluang') {
+      const isBmp =
+        campaign?.id === 'cmp-1788107291420' ||
+        (campaign?.title && campaign.title.toLowerCase().includes('bmp')) ||
+        (campaign?.orgName && campaign.orgName.toLowerCase().includes('bmp'));
+      if (isBmp) {
+        entryHead = 'BMP Fund';
+      } else if (Array.isArray(campaign?.subCategories) && campaign.subCategories.length > 0 && campaign.subCategories[0]?.trim()) {
+        entryHead = campaign.subCategories[0].trim();
+      } else if (campaign?.title) {
+        entryHead = `${campaign.title} Fund`;
+      } else {
+        entryHead = 'BMP Fund';
+      }
+    }
+
     rowsHtml += `
       <tr style="background: ${rowBg}; border-bottom: 1px solid #e2e8f0;">
         <td style="text-align: center; padding: 7px 6px; font-family: monospace; font-size: 9.5px; color: #64748b;">${rowIdx}</td>
@@ -3820,7 +3920,7 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
         <td style="padding: 7px 6px; font-size: 10.5px; color: #0f172a; line-height: 1.3;">
           <div style="font-weight: 600;">${entry.particulars}</div>
         </td>
-        <td style="padding: 7px 6px; font-size: 9.5px; font-weight: 700; color: #6366f1; white-space: nowrap;">${entry.head}</td>
+        <td style="padding: 7px 6px; font-size: 9.5px; font-weight: 700; color: #6366f1; white-space: nowrap;">${entryHead}</td>
         <td style="text-align: right; padding: 7px 6px; font-family: monospace; font-weight: 800; color: #047857; font-size: 10.5px; white-space: nowrap;">
           ${entry.receiptAmount > 0 ? `₹${entry.receiptAmount.toLocaleString('en-IN')}` : '--'}
         </td>
@@ -4155,7 +4255,7 @@ export const generateExpenditureStatementPrintHtml = (options: ExpenditureStatem
   } = options;
 
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const todayStr = formatDateDDMMYYYY(new Date());
 
@@ -4447,7 +4547,7 @@ export const generatePaymentVoucherSlipPrintHtml = (
   expense: KumtluangExpense
 ): string => {
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = creatorProfile?.logoUrl || creatorProfile?.avatarUrl;
+  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const amountWords = formatAmountInWords(expense.amount);
 
@@ -4634,13 +4734,30 @@ export const exportCashBookToCSV = (
   }
 
   cashBookEntries.forEach((entry, idx) => {
+    let entryHead = entry.head || '';
+    if (!entryHead || entryHead.trim().toLowerCase() === 'kumtluang') {
+      const isBmp =
+        campaign?.id === 'cmp-1788107291420' ||
+        (campaign?.title && campaign.title.toLowerCase().includes('bmp')) ||
+        (campaign?.orgName && campaign.orgName.toLowerCase().includes('bmp'));
+      if (isBmp) {
+        entryHead = 'BMP Fund';
+      } else if (Array.isArray(campaign?.subCategories) && campaign.subCategories.length > 0 && campaign.subCategories[0]?.trim()) {
+        entryHead = campaign.subCategories[0].trim();
+      } else if (campaign?.title) {
+        entryHead = `${campaign.title} Fund`;
+      } else {
+        entryHead = 'BMP Fund';
+      }
+    }
+
     rows.push([
       String(idx + 1),
       `"${formatDateDDMMYYYY(entry.date)}"`,
       `"${entry.type.toUpperCase()}"`,
       `"${(entry.refNo || '').replace(/"/g, '""')}"`,
       `"${(entry.particulars || '').replace(/"/g, '""')}"`,
-      `"${(entry.head || '').replace(/"/g, '""')}"`,
+      `"${entryHead.replace(/"/g, '""')}"`,
       entry.receiptAmount > 0 ? entry.receiptAmount.toFixed(2) : '--',
       entry.paymentAmount > 0 ? entry.paymentAmount.toFixed(2) : '--',
       entry.runningBalance.toFixed(2)

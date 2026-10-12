@@ -67,7 +67,8 @@ import {
   exportExpenditureStatementPrint, 
   exportPaymentVoucherSlipPrint,
   exportCashBookToCSV,
-  exportExpensesToCSV 
+  exportExpensesToCSV,
+  getTransactionHead 
 } from '../utils/export';
 
 interface KumtluangExpenseManagerProps {
@@ -389,7 +390,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
           date: txDate,
           type: 'receipt',
           refNo: t.id,
-          head: t.category || 'Donation / Contribution',
+          head: getTransactionHead(t, campaign),
           particulars: `${t.donorName || 'Anonymous Donor'}${t.donorVeng ? ` (${t.donorVeng})` : ''}${(t as any).note ? ` - ${(t as any).note}` : ''}`,
           receiptAmount: Number(t.amount) || 0,
           paymentAmount: 0,
