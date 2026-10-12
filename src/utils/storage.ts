@@ -1085,11 +1085,20 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
 
 export const getStoredTransactions = (): Transaction[] => {
   try {
-    if (isCleanSlateModeActive()) {
-      const raw = localStorage.getItem(TRANSACTIONS_KEY);
+    const hardPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
+    if (isCleanSlateModeActive() || hardPurgeTs > 0) {
+      const raw = localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions');
       if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(t => {
+            if (!t) return false;
+            const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+            return hardPurgeTs > 0 ? tTime > hardPurgeTs : true;
+          });
+        }
+      } catch {}
       return [];
     }
 
