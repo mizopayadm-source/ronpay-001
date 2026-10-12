@@ -5051,10 +5051,15 @@ app.post('/api/data/sync', async (req: Request, res: Response) => {
       }
     }
     if (Array.isArray(transactions) && transactions.length > 0) {
+      const purgeTs = db.hardPurgeTimestamp || 0;
       const cleanTx = transactions.filter((t: any) => {
         if (!t || !t.id) return false;
         const cleanId = String(t.id).toLowerCase().trim();
         if (serverDelTxSet.has(cleanId)) return false;
+        if (purgeTs > 0) {
+          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+          if (tTime <= purgeTs) return false;
+        }
         const amt = Number(t.amount);
         if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
         return true;
