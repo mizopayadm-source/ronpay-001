@@ -58,6 +58,7 @@ export async function clearAllFirestoreTransactionsAndStats() {
         keysToRemove.forEach(k => localStorage.removeItem(k));
       }
 
+      localStorage.setItem('ronpay_hard_purge_timestamp_v1', String(Date.now()));
       localStorage.setItem('ronpay_transactions_v4', JSON.stringify([]));
       localStorage.setItem('ronpay_transactions_v2', JSON.stringify([]));
       localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify({

@@ -88,9 +88,17 @@ export const fetchTableData = async <T>(table: string): Promise<T[]> => {
     const { data, error } = await supabase
       .from(table)
       .select('*');
-    if (!error && Array.isArray(data) && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       if (table === 'transactions') {
-        return data.map(normalizeTransaction) as unknown as T[];
+        const normalized = data.map(normalizeTransaction);
+        const hardPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
+        const filtered = hardPurgeTs > 0 
+          ? normalized.filter((t: any) => {
+              const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+              return tTime > hardPurgeTs;
+            })
+          : normalized;
+        return filtered as unknown as T[];
       }
       if (table === 'campaigns') {
         return data.map(normalizeCampaign) as unknown as T[];
