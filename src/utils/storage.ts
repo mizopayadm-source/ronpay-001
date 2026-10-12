@@ -1013,6 +1013,18 @@ export const getDeletedTransactionIds = (): Set<string> => {
         });
       }
     }
+    const purgedRaw = localStorage.getItem('ronpay_permanently_purged_tx_ids_v1');
+    if (purgedRaw) {
+      const pArr = JSON.parse(purgedRaw);
+      if (Array.isArray(pArr)) {
+        pArr.forEach(id => {
+          if (!id) return;
+          const cleanId = String(id).toLowerCase().trim();
+          result.add(cleanId);
+          PERMANENTLY_PURGED_TX_IDS.add(cleanId);
+        });
+      }
+    }
   } catch (e) {}
   return result;
 };
@@ -1021,11 +1033,13 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
   if (!txId) return;
   const clean = String(txId).toLowerCase().trim();
   try {
+    PERMANENTLY_PURGED_TX_IDS.add(clean);
     const set = getDeletedTransactionIds();
     set.add(clean);
-    const arr = Array.from(set).slice(-1000); // Retain recent 1000 deletions
+    const arr = Array.from(set).slice(-2000); // Retain recent deletions
     localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
     localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
+    localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(Array.from(PERMANENTLY_PURGED_TX_IDS)));
 
     // Also notify Firestore tombstone in real-time if requested
     if (syncFirestore) {
