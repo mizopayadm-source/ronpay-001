@@ -20,7 +20,7 @@ import {
 import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v3';
-const TRANSACTIONS_KEY = 'ronpay_transactions_v3';
+const TRANSACTIONS_KEY = 'ronpay_transactions_v4';
 const CREATOR_PROFILE_KEY = 'ronpay_creator_profile_v2';
 const CREATORS_LIST_KEY = 'ronpay_creators_list_v2';
 const MEMBERS_LIST_KEY = 'ronpay_kumtluang_members_v1';
@@ -4129,15 +4129,8 @@ export const isCleanSlateModeActive = (): boolean => {
 export const executeCleanSlateFactoryReset = (): void => {
   try {
     if (typeof localStorage !== 'undefined') {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && (k.startsWith('ronpay_') || k.startsWith('rpay_'))) {
-          keysToRemove.push(k);
-        }
-      }
-      keysToRemove.forEach(k => localStorage.removeItem(k));
-
+      localStorage.clear(); // Wipe everything
+      
       localStorage.setItem('ronpay_clean_slate_mode_v1', 'false');
       localStorage.setItem('ronpay_app_version_v2.7', 'active');
       localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
@@ -4150,6 +4143,8 @@ export const executeCleanSlateFactoryReset = (): void => {
         window.dispatchEvent(new CustomEvent('ronpay_data_synced', { detail: { timestamp: Date.now() } }));
         broadcastTabSync('transactions', INITIAL_TRANSACTIONS);
         broadcastTabSync('campaigns', INITIAL_CAMPAIGNS);
+        // Force refresh
+        window.location.reload();
       }
     }
 

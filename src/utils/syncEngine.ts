@@ -1,4 +1,5 @@
 import { Campaign, MemberRecord, Transaction, CreatorProfile, SystemPricingConfig, AnnouncementBanner, AuditLog, StaffAccount, KumtluangExpense } from '../types';
+import { supabase } from '../lib/supabase';
 import { resolveApiUrl } from './apiConfig';
 import { BCM_EBENEZER_DEFAULT_LOGO, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { 
@@ -767,56 +768,6 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     window.addEventListener('storage', handleStorageChange);
   }
 
-  // 5. Server-Sent Events (SSE) for instant sub-second multi-device synchronization
-  let eventSource: EventSource | null = null;
-  let sseReconnectTimer: any = null;
-  if (typeof window !== 'undefined' && 'EventSource' in window) {
-    const connectSSE = () => {
-      try {
-        eventSource = new EventSource(resolveApiUrl('/api/data/events'));
-        eventSource.onmessage = (event) => {
-          try {
-            const parsed = JSON.parse(event.data);
-            if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
-              syncAllWithServer(true).then(res => {
-                if (res && onSyncUpdate) onSyncUpdate(res);
-              }).catch(() => {});
-            }
-          } catch {}
-        };
-        eventSource.onerror = () => {
-          if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-          }
-          if (!sseReconnectTimer) {
-            sseReconnectTimer = setTimeout(() => {
-              sseReconnectTimer = null;
-              connectSSE();
-            }, 3000);
-          }
-        };
-      } catch (err) {
-        console.warn('SSE connection note:', err);
-      }
-    };
-    connectSSE();
-
-    // Mobile & multi-browser resume listener: When user opens app or brings phone screen back from sleep
-    const handleVisibilityOrOnline = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        if (!eventSource) {
-          connectSSE();
-        }
-        syncAllWithServer(true).then(res => {
-          if (res && onSyncUpdate) onSyncUpdate(res);
-        }).catch(() => {});
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityOrOnline);
-    window.addEventListener('online', handleVisibilityOrOnline);
-  }
 
   return () => {
     stopFirestore();
@@ -827,14 +778,7 @@ export function startAutoSyncEngine(onSyncUpdate?: (data: SyncDataState) => void
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorageChange);
     }
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-    if (sseReconnectTimer) {
-      clearTimeout(sseReconnectTimer);
-      sseReconnectTimer = null;
-    }
+
   };
 }
 
@@ -1001,96 +945,13 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
  * Guarantees phones, browsers, and different user sessions stay in lockstep without delay.
  */
 export function subscribeServerEvents(onChanged: () => void): () => void {
-  if (typeof window === 'undefined' || !('EventSource' in window)) {
-    return () => {};
-  }
-
-  let eventSource: EventSource | null = null;
-  let sseReconnectTimer: any = null;
-  let debounceTimer: any = null;
-  let isClosed = false;
-
-  const connect = () => {
-    if (isClosed) return;
-    try {
-      eventSource = new EventSource(resolveApiUrl('/api/data/events'));
-
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          if (parsed && (parsed.type === 'data_changed' || parsed.type === 'message')) {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-              pullLatestServerState().then(() => {
-                onChanged();
-              }).catch(() => {
-                onChanged();
-              });
-            }, 180);
-          }
-        } catch {}
-      };
-
-      eventSource.onerror = () => {
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-        if (!isClosed && !sseReconnectTimer) {
-          sseReconnectTimer = setTimeout(() => {
-            sseReconnectTimer = null;
-            connect();
-          }, 3000);
-        }
-      };
-    } catch {
-      if (!isClosed && !sseReconnectTimer) {
-        sseReconnectTimer = setTimeout(() => {
-          sseReconnectTimer = null;
-          connect();
-        }, 5000);
-      }
-    }
-  };
-
-  connect();
-
-  const handleVisibility = () => {
-    if (document.visibilityState === 'visible' && !isClosed) {
-      if (!eventSource) {
-        connect();
-      }
-      pullLatestServerState().then(() => onChanged()).catch(() => onChanged());
-    }
-  };
-
-  const handleOnline = () => {
-    if (!isClosed) {
-      if (!eventSource) {
-        connect();
-      }
-      pullLatestServerState().then(() => onChanged()).catch(() => onChanged());
-    }
-  };
-
-  document.addEventListener('visibilitychange', handleVisibility);
-  window.addEventListener('online', handleOnline);
+  const channel = supabase.channel('public:transactions')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+      onChanged();
+    })
+    .subscribe();
 
   return () => {
-    isClosed = true;
-    if (sseReconnectTimer) {
-      clearTimeout(sseReconnectTimer);
-      sseReconnectTimer = null;
-    }
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-    document.removeEventListener('visibilitychange', handleVisibility);
-    window.removeEventListener('online', handleOnline);
+    supabase.removeChannel(channel);
   };
 }
