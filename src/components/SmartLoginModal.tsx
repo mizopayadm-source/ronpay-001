@@ -24,8 +24,7 @@ import {
   LogIn
 } from 'lucide-react';
 import { CreatorProfile, UserRole } from '../types';
-import { INITIAL_REGISTERED_CREATORS } from '../data/initialData';
-import { saveStoredCreatorProfile, getStoredStaffAccounts, getStoredCreatorsList, recordAuditLog } from '../utils/storage';
+import { saveStoredCreatorProfile, getStoredStaffAccounts, getStoredCreatorsList, recordAuditLog, saveAdminAuthState, loginCreator } from '../utils/storage';
 
 export interface SmartLoginModalProps {
   isOpen: boolean;
@@ -292,6 +291,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     setIsLoading(true);
     triggerHaptic();
 
+    // Fast and snappy authentication
     setTimeout(() => {
       // 1. Check Master Super Admin credentials
       if (
@@ -315,18 +315,12 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           registeredAt: new Date().toISOString()
         };
 
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
+        saveAdminAuthState('SUPER_ADMIN', profile);
         recordAuditLog('Super Admin Login', 'Super Admin authenticated via Unified Login Modal.', 'system');
         saveStoredCreatorProfile(profile);
         setIsLoading(false);
-        setSuccessNotice('Super Admin (Tier 6 Clearance) anga login a hlawhtling e!');
-        triggerHaptic();
-        setTimeout(() => {
-          onLoginSuccess(profile);
-          onClose();
-        }, 700);
+        onLoginSuccess(profile);
+        onClose();
         return;
       }
 
@@ -356,18 +350,16 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             registeredAt: matchedStaff.createdAt || new Date().toISOString()
           };
 
-          try {
-            sessionStorage.setItem('ronpay_admin_auth', 'true');
-          } catch {}
+          if (isSuperOrAdmin) {
+            saveAdminAuthState(matchedStaff.role, profile);
+          } else {
+            loginCreator(profile);
+          }
           recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
           saveStoredCreatorProfile(profile);
           setIsLoading(false);
-          setSuccessNotice(`${matchedStaff.name} (${matchedStaff.role}) anga login a hlawhtling e!`);
-          triggerHaptic();
-          setTimeout(() => {
-            onLoginSuccess(profile);
-            onClose();
-          }, 700);
+          onLoginSuccess(profile);
+          onClose();
           return;
         } else {
           setIsLoading(false);
@@ -377,7 +369,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       }
 
       // 3. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
-      const allCreators = getStoredCreatorsList ? getStoredCreatorsList() : INITIAL_REGISTERED_CREATORS;
+      const allCreators = getStoredCreatorsList ? getStoredCreatorsList() : [];
       const matchedCreator = allCreators.find(
         c => (c.phone && c.phone.replace(/\D/g, '') === cleanPhone) || (c.name && c.name.toLowerCase() === cleanUser)
       );
@@ -393,14 +385,11 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             pin: isOtp ? (matchedCreator.pin || '1234') : pwd,
           };
 
+          loginCreator(profile);
           saveStoredCreatorProfile(profile);
           setIsLoading(false);
-          setSuccessNotice(`${matchedCreator.name} (${matchedCreator.orgName || 'Creator'}) anga login a hlawhtling e!`);
-          triggerHaptic();
-          setTimeout(() => {
-            onLoginSuccess(profile);
-            onClose();
-          }, 700);
+          onLoginSuccess(profile);
+          onClose();
           return;
         } else {
           setIsLoading(false);
@@ -427,66 +416,56 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           registeredAt: new Date().toISOString()
         };
 
+        loginCreator(profile);
         saveStoredCreatorProfile(profile);
         setIsLoading(false);
-        setSuccessNotice(`${profile.name} anga login a hlawhtling e!`);
-        triggerHaptic();
-        setTimeout(() => {
-          onLoginSuccess(profile);
-          onClose();
-        }, 700);
+        onLoginSuccess(profile);
+        onClose();
         return;
       }
 
       setIsLoading(false);
       setErrorMessage('User ID emaw Password / PIN a dik lo. Khawngaihin enfiah leh rawh.');
-    }, 550);
+    }, 60);
   };
 
-  // 2. One-click Demo Login
+  // 2. One-click Demo / Tester Login (Instantaneous & Zero Delay)
   const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
-    setIsLoading(true);
     setErrorMessage('');
     triggerHaptic();
 
-    setTimeout(() => {
-      const isSuperOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
-      const profile: CreatorProfile = {
-        name: demo.name,
-        orgName: demo.orgName,
-        designation: demo.designation,
-        phone: demo.phone,
-        role: demo.role,
-        isAdmin: isSuperOrAdmin,
-        isPhoneVerified: true,
-        isApproved: true,
-        avatarUrl: demo.avatarUrl,
-        password: demo.mpin,
-        pin: demo.mpin,
-        approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-        createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 15,
-        registeredAt: new Date().toISOString()
-      };
+    const isSuperOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
+    const profile: CreatorProfile = {
+      name: demo.name,
+      orgName: demo.orgName,
+      designation: demo.designation,
+      phone: demo.phone,
+      role: demo.role,
+      isAdmin: isSuperOrAdmin,
+      isPhoneVerified: true,
+      isApproved: true,
+      avatarUrl: demo.avatarUrl,
+      password: demo.mpin,
+      pin: demo.mpin,
+      approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+      createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 15,
+      registeredAt: new Date().toISOString()
+    };
 
-      if (isSuperOrAdmin) {
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
-        recordAuditLog(`${demo.role} Login`, `${demo.name} authenticated via Tester Hub.`, 'system');
-      }
+    if (isSuperOrAdmin) {
+      saveAdminAuthState(demo.role, profile);
+      recordAuditLog(`${demo.role} Login`, `${demo.name} authenticated via Tester Hub.`, 'system');
+    } else {
+      loginCreator(profile);
+    }
 
-      saveStoredCreatorProfile(profile);
-      setIsLoading(false);
-      setSuccessNotice(`${demo.name} (${demo.roleTitle}) anga login a hlawhtling e!`);
-      triggerHaptic();
-      setTimeout(() => {
-        onLoginSuccess(profile);
-        onClose();
-      }, 500);
-    }, 400);
+    saveStoredCreatorProfile(profile);
+    setIsLoading(false);
+    onLoginSuccess(profile);
+    onClose();
   };
 
-  // 3. Google 1-Tap Login / Registration
+  // 3. Google 1-Tap Login / Registration (Fast & Direct)
   const handleGoogleLogin = () => {
     const trimmedEmail = googleCustomEmail.trim();
     if (!trimmedEmail) {
@@ -527,28 +506,20 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       };
 
       if (isSuperAdminEmail) {
-        try {
-          sessionStorage.setItem('ronpay_admin_auth', 'true');
-        } catch {}
+        saveAdminAuthState('SUPER_ADMIN', profile);
         recordAuditLog('Super Admin Login', `Super Admin (${trimmedEmail}) logged in via Google.`, 'system');
+      } else {
+        loginCreator(profile);
       }
 
       saveStoredCreatorProfile(profile);
       setIsLoading(false);
-      setSuccessNotice(isSuperAdminEmail
-        ? `Super Admin Account (${trimmedEmail}) hmanga login a hlawhtling e!`
-        : (googleIsNewUser 
-          ? `Google Account (${trimmedEmail}) hmangin Member Account thar siam fel a ni e!` 
-          : `Google Account (${trimmedEmail}) hmanga login a hlawhtling e!`));
-      triggerHaptic();
-      setTimeout(() => {
-        onLoginSuccess(profile);
-        onClose();
-      }, 700);
-    }, 700);
+      onLoginSuccess(profile);
+      onClose();
+    }, 60);
   };
 
-  // 4. Biometric Quick Unlock
+  // 4. Biometric Quick Unlock (Fast)
   const handleBiometricUnlock = () => {
     setIsLoading(true);
     setErrorMessage('');
@@ -556,13 +527,9 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
 
     setTimeout(() => {
       setIsLoading(false);
-      setSuccessNotice(`Fingerprint / Face ID verified!`);
-      triggerHaptic();
-      setTimeout(() => {
-        onLoginSuccess(currentProfile);
-        onClose();
-      }, 600);
-    }, 700);
+      onLoginSuccess(currentProfile);
+      onClose();
+    }, 60);
   };
 
   return (

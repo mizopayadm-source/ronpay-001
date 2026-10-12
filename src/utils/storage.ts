@@ -1076,7 +1076,7 @@ export const getStoredTransactions = (): Transaction[] => {
     }
 
     const deletedIds = getDeletedTransactionIds();
-    const raw = localStorage.getItem(TRANSACTIONS_KEY);
+    const raw = localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions');
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -1257,6 +1257,8 @@ let _syncServerTxTimer: any = null;
 export const saveStoredTransactions = (transactions: Transaction[], skipServerPush: boolean = false) => {
   try {
     localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+    localStorage.setItem('ronpay_transactions_v2', JSON.stringify(transactions));
+    localStorage.setItem('ronpay_transactions', JSON.stringify(transactions));
 
     // Broadcast local event for immediate real-time sync across components/tabs
     if (typeof window !== 'undefined') {

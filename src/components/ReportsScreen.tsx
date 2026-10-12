@@ -261,14 +261,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     };
   }, [selectedFilter]);
 
+  // Synchronize serverTransactions whenever transactions prop updates from App
+  useEffect(() => {
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      setServerTransactions(transactions);
+    }
+  }, [transactions]);
+
   // Listen to transaction updates/deletions dispatched from anywhere in the app
   useEffect(() => {
     const handleTxEvent = () => {
       fetchTableData('transactions').then((txs) => {
-        if (Array.isArray(txs)) {
+        if (Array.isArray(txs) && txs.length > 0) {
           setServerTransactions(txs as Transaction[]);
           try {
             localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
+            localStorage.setItem('ronpay_transactions_v4', JSON.stringify(txs));
             localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
           } catch {}
         }
@@ -284,45 +292,32 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }, []);
 
   const effectiveTransactions = useMemo(() => {
-    // 1. Authoritative Server Supabase Transactions:
-    // When serverTransactions is loaded from the cloud database, it is the single source of truth.
+    // Authoritative Transactions: Match 100% with Home Screen ledger
     let baseList: Transaction[] = [];
 
-    if (Array.isArray(serverTransactions)) {
+    if (Array.isArray(serverTransactions) && serverTransactions.length > 0) {
       baseList = [...serverTransactions];
-      
-      // Merge only genuinely pending unsynced local transactions created in this session
-      const localTxs = getStoredTransactions();
-      if (Array.isArray(localTxs)) {
-        const serverIds = new Set(baseList.map(t => String(t.id).toLowerCase().trim()));
-        localTxs.forEach(t => {
-          if (t && t.id && (t.isSynced === false || (t as any).isOfflinePending)) {
-            const cleanId = String(t.id).toLowerCase().trim();
-            if (!serverIds.has(cleanId)) {
-              baseList.push(t);
-              serverIds.add(cleanId);
-            }
-          }
-        });
-      }
     } else if (Array.isArray(transactions) && transactions.length > 0) {
       baseList = [...transactions];
     } else {
-      baseList = getStoredTransactions() || [];
+      const stored = getStoredTransactions();
+      baseList = Array.isArray(stored) && stored.length > 0 ? stored : INITIAL_TRANSACTIONS;
     }
 
     const deletedIds = getDeletedTransactionIds();
     return baseList.filter(t => {
       if (!t || !t.id) return false;
       const cleanId = String(t.id).toLowerCase().trim();
-      return !deletedIds.has(cleanId) && !PERMANENTLY_PURGED_TX_IDS.has(cleanId);
+      if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
+      // Exact parity with HomeScreen: Must be confirmed with positive amount
+      return isConfirmedTransaction(t) && Number(t.amount) > 0;
     });
   }, [serverTransactions, transactions]);
 
   const userRole = getUserRole(creatorProfile);
-  const isSuperAdmin = userRole === 'SUPER_ADMIN';
-  const isAdmin = userRole === 'ADMIN' || creatorProfile?.isAdmin === true;
-  const isModerator = userRole === 'MODERATOR';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || creatorProfile?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN'));
+  const isAdmin = userRole === 'ADMIN' || creatorProfile?.isAdmin === true || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'ADMIN'));
+  const isModerator = userRole === 'MODERATOR' || creatorProfile?.role === 'MODERATOR';
   const isStaffFullAccess = isSuperAdmin || isAdmin;
 
   // Check if current user is an authenticated QR creator or privileged staff (Admin/Moderator)

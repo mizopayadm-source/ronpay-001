@@ -48,6 +48,7 @@ import {
   getStoredUserPaidTxIds,
   isCampaignCreator,
   ensureCampaignImagesOptimizedAndSynced,
+  saveAdminAuthState,
 } from './utils/storage';
 import {
   fetchTableData,
@@ -2233,6 +2234,9 @@ export default function App() {
           onToggleBiometric={handleToggleBiometric}
           onLoginSuccess={(newProfile) => {
             setCreatorProfile(newProfile);
+            if (newProfile.isAdmin || newProfile.role === 'SUPER_ADMIN' || newProfile.role === 'ADMIN') {
+              saveAdminAuthState(newProfile.role || 'SUPER_ADMIN', newProfile);
+            }
             saveStoredCreatorProfile(newProfile);
             setIsLoginModalOpen(false);
           }}
