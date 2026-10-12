@@ -42,6 +42,7 @@ export interface ParsedRoute {
   isAdminOpen?: boolean;
   isSyncDiagnosticOpen?: boolean;
   isWalletOpen?: boolean;
+  isLoginOpen?: boolean;
   view?: 'website' | 'app';
   isPhonePeOpen?: boolean;
   isDirectPhonePeLaunch?: boolean;
@@ -235,6 +236,14 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
 
     const isPhonePePath = pathname.toLowerCase() === '/phonepe';
     const isPhonePeOpen = phonepeParam === 'true' || phonepeParam === '1' || phonepeParam === 'phonepe' || isPhonePePath;
+
+    const isLoginPath = pathname.toLowerCase() === '/login' || pathname.toLowerCase().endsWith('/login') || searchParams.has('login') || searchParams.get('screen') === 'login' || searchParams.get('login') === 'true';
+    if (isLoginPath) {
+      return {
+        isLoginOpen: true,
+        view: parsedView || 'app',
+      };
+    }
 
     // 1. If Campaign ID is present: Match existing campaign or reconstruct dynamic campaign
     if (campaignId) {

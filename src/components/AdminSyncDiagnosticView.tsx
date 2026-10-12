@@ -54,6 +54,7 @@ import {
   syncCampaignToFirestore 
 } from '../services/firestoreSync';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
+import { clearAllFirestoreTransactionsAndStats } from '../utils/purgeFirestore';
 
 export type DiscrepancyType = 
   | 'missing_in_cloud' 
@@ -252,6 +253,39 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       await runDiagnosticScan();
     } catch (err: any) {
       alert('Error purging transactions: ' + (err as any)?.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePurgeAllTransactions = async () => {
+    setIsScanning(true);
+    setActionNotice({
+      message: '⏳ Transaction zawng zawng paih fai mek a ni...',
+      type: 'info'
+    });
+    try {
+      const res = await clearAllFirestoreTransactionsAndStats();
+      if (res && res.success !== false) {
+        setActionNotice({
+          message: `✅ Transaction zawng zawng paih fai vek a ni ta! Fresh-in a in-reset ta e. App a rawn refresh mek...`,
+          type: 'success'
+        });
+        if (onRefreshParent) onRefreshParent();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setActionNotice({
+          message: `❌ Transaction paih fai a hlawhchham: ${res?.error || 'Unknown error'}`,
+          type: 'error'
+        });
+      }
+    } catch (err: any) {
+      setActionNotice({
+        message: `❌ Error: ${err?.message || String(err)}`,
+        type: 'error'
+      });
     } finally {
       setIsScanning(false);
     }
@@ -806,6 +840,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <p className="text-[11px] text-slate-400">Hengte hi emergency reset emaw cleanup atana chauhva hman tur a ni.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+                type="button"
+                onClick={handlePurgeAllTransactions}
+                disabled={isScanning}
+                className="px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-white" />
+                <span>Paih Fai Vek (Purge All)</span>
+              </button>
+
             <button
               type="button"
               onClick={handlePurgeSystemUpdated}

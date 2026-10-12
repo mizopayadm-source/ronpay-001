@@ -5739,6 +5739,69 @@ app.post('/api/transactions/delete-batch', (req: Request, res: Response) => {
   }
 });
 
+app.post('/api/transactions/purge-all', async (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const existingIds = (db.transactions || []).map((t: any) => String(t.id).toLowerCase().trim());
+    const count = existingIds.length;
+
+    db.transactions = [];
+    db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...existingIds]));
+    if (db.stats) {
+      db.stats.totalAmount = 0;
+      db.stats.totalCount = 0;
+      db.stats.todayCount = 0;
+    }
+    saveDatabase(db);
+
+    // Delete all from Supabase by fetching IDs first and deleting individually or in batch
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      try {
+        const getRes = await fetch(`${sbUrl}/rest/v1/transactions?select=id`, {
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (getRes.ok) {
+          const rows = await getRes.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            for (const r of rows) {
+              if (r && r.id) {
+                await fetch(`${sbUrl}/rest/v1/transactions?id=eq.${encodeURIComponent(r.id)}`, {
+                  method: 'DELETE',
+                  headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`
+                  }
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+        // Fallback catch-all delete
+        await fetch(`${sbUrl}/rest/v1/transactions?id=not.is.null`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`
+          }
+        }).catch(() => {});
+      } catch (e) {
+        console.warn('Supabase purge delete error:', e);
+      }
+    }
+
+    res.json({ success: true, count, message: `Successfully purged ${count} transactions from server and Supabase.` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Announcement API
 app.get('/api/announcement', (req: Request, res: Response) => {
   const db = getDatabase();

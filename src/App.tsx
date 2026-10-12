@@ -624,6 +624,9 @@ export default function App() {
     if (route.isWalletOpen) {
       setIsWalletOpen(true);
     }
+    if (route.isLoginOpen) {
+      setIsLoginModalOpen(true);
+    }
     if (route.isDirectPhonePeLaunch || route.screen === 'phonepe_launcher') {
       setCurrentScreen('phonepe_launcher');
       setAppView('app');
