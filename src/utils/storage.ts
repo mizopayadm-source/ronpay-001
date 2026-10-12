@@ -4115,19 +4115,38 @@ export const isCleanSlateModeActive = (): boolean => {
 export const executeCleanSlateFactoryReset = (): void => {
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('ronpay_clean_slate_mode_v1', 'true');
-      localStorage.removeItem(TRANSACTIONS_KEY);
-      localStorage.removeItem(CAMPAIGNS_KEY);
-      localStorage.removeItem('ronpay_public_pool_stats_v1');
-      localStorage.removeItem('ronpay_deleted_tx_ids_v1');
-      localStorage.removeItem('ronpay_deleted_campaign_ids_v1');
-      localStorage.removeItem('ronpay_kumtluang_members_v1');
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('ronpay_') || k.startsWith('rpay_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      localStorage.setItem('ronpay_clean_slate_mode_v1', 'false');
+      localStorage.setItem('ronpay_app_version_v2.7', 'active');
+      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
+      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(INITIAL_CAMPAIGNS));
+      localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(INITIAL_KUMTLUANG_EXPENSES));
+
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: [] }));
-        window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: [] }));
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: INITIAL_TRANSACTIONS }));
+        window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: INITIAL_CAMPAIGNS }));
+        window.dispatchEvent(new CustomEvent('ronpay_data_synced', { detail: { timestamp: Date.now() } }));
+        broadcastTabSync('transactions', INITIAL_TRANSACTIONS);
+        broadcastTabSync('campaigns', INITIAL_CAMPAIGNS);
       }
     }
-  } catch {}
+
+    if (typeof caches !== 'undefined') {
+      caches.keys().then(names => {
+        names.forEach(name => caches.delete(name));
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Clean slate reset error:', e);
+  }
 };
 
 export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[] => {
