@@ -4192,6 +4192,7 @@ interface DatabaseSchema {
   deletedStaffIds?: string[];
   expenses?: any[];
   deletedExpenseIds?: string[];
+  hardPurgeTimestamp?: number;
   lastUpdated: string;
 }
 
@@ -4555,10 +4556,15 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
   if (Array.isArray(db.transactions)) {
     const seenTxIds = new Set<string>();
     const origCount = db.transactions.length;
+    const purgeTs = db.hardPurgeTimestamp || 0;
     db.transactions = db.transactions.filter((t: any) => {
       if (!t || !t.id) return false;
       const cleanId = String(t.id).toLowerCase().trim();
       if (PURGED_SIMULATOR_TXS.has(cleanId)) return false;
+      if (purgeTs > 0) {
+        const txTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+        if (txTime <= purgeTs) return false;
+      }
       if (seenTxIds.has(cleanId)) return false; // Drop duplicate transaction with identical ID
       seenTxIds.add(cleanId);
       return true;
@@ -4596,6 +4602,7 @@ function getDatabase(): DatabaseSchema {
         deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
         expenses: Array.isArray(parsed?.expenses) ? parsed.expenses : [],
         deletedExpenseIds: Array.isArray(parsed?.deletedExpenseIds) ? parsed.deletedExpenseIds : [],
+        hardPurgeTimestamp: parsed?.hardPurgeTimestamp,
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
       if (autoHealDatabase(currentDb)) {
@@ -5746,6 +5753,7 @@ app.post('/api/transactions/purge-all', async (req: Request, res: Response) => {
     const count = existingIds.length;
 
     db.transactions = [];
+    db.hardPurgeTimestamp = Date.now();
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...existingIds]));
     if (db.stats) {
       db.stats.totalAmount = 0;
