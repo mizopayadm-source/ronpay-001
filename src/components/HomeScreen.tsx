@@ -242,28 +242,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const { stats: hookStats } = usePublicPoolStats();
 
-  // Real-time pool stats with complete immunity to negative/corrupted Firestore counter values
-  // Prioritizes verified ledger so Home Screen and Reports Screen ALWAYS stay 100% in sync
   const poolStats = useMemo(() => {
-    const rawStats = (hookStats && (hookStats.totalCount > 0 || hookStats.totalAmount > 0)) 
-      ? hookStats 
-      : (publicPoolStats || hookStats);
-
-    const rawAmt = typeof rawStats?.totalAmount === 'number' && !isNaN(rawStats.totalAmount) ? rawStats.totalAmount : 0;
-    const rawCnt = typeof rawStats?.totalCount === 'number' && !isNaN(rawStats.totalCount) ? rawStats.totalCount : 0;
-    const rawToday = typeof rawStats?.todayCount === 'number' && !isNaN(rawStats.todayCount) ? rawStats.todayCount : 0;
-
     // If local confirmed transactions exist, use the exact ledger totals as authoritative truth
-    const finalAmt = ledgerTotalCount > 0 ? ledgerTotalAmount : Math.max(0, rawAmt);
-    const finalCnt = ledgerTotalCount > 0 ? ledgerTotalCount : Math.max(0, rawCnt);
-    const finalToday = ledgerTotalCount > 0 ? ledgerTodayCount : Math.max(0, rawToday);
+    if (ledgerTotalCount > 0) {
+      return {
+        totalAmount: ledgerTotalAmount,
+        totalCount: ledgerTotalCount,
+        todayCount: ledgerTodayCount,
+      };
+    }
 
+    // Otherwise, fallback to live hookStats from Supabase
     return {
-      totalAmount: finalAmt,
-      totalCount: finalCnt,
-      todayCount: finalToday,
+      totalAmount: Math.max(0, hookStats?.totalAmount || 0),
+      totalCount: Math.max(0, hookStats?.totalCount || 0),
+      todayCount: Math.max(0, hookStats?.todayCount || 0),
     };
-  }, [hookStats, publicPoolStats, ledgerTotalAmount, ledgerTotalCount, ledgerTodayCount]);
+  }, [hookStats, ledgerTotalAmount, ledgerTotalCount, ledgerTodayCount]);
 
   const totalRaised = poolStats.totalAmount;
   const totalTxnsCount = poolStats.totalCount;
