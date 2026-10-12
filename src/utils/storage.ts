@@ -951,6 +951,14 @@ export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay-test-123456',
   'test-123',
   'rpay-cash-520699',
+  'rpay-cash-168598',
+  'rpay-cash-742024',
+  'rpay-cash-531295',
+  'rpay-cash-773692',
+  'rpay-cash-536139',
+  'rpay-cash-426904',
+  'rpay-cash-553088',
+  'rpay_txn_1790874919399_965',
   'rpay-cash-800-web',
   'rpay-cash-800-app',
   'rpay_txn_1790753980087_908',
@@ -1073,6 +1081,19 @@ export const getStoredTransactions = (): Transaction[] => {
           if (canonicalTxMap.has(cleanId)) return true;
           const numAmt = Number(t.amount);
           if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0) return false;
+
+          // For server-managed BMP Shillong campaign, canonical dataset is authoritative
+          const isBmpTx = String(t.campaignId).trim().toLowerCase() === 'cmp-1788107291420' ||
+                          String(t.campaignTitle || '').toLowerCase().includes('bmp shillong') ||
+                          (t.memberId && String(t.memberId).toUpperCase().startsWith('BMPSHL'));
+          if (isBmpTx) {
+            const isFreshPending = ((t as any).isOfflinePending === true || t.isSynced === false) &&
+              t.createdAt ? (Date.now() - new Date(t.createdAt).getTime() < 15 * 60 * 1000) : false;
+            if (!isFreshPending) {
+              // Obsolete / purged / phantom BMP transaction not in canonical database: drop it
+              return false;
+            }
+          }
           
           // 2. Real user-created / completed / live transactions MUST BE KEPT!
           // Preserves all payments completed on web, mobile apps, QR scans, etc.
@@ -3817,23 +3838,68 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
       }
     }
     const delSet = getDeletedExpenseIds();
-    const cleanList = list.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()) && !KNOWN_DUMMY_EXPENSE_IDS.has(String(e.id).toLowerCase().trim()));
+    let cleanList = list.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()) && !KNOWN_DUMMY_EXPENSE_IDS.has(String(e.id).toLowerCase().trim()));
     
-    // Backfill any active canonical expenses from INITIAL_KUMTLUANG_EXPENSES that may be missing from local storage
+    // Reconcile and ensure authoritative canonical expenses from INITIAL_KUMTLUANG_EXPENSES
+    const canonicalMap = new Map<string, KumtluangExpense>();
+    for (const initExp of INITIAL_KUMTLUANG_EXPENSES) {
+      if (initExp && initExp.id) {
+        canonicalMap.set(String(initExp.id).toLowerCase().trim(), initExp);
+      }
+    }
+
+    let reconciled = false;
+    // 1. Reconcile existing records against canonical definitions
+    for (let i = 0; i < cleanList.length; i++) {
+      const exp = cleanList[i];
+      if (!exp || !exp.id) continue;
+      const k = String(exp.id).toLowerCase().trim();
+      const canonical = canonicalMap.get(k);
+      if (canonical) {
+        if (exp.amount !== canonical.amount || exp.voucherNo !== canonical.voucherNo) {
+          cleanList[i] = { ...exp, ...canonical };
+          reconciled = true;
+        }
+      }
+    }
+
+    // 2. Filter out non-canonical BMP records (stale / deleted / test items) unless fresh offline pending
+    const bmpCanonIds = new Set(
+      INITIAL_KUMTLUANG_EXPENSES
+        .filter(e => e && String(e.campaignId).trim().toLowerCase() === 'cmp-1788107291420')
+        .map(e => String(e.id).toLowerCase().trim())
+    );
+    const beforeBmpFilterLen = cleanList.length;
+    cleanList = cleanList.filter(e => {
+      if (!e || !e.id) return false;
+      const k = String(e.id).toLowerCase().trim();
+      const isBmp = String(e.campaignId).trim().toLowerCase() === 'cmp-1788107291420' ||
+                    String(e.campaignTitle || '').toLowerCase().includes('bmp shillong');
+      if (isBmp && !bmpCanonIds.has(k)) {
+        const isFreshPending = (e as any).isOfflinePending === true &&
+          e.createdAt ? (Date.now() - new Date(e.createdAt).getTime() < 15 * 60 * 1000) : false;
+        return isFreshPending;
+      }
+      return true;
+    });
+    if (cleanList.length !== beforeBmpFilterLen) {
+      reconciled = true;
+    }
+
+    // 3. Backfill any active canonical expenses from INITIAL_KUMTLUANG_EXPENSES that may be missing
     const seenIds = new Set(cleanList.map(e => String(e.id).toLowerCase().trim()));
-    let backfilled = false;
     for (const initExp of INITIAL_KUMTLUANG_EXPENSES) {
       if (!initExp || !initExp.id) continue;
       const k = String(initExp.id).toLowerCase().trim();
       if (!delSet.has(k) && !KNOWN_DUMMY_EXPENSE_IDS.has(k) && !seenIds.has(k)) {
         cleanList.push(initExp);
         seenIds.add(k);
-        backfilled = true;
+        reconciled = true;
       }
     }
 
     // Self-heal: If dirty dummy records existed or canonical records backfilled, persist to localStorage
-    if ((backfilled || cleanList.length !== list.length) && typeof localStorage !== 'undefined') {
+    if ((reconciled || cleanList.length !== list.length) && typeof localStorage !== 'undefined') {
       localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(cleanList));
     }
 
