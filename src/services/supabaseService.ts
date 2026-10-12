@@ -917,8 +917,13 @@ export async function syncAllLocalToSupabase(): Promise<{
       if (ok) campaignsSynced++;
     }
 
-    // 3. Sync Transactions - COMPLETELY DISABLED to prevent mock data auto-insertion
+    // 3. Sync Transactions
+    const localTxns = getStoredTransactions();
     let transactionsSynced = 0;
+    for (const t of localTxns) {
+      const ok = await insertSupabaseTransaction(t);
+      if (ok) transactionsSynced++;
+    }
 
     // 4. Sync Wallet
     const localWallet = getStoredWallet();
