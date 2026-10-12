@@ -83,8 +83,8 @@ import {
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
-import { db } from '../lib/firebase';
-import { collection, query, limit, getDocs, getDocsFromServer } from 'firebase/firestore';
+import { initSupabaseRealtimeSync } from '../services/supabaseService';
+
 import { 
   formatDateDDMMYYYY, 
   formatDateTimeDDMMYYYY, 
@@ -216,92 +216,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
 
   // Supabase data fetch
-  const [serverTransactions, setServerTransactions] = useState<Transaction[]>(() => {
-    if (Array.isArray(transactions) && transactions.length > 0) return transactions;
-    const stored = getStoredTransactions();
-    if (Array.isArray(stored) && stored.length > 0) return stored;
-    return INITIAL_TRANSACTIONS;
-  });
-  const [isFetchingServerTxns, setIsFetchingServerTxns] = useState<boolean>(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    setIsFetchingServerTxns(true);
 
-    const loadData = async () => {
-      try {
-        const txs = await fetchTableData('transactions') as Transaction[];
-        if (isMounted) {
-          if (Array.isArray(txs) && txs.length > 0) {
-            setServerTransactions(txs);
-            try {
-              localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-              localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
-            } catch {}
-          }
-          setIsFetchingServerTxns(false);
-        }
-      } catch (err) {
-        console.warn('[ReportsScreen] Supabase fetch error:', err);
-        if (isMounted) setIsFetchingServerTxns(false);
-      }
-    };
-
-    loadData();
-
-    // Supabase Real-time subscription
-    const subscription = subscribeToTable('transactions', () => {
-      if (!isMounted) return;
-      loadData();
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, [selectedFilter]);
-
-  // Synchronize serverTransactions whenever transactions prop updates from App
-  useEffect(() => {
-    if (Array.isArray(transactions) && transactions.length > 0) {
-      setServerTransactions(transactions);
-    }
-  }, [transactions]);
-
-  // Listen to transaction updates/deletions dispatched from anywhere in the app
-  useEffect(() => {
-    const handleTxEvent = () => {
-      fetchTableData('transactions').then((txs) => {
-        if (Array.isArray(txs) && txs.length > 0) {
-          setServerTransactions(txs as Transaction[]);
-          try {
-            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-            localStorage.setItem('ronpay_transactions_v4', JSON.stringify(txs));
-            localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
-          } catch {}
-        }
-      }).catch(() => {});
-    };
-
-    window.addEventListener('ronpay_transactions_updated', handleTxEvent);
-    window.addEventListener('ronpay-transactions-updated', handleTxEvent);
-    return () => {
-      window.removeEventListener('ronpay_transactions_updated', handleTxEvent);
-      window.removeEventListener('ronpay-transactions-updated', handleTxEvent);
-    };
-  }, []);
 
   const effectiveTransactions = useMemo(() => {
     // Authoritative Transactions: Match 100% with Home Screen ledger
     let baseList: Transaction[] = [];
 
-    if (Array.isArray(serverTransactions) && serverTransactions.length > 0) {
-      baseList = [...serverTransactions];
-    } else if (Array.isArray(transactions) && transactions.length > 0) {
+    if (Array.isArray(transactions) && transactions.length > 0) {
       baseList = [...transactions];
     } else {
-      const stored = getStoredTransactions();
-      baseList = Array.isArray(stored) && stored.length > 0 ? stored : INITIAL_TRANSACTIONS;
+      baseList = [];
     }
 
     const deletedIds = getDeletedTransactionIds();
@@ -312,7 +237,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       // Exact parity with HomeScreen: Must be confirmed with positive amount
       return isConfirmedTransaction(t) && Number(t.amount) > 0;
     });
-  }, [serverTransactions, transactions]);
+  }, [transactions]);
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN' || creatorProfile?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN'));
@@ -382,12 +307,12 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
     if (!isCreator && !isStaffFullAccess) return effectiveTransactions;
 
     return effectiveTransactions.filter(t => {
-      // 1. Creator Security Barrier: Staff, admin, creator, or unfiltered 'all' view shows all valid transactions
+      // 1. Creator Security Barrier: 
+      //    - Staff/Admin: Full system access (all valid transactions)
+      //    - Creator: STRICT USER-ISOLATION (Own created campaigns transactions only)
       const matchesOwnership = isStaffFullAccess || 
-        isCreator ||
-        selectedFilter === 'all' ||
-        creatorCampaignIds.has(t.campaignId) || 
-        creatorCampaigns.some(c => isTransactionForCampaign(t, c));
+        (isCreator && (creatorCampaignIds.has(t.campaignId) || creatorCampaigns.some(c => isTransactionForCampaign(t, c))));
+
       if (!matchesOwnership) {
         return false;
       }
@@ -1181,6 +1106,18 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             title="Go back to Home"
           >
             <ArrowLeft className="w-5 h-5" />
+          </button>
+          <button
+            onClick={async () => {
+              if (window.confirm("I data zawng zawng hi i delete a, cloud atangin i la thar vek duh em? Hei hian browser a cache zawng zawng a paih fai ang.")) {
+                localStorage.clear();
+                window.location.reload();
+              }
+            }}
+            className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-2xs"
+            title="Hard Refresh App"
+          >
+            <RefreshCw className="w-5 h-5" />
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">

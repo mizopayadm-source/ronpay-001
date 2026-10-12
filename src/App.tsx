@@ -49,6 +49,8 @@ import {
   isCampaignCreator,
   ensureCampaignImagesOptimizedAndSynced,
   saveAdminAuthState,
+  mergeTransactions,
+  wipeAllClientStorage,
 } from './utils/storage';
 import {
   fetchTableData,
@@ -186,7 +188,7 @@ export default function App() {
 
   // App Core Data States
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => getStoredCampaigns());
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredTransactions());
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [creators, setCreators] = useState<CreatorProfile[]>(() => getStoredCreatorsList());
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>(() => getStoredCreatorProfile());
   const [pricingConfig, setPricingConfig] = useState<SystemPricingConfig>(() => getStoredPricingConfig());
@@ -361,7 +363,7 @@ export default function App() {
     const handleTransactionsSync = (e: Event) => {
       const customEvent = e as CustomEvent<Transaction[]>;
       if (customEvent.detail && Array.isArray(customEvent.detail)) {
-        setTransactions(customEvent.detail);
+        setTransactions(prev => mergeTransactions(prev, customEvent.detail));
       } else {
         setTransactions(getStoredTransactions());
       }
@@ -504,7 +506,7 @@ export default function App() {
       reloadLocalData();
       pullLatestServerState().then((res) => {
         if (res?.transactions && res.transactions.length > 0) {
-          setTransactions(res.transactions);
+          setTransactions(prev => mergeTransactions(prev, res.transactions));
         }
       }).catch(() => {});
     });
@@ -514,7 +516,7 @@ export default function App() {
       reloadLocalData();
       pullLatestServerState().then((res) => {
         if (res?.transactions && res.transactions.length > 0) {
-          setTransactions(res.transactions);
+          setTransactions(prev => mergeTransactions(prev, res.transactions));
         }
         reloadLocalData();
       }).catch(() => {
@@ -570,7 +572,19 @@ export default function App() {
     }
   }, [reloadLocalData]);
 
+
   // Apply route from current browser URL (for Google Lens, QR scans, and browser Back/Forward navigation)
+  useEffect(() => {
+    const init = async () => {
+        if (!localStorage.getItem('ronpay_cleared_once')) {
+            await wipeAllClientStorage();
+            localStorage.setItem('ronpay_cleared_once', 'true');
+            handleRefreshCloudData();
+        }
+    };
+    init();
+  }, [handleRefreshCloudData]);
+
   const applyRouteFromUrl = useCallback(async () => {
     const route = getUrlRoute();
     if (!route) return;

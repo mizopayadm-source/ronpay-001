@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { saveStoredCreatorProfile, executeCleanSlateFactoryReset } from '../utils/storage';
+import { saveStoredCreatorProfile, wipeAllClientStorage } from '../utils/storage';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -725,9 +725,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </button>
           </div>
           <button
-            onClick={() => {
+            onClick={async () => {
               if (window.confirm("Data leh transaction zawng zawng paihin a bul atangin (Clean Slate / Data Ruak) tan i duh tak zet em? System-in sample data a rawn dah tawh lo vang.")) {
-                executeCleanSlateFactoryReset();
+                await wipeAllClientStorage();
                 onResetData();
               }
             }}

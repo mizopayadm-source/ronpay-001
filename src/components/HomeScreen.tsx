@@ -200,16 +200,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
-  useEffect(() => {
-    const loadData = async () => {
-      const data = await fetchTableData('transactions') as Transaction[];
-      setTransactions(data);
-    };
-    loadData();
-
-    const subscription = subscribeToTable('transactions', loadData);
-    return () => { subscription.unsubscribe(); };
-  }, []);
 
   useEffect(() => {
     setTransactions(propTransactions);

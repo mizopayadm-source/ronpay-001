@@ -1029,6 +1029,24 @@ export const getDeletedTransactionIds = (): Set<string> => {
   return result;
 };
 
+export const syncTombstonesFromFirestore = async (): Promise<void> => {
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const { db } = await import('../lib/firebase');
+    const tombSnap = await getDoc(doc(db, 'system_metadata', 'tombstones'));
+    if (tombSnap.exists()) {
+      const data = tombSnap.data();
+      if (Array.isArray(data?.deleted_transactions)) {
+        data.deleted_transactions.forEach((id: any) => {
+          if (id) markTransactionAsDeleted(String(id).toLowerCase().trim(), false);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Storage] Failed to sync tombstones from Firestore:', err);
+  }
+};
+
 export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = true): void => {
   if (!txId) return;
   const clean = String(txId).toLowerCase().trim();
@@ -4128,37 +4146,23 @@ export const isCleanSlateModeActive = (): boolean => {
   }
 };
 
-export const executeCleanSlateFactoryReset = (): void => {
+export const wipeAllClientStorage = async (): Promise<void> => {
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.clear(); // Wipe everything
-      
-      localStorage.setItem('ronpay_clean_slate_mode_v1', 'false');
-      localStorage.setItem('ronpay_app_version_v2.7', 'active');
-      localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
-      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(INITIAL_CAMPAIGNS));
-      localStorage.setItem(KUMTLUANG_EXPENSES_KEY, JSON.stringify(INITIAL_KUMTLUANG_EXPENSES));
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: INITIAL_TRANSACTIONS }));
-        window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: INITIAL_CAMPAIGNS }));
-        window.dispatchEvent(new CustomEvent('ronpay_data_synced', { detail: { timestamp: Date.now() } }));
-        broadcastTabSync('transactions', INITIAL_TRANSACTIONS);
-        broadcastTabSync('campaigns', INITIAL_CAMPAIGNS);
-        // Force refresh
-        window.location.reload();
-      }
-    }
-
+    if (typeof localStorage !== 'undefined') localStorage.clear();
+    if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+    
+    // Clear all caches
     if (typeof caches !== 'undefined') {
-      caches.keys().then(names => {
-        names.forEach(name => caches.delete(name));
-      }).catch(() => {});
+      const keys = await caches.keys();
+      await Promise.all(keys.map(key => caches.delete(key)));
     }
+    console.log('[Storage] All client storage (local, session, caches) cleared.');
   } catch (e) {
-    console.error('Clean slate reset error:', e);
+    console.error('Failed to clear client storage:', e);
   }
 };
+
+
 
 export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[] => {
   const defaultList = [...DEFAULT_KUMTLUANG_EXPENSE_HEADS];
@@ -4171,3 +4175,14 @@ export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[]
 
 
 
+export function mergeTransactions(existing: Transaction[], incoming: Transaction[]): Transaction[] {
+  const map = new Map<string, Transaction>();
+  existing.forEach(t => map.set(t.id, t));
+  incoming.forEach(t => map.set(t.id, t));
+  return Array.from(map.values());
+}
+export const clearRonpayLocalStorage = (): void => {
+  if (typeof localStorage === 'undefined') return;
+  const keysToRemove = Object.keys(localStorage).filter(key => key.startsWith('ronpay_'));
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+};

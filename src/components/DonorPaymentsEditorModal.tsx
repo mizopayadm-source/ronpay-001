@@ -111,7 +111,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
     return ['BMP Fund', 'General', 'Pathian Ram', 'Mission'];
   }, [currentCampaign]);
 
-  // 3. Initialize editable payment entries from existing transactions
+  // 3. Initialize editable payment entries from existing transactions (with robust deduplication)
   const [entries, setEntries] = useState<EditablePaymentEntry[]>(() => {
     if (!transactions || transactions.length === 0) {
       const today = new Date();
@@ -132,10 +132,14 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       }];
     }
 
-    return transactions.map((t, idx) => {
+    const monthMap = new Map<string, EditablePaymentEntry>();
+    const otherEntries: EditablePaymentEntry[] = [];
+    const extraDeleted: string[] = [];
+
+    transactions.forEach((t, idx) => {
       let dStr = '';
       try {
-        const d = new Date(t.timestamp);
+        const d = new Date(t.timestamp || t.date);
         if (!isNaN(d.getTime())) {
           dStr = d.toISOString().split('T')[0];
         }
@@ -143,11 +147,13 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       if (!dStr) dStr = new Date().toISOString().split('T')[0];
 
       const mInfo = getTransactionMonthInfo(t);
+      const isMonthly = t.periodType === 'monthly' || (!t.periodType && ALL_MONTH_NAMES_FULL.includes(mInfo.fullMonth as any));
+      const monthKey = `${mInfo.fullMonth.trim().toLowerCase()}_${mInfo.year || defaultYear}`;
 
-      return {
+      const entryObj: EditablePaymentEntry = {
         tempId: t.id || `temp-${idx}`,
         originalId: t.id,
-        amount: t.amount,
+        amount: Number(t.amount) || 0,
         dateStr: dStr,
         periodMonth: mInfo.fullMonth,
         periodYear: mInfo.year || defaultYear,
@@ -167,7 +173,37 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
         donorType: t.donorType,
         createdAt: t.createdAt || t.timestamp,
       };
+
+      if (isMonthly && mInfo.fullMonth && ALL_MONTH_NAMES_FULL.includes(mInfo.fullMonth as any)) {
+        if (monthMap.has(monthKey)) {
+          // Merge duplicates for same month/year to prevent double entry
+          const existing = monthMap.get(monthKey)!;
+          existing.amount += Number(t.amount) || 0;
+          if (t.id) {
+            extraDeleted.push(t.id);
+          }
+          const breakdown = t.subCategoryBreakdown || (t.subCategory ? { [t.subCategory]: t.amount } : {});
+          Object.entries(breakdown).forEach(([cat, val]) => {
+            existing.subCategoryBreakdown[cat] = (Number(existing.subCategoryBreakdown[cat]) || 0) + (Number(val) || 0);
+          });
+          if (t.remark && !existing.remark.includes(t.remark)) {
+            existing.remark = existing.remark ? `${existing.remark}; ${t.remark}` : t.remark;
+          }
+        } else {
+          monthMap.set(monthKey, entryObj);
+        }
+      } else {
+        otherEntries.push(entryObj);
+      }
     });
+
+    if (extraDeleted.length > 0) {
+      setTimeout(() => {
+        setDeletedIds(prev => Array.from(new Set([...prev, ...extraDeleted])));
+      }, 50);
+    }
+
+    return [...Array.from(monthMap.values()), ...otherEntries];
   });
 
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
@@ -374,8 +410,35 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 
     const nowIso = new Date().toISOString();
 
+    // Strict deduplication of entries before save to prevent any double entries
+    const seenMonths = new Map<string, EditablePaymentEntry>();
+    const cleanEntries: EditablePaymentEntry[] = [];
+    const allDeletedIds = new Set(deletedIds);
+
+    entries.forEach(e => {
+      const isMonthly = e.periodType === 'monthly' && ALL_MONTH_NAMES_FULL.includes(e.periodMonth as any);
+      if (isMonthly) {
+        const mKey = `${e.periodMonth.trim().toLowerCase()}_${e.periodYear}`;
+        if (seenMonths.has(mKey)) {
+          const first = seenMonths.get(mKey)!;
+          first.amount += Number(e.amount) || 0;
+          Object.entries(e.subCategoryBreakdown || {}).forEach(([cat, val]) => {
+            first.subCategoryBreakdown[cat] = (Number(first.subCategoryBreakdown[cat]) || 0) + (Number(val) || 0);
+          });
+          if (e.originalId) {
+            allDeletedIds.add(e.originalId);
+          }
+        } else {
+          seenMonths.set(mKey, e);
+          cleanEntries.push(e);
+        }
+      } else {
+        cleanEntries.push(e);
+      }
+    });
+
     // Convert entries to real Transaction objects
-    const finalTransactions: Transaction[] = entries.map(e => {
+    const finalTransactions: Transaction[] = cleanEntries.map(e => {
       let isoTimestamp = nowIso;
       if (e.dateStr) {
         try {
@@ -453,7 +516,7 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
       };
     });
 
-    onSaveAll(finalTransactions, deletedIds);
+    onSaveAll(finalTransactions, Array.from(allDeletedIds));
     onClose();
   };
 

@@ -3834,7 +3834,7 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
   } = options;
 
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
+  const logoDisplay = campaign.imageUrl || (campaign as any).logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const todayStr = formatDateDDMMYYYY(new Date());
 
@@ -4255,7 +4255,7 @@ export const generateExpenditureStatementPrintHtml = (options: ExpenditureStatem
   } = options;
 
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
+  const logoDisplay = campaign.imageUrl || (campaign as any).logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const todayStr = formatDateDDMMYYYY(new Date());
 
@@ -4547,7 +4547,7 @@ export const generatePaymentVoucherSlipPrintHtml = (
   expense: KumtluangExpense
 ): string => {
   const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
-  const logoDisplay = campaign.imageUrl || campaign.logoUrl || creatorProfile?.logoUrl;
+  const logoDisplay = campaign.imageUrl || (campaign as any).logoUrl || creatorProfile?.logoUrl;
   const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
   const amountWords = formatAmountInWords(expense.amount);
 

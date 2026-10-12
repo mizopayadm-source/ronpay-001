@@ -25,7 +25,6 @@ import { Transaction } from '../types';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
-import { triggerReceiptNotification, requestFCMNotificationPermission, getFCMStatus } from '../services/fcmService';
 import { getStoredCampaigns } from '../utils/storage';
 import { 
   getCampaignCauseTitle, 
@@ -75,7 +74,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
   const [receiptQrUrl, setReceiptQrUrl] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
-  const [fcmEnabled, setFcmEnabled] = useState<boolean>(false);
 
   // Intercept mobile hardware back button on receipt screen so it returns to home cleanly without looping
   useEffect(() => {
@@ -96,13 +94,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
     if (transaction) {
       // 1. Generate Receipt QR Data URL
       generateReceiptQRDataUrl(transaction.id).then(url => setReceiptQrUrl(url)).catch(() => {});
-      
-      // 2. Trigger instant FCM receipt notification (playSound: false to avoid double-chime)
-      triggerReceiptNotification(transaction, undefined, { playSound: false });
-
-      // 3. Check FCM status
-      const status = getFCMStatus();
-      setFcmEnabled(status.permission === 'granted');
     }
   }, [transaction?.id]);
 
@@ -288,14 +279,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
     });
-  };
-
-  const handleEnableFCM = async () => {
-    const res = await requestFCMNotificationPermission();
-    if (res.granted) {
-      setFcmEnabled(true);
-      if (transaction) triggerReceiptNotification(transaction);
-    }
   };
 
   const handleDownloadReceipt = () => {
@@ -613,26 +596,6 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           </button>
         </div>
 
-        {/* FCM Push Notification Info / Toggle */}
-        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10.5px]">
-          <div className="flex items-center gap-1.5 text-slate-300">
-            <Bell className="w-3.5 h-3.5 text-amber-400" />
-            <span>Real-Time Receipt Push (FCM):</span>
-          </div>
-          {fcmEnabled ? (
-            <span className="text-[9.5px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full">
-              ✓ Active / Delivered
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={handleEnableFCM}
-              className="text-[9.5px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
-            >
-              Enable Browser Push
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Share & Download Action Buttons Strip */}
