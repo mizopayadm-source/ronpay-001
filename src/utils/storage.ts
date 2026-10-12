@@ -470,9 +470,6 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             // Canonical campaigns are always preserved
             if (canonicalCampIds.has(cleanId)) return true;
-            // Preserve valid user-created campaigns
-            const isUserCreated = cleanId.startsWith('cmp-') && !cleanId.includes('test') && Boolean(camp.title && camp.upiId);
-            if (isUserCreated) return true;
             return false;
           })
           .map((camp: Campaign) => {
