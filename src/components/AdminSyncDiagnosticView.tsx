@@ -144,14 +144,19 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       setLocalTxList(freshLocalTx);
       setLocalCampList(freshLocalCamps);
 
-      // 2. Fetch Server/Mock DB Layer (/api/data/sync)
+      // 2. Fetch Server/Mock DB Layer (/api/data/state & ronpay_db.json)
       try {
         setServerStatus('checking');
-        const serverState = await syncAllWithServer(false);
-        if (serverState) {
-          setServerTxList(serverState.transactions || []);
-          setServerCampList(serverState.campaigns || []);
-          setServerStatus('online');
+        const stateRes = await fetch('/api/data/state');
+        if (stateRes.ok) {
+          const stateData = await stateRes.json();
+          if (stateData && stateData.data) {
+            setServerTxList(stateData.data.transactions || []);
+            setServerCampList(stateData.data.campaigns || []);
+            setServerStatus('online');
+          } else {
+            setServerStatus('online');
+          }
         } else {
           setServerStatus('offline');
         }

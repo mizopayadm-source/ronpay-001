@@ -4210,6 +4210,8 @@ export function broadcastServerEvent(type: string, data?: any) {
   }
 }
 
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791836500000;
+
 function getDefaultDatabase(): DatabaseSchema {
   return {
     campaigns: [],
@@ -4226,6 +4228,7 @@ function getDefaultDatabase(): DatabaseSchema {
     deletedStaffIds: [],
     expenses: [],
     deletedExpenseIds: [],
+    hardPurgeTimestamp: SYSTEM_HARD_PURGE_TIMESTAMP,
     lastUpdated: new Date().toISOString()
   };
 }
@@ -4556,15 +4559,13 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
   if (Array.isArray(db.transactions)) {
     const seenTxIds = new Set<string>();
     const origCount = db.transactions.length;
-    const purgeTs = db.hardPurgeTimestamp || 0;
+    const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
     db.transactions = db.transactions.filter((t: any) => {
       if (!t || !t.id) return false;
       const cleanId = String(t.id).toLowerCase().trim();
       if (PURGED_SIMULATOR_TXS.has(cleanId)) return false;
-      if (purgeTs > 0) {
-        const txTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-        if (txTime <= purgeTs) return false;
-      }
+      const txTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+      if (txTime <= purgeTs) return false;
       if (seenTxIds.has(cleanId)) return false; // Drop duplicate transaction with identical ID
       seenTxIds.add(cleanId);
       return true;
@@ -4602,7 +4603,7 @@ function getDatabase(): DatabaseSchema {
         deletedStaffIds: Array.isArray(parsed?.deletedStaffIds) ? parsed.deletedStaffIds : [],
         expenses: Array.isArray(parsed?.expenses) ? parsed.expenses : [],
         deletedExpenseIds: Array.isArray(parsed?.deletedExpenseIds) ? parsed.deletedExpenseIds : [],
-        hardPurgeTimestamp: parsed?.hardPurgeTimestamp,
+        hardPurgeTimestamp: Math.max(parsed?.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP),
         lastUpdated: parsed?.lastUpdated || new Date().toISOString()
       };
       if (autoHealDatabase(currentDb)) {
@@ -4823,10 +4824,13 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
     }
 
     let hasNew = false;
+    const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
     for (const row of supaRows) {
       if (!row || !row.id) continue;
       const cleanId = String(row.id).toLowerCase().trim();
       if (serverDelTxSet.has(cleanId) || PURGED_SIMULATOR_TXS.has(cleanId)) continue;
+      const rowTime = new Date(row.timestamp || row.created_at || 0).getTime();
+      if (rowTime <= purgeTs) continue;
       const normalized = {
         id: row.id,
         campaignId: row.campaign_id || row.campaignId || '',
@@ -5051,15 +5055,13 @@ app.post('/api/data/sync', async (req: Request, res: Response) => {
       }
     }
     if (Array.isArray(transactions) && transactions.length > 0) {
-      const purgeTs = db.hardPurgeTimestamp || 0;
+      const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
       const cleanTx = transactions.filter((t: any) => {
         if (!t || !t.id) return false;
         const cleanId = String(t.id).toLowerCase().trim();
         if (serverDelTxSet.has(cleanId)) return false;
-        if (purgeTs > 0) {
-          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-          if (tTime <= purgeTs) return false;
-        }
+        const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+        if (tTime <= purgeTs) return false;
         const amt = Number(t.amount);
         if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
         return true;
@@ -5528,6 +5530,11 @@ app.post('/api/transactions', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid transaction payload' });
     }
     const db = getDatabase();
+    const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
+    const tTime = new Date(tx.timestamp || tx.createdAt || 0).getTime();
+    if (tTime <= purgeTs) {
+      return res.json({ success: true, message: 'Transaction skipped (prior to hard purge timestamp)' });
+    }
     tx.updatedAt = new Date().toISOString();
     tx.totalAmount = Number(tx.amount) || 0;
     tx.campaignNetReceived = Number(tx.amount) || 0;
@@ -5623,7 +5630,12 @@ app.post('/api/transactions/batch', (req: Request, res: Response) => {
     const { transactions: batchTxs } = req.body || {};
     if (Array.isArray(batchTxs) && batchTxs.length > 0) {
       const db = getDatabase();
-      const validTxs = batchTxs.filter((t: any) => t && t.id);
+      const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
+      const validTxs = batchTxs.filter((t: any) => {
+        if (!t || !t.id) return false;
+        const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+        return tTime > purgeTs;
+      });
       const idSet = new Set(validTxs.map((t: any) => String(t.id).toLowerCase().trim()));
       
       db.deletedTransactionIds = (db.deletedTransactionIds || []).filter((id: string) => !idSet.has(id));
@@ -5758,7 +5770,7 @@ app.post('/api/transactions/purge-all', async (req: Request, res: Response) => {
     const count = existingIds.length;
 
     db.transactions = [];
-    db.hardPurgeTimestamp = Date.now();
+    db.hardPurgeTimestamp = Math.max(Date.now(), SYSTEM_HARD_PURGE_TIMESTAMP);
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...existingIds]));
     if (db.stats) {
       db.stats.totalAmount = 0;

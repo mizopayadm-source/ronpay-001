@@ -1083,200 +1083,40 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
   } catch (e) {}
 };
 
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791836500000;
+
 export const getStoredTransactions = (): Transaction[] => {
   try {
-    const hardPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
-    if (isCleanSlateModeActive() || hardPurgeTs > 0) {
-      const raw = localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions');
-      if (!raw) return [];
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(t => {
-            if (!t) return false;
-            const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-            return hardPurgeTs > 0 ? tTime > hardPurgeTs : true;
-          });
-        }
-      } catch {}
-      return [];
-    }
+    const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
+    const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
 
-    const deletedIds = getDeletedTransactionIds();
-    const raw = localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions');
-    if (raw !== null) {
+    const raw = typeof localStorage !== 'undefined' 
+      ? (localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions'))
+      : null;
+    if (!raw) return [];
+    try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Canonical dataset index
-        const canonicalTxMap = new Map<string, Transaction>();
-        for (const it of INITIAL_TRANSACTIONS) {
-          if (it && it.id) {
-            canonicalTxMap.set(String(it.id).toLowerCase().trim(), it);
-          }
-        }
-
-        // Filter out legacy sample entries, deleted transactions, or stale non-canonical phantom records
-        const legacyMismatchedIds = new Set(['TXN-9015', 'TXN-9016', 'TXN-9017']);
-        let hasAttrChange = false;
-        const cleaned = parsed.filter(t => {
-          if (!t || !t.id) return false;
-          const cleanId = String(t.id).toLowerCase().trim();
-          
-          // 1. If explicitly deleted or permanently purged, ALWAYS exclude!
-          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-          if (legacyMismatchedIds.has(t.id)) return false;
-
-          // 2. Authoritative baseline: active canonical database transactions are preserved
-          if (canonicalTxMap.has(cleanId)) return true;
-          const numAmt = Number(t.amount);
-          if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0) return false;
-
-          // For server-managed BMP Shillong campaign, canonical dataset is authoritative
-          const isBmpTx = String(t.campaignId).trim().toLowerCase() === 'cmp-1788107291420' ||
-                          String(t.campaignTitle || '').toLowerCase().includes('bmp shillong') ||
-                          (t.memberId && String(t.memberId).toUpperCase().startsWith('BMPSHL'));
-          if (isBmpTx) {
-            const isFreshPending = ((t as any).isOfflinePending === true || t.isSynced === false) &&
-              t.createdAt ? (Date.now() - new Date(t.createdAt).getTime() < 15 * 60 * 1000) : false;
-            if (!isFreshPending) {
-              // Obsolete / purged / phantom BMP transaction not in canonical database: drop it
-              return false;
-            }
-          }
-          
-          // 2. Real user-created / completed / live transactions MUST BE KEPT!
-          // Preserves all payments completed on web, mobile apps, QR scans, etc.
-          const isRealTransaction = cleanId.startsWith('rpay_') || 
-                                    cleanId.startsWith('rpay-') || 
-                                    cleanId.startsWith('txn_') || 
-                                    cleanId.startsWith('txn-') || 
-                                    cleanId.startsWith('tx-') || 
-                                    cleanId.startsWith('tx_') || 
-                                    cleanId.startsWith('bill-') || 
-                                    cleanId.startsWith('cash-') || 
-                                    cleanId.startsWith('pay_') ||
-                                    Boolean(t.timestamp || t.date || t.createdAt);
-          if (isRealTransaction) {
-            return true;
-          }
-          
-          return false;
-        }).map(t => {
-          // Backfill missing fields from canonical transactions without overwriting user edits
-          const cleanId = String(t.id).toLowerCase().trim();
-          const canonical = canonicalTxMap.get(cleanId);
-          if (canonical) {
-            if (t.amount === undefined || isNaN(Number(t.amount))) {
-              t.amount = canonical.amount;
-              hasAttrChange = true;
-            }
-            if (!t.status) {
-              t.status = canonical.status;
-              hasAttrChange = true;
-            }
-            if (t.totalAmount === undefined || isNaN(Number(t.totalAmount))) {
-              t.totalAmount = t.amount;
-              hasAttrChange = true;
-            }
-          }
-
-          // Auto-heal future timestamps if double IST offset occurred (e.g. IST formatted as UTC)
-          const nowMs = Date.now();
-          const txTime = t.timestamp ? new Date(t.timestamp).getTime() : 0;
-          if (txTime > nowMs + 60000) {
-            const matchRpay = String(t.id).match(/^RPAY_TXN_(\d{13})/i);
-            if (matchRpay && Number(matchRpay[1]) > 0 && Number(matchRpay[1]) <= nowMs + 60000) {
-              t.timestamp = new Date(Number(matchRpay[1])).toISOString();
-              t.createdAt = t.timestamp;
-              hasAttrChange = true;
-            } else if (txTime - nowMs <= (6.5 * 3600 * 1000)) {
-              t.timestamp = new Date(txTime - (5.5 * 3600 * 1000)).toISOString();
-              t.createdAt = t.timestamp;
-              hasAttrChange = true;
-            }
-          }
-
-          // Reassign duplicate member deposit RPAY-771843 to canonical BMPSHL-1718
-          if (cleanId === 'rpay-771843' || String(t.memberId).toLowerCase().trim() === 'bmpshl-1253') {
-            t.memberId = 'BMPSHL-1718';
-            t.donorVeng = 'Shillong Unit';
-            hasAttrChange = true;
-          }
-
-          // Enforce canonical name for BMPSHL-1739 if missing
-          if (String(t.memberId).toLowerCase().trim() === 'bmpshl-1739' && !t.donorName) {
-            t.donorName = 'Upa Thawngphena Tuallawt';
-            hasAttrChange = true;
-          }
-
-          // Ensure Inkhawm Thawhlawm legacy donation rpay-cash-709121 has dedicated subCategory and breakdown
-          if (cleanId === 'rpay-cash-709121') {
-            if (t.subCategory !== 'Inkhawm Thawhlawm' || !t.subCategoryBreakdown || !t.subCategoryBreakdown['Inkhawm Thawhlawm']) {
-              t.subCategory = 'Inkhawm Thawhlawm';
-              t.subCategoryBreakdown = { 'Inkhawm Thawhlawm': t.amount };
-              hasAttrChange = true;
-            }
-          }
-
-          // Normalize Pocket Monye typo to Pocket Money
-          if (t.campaignTitle === 'Pocket Monye') {
-            t.campaignTitle = 'Pocket Money';
-            hasAttrChange = true;
-          }
-
-          // Ensure date attribute exists without mutating actual payment timestamp
-          if (!t.date && t.timestamp) {
-            t.date = t.timestamp.slice(0, 10);
-          } else if (!t.timestamp) {
-            t.timestamp = new Date().toISOString();
-            t.date = t.timestamp.slice(0, 10);
-            hasAttrChange = true;
-          }
-
-          return t;
-        });
-
-        // Strict Deduplication Pass by unique transaction ID only
-        const seenTxIds = new Set<string>();
-        const finalMerged: Transaction[] = [];
-        for (const t of cleaned) {
+        const deletedIds = getDeletedTransactionIds();
+        const seen = new Set<string>();
+        const result: Transaction[] = [];
+        for (const t of parsed) {
           if (!t || !t.id) continue;
           const cleanId = String(t.id).toLowerCase().trim();
-          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
-            continue;
-          }
-          if (seenTxIds.has(cleanId)) {
-            continue;
-          }
-          seenTxIds.add(cleanId);
-          finalMerged.push(t);
+          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId) || seen.has(cleanId)) continue;
+          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+          if (tTime <= hardPurgeTs) continue;
+          seen.add(cleanId);
+          result.push(t);
         }
-
-        // Seamlessly ensure any active canonical transactions from database are backfilled
-        for (const initTx of INITIAL_TRANSACTIONS) {
-          if (!initTx || !initTx.id) continue;
-          const cleanId = String(initTx.id).toLowerCase().trim();
-          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) continue;
-          if (!seenTxIds.has(cleanId)) {
-            seenTxIds.add(cleanId);
-            finalMerged.push(initTx);
-          }
-        }
-
-        if (finalMerged.length !== parsed.length) {
-          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(finalMerged));
-        }
-
-        return finalMerged;
+        return result;
       }
-    }
-    // Initialize if never stored before
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(INITIAL_TRANSACTIONS));
-    return INITIAL_TRANSACTIONS;
+    } catch {}
+    return [];
   } catch (e) {
     console.error('Failed to parse stored transactions', e);
   }
-  return INITIAL_TRANSACTIONS;
+  return [];
 };
 
 let _syncServerTxTimer: any = null;
@@ -4185,9 +4025,22 @@ export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[]
 
 
 export function mergeTransactions(existing: Transaction[], incoming: Transaction[]): Transaction[] {
+  const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
+  const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
+  const delIds = getDeletedTransactionIds();
   const map = new Map<string, Transaction>();
-  existing.forEach(t => map.set(t.id, t));
-  incoming.forEach(t => map.set(t.id, t));
+  
+  const filterValid = (t: Transaction) => {
+    if (!t || !t.id) return false;
+    const cleanId = String(t.id).toLowerCase().trim();
+    if (delIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
+    const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+    if (tTime <= hardPurgeTs) return false;
+    return true;
+  };
+
+  (existing || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
+  (incoming || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
   return Array.from(map.values());
 }
 export const clearRonpayLocalStorage = (): void => {
