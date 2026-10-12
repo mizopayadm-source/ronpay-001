@@ -19,8 +19,8 @@ import {
 } from '../services/firestoreSync';
 import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
 
-const CAMPAIGNS_KEY = 'ronpay_campaigns_v2';
-const TRANSACTIONS_KEY = 'ronpay_transactions_v2';
+const CAMPAIGNS_KEY = 'ronpay_campaigns_v3';
+const TRANSACTIONS_KEY = 'ronpay_transactions_v3';
 const CREATOR_PROFILE_KEY = 'ronpay_creator_profile_v2';
 const CREATORS_LIST_KEY = 'ronpay_creators_list_v2';
 const MEMBERS_LIST_KEY = 'ronpay_kumtluang_members_v1';
@@ -30,17 +30,36 @@ const AUDIT_LOGS_KEY = 'ronpay_audit_logs_v1';
 const ANNOUNCEMENT_KEY = 'ronpay_announcement_v1';
 const DELETED_CAMPAIGN_IDS_KEY = 'ronpay_deleted_campaign_ids_v1';
 
+export const PERMANENTLY_PURGED_CAMPAIGN_IDS = new Set([
+  'cmp-kumtluang-ymavt',
+  'cmp-1787545326556',
+  'cmp-chk-mu6on2s6',
+  'cmp-chk-mu6ojr7t',
+  'cmp-chhungkaw-2',
+  'cmp-chhungkaw-1',
+  'cmp-1790613933759',
+  'cmp-1790611183923',
+  'cmp-1790611018907',
+  'cmp-1790610970360'
+]);
+
 export const getDeletedCampaignIds = (): Set<string> => {
+  const result = new Set<string>();
+  for (const id of PERMANENTLY_PURGED_CAMPAIGN_IDS) {
+    if (id) result.add(id.toLowerCase().trim());
+  }
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DELETED_CAMPAIGN_IDS_KEY) : null;
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        return new Set(arr.map(id => String(id).toLowerCase().trim()));
+        arr.forEach(id => {
+          if (id) result.add(String(id).toLowerCase().trim());
+        });
       }
     }
   } catch (e) {}
-  return new Set<string>();
+  return result;
 };
 
 export const recordDeletedCampaignId = (campaignId: string): void => {
@@ -438,25 +457,17 @@ export const getStoredCampaigns = (): Campaign[] => {
             const cleanId = String(camp.id).toLowerCase().trim();
             // BMP Shillong (cmp-1788107291420) is an authoritative permanent kumtluang bawm and must always be retained
             if (cleanId === 'cmp-1788107291420') return true;
+            if (PERMANENTLY_PURGED_CAMPAIGN_IDS.has(cleanId) || deletedCampIds.has(cleanId)) {
+              return false;
+            }
             const titleLower = String(camp.title || '').toLowerCase();
             const orgLower = String(camp.orgName || '').toLowerCase();
             if (
-              cleanId === 'cmp-kumtluang-ymavt' ||
-              cleanId === 'cmp-1787545326556' ||
-              cleanId === 'cmp-chk-mu6on2s6' ||
-              cleanId === 'cmp-chk-mu6ojr7t' ||
-              cleanId === 'cmp-chhungkaw-2' ||
-              cleanId === 'cmp-chhungkaw-1' ||
-              cleanId === 'cmp-1790613933759' || 
-              cleanId === 'cmp-1790611183923' || 
-              cleanId === 'cmp-1790611018907' || 
-              cleanId === 'cmp-1790610970360' ||
               (titleLower.includes('tkp') && titleLower.includes('shillong')) ||
               (orgLower.includes('tkp') && orgLower.includes('shillong'))
             ) {
               return false;
             }
-            if (deletedCampIds.has(cleanId) && cleanId !== 'cmp-1788107291420') return false;
             // Canonical campaigns are always preserved
             if (canonicalCampIds.has(cleanId)) return true;
             // Preserve valid user-created campaigns
@@ -3789,7 +3800,7 @@ export const DEFAULT_KUMTLUANG_EXPENSE_HEADS: string[] = [
 
 export const INITIAL_KUMTLUANG_EXPENSES: KumtluangExpense[] = (INITIAL_EXPENSES || []) as KumtluangExpense[];
 
-const KUMTLUANG_EXPENSES_KEY = 'ronpay_kumtluang_expenses_v1';
+const KUMTLUANG_EXPENSES_KEY = 'ronpay_kumtluang_expenses_v2';
 const EXPENSE_HEADS_PREFIX = 'ronpay_expense_heads_';
 const DELETED_EXPENSES_KEY = 'ronpay_deleted_expenses_v1';
 

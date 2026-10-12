@@ -688,7 +688,11 @@
     "cmp-chhungkaw-2",
     "cmp-chhungkaw-1",
     "cmp-1787545326556",
-    "cmp-kumtluang-ymavt"
+    "cmp-kumtluang-ymavt",
+    "cmp-1790613933759",
+    "cmp-1790611183923",
+    "cmp-1790611018907",
+    "cmp-1790610970360"
   ],
   "members": [
     {
@@ -9677,6 +9681,25 @@
   "deletedStaffIds": [],
   "expenses": [
     {
+      "id": "EXP-1791226950000",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "voucherNo": "VCH-2026-011",
+      "amount": 6565,
+      "head": "Bial BMP",
+      "purpose": "Bial BMP Inkhawmpui hmanna (Palai kal, Thingpui & Hmanral)",
+      "paidTo": "Bial Inkhawmpui Organising Committee",
+      "paymentMode": "Cash",
+      "spentDate": "2026-10-04",
+      "recordedBy": "Super Admin (Master)",
+      "recordedByPhone": "9862000001",
+      "recordedAt": "2026-10-04T14:30:00.000Z",
+      "createdAt": "2026-10-04T14:30:00.000Z",
+      "updatedAt": "2026-10-11T18:00:00.000Z",
+      "status": "approved",
+      "attachmentUrl": null
+    },
+    {
       "attachmentUrl": null,
       "spentDate": "2026-08-29",
       "status": "approved",
@@ -9865,25 +9888,6 @@
       "voucherNo": "VCH-2026-001",
       "status": "approved",
       "paymentMode": "Cash"
-    },
-    {
-      "id": "EXP-1791226950000",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "voucherNo": "VCH-2026-011",
-      "amount": 6565,
-      "head": "Bial BMP",
-      "purpose": "Bial BMP Inkhawmpui hmanna (Palai kal, Thingpui & Hmanral)",
-      "paidTo": "Bial Inkhawmpui Organising Committee",
-      "paymentMode": "Cash",
-      "spentDate": "2026-10-04",
-      "recordedBy": "Super Admin (Master)",
-      "recordedByPhone": "9862000001",
-      "recordedAt": "2026-10-04T14:30:00.000Z",
-      "createdAt": "2026-10-04T14:30:00.000Z",
-      "updatedAt": "2026-10-11T18:00:00.000Z",
-      "status": "approved",
-      "attachmentUrl": null
     }
   ],
   "deletedExpenseIds": [
@@ -9895,5 +9899,5 @@
     "exp-kt-2026-003",
     "exp-test-1"
   ],
-  "lastUpdated": "2026-10-11T19:24:33.642Z"
+  "lastUpdated": "2026-10-12T06:02:05.076Z"
 }
