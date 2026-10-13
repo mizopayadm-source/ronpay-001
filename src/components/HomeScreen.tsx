@@ -117,9 +117,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenWebsite,
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>(propTransactions);
-
+  const [campaignsList, setCampaigns] = useState<Campaign[]>(campaigns);
   const t = TRANSLATIONS[language] || TRANSLATIONS.mizo;
-  const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState<boolean>(false);
+  const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
   const [isSyncBannerDismissed, setIsSyncBannerDismissed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('ronpay_hide_sync_diagnostic_banner') === 'true';
@@ -127,89 +128,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       return false;
     }
   });
-  const [currentAnnounceIdx, setCurrentAnnounceIdx] = useState<number>(0);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
-
-  // Active items for rotating announcement banner
-  const bannerItems: AnnouncementItem[] = announcement?.items && announcement.items.length > 0
-    ? announcement.items.filter(item => item.isActive !== false)
-    : (announcement?.title ? [{
-        id: 'legacy-1',
-        title: announcement.title,
-        message: announcement.message,
-        type: announcement.type || 'info',
-        badge: announcement.type?.toUpperCase() || 'INFO',
-        isActive: true
-      }] : DEFAULT_ANNOUNCEMENT_ITEMS);
-
-  const animationStyle = announcement?.animationStyle || 'slide';
-  const autoRotate = announcement?.autoRotate !== false;
-  const rotationSpeedMs = Math.max(2, announcement?.rotationSpeedSeconds || 4) * 1000;
-
-  // Auto-rotation timer
-  useEffect(() => {
-    if (!autoRotate || isPaused || bannerItems.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentAnnounceIdx((prev) => (prev + 1) % bannerItems.length);
-    }, rotationSpeedMs);
-    return () => clearInterval(timer);
-  }, [autoRotate, isPaused, bannerItems.length, rotationSpeedMs]);
-
-  const fallbackItem: AnnouncementItem = {
-    id: 'default',
-    title: 'RonPay Community Platform',
-    message: 'Mizoram mipuite tan 100% Direct & Transparent Donation Platform.',
-    type: 'info',
-    badge: 'INFO',
-    isActive: true,
-    linkText: 'Bawm En Rawh',
-    linkAction: 'action_bawm_explorer'
-  };
-
-  const activeItem: AnnouncementItem = bannerItems[currentAnnounceIdx] || bannerItems[0] || fallbackItem;
-
-  const handleNextAnnounce = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setCurrentAnnounceIdx((prev) => (prev + 1) % bannerItems.length);
-  };
-
-  const handlePrevAnnounce = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setCurrentAnnounceIdx((prev) => (prev - 1 + bannerItems.length) % bannerItems.length);
-  };
-
-  const handleActionLink = (action?: string) => {
-    if (!action) return;
-    if (action === 'action_bawm_explorer' || action === 'explore_bawm') {
-      onSelectBawm('ralna');
-    } else if (action === 'action_bill_payment' || action === 'open_bill_service') {
-      const el = document.getElementById('quick-bill-recharge-section');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-      } else if (BILL_SERVICES.length > 0) {
-        onOpenBillService(BILL_SERVICES[0]);
-      }
-    } else if (action === 'action_creator_studio' || action === 'create_qr') {
-      onCreateQRClick();
-    } else if (action === 'action_kumtluang' || action === 'kumtluang_bawm') {
-      onSelectBawm('kumtluang');
-    } else if (action.startsWith('http://') || action.startsWith('https://') || action.includes('canva.com')) {
-      window.open(action, '_blank');
-    }
-  };
-
 
   useEffect(() => {
-    setTransactions(propTransactions);
-  }, [propTransactions]);
+    const txChannel = subscribeToTable('transactions', async () => {
+      const fresh = await fetchTableData<Transaction>('transactions');
+      setTransactions(fresh);
+    });
+
+    const campChannel = subscribeToTable('campaigns', async () => {
+      const fresh = await fetchTableData<Campaign>('campaigns');
+      setCampaigns(fresh);
+    });
+
+    return () => {
+      txChannel.unsubscribe();
+      campChannel.unsubscribe();
+    };
+  }, []);
+
+
+
 
   const safeTransactions = useMemo(() => {
     return Array.isArray(transactions) ? transactions.filter(Boolean) : [];
   }, [transactions]);
 
-  const safeCampaigns = Array.isArray(campaigns) ? campaigns : [];
+  const safeCampaigns = Array.isArray(campaignsList) ? campaignsList : [];
 
   // Ground truth confirmed transactions from safeTransactions (matches ReportsScreen 100%)
   const confirmedTxns = useMemo(() => {

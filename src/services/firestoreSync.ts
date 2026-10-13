@@ -210,6 +210,12 @@ export async function purgeSystemUpdatedTransactions(): Promise<number> {
  */
 import { compressDataUrl } from '../utils/imageCompressor';
 
+export async function fetchAllCampaignsFromFirestore(): Promise<Campaign[]> {
+  const q = collection(db, 'campaigns');
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => doc.data() as Campaign);
+}
+
 export function smartMerge<T extends Record<string, any>>(localItems: T[], remoteItems: T[], key: string = 'id'): T[] {
   const map = new Map<string, T>();
   const isCustomLogo = (url?: string) => url && typeof url === 'string' && !url.includes('unsplash.com');

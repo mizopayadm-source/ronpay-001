@@ -18,8 +18,13 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('error', (ev) => {
+    // Suppress common HMR/WebSocket connection issues in development/sandboxed environments
+    if (ev.message?.includes('WebSocket') || ev.message?.includes('HMR')) {
+      return;
+    }
     console.warn('[RonPay Crash Guard] Caught runtime error:', ev.message);
-  });
+  }, true); // Use capture phase to catch before bubble
+
 
   // Automatically dismiss pre-mount splash screen once JS loads
   try {

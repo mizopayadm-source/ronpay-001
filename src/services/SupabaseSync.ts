@@ -8,16 +8,24 @@ export const subscribeToTable = (
 ) => {
   const channelName = `${table}-sync-${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase.channel(channelName);
-  channel
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table },
-      (payload) => {
-        console.log(`[SupabaseSync] Change detected in ${table}:`, payload);
-        onUpdate(payload);
-      }
-    )
-    .subscribe();
+  try {
+    channel
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        (payload) => {
+          console.log(`[SupabaseSync] Change detected in ${table}:`, payload);
+          onUpdate(payload);
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || err) {
+          console.warn(`[SupabaseSync] WebSocket connection issue for ${table}:`, status, err);
+        }
+      });
+  } catch (e) {
+    console.error(`[SupabaseSync] Failed to subscribe to ${table}:`, e);
+  }
   return channel;
 };
 
@@ -160,7 +168,7 @@ export const upsertTransaction = async (tx: Transaction) => {
   };
   const { data, error } = await supabase
     .from('transactions')
-    .upsert(payload);
+    .upsert(payload, { onConflict: 'id' });
   if (error) throw error;
   return data;
 };
@@ -177,7 +185,7 @@ export const deleteTransaction = async (id: string) => {
 export const upsertCampaign = async (camp: Campaign) => {
   const { data, error } = await supabase
     .from('campaigns')
-    .upsert(camp);
+    .upsert(camp, { onConflict: 'id' });
   if (error) throw error;
   return data;
 };

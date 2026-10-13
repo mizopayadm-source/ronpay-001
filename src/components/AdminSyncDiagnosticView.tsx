@@ -42,6 +42,7 @@ import {
   deleteCampaign,
   migrateAndSwitchToSupabase
 } from '../services/SupabaseSync';
+import { fetchAllCampaignsFromFirestore } from '../services/firestoreSync';
 import { 
   syncAllWithServer, 
   saveTransactionToServer, 
@@ -301,21 +302,15 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     runDiagnosticScan();
   }, [runDiagnosticScan]);
 
-  // Compute Discrepancies across Local, Cloud Firestore, and Server DB
+  // Compute Discrepancies across Local and Server DB
   const discrepancies = useMemo(() => {
     const items: DiscrepancyItem[] = [];
     const deletedTxIds = getDeletedTransactionIds();
-    const cloudTombstoneSet = new Set(cloudTombstones.map(s => s.toLowerCase().trim()));
 
     // Create lookup maps
     const localTxMap = new Map<string, Transaction>();
     localTxList.forEach(t => {
       if (t && t.id) localTxMap.set(String(t.id).toLowerCase().trim(), t);
-    });
-
-    const cloudTxMap = new Map<string, Transaction>();
-    cloudTxList.forEach(t => {
-      if (t && t.id) cloudTxMap.set(String(t.id).toLowerCase().trim(), t);
     });
 
     const serverTxMap = new Map<string, Transaction>();
@@ -326,41 +321,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     // 1. Analyze Transactions: Check all known IDs
     const allTxIds = new Set<string>([
       ...Array.from(localTxMap.keys()),
-      ...Array.from(cloudTxMap.keys()),
       ...Array.from(serverTxMap.keys())
     ]);
 
-    const isCloudActive = cloudStatus === 'connected' || cloudTxList.length > 0;
-
     allTxIds.forEach(cleanId => {
       const isDeletedLocally = deletedTxIds.has(cleanId);
-      const isDeletedInCloud = cloudTombstoneSet.has(cleanId);
-
       const localTx = localTxMap.get(cleanId);
-      const cloudTx = cloudTxMap.get(cleanId);
       const serverTx = serverTxMap.get(cleanId);
 
-      // Check tombstone conflicts
-      if (isDeletedLocally && cloudTx && !isDeletedInCloud) {
-        items.push({
-          id: cloudTx.id,
-          type: 'transaction',
-          title: `Donation ₹${cloudTx.amount?.toLocaleString('en-IN') || 0} (${cloudTx.donorName || 'Anonymous'})`,
-          subTitle: `Campaign: ${cloudTx.campaignTitle || cloudTx.campaignId}`,
-          discrepancyType: 'tombstone_conflict',
-          severity: 'alert',
-          localData: null,
-          cloudData: cloudTx,
-          serverData: serverTx,
-          description: `Deleted on local app, but still active in Cloud Firestore.`,
-          descriptionMizo: `App-ah paih tawh a ni a, mahse Cloud Firestore-ah a la awm reng.`,
-          suggestedAction: 'purge'
-        });
-        return;
-      }
-
-      // If deleted locally and not in cloud, it's properly purged
-      if (isDeletedLocally && !cloudTx) return;
+      // Check if deleted locally
+      if (isDeletedLocally) return;
 
       // 1. Check Missing in Central Server DB
       if (localTx && !serverTx && serverStatus === 'online') {
@@ -372,7 +342,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           discrepancyType: 'missing_in_server',
           severity: 'alert',
           localData: localTx,
-          cloudData: cloudTx,
+          cloudData: null,
           serverData: null,
           description: `Transaction exists locally, but is MISSING from central database.`,
           descriptionMizo: `He transaction hi he device-ah a awm a, central server-ah a la lut lo.`,
@@ -382,7 +352,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       }
 
       // 2. Check Missing in Local from Server
-      if (serverTx && !localTx && !isDeletedLocally) {
+      if (serverTx && !localTx) {
         items.push({
           id: serverTx.id,
           type: 'transaction',
@@ -391,96 +361,13 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           discrepancyType: 'missing_in_local',
           severity: 'warning',
           localData: null,
-          cloudData: cloudTx,
+          cloudData: null,
           serverData: serverTx,
           description: `Transaction exists in central server database, but is MISSING from local device storage.`,
           descriptionMizo: `Central server-ah a awm a, mahse he device Local Storage-ah a la awm lo.`,
           suggestedAction: 'pull_to_local'
         });
         return;
-      }
-
-      // 3. Check Missing in Cloud (only if Cloud is actively connected)
-      if (isCloudActive && localTx && !cloudTx) {
-        items.push({
-          id: localTx.id,
-          type: 'transaction',
-          title: `Donation ₹${localTx.amount?.toLocaleString('en-IN') || 0} (${localTx.donorName || 'Anonymous'})`,
-          subTitle: `Campaign: ${localTx.campaignTitle || localTx.campaignId}`,
-          discrepancyType: 'missing_in_cloud',
-          severity: 'alert',
-          localData: localTx,
-          cloudData: null,
-          serverData: serverTx,
-          description: `Transaction exists in Local Storage/App, but is MISSING in Cloud Firestore.`,
-          descriptionMizo: `He transaction hi Local Database-ah a awm a, mahse Cloud Firestore-ah a la lut lo.`,
-          suggestedAction: 'push_to_cloud'
-        });
-        return;
-      }
-
-      // 4. Check Missing in Local from Cloud (only if Cloud is actively connected)
-      if (isCloudActive && cloudTx && !localTx && !isDeletedLocally) {
-        items.push({
-          id: cloudTx.id,
-          type: 'transaction',
-          title: `Donation ₹${cloudTx.amount?.toLocaleString('en-IN') || 0} (${cloudTx.donorName || 'Anonymous'})`,
-          subTitle: `Campaign: ${cloudTx.campaignTitle || cloudTx.campaignId}`,
-          discrepancyType: 'missing_in_local',
-          severity: 'warning',
-          localData: null,
-          cloudData: cloudTx,
-          serverData: serverTx,
-          description: `Transaction exists in Cloud Firestore, but is MISSING from local device storage.`,
-          descriptionMizo: `Cloud Firestore-ah a awm a, mahse he device Local Storage-ah a la awm lo.`,
-          suggestedAction: 'pull_to_local'
-        });
-        return;
-      }
-
-      // Both local and cloud exist: check for status discrepancies
-      if (localTx && cloudTx) {
-        const localStatus = (localTx.status || '').toLowerCase().trim();
-        const cloudStatusVal = (cloudTx.status || '').toLowerCase().trim();
-
-        const isLocalVerified = localStatus === 'completed' || localStatus === 'verified';
-        const isCloudVerified = cloudStatusVal === 'completed' || cloudStatusVal === 'verified';
-
-        if (isLocalVerified !== isCloudVerified) {
-          items.push({
-            id: localTx.id,
-            type: 'transaction',
-            title: `Donation ₹${localTx.amount?.toLocaleString('en-IN') || 0} (${localTx.donorName || 'Anonymous'})`,
-            subTitle: `Campaign: ${localTx.campaignTitle || localTx.campaignId}`,
-            discrepancyType: 'status_mismatch',
-            severity: 'alert',
-            localData: localTx,
-            cloudData: cloudTx,
-            serverData: serverTx,
-            description: `Status mismatch: Local is '${localTx.status}', but Cloud Firestore is '${cloudTx.status}'.`,
-            descriptionMizo: `Status inmil lo: Local chu '${localTx.status}' a ni a, Cloud-ah '${cloudTx.status}' a ni lawi a.`,
-            suggestedAction: isLocalVerified ? 'push_to_cloud' : 'pull_to_local'
-          });
-          return;
-        }
-
-        // Check amount mismatch
-        if (Number(localTx.amount) !== Number(cloudTx.amount)) {
-          items.push({
-            id: localTx.id,
-            type: 'transaction',
-            title: `Donation ₹${localTx.amount?.toLocaleString('en-IN')} vs ₹${cloudTx.amount?.toLocaleString('en-IN')}`,
-            subTitle: `Campaign: ${localTx.campaignTitle || localTx.campaignId}`,
-            discrepancyType: 'amount_mismatch',
-            severity: 'alert',
-            localData: localTx,
-            cloudData: cloudTx,
-            serverData: serverTx,
-            description: `Amount mismatch: Local is ₹${localTx.amount}, but Cloud Firestore is ₹${cloudTx.amount}.`,
-            descriptionMizo: `Pawisa zat inmil lo: Local chu ₹${localTx.amount} a ni a, Cloud chu ₹${cloudTx.amount} a ni.`,
-            suggestedAction: 'push_to_cloud'
-          });
-        }
       }
     });
 
@@ -490,11 +377,6 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       if (c && c.id) localCampMap.set(String(c.id).toLowerCase().trim(), c);
     });
 
-    const cloudCampMap = new Map<string, Campaign>();
-    cloudCampList.forEach(c => {
-      if (c && c.id) cloudCampMap.set(String(c.id).toLowerCase().trim(), c);
-    });
-
     const serverCampMap = new Map<string, Campaign>();
     serverCampList.forEach(c => {
       if (c && c.id) serverCampMap.set(String(c.id).toLowerCase().trim(), c);
@@ -502,15 +384,11 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
     const allCampIds = new Set<string>([
       ...Array.from(localCampMap.keys()),
-      ...Array.from(cloudCampMap.keys()),
       ...Array.from(serverCampMap.keys())
     ]);
 
-    const isCloudCampActive = cloudStatus === 'connected' || cloudCampList.length > 0;
-
     allCampIds.forEach(cleanId => {
       const localCamp = localCampMap.get(cleanId);
-      const cloudCamp = cloudCampMap.get(cleanId);
       const serverCamp = serverCampMap.get(cleanId);
 
       // 1. Check Missing in Central Server
@@ -523,7 +401,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           discrepancyType: 'missing_in_server',
           severity: 'alert',
           localData: localCamp,
-          cloudData: cloudCamp,
+          cloudData: null,
           serverData: null,
           description: `Campaign exists in Local Storage/App, but is MISSING from central server database.`,
           descriptionMizo: `He Bawm/QR hi he device-ah a awm a, central server database-ah a la awm lo.`,
@@ -542,7 +420,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
           discrepancyType: 'missing_in_local',
           severity: 'warning',
           localData: null,
-          cloudData: cloudCamp,
+          cloudData: null,
           serverData: serverCamp,
           description: `Campaign exists in central server database, but is MISSING from local device storage.`,
           descriptionMizo: `He Bawm/QR hi central server-ah a awm a, mahse he device Local Storage-ah a la awm lo.`,
@@ -550,92 +428,10 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         });
         return;
       }
-
-      // 3. Check Missing in Cloud (only if Cloud is actively connected)
-      if (isCloudCampActive && localCamp && !cloudCamp) {
-        items.push({
-          id: localCamp.id,
-          type: 'campaign',
-          title: localCamp.title || 'Untitled Campaign',
-          subTitle: `Category: ${localCamp.category} • Location: ${localCamp.location || 'Mizoram'}`,
-          discrepancyType: 'missing_in_cloud',
-          severity: 'alert',
-          localData: localCamp,
-          cloudData: null,
-          serverData: serverCamp,
-          description: `Campaign exists in Local Storage/App, but is MISSING in Cloud Firestore.`,
-          descriptionMizo: `He Bawm/QR hi Local-ah a awm a, Cloud Firestore-ah a la awm lo.`,
-          suggestedAction: 'push_to_cloud'
-        });
-        return;
-      }
-
-      // 4. Check Missing in Local from Cloud (only if Cloud is actively connected)
-      if (isCloudCampActive && cloudCamp && !localCamp) {
-        items.push({
-          id: cloudCamp.id,
-          type: 'campaign',
-          title: cloudCamp.title || 'Untitled Campaign',
-          subTitle: `Category: ${cloudCamp.category} • Location: ${cloudCamp.location || 'Mizoram'}`,
-          discrepancyType: 'missing_in_local',
-          severity: 'warning',
-          localData: null,
-          cloudData: cloudCamp,
-          serverData: serverCamp,
-          description: `Campaign exists in Cloud Firestore, but is MISSING from local device storage.`,
-          descriptionMizo: `Cloud Firestore-ah a awm a, mahse he device Local Storage-ah a la lut lo.`,
-          suggestedAction: 'pull_to_local'
-        });
-        return;
-      }
-
-      // Check Status or Approval Mismatch
-      if (localCamp && cloudCamp) {
-        const localApproved = Boolean(localCamp.isApproved);
-        const cloudApproved = Boolean(cloudCamp.isApproved);
-
-        if (localApproved !== cloudApproved) {
-          items.push({
-            id: localCamp.id,
-            type: 'campaign',
-            title: localCamp.title || 'Untitled Campaign',
-            subTitle: `Category: ${localCamp.category}`,
-            discrepancyType: 'status_mismatch',
-            severity: 'alert',
-            localData: localCamp,
-            cloudData: cloudCamp,
-            serverData: serverCamp,
-            description: `Approval status mismatch: Local isApproved=${localApproved}, Cloud isApproved=${cloudApproved}.`,
-            descriptionMizo: `Pawmpuina (Approval) inmil lo: Local=${localApproved ? 'Approved' : 'Pending'}, Cloud=${cloudApproved ? 'Approved' : 'Pending'}.`,
-            suggestedAction: localApproved ? 'push_to_cloud' : 'pull_to_local'
-          });
-          return;
-        }
-
-        // Check Target Amount Mismatch
-        const localTarget = localCamp.targetAmount || 0;
-        const cloudTarget = cloudCamp.targetAmount || 0;
-        if (localTarget !== cloudTarget) {
-          items.push({
-            id: localCamp.id,
-            type: 'campaign',
-            title: localCamp.title || 'Untitled Campaign',
-            subTitle: `Target: ₹${localTarget.toLocaleString('en-IN')} vs ₹${cloudTarget.toLocaleString('en-IN')}`,
-            discrepancyType: 'amount_mismatch',
-            severity: 'warning',
-            localData: localCamp,
-            cloudData: cloudCamp,
-            serverData: serverCamp,
-            description: `Target amount mismatch: Local is ₹${localTarget}, Cloud is ₹${cloudTarget}.`,
-            descriptionMizo: `Target zat inmil lo: Local chu ₹${localTarget} a ni a, Cloud chu ₹${cloudTarget} a ni.`,
-            suggestedAction: 'push_to_cloud'
-          });
-        }
-      }
     });
 
     return items;
-  }, [localTxList, localCampList, cloudTxList, cloudCampList, serverTxList, serverCampList, cloudTombstones]);
+  }, [localTxList, localCampList, serverTxList, serverCampList]);
 
   // One-click Re-sync single item
   const handleReSyncItem = async (item: DiscrepancyItem) => {
@@ -703,6 +499,19 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
     let successCount = 0;
     let failCount = 0;
+
+    // Force-sync campaigns from Firestore as Source of Truth
+    try {
+      const allFirestoreCampaigns = await fetchAllCampaignsFromFirestore();
+      await fetch('/api/data/force-sync-campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaigns: allFirestoreCampaigns })
+      });
+      console.log('Campaigns force-synced from Firestore');
+    } catch (e) {
+      console.error('Failed to force-sync campaigns from Firestore', e);
+    }
 
     for (const item of discrepancies) {
       try {
@@ -1043,96 +852,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         </div>
       )}
 
-      {/* 3-Layer Consistency Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {/* Layer 1: Local Client / Mobile App Cache */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                <Smartphone className="w-3.5 h-3.5" />
-              </span>
-              <h3 className="font-black text-slate-800 text-xs">Local Client Layer</h3>
-            </div>
-            <span className="text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Active Storage
-            </span>
-          </div>
-          <p className="text-[10.5px] text-slate-500 font-medium">
-            Mobile App & Web browser Indexed/LocalStorage
-          </p>
-          <div className="grid grid-cols-2 gap-2 pt-1 text-center">
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Transactions</span>
-              <span className="text-sm font-black text-slate-900">{localTxList.length}</span>
-            </div>
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Campaigns</span>
-              <span className="text-sm font-black text-slate-900">{localCampList.length}</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Layer 2: Server API & Mock DB Layer */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
-                <Globe className="w-3.5 h-3.5" />
-              </span>
-              <h3 className="font-black text-slate-800 text-xs">Server / API Layer</h3>
-            </div>
-            <span className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md border ${
-              serverStatus === 'online' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-            }`}>
-              {serverStatus === 'online' ? 'Pre-UAT / Express OK' : 'Checking...'}
-            </span>
-          </div>
-          <p className="text-[10.5px] text-slate-500 font-medium">
-            Express /api/data/sync & ronpay_db.json
-          </p>
-          <div className="grid grid-cols-2 gap-2 pt-1 text-center">
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Transactions</span>
-              <span className="text-sm font-black text-slate-900">{serverTxList.length}</span>
-            </div>
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Campaigns</span>
-              <span className="text-sm font-black text-slate-900">{serverCampList.length}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Layer 3: Cloud Firestore Production Layer */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
-                <Cloud className="w-3.5 h-3.5" />
-              </span>
-              <h3 className="font-black text-slate-800 text-xs">Cloud Firestore Layer</h3>
-            </div>
-            <span className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md border ${
-              cloudStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
-            }`}>
-              {cloudStatus === 'connected' ? `Live (${cloudLatencyMs}ms)` : cloudStatus}
-            </span>
-          </div>
-          <p className="text-[10.5px] text-slate-500 font-medium">
-            Firebase Project: ronpay-7fc69
-          </p>
-          <div className="grid grid-cols-2 gap-2 pt-1 text-center">
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Transactions</span>
-              <span className="text-sm font-black text-slate-900">{cloudTxList.length}</span>
-            </div>
-            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-              <span className="text-[9px] text-slate-400 block font-bold uppercase">Campaigns</span>
-              <span className="text-sm font-black text-slate-900">{cloudCampList.length}</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Sync Health Overview Banner */}
       <div className={`p-4 rounded-2xl border transition-all ${

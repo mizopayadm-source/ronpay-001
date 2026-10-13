@@ -5770,7 +5770,7 @@ app.post('/api/transactions/purge-all', async (req: Request, res: Response) => {
     const count = existingIds.length;
 
     db.transactions = [];
-    db.hardPurgeTimestamp = Math.max(Date.now(), SYSTEM_HARD_PURGE_TIMESTAMP);
+    db.hardPurgeTimestamp = Date.now();
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...existingIds]));
     if (db.stats) {
       db.stats.totalAmount = 0;
@@ -6863,6 +6863,19 @@ app.get('/api/download-file/:id/:fileName', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // Vite Middleware / Static Serving
 // -------------------------------------------------------------
+app.post('/api/data/force-sync-campaigns', async (req: Request, res: Response) => {
+  try {
+    const { campaigns } = req.body;
+    if (!Array.isArray(campaigns)) return res.status(400).json({ success: false, message: 'Invalid data' });
+    const db = getDatabase();
+    db.campaigns = campaigns;
+    saveDatabase(db);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 async function startServer() {
   // If running inside Vercel serverless functions, do not bind to port
   if (process.env.VERCEL) {
