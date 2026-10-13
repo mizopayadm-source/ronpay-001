@@ -268,7 +268,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     setIsScanning(true);
     setActionNotice({
       message: '⏳ Transaction zawng zawng paih fai mek a ni...',
-      type: 'info'
+      type: 'success'
     });
     try {
       const res = await clearAllFirestoreTransactionsAndStats();

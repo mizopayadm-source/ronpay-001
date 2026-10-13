@@ -59,6 +59,7 @@ import {
   saveCampaign
 } from '../utils/storage';
 import { fetchExpensesFromFirestore, syncAllLocalExpensesToFirestore } from '../services/firestoreSync';
+import { fetchOpeningBalanceFromSupabase } from '../services/SupabaseSync';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { formatDateDDMMYYYY, getTodayDateTimeLocal } from '../utils/date';
 import { compressDataUrl } from '../utils/imageCompressor';
@@ -210,6 +211,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   };
 
   useEffect(() => {
+    // Fetch opening balance directly from Supabase as Single Source of Truth
+    fetchOpeningBalanceFromSupabase(campaign.id).then((val) => {
+      if (val > 0) {
+        setOpeningBalance(val);
+        setTempOpeningBalance(String(val));
+      }
+    }).catch(() => {});
+
     // When opened, fetch from central sync server and Firestore in background to ensure 100% consistent data across Web, Mobile & Preview
     syncAllWithServer(true).then(() => {
       if (!isUserInteractingRef.current) {

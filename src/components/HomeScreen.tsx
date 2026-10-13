@@ -129,6 +129,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   });
 
+  const handleActionLink = (url?: string) => {
+    if (url) window.open(url, '_blank');
+  };
+
   useEffect(() => {
     const txChannel = subscribeToTable('transactions', async () => {
       const fresh = await fetchTableData<Transaction>('transactions');

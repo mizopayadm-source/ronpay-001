@@ -177,6 +177,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   
   // Cloud sync spinner state
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+  const [serverTransactions, setServerTransactions] = useState<Transaction[] | null>(null);
 
   // Transaction Editing State (Single Transaction)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);

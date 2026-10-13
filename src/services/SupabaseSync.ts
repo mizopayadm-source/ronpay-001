@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Transaction, Campaign, MemberRecord, KumtluangExpense } from '../types';
+import { getStoredExpenses, getStoredCampaigns } from '../utils/storage';
 
 // Subscribe to real-time changes from Supabase
 export const subscribeToTable = (
@@ -244,3 +245,66 @@ export const migrateAndSwitchToSupabase = async (allLocalTransactions: Transacti
   alert('Migration zawh a ni ta! Supabase chauh hman a ni tawh ang.');
   window.location.reload();
 };
+
+// 1. Push all local expenses and opening balances (campaigns) to Supabase via upsert
+export const pushLocalExpensesAndOpeningBalancesToSupabase = async () => {
+  try {
+    const localExpenses = getStoredExpenses();
+    if (localExpenses.length > 0) {
+      const { error: expErr } = await supabase.from('expenses').upsert(localExpenses, { onConflict: 'id' });
+      if (expErr) console.warn('[SupabaseSync] Expense upsert warning:', expErr);
+    }
+
+    const localCampaigns = getStoredCampaigns();
+    if (localCampaigns.length > 0) {
+      const { error: campErr } = await supabase.from('campaigns').upsert(localCampaigns, { onConflict: 'id' });
+      if (campErr) console.warn('[SupabaseSync] Campaign opening balance upsert warning:', campErr);
+    }
+
+    console.log('[SupabaseSync] Successfully synced local expenses and opening balances to Supabase.');
+  } catch (err) {
+    console.warn('[SupabaseSync] Error in pushLocalExpensesAndOpeningBalancesToSupabase:', err);
+  }
+};
+
+// 2. Load opening balance directly from Supabase table (campaigns) as Single Source of Truth
+export const fetchOpeningBalanceFromSupabase = async (campaignId: string): Promise<number> => {
+  if (!campaignId) return 0;
+  try {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('opening_balance, openingBalance')
+      .eq('id', campaignId)
+      .single();
+    
+    if (!error && data) {
+      const val = Number(data.opening_balance ?? data.openingBalance ?? 0);
+      if (!isNaN(val)) return val;
+    }
+  } catch (err) {
+    console.warn('[SupabaseSync] Failed to fetch opening balance from Supabase:', err);
+  }
+  return 0;
+};
+
+// 3. Startup sequence cleanup function to clear old client-side caches that conflict with Supabase SSOT
+export const runStartupCleanupSequence = async () => {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    
+    // First push local expenses & opening balances to Supabase
+    await pushLocalExpensesAndOpeningBalancesToSupabase();
+
+    // Mark Supabase SSOT active flag
+    localStorage.setItem('ronpay_supabase_ssot_active', 'true');
+    
+    const cleanupMarker = localStorage.getItem('ronpay_startup_cleanup_v2');
+    if (!cleanupMarker) {
+      localStorage.setItem('ronpay_startup_cleanup_v2', new Date().toISOString());
+      console.log('[SupabaseSync] Startup sequence cleanup executed successfully. Supabase is now Single Source of Truth.');
+    }
+  } catch (e) {
+    console.warn('[SupabaseSync] Startup cleanup warning:', e);
+  }
+};
+

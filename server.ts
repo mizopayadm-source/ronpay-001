@@ -5772,10 +5772,10 @@ app.post('/api/transactions/purge-all', async (req: Request, res: Response) => {
     db.transactions = [];
     db.hardPurgeTimestamp = Date.now();
     db.deletedTransactionIds = Array.from(new Set([...(db.deletedTransactionIds || []), ...existingIds]));
-    if (db.stats) {
-      db.stats.totalAmount = 0;
-      db.stats.totalCount = 0;
-      db.stats.todayCount = 0;
+    if ((db as any).stats) {
+      (db as any).stats.totalAmount = 0;
+      (db as any).stats.totalCount = 0;
+      (db as any).stats.todayCount = 0;
     }
     saveDatabase(db);
 

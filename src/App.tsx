@@ -56,7 +56,8 @@ import {
   fetchTableData,
   subscribeToTable,
   upsertTransaction,
-  deleteTransaction
+  deleteTransaction,
+  runStartupCleanupSequence
 } from './services/SupabaseSync';
 import {
   getStoredPublicPoolStats,
@@ -301,6 +302,7 @@ export default function App() {
 
     const loadSupabaseData = async () => {
       try {
+        await runStartupCleanupSequence().catch(() => {});
         const txs = await fetchTableData('transactions') as Transaction[];
         const camps = await fetchTableData('campaigns') as Campaign[];
         if (isMounted) {
