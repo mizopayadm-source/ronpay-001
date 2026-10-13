@@ -58,8 +58,15 @@ import {
   isTransactionForCampaign,
   saveCampaign
 } from '../utils/storage';
+import { supabase } from '../lib/supabase';
 import { fetchExpensesFromFirestore, syncAllLocalExpensesToFirestore } from '../services/firestoreSync';
-import { fetchOpeningBalanceFromSupabase } from '../services/SupabaseSync';
+import { 
+  fetchOpeningBalanceFromSupabase, 
+  fetchTableData, 
+  upsertExpense, 
+  deleteExpense, 
+  subscribeToTable 
+} from '../services/SupabaseSync';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { formatDateDDMMYYYY, getTodayDateTimeLocal } from '../utils/date';
 import { compressDataUrl } from '../utils/imageCompressor';
@@ -219,19 +226,53 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       }
     }).catch(() => {});
 
+    // Fetch expenses directly from Supabase as Single Source of Truth
+    fetchTableData<KumtluangExpense>('expenses').then((fresh) => {
+      if (Array.isArray(fresh) && fresh.length > 0 && !isUserInteractingRef.current) {
+        const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+        if (campExpenses.length > 0) {
+          setExpenseList(campExpenses);
+        }
+      }
+    }).catch(() => {});
+
+    // Realtime Supabase listener for live voucher updates across devices
+    const expChannel = subscribeToTable('expenses', () => {
+      if (!isUserInteractingRef.current) {
+        fetchTableData<KumtluangExpense>('expenses').then((fresh) => {
+          if (Array.isArray(fresh) && fresh.length > 0) {
+            const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+            setExpenseList(campExpenses);
+          }
+        }).catch(() => {});
+      }
+    });
+
     // When opened, fetch from central sync server and Firestore in background to ensure 100% consistent data across Web, Mobile & Preview
     syncAllWithServer(true).then(() => {
       if (!isUserInteractingRef.current) {
         const fresh = getStoredExpenses(campaign.id);
-        setExpenseList(fresh);
+        if (fresh && fresh.length > 0) {
+          setExpenseList(fresh);
+        }
       }
     }).catch(() => {});
     fetchExpensesFromFirestore(true).then((fresh) => {
-      if (Array.isArray(fresh) && !isUserInteractingRef.current) {
+      if (Array.isArray(fresh) && fresh.length > 0 && !isUserInteractingRef.current) {
         const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
-        setExpenseList(campExpenses);
+        if (campExpenses.length > 0) {
+          setExpenseList(campExpenses);
+        }
       }
     }).catch(() => {});
+
+    return () => {
+      if (expChannel) {
+        try {
+          supabase.removeChannel(expChannel);
+        } catch {}
+      }
+    };
   }, [campaign.id]);
 
   // Listen for storage updates, but DO NOT overwrite if user is actively editing a voucher or recording
@@ -620,6 +661,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       };
 
       saveExpense(newExpense);
+      upsertExpense(newExpense).catch(() => {});
       setExpenseList(prev => [newExpense, ...prev.filter(e => e.id !== newExpense.id)]);
 
       setFormSuccess(`₹${amt.toLocaleString('en-IN')} hmanna chu fel takin record a ni ta e!`);
@@ -699,6 +741,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     };
 
     updateStoredExpense(updated);
+    upsertExpense(updated).catch(() => {});
     setExpenseList(prev => prev.map(e => e.id === updated.id ? updated : e));
     setEditFormSuccess('Voucher siamthatna vawn that a ni ta e!');
     showToast(`Voucher ${updated.voucherNo} siamthat fel a ni e!`, 'success');
@@ -718,6 +761,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
   const confirmDeleteExpense = (id: string) => {
     deleteStoredExpense(id);
+    deleteExpense(id).catch(() => {});
     setExpenseList(prev => prev.filter(e => e.id !== id));
     setVoucherToDelete(null);
     showToast('Expense voucher paih fel a ni e.', 'info');

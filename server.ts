@@ -4210,7 +4210,7 @@ export function broadcastServerEvent(type: string, data?: any) {
   }
 }
 
-export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791836500000;
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
 
 function getDefaultDatabase(): DatabaseSchema {
   return {
@@ -4228,7 +4228,7 @@ function getDefaultDatabase(): DatabaseSchema {
     deletedStaffIds: [],
     expenses: [],
     deletedExpenseIds: [],
-    hardPurgeTimestamp: SYSTEM_HARD_PURGE_TIMESTAMP,
+    hardPurgeTimestamp: 0,
     lastUpdated: new Date().toISOString()
   };
 }

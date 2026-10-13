@@ -24,6 +24,8 @@ import {
   Info
 } from 'lucide-react';
 import { Campaign, Transaction } from '../types';
+import { ConnectionStatusMonitor } from './ConnectionStatusMonitor';
+import { SupabaseHealthIndicator } from './SupabaseHealthIndicator';
 import { 
   getStoredTransactions, 
   getStoredCampaigns, 
@@ -191,7 +193,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
   }, []);
 
   // Automated Deep Audit & Auto-Repair Engine Trigger
-  const handleDeepAuditAndRepair = async () => {
+  const handleDeepAuditAndRepair = useCallback(async () => {
     setIsScanning(true);
     setScanError(null);
     setActionNotice(null);
@@ -217,7 +219,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [onRefreshParent]);
 
   const handlePurgeNonBMP = async () => {
     if (!confirm("Are you sure you want to delete ALL transactions except BMP Shillong Unit? This cannot be undone!")) return;
@@ -593,6 +595,12 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
 
   return (
     <div className="space-y-4 text-xs font-sans pb-8">
+      {/* Real-time Connection Status Monitor: Auth & DB Latency */}
+      <ConnectionStatusMonitor variant="bar" />
+
+      {/* Authoritative Supabase SSOT Health & Live Counters */}
+      <SupabaseHealthIndicator />
+
       {/* Top Header Card */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-2xl shadow-md border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">

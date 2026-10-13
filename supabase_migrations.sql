@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS public.campaigns (
     created_by TEXT NOT NULL, -- user phone or id
     created_by_name TEXT,
     custom_amount NUMERIC(12,2),
+    opening_balance NUMERIC(12,2) DEFAULT 7827.00,
     location TEXT,
     description TEXT,
     image_url TEXT,
@@ -179,6 +180,22 @@ CREATE TABLE IF NOT EXISTS public.members (
 );
 
 -- =========================================================================
+-- 8. EXPENSES TABLE (VOUCHERS & EXPENDITURES)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.expenses (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    voucher_no TEXT,
+    payee TEXT,
+    purpose TEXT,
+    amount NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    date TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- =========================================================================
 -- INDEXES FOR FAST PERFORMANCE
 -- =========================================================================
 CREATE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone);
@@ -278,6 +295,7 @@ ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wallet_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fund_pools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read access to active campaigns and public pool stats
 CREATE POLICY "Public Read Campaigns" ON public.campaigns FOR SELECT USING (true);
@@ -287,6 +305,7 @@ CREATE POLICY "Public Read Users" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Public Read Wallets" ON public.wallets FOR SELECT USING (true);
 CREATE POLICY "Public Read Wallet Transactions" ON public.wallet_transactions FOR SELECT USING (true);
 CREATE POLICY "Public Read Members" ON public.members FOR SELECT USING (true);
+CREATE POLICY "Public Read Expenses" ON public.expenses FOR SELECT USING (true);
 
 -- Permissive write policies for anon key (client app interactions)
 CREATE POLICY "Anon Insert Transactions" ON public.transactions FOR INSERT WITH CHECK (true);
@@ -299,6 +318,7 @@ CREATE POLICY "Anon Upsert Wallets" ON public.wallets FOR ALL USING (true) WITH 
 CREATE POLICY "Anon Upsert Fund Pools" ON public.fund_pools FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Anon Upsert Wallet Txns" ON public.wallet_transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Anon Upsert Members" ON public.members FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Anon Upsert Expenses" ON public.expenses FOR ALL USING (true) WITH CHECK (true);
 
 -- =========================================================================
 -- SEED INITIAL DATA: RONPAY PUBLIC FUND POOL (39 TXNS / ₹262,125.90)
@@ -317,6 +337,7 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.fund_pools;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
         ALTER PUBLICATION supabase_realtime ADD TABLE public.campaigns;
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
     EXCEPTION
         WHEN others THEN
             NULL; -- In case publication does not exist or already added

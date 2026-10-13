@@ -305,7 +305,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
-    if (!isCreator && !isStaffFullAccess) return effectiveTransactions;
+    if (isStaffFullAccess) return effectiveTransactions;
+    if (!isCreator) return effectiveTransactions;
 
     return effectiveTransactions.filter(t => {
       // 1. Creator Security Barrier: 

@@ -1083,7 +1083,7 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
   } catch (e) {}
 };
 
-export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791836500000;
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
 
 export const getStoredTransactions = (): Transaction[] => {
   try {
@@ -1104,8 +1104,10 @@ export const getStoredTransactions = (): Transaction[] => {
           if (!t || !t.id) continue;
           const cleanId = String(t.id).toLowerCase().trim();
           if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId) || seen.has(cleanId)) continue;
-          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-          if (tTime <= hardPurgeTs) continue;
+          if (hardPurgeTs > 0) {
+            const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+            if (tTime <= hardPurgeTs) continue;
+          }
           seen.add(cleanId);
           result.push(t);
         }
@@ -4034,8 +4036,10 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
     if (!t || !t.id) return false;
     const cleanId = String(t.id).toLowerCase().trim();
     if (delIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-    const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-    if (tTime <= hardPurgeTs) return false;
+    if (hardPurgeTs > 0) {
+      const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+      if (tTime <= hardPurgeTs) return false;
+    }
     return true;
   };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ConnectionStatusMonitor } from './ConnectionStatusMonitor';
 import { SupabaseHealthIndicator } from './SupabaseHealthIndicator';
 import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSync';
 import { 
@@ -1322,9 +1323,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     Tier {ROLE_RANKS[currentRole] || 6}
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-300 hidden md:inline truncate max-w-[280px]">
-                  {ROLE_DEFINITIONS[currentRole]?.description || 'System Operator'}
-                </span>
+                {/* Real-time Supabase Auth & DB Latency Monitor (Replacing placeholder status text) */}
+                <ConnectionStatusMonitor variant="badge" />
               </div>
 
               {/* 1-Click Role Switcher */}
@@ -1423,7 +1423,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   id: 'sync_diagnostic' as const, 
                   label: 'Sync Diagnostic', 
                   icon: Activity,
-                  minRole: 'ADMIN' as UserRole
+                  minRole: 'SUPER_ADMIN' as UserRole
                 },
                 { 
                   id: 'gateway' as const, 
@@ -3392,8 +3392,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </div>
                   )}
 
-                  {/* Supabase Connection & Health Indicator (Replacing deprecated Firestore monitor) */}
-                  <SupabaseHealthIndicator />
+                  {/* Supabase Real-time Connection Status Monitor (visualizes fetchTableData, Auth, and DB latency) */}
+                  <ConnectionStatusMonitor variant="card" />
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Export Card */}

@@ -155,8 +155,10 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         if (!t || !t.id) return false;
         const cleanId = String(t.id).toLowerCase().trim();
         if (deletedTxSet.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-        const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-        if (tTime <= hardPurgeTs) return false;
+        if (hardPurgeTs > 0) {
+          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
+          if (tTime <= hardPurgeTs) return false;
+        }
         return (t.isSynced !== true || (t as any).isOfflinePending);
       });
 
@@ -365,8 +367,10 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             if (st && st.id) {
               const k = String(st.id).toLowerCase().trim();
               if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
-              const tTime = new Date(st.timestamp || st.createdAt || 0).getTime();
-              if (tTime <= hardPurgeTs) continue;
+              if (hardPurgeTs > 0) {
+                const tTime = new Date(st.timestamp || st.createdAt || 0).getTime();
+                if (tTime <= hardPurgeTs) continue;
+              }
               txMap.set(k, { ...st, isSynced: true });
             }
           }
