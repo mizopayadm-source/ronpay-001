@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Transaction, Campaign, MemberRecord, KumtluangExpense, WalletTransaction } from '../types';
-import { getStoredExpenses, getStoredCampaigns, getStoredTransactions, DEFAULT_WALLET } from '../utils/storage';
+import { getStoredExpenses, getStoredCampaigns, getStoredTransactions, DEFAULT_WALLET, getDeletedTransactionIds, PERMANENTLY_PURGED_TX_IDS } from '../utils/storage';
 
 // =========================================================================
 // Real-time Listener Integration
@@ -258,12 +258,24 @@ export const normalizeCampaign = (row: any): Campaign => {
 // =========================================================================
 export const fetchTableData = async <T>(table: string): Promise<T[]> => {
   try {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*');
+    let query = supabase.from(table).select('*');
+    if (table === 'transactions') {
+      query = query.neq('status', 'deleted');
+    }
+    const { data, error } = await query;
     if (!error && Array.isArray(data)) {
       if (table === 'transactions') {
-        const normalized = data.map(normalizeTransaction);
+        const deletedIds = getDeletedTransactionIds();
+        const validRows = data.filter((row: any) => {
+          if (!row || !row.id) return false;
+          const cleanId = String(row.id).toLowerCase().trim();
+          const st = String(row.status || '').toLowerCase().trim();
+          if (st === 'deleted' || deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
+            return false;
+          }
+          return true;
+        });
+        const normalized = validRows.map(normalizeTransaction);
         return normalized as unknown as T[];
       }
       if (table === 'campaigns') {
