@@ -58,7 +58,7 @@ import {
   saveCampaign,
   getStoredCampaigns
 } from '../utils/storage';
-import { syncCampaignToFirestore } from '../services/firestoreSync';
+
 import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
 import { isAndroidOrMobileApp } from '../utils/urlRouting';
 import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonepeCheckout';

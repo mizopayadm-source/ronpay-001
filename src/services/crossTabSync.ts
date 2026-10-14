@@ -8,8 +8,9 @@
  * Guarantees zero unnecessary Firestore reads during cross-tab state updates.
  */
 
-import { resetCloudSessionGuards } from './firestoreSync';
+
 import { markMemberAsDeleted } from '../utils/storage';
+import { resetCloudSessionGuards } from './firestoreSync';
 
 export const BROADCAST_CHANNEL_NAME = 'ronpay_state_sync';
 export const LEGACY_BROADCAST_CHANNEL_NAME = 'ronpay_realtime_sync';

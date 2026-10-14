@@ -4210,7 +4210,7 @@ export function broadcastServerEvent(type: string, data?: any) {
   }
 }
 
-export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791980400000;
 
 function getDefaultDatabase(): DatabaseSchema {
   return {
@@ -4815,23 +4815,24 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
     });
     if (!res.ok) return false;
     const supaRows: any[] = await res.json();
-    if (!Array.isArray(supaRows) || supaRows.length === 0) return false;
+    if (!Array.isArray(supaRows)) return false;
 
-    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
-    const txMap = new Map<string, any>();
-    for (const t of (db.transactions || [])) {
-      if (t && t.id) txMap.set(String(t.id).toLowerCase().trim(), t);
-    }
+    if (supaRows.length === 0) {
+      db.transactions = [];
+    } else {
+      const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
 
-    let hasNew = false;
-    const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
-    for (const row of supaRows) {
-      if (!row || !row.id) continue;
-      const cleanId = String(row.id).toLowerCase().trim();
-      if (serverDelTxSet.has(cleanId) || PURGED_SIMULATOR_TXS.has(cleanId)) continue;
-      const rowTime = new Date(row.timestamp || row.created_at || 0).getTime();
-      if (rowTime <= purgeTs) continue;
-      const normalized = {
+      const validRows = supaRows.filter(row => {
+        if (!row || !row.id) return false;
+        const cleanId = String(row.id).toLowerCase().trim();
+        if (serverDelTxSet.has(cleanId) || PURGED_SIMULATOR_TXS.has(cleanId) || row.status === 'deleted') return false;
+        const rowTime = new Date(row.timestamp || row.created_at || 0).getTime();
+        if (rowTime <= purgeTs) return false;
+        return true;
+      });
+
+      const normalizedList = validRows.map(row => ({
         id: row.id,
         campaignId: row.campaign_id || row.campaignId || '',
         campaignTitle: row.campaign_title || row.campaignTitle || '',
@@ -4858,27 +4859,56 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
         createdAt: row.created_at || row.timestamp || new Date().toISOString(),
         updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
         metadata: row.metadata || {}
-      };
+      }));
 
-      const existing = txMap.get(cleanId);
-      if (!existing) {
-        txMap.set(cleanId, normalized);
-        hasNew = true;
-      } else {
-        txMap.set(cleanId, { ...existing, ...normalized });
-      }
-    }
-
-    if (hasNew || txMap.size > db.transactions.length) {
-      db.transactions = Array.from(txMap.values());
-      db.transactions.sort((a: any, b: any) => {
+      normalizedList.sort((a: any, b: any) => {
         const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
         const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
         return timeB - timeA;
       });
-      saveDatabase(db);
-      return true;
+
+      db.transactions = normalizedList;
     }
+
+    // 2. Fetch campaigns from Supabase
+    try {
+      const campRes = await fetch(`${sbUrl}/rest/v1/campaigns?select=*&order=created_at.desc`, {
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (campRes.ok) {
+        const campRows: any[] = await campRes.json();
+        if (Array.isArray(campRows) && campRows.length > 0) {
+          const delCampSet = new Set((db.deletedCampaignIds || []).map((id: string) => String(id).toLowerCase().trim()));
+          const validCamps = campRows.filter(c => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
+          db.campaigns = validCamps.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            category: r.category || 'ralna',
+            orgName: r.org_name || r.orgName,
+            targetUpiId: r.target_upi_id || r.targetUpiId || 'ronpay@upi',
+            status: r.status || 'active',
+            createdBy: r.created_by || r.createdBy,
+            createdByName: r.created_by_name || r.createdByName,
+            customAmount: r.custom_amount ? Number(r.custom_amount) : undefined,
+            location: r.location,
+            description: r.description,
+            imageUrl: r.image_url || r.imageUrl,
+            isApproved: r.is_approved ?? r.isApproved ?? true,
+            allowPublicGroupDeposits: r.allow_public_group_deposits ?? r.allowPublicGroupDeposits ?? true,
+            createdAt: r.created_at || r.createdAt,
+            updatedAt: r.updated_at || r.updatedAt,
+            ...(r.metadata || {})
+          }));
+        }
+      }
+    } catch {}
+
+    saveDatabase(db);
+    return true;
   } catch (err: any) {
     // Graceful silent fallback to local database state when external Supabase is unreachable or times out
     const msg = err?.message || String(err);
@@ -4902,261 +4932,6 @@ app.get('/api/data/state', async (req: Request, res: Response) => {
   });
 });
 
-// POST /api/data/sync - Bi-directional sync between App, Web Portal, & Multi-devices
-app.post('/api/data/sync', async (req: Request, res: Response) => {
-  try {
-    const {
-      campaigns,
-      deletedCampaignIds,
-      members,
-      deletedMemberIds,
-      transactions,
-      deletedTransactionIds,
-      creators,
-      pricingConfig,
-      announcement,
-      auditLogs,
-      staffAccounts,
-      deletedStaffIds,
-      expenses,
-      deletedExpenseIds
-    } = req.body || {};
-
-    const db = getDatabase();
-
-    // 0. Process any deletions first so they are permanently registered and never resurrected
-    // Canonical dataset protection: Official 25 campaigns and 437 transactions can never be suppressed by client test tombstones
-    const CANONICAL_CAMPAIGN_IDS = new Set([
-      'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697', 'cmp-kumtluang-1', 'cmp-kumtluang-2',
-      'cmp-1788262396368', 'cmp-1788526889943', 'cmp-1787569484926', 'cmp-ralna-1',
-      'cmp-ralna-2', 'cmp-rikrum-1', 'cmp-khawlsak-1', 'cmp-khawlsak-2', 'cmp-khawlsak-3',
-      'cmp-1787917594696',
-      'cmp-1789722801941', 'cmp-1789722498375', 'cmp-1789722358527', 'cmp-1789722668042', 'cmp-custom'
-    ]);
-
-    let hasChanges = false;
-
-    if (Array.isArray(deletedExpenseIds) && deletedExpenseIds.length > 0) {
-      const delSet = new Set(deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
-      db.expenses = (db.expenses || []).filter((e: any) => !delSet.has(String(e.id).toLowerCase().trim()));
-      db.deletedExpenseIds = Array.from(new Set([
-        ...(db.deletedExpenseIds || []),
-        ...Array.from(delSet)
-      ]));
-      hasChanges = true;
-    }
-
-    if (Array.isArray(deletedTransactionIds) && deletedTransactionIds.length > 0) {
-      const delSet = new Set(
-        deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())
-      );
-      db.transactions = (db.transactions || []).filter((t: any) => {
-        const idLower = String(t.id).toLowerCase().trim();
-        return !delSet.has(idLower);
-      });
-      db.deletedTransactionIds = Array.from(new Set([
-        ...(db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()),
-        ...Array.from(delSet)
-      ]));
-      hasChanges = true;
-
-      // Forward deletions to Supabase as soft-delete and hard-delete
-      const sbConfig = (db as any).supabaseConfig || {};
-      const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
-      const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
-      if (sbUrl && sbKey) {
-        deletedTransactionIds.forEach((dId: any) => {
-          const clean = String(dId).trim();
-          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(clean)}`, {
-            method: 'PATCH',
-            headers: {
-              'apikey': sbKey,
-              'Authorization': `Bearer ${sbKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ status: 'deleted' })
-          }).catch(() => {});
-          fetch(`${sbUrl}/rest/v1/transactions?id=ilike.${encodeURIComponent(clean)}`, {
-            method: 'DELETE',
-            headers: {
-              'apikey': sbKey,
-              'Authorization': `Bearer ${sbKey}`
-            }
-          }).catch(() => {});
-        });
-      }
-    }
-
-    if (Array.isArray(deletedMemberIds) && deletedMemberIds.length > 0) {
-      const delSet = new Set(deletedMemberIds.map((id: any) => String(id).toLowerCase().trim()));
-      db.members = (db.members || []).filter((m: any) => !delSet.has(String(m.id).toLowerCase().trim()));
-      db.deletedMemberIds = Array.from(new Set([
-        ...(db.deletedMemberIds || []),
-        ...Array.from(delSet)
-      ]));
-      hasChanges = true;
-    }
-
-    if (Array.isArray(deletedStaffIds) && deletedStaffIds.length > 0) {
-      const delSet = new Set(deletedStaffIds.map((id: any) => String(id).trim()));
-      db.staffAccounts = (db.staffAccounts || []).filter((s: any) => !delSet.has(String(s.id).trim()));
-      db.deletedStaffIds = Array.from(new Set([
-        ...(db.deletedStaffIds || []),
-        ...Array.from(delSet)
-      ]));
-      hasChanges = true;
-    }
-
-    const delCampSet = (Array.isArray(deletedCampaignIds) && deletedCampaignIds.length > 0)
-      ? new Set<string>(deletedCampaignIds.map((id: any) => String(id).toLowerCase().trim()))
-      : undefined;
-
-    if (delCampSet && delCampSet.size > 0) {
-      db.campaigns = (db.campaigns || []).filter((c: any) => !delCampSet.has(String(c.id).toLowerCase().trim()));
-      db.deletedCampaignIds = Array.from(new Set([
-        ...(db.deletedCampaignIds || []).map(id => String(id).toLowerCase().trim()),
-        ...Array.from(delCampSet)
-      ]));
-      hasChanges = true;
-    }
-
-    const serverDelCampSet = new Set((db.deletedCampaignIds || []).map((id: any) => String(id).toLowerCase().trim()));
-    const serverDelTxSet = new Set((db.deletedTransactionIds || []).map((id: any) => String(id).toLowerCase().trim()));
-    const serverDelMemSet = new Set((db.deletedMemberIds || []).map((id: any) => String(id).toLowerCase().trim()));
-    const serverDelStaffSet = new Set((db.deletedStaffIds || []).map((id: any) => String(id).trim()));
-
-    // Merge collections intelligently with deletion protection
-    if (Array.isArray(campaigns) && campaigns.length > 0) {
-      db.campaigns = mergeCollections(db.campaigns, campaigns, 'id', serverDelCampSet);
-      hasChanges = true;
-    }
-    if (Array.isArray(members) && members.length > 0) {
-      const validIncomingMembers = members.filter((m: any) => {
-        if (!m || !m.id) return false;
-        const name = String(m.name || m.fullName || '').trim();
-        return name.length >= 2;
-      });
-      if (validIncomingMembers.length > 0) {
-        db.members = mergeCollections(db.members, validIncomingMembers, 'id', serverDelMemSet);
-        db.members = (db.members || []).filter((m: any) => {
-          if (!m || !m.id) return false;
-          if (serverDelMemSet.has(String(m.id).toLowerCase().trim())) return false;
-          const name = String(m.name || m.fullName || '').trim();
-          return name.length >= 2;
-        });
-        (db.members || []).forEach((m: any) => {
-          if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
-            if (!m.section) {
-              m.section = 'General';
-            }
-          }
-        });
-        hasChanges = true;
-      }
-    }
-    if (Array.isArray(transactions) && transactions.length > 0) {
-      const purgeTs = Math.max(db.hardPurgeTimestamp || 0, SYSTEM_HARD_PURGE_TIMESTAMP);
-      const cleanTx = transactions.filter((t: any) => {
-        if (!t || !t.id) return false;
-        const cleanId = String(t.id).toLowerCase().trim();
-        if (serverDelTxSet.has(cleanId)) return false;
-        const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-        if (tTime <= purgeTs) return false;
-        const amt = Number(t.amount);
-        if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
-        return true;
-      });
-      if (cleanTx.length > 0) {
-        // Direct upsert incoming clean transactions
-        for (const ctx of cleanTx) {
-          const cid = String(ctx.id).toLowerCase().trim();
-          const existingIdx = db.transactions.findIndex((t: any) => String(t.id).toLowerCase().trim() === cid);
-          if (existingIdx >= 0) {
-            db.transactions[existingIdx] = { ...db.transactions[existingIdx], ...ctx };
-          } else {
-            db.transactions.unshift(ctx);
-          }
-        }
-        db.transactions = reconcileAndDeduplicateTransactions(db.transactions, serverDelTxSet);
-        (db.transactions || []).forEach((t: any) => {
-          const isBmp = t.campaignId === 'cmp-1788107291420' ||
-                        String(t.campaignTitle || '').toLowerCase().includes('bmp') ||
-                        String(t.campaignTitle || '').toLowerCase().includes('shillong') ||
-                        String(t.memberId || '').startsWith('BMPSHL-');
-          if (isBmp) {
-            t.category = 'kumtluang';
-            t.campaignId = 'cmp-1788107291420';
-            t.campaignTitle = 'BMP Shillong';
-            if (!t.donorVeng) {
-              t.donorVeng = 'Shillong Unit';
-            }
-          }
-        });
-        db.transactions.sort((a: any, b: any) => {
-          const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
-          const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
-          return timeB - timeA;
-        });
-        hasChanges = true;
-      }
-    }
-    if (Array.isArray(staffAccounts) && staffAccounts.length > 0) {
-      db.staffAccounts = mergeCollections(db.staffAccounts || [], staffAccounts, 'id', serverDelStaffSet);
-      hasChanges = true;
-    }
-    if (Array.isArray(expenses) && expenses.length > 0) {
-      const serverDelExpSet = new Set((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
-      db.expenses = mergeCollections(db.expenses || [], expenses, 'id', serverDelExpSet);
-      db.expenses.sort((a: any, b: any) => {
-        const timeA = new Date(a.spentDate || a.recordedAt || a.date || a.createdAt || 0).getTime();
-        const timeB = new Date(b.spentDate || b.recordedAt || b.date || b.createdAt || 0).getTime();
-        return timeB - timeA;
-      });
-      hasChanges = true;
-    }
-    if (Array.isArray(creators) && creators.length > 0) {
-      db.creators = mergeCollections(db.creators, creators, 'phone');
-      hasChanges = true;
-    }
-    if (Array.isArray(auditLogs) && auditLogs.length > 0) {
-      db.auditLogs = mergeCollections(db.auditLogs || [], auditLogs, 'id');
-      db.auditLogs.sort((a: any, b: any) => {
-        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return timeB - timeA;
-      });
-      if (db.auditLogs.length > 500) {
-        db.auditLogs = db.auditLogs.slice(0, 500);
-      }
-      hasChanges = true;
-    }
-    if (pricingConfig && typeof pricingConfig === 'object') {
-      db.pricingConfig = { ...(db.pricingConfig || {}), ...pricingConfig };
-      hasChanges = true;
-    }
-    // Only update announcement via explicit /api/announcement endpoint, never blindly overwrite from regular client state sync
-    if (announcement && typeof announcement === 'object' && !db.announcement) {
-      db.announcement = { ...(db.announcement || {}), ...announcement };
-      hasChanges = true;
-    }
-
-    if (hasChanges) {
-      saveDatabase(db);
-    }
-
-    await syncFromSupabase(db);
-
-    res.json({
-      success: true,
-      message: 'State synchronized successfully',
-      data: db,
-      timestamp: db.lastUpdated
-    });
-  } catch (err: any) {
-    console.error('Sync error:', err);
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
 
 // All Campaigns Fetch for Web / Mobile Apps
 app.get('/api/campaigns', (req: Request, res: Response) => {

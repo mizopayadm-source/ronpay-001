@@ -59,7 +59,8 @@ import {
   saveCampaign
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
-import { fetchExpensesFromFirestore, syncAllLocalExpensesToFirestore } from '../services/firestoreSync';
+import { syncAllLocalExpensesToFirestore, fetchExpensesFromFirestore } from '../services/firestoreSync';
+
 import { 
   fetchOpeningBalanceFromSupabase, 
   fetchTableData, 

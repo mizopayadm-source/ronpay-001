@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Database, Zap, ShieldCheck, Activity, RefreshCw, CheckCircle2, AlertTriangle, Wifi, Lock, Wallet, Receipt, Check } from 'lucide-react';
 import { supabase, getSupabaseUrl } from '../lib/supabase';
 import { 
-  pushLocalExpensesAndOpeningBalancesToSupabase, 
-  pushBackupAndLocalDataToSupabase, 
   verifySupabaseSingleSourceOfTruth,
   SSOTVerificationResult 
 } from '../services/SupabaseSync';
@@ -19,7 +17,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
   const [realtimeStatus, setRealtimeStatus] = useState<'active' | 'connecting' | 'error'>('active');
   const [latencyMs, setLatencyMs] = useState<number>(42);
   const [isChecking, setIsChecking] = useState<boolean>(false);
-  const [isPushing, setIsPushing] = useState<boolean>(false);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [lastChecked, setLastChecked] = useState<string>(new Date().toLocaleTimeString());
   
@@ -101,19 +98,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
     }
   }, [checkHealth]);
 
-  const handlePushBackupAndLocalData = async () => {
-    setIsPushing(true);
-    try {
-      const res = await pushBackupAndLocalDataToSupabase();
-      alert(`Supabase-ah Backup & Local Data vawm luh fel a ni ta!\n\n• Transactions (onConflict 'id'): ${res.transactionsCount}\n• Expenses (Vouchers): ${res.expensesCount}\n• Wallet Transactions: ${res.walletTxCount}\n• Campaigns & Opening Balance: ₹7,827\n\nSingle Source of Truth 100% active!`);
-      await checkHealth();
-      if (onRefreshRef.current) onRefreshRef.current();
-    } catch (e: any) {
-      alert('Push error: ' + (e?.message || e));
-    } finally {
-      setIsPushing(false);
-    }
-  };
 
   const handleVerifySSOT = async () => {
     setIsVerifying(true);
@@ -291,15 +275,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handlePushBackupAndLocalData}
-            disabled={isPushing}
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{isPushing ? 'Pushing Data...' : 'Push Backup & Local Data to Supabase'}</span>
-          </button>
         </div>
       </div>
     </div>

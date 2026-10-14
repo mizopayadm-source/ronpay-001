@@ -42,7 +42,7 @@ import {
   PERMANENTLY_PURGED_TX_IDS
 } from '../utils/storage';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
-import { deleteTransactionFromFirestore } from '../services/firestoreSync';
+
 import { 
   getCampaignCauseTitle, 
   getEffectiveCategory, 
@@ -484,7 +484,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
     // 2. Persistent removal from Storage, Firestore & Server
     deleteStoredTransaction(cleanId);
-    deleteTransactionFromFirestore(cleanId).catch(() => {});
+    // Firebase removed
+
 
     // 3. Clear dialog
     setStatusDialogTx(null);
@@ -509,7 +510,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
     // 2. Batch delete across channels
     deleteMultipleTransactions(ids);
-    ids.forEach(id => deleteTransactionFromFirestore(id).catch(() => {}));
+    // Firebase removed
+
     setShowConfirmClearAll(false);
 
     if (onRefreshData) onRefreshData();

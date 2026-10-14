@@ -2,20 +2,17 @@ import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfi
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, INITIAL_EXPENSES, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
+  syncCreatorToFirestore,
+  syncPricingConfigToFirestore,
+  syncAnnouncementToFirestore,
   syncCampaignToFirestore,
-  deleteCampaignFromFirestore,
-  syncTransactionToFirestore,
-  deleteTransactionFromFirestore,
-  deleteMultipleTransactionsFromFirestore,
+  syncAuditLogToFirestore,
   syncMemberToFirestore,
   deleteMemberFromFirestore,
-  syncCreatorToFirestore,
-  syncAnnouncementToFirestore,
-  syncPricingConfigToFirestore,
-  syncAuditLogToFirestore,
+  syncTransactionToFirestore,
+  syncAllLocalExpensesToFirestore,
   syncExpenseToFirestore,
   deleteExpenseFromFirestore,
-  syncAllLocalExpensesToFirestore
 } from '../services/firestoreSync';
 import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
 
@@ -446,7 +443,6 @@ export const getStoredCampaigns = (): Campaign[] => {
     }
 
     const deletedCampIds = getDeletedCampaignIds();
-    const canonicalCampIds = new Set(INITIAL_CAMPAIGNS.map(c => String(c.id).toLowerCase().trim()));
     const raw = localStorage.getItem(CAMPAIGNS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
@@ -455,8 +451,6 @@ export const getStoredCampaigns = (): Campaign[] => {
           .filter((camp: Campaign) => {
             if (!camp || !camp.id) return false;
             const cleanId = String(camp.id).toLowerCase().trim();
-            // BMP Shillong (cmp-1788107291420) is an authoritative permanent kumtluang bawm and must always be retained
-            if (cleanId === 'cmp-1788107291420') return true;
             if (PERMANENTLY_PURGED_CAMPAIGN_IDS.has(cleanId) || deletedCampIds.has(cleanId)) {
               return false;
             }
@@ -468,9 +462,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             ) {
               return false;
             }
-            // Canonical campaigns are always preserved
-            if (canonicalCampIds.has(cleanId)) return true;
-            return false;
+            return true;
           })
           .map((camp: Campaign) => {
             const updated = { ...camp };
@@ -790,6 +782,7 @@ export const ensureCampaignImagesOptimizedAndSynced = async (): Promise<void> =>
             ...camp,
             updatedAt: new Date().toISOString()
           };
+          // Firebase removed
           syncCampaignToFirestore(stampedCamp).catch(() => {});
           safeApiFetch('/api/campaigns', {
             method: 'POST',
@@ -1030,21 +1023,7 @@ export const getDeletedTransactionIds = (): Set<string> => {
 };
 
 export const syncTombstonesFromFirestore = async (): Promise<void> => {
-  try {
-    const { doc, getDoc } = await import('firebase/firestore');
-    const { db } = await import('../lib/firebase');
-    const tombSnap = await getDoc(doc(db, 'system_metadata', 'tombstones'));
-    if (tombSnap.exists()) {
-      const data = tombSnap.data();
-      if (Array.isArray(data?.deleted_transactions)) {
-        data.deleted_transactions.forEach((id: any) => {
-          if (id) markTransactionAsDeleted(String(id).toLowerCase().trim(), false);
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[Storage] Failed to sync tombstones from Firestore:', err);
-  }
+  return;
 };
 
 export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = true): void => {
@@ -1061,7 +1040,7 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
 
     // Also notify Firestore tombstone in real-time if requested
     if (syncFirestore) {
-      deleteTransactionFromFirestore(clean).catch(() => {});
+      // Firebase removed
     }
 
     // Immediately remove from local transaction cache to instantly reflect deletion
@@ -1083,7 +1062,7 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
   } catch (e) {}
 };
 
-export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791980400000;
 
 export const getStoredTransactions = (): Transaction[] => {
   try {

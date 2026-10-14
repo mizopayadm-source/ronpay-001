@@ -41,7 +41,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
-import { fetchMembersFromFirestore } from '../services/firestoreSync';
+
 import { syncAllWithServer } from '../utils/syncEngine';
 import { getUserRole } from '../utils/rbac';
 import { 
@@ -74,6 +74,7 @@ import {
   updateMemberYearStatus,
   getAvailableRollYears
 } from '../utils/memberYearRoll';
+import { fetchMembersFromFirestore } from '../services/firestoreSync';
 
 // Helper to check if a campaign was strictly created by this creator (strict ownership, no cross-creator leakage)
 const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null): boolean => {

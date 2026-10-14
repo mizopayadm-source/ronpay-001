@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConnectionStatusMonitor } from './ConnectionStatusMonitor';
 import { SupabaseHealthIndicator } from './SupabaseHealthIndicator';
-import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSync';
+
 import { 
   X, 
   Maximize2,
@@ -134,12 +134,6 @@ import {
   getRoleBadgeInfo
 } from '../utils/rbac';
 import { StaffManagementTab } from './StaffManagementTab';
-import { 
-  pushAllLocalDataToFirestore,
-  getFirestoreConnectionStatus,
-  subscribeFirestoreStatus,
-  FirestoreConnectionStatus
-} from '../services/firestoreSync';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { 
@@ -371,44 +365,16 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [restoreNotice, setRestoreNotice] = useState<{ message: string; isError?: boolean } | null>(null);
 
-  // Firebase Cloud Sync State
-  const [firebaseStatus, setFirebaseStatus] = useState<FirestoreConnectionStatus>(getFirestoreConnectionStatus);
   const [isSyncingToCloud, setIsSyncingToCloud] = useState<boolean>(false);
   const [cloudSyncMessage, setCloudSyncMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsub = subscribeFirestoreStatus((status, msg) => {
-      setFirebaseStatus(status);
-      if (msg) setCloudSyncMessage(msg);
-    });
-    return () => unsub();
-  }, []);
-
   const handlePushAllToCloud = async () => {
     setIsSyncingToCloud(true);
-    setCloudSyncMessage(null);
-    try {
-      const result = await pushAllLocalDataToFirestore();
-      if (result.success) {
-        setRestoreNotice({
-          message: `☁️ Realtime Cloud Synchronization Active! Successfully synced ${result.count} local records to Firebase Firestore (ronpay-7fc69).`
-        });
-        recordAuditLog('Cloud Database Sync Pushed', `Pushed ${result.count} records to Firebase Firestore.`, 'system');
-        setLogsList(getStoredAuditLogs());
-      } else {
-        setRestoreNotice({
-          message: '⚠️ Cloud sync deferred to offline queue.',
-          isError: true
-        });
-      }
-    } catch (err: any) {
-      setRestoreNotice({
-        message: `⚠️ Cloud sync notice: ${err?.message || 'Offline cache active'}`,
-        isError: true
-      });
-    } finally {
-      setIsSyncingToCloud(false);
-    }
+    setCloudSyncMessage('Firebase integration removed. Supabase is now the single source of truth.');
+    setTimeout(() => {
+        setIsSyncingToCloud(false);
+        setCloudSyncMessage(null);
+    }, 2000);
   };
 
   const handleForcePullCloud = async () => {
@@ -574,7 +540,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingCreators = activeCreatorsList.filter(c => !c.isApproved);
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
-  const activeCampaigns = campaigns.filter(c => c.status === 'active' && !isCampaignExpired(c.validityDate, c.status));
+  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && !isCampaignExpired(c.validityDate, c.status));
   const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
 
@@ -1064,7 +1030,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && (c.status !== 'active' || isCampaignExpired(c.validityDate, c.status))) return false;
+    if (campaignFilter === 'active' && (c.status === 'expired' || c.status === 'rejected' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'pending_approval' || isCampaignExpired(c.validityDate, c.status))) return false;
     if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
@@ -3375,7 +3341,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </p>
                     <button
                       onClick={async () => {
-                        await recalibratePublicPoolStatsFromFirestore();
+                        const { recalibrateSupabaseFundPool } = await import('../services/supabaseService');
+                        await recalibrateSupabaseFundPool();
                         alert('✅ Stats recalibrated successfully!');
                       }}
                       className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold mt-2"

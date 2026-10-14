@@ -58,23 +58,75 @@ export const BAWM_CONFIG: Record<BawmCategory, BawmInfo> = {
   },
 };
 
-// Canonical Initial Campaigns & Transactions directly loaded from authoritative database
-import ronpayDb from "./ronpay_db.json";
+// Canonical Initial Campaigns & Transactions
+export const INITIAL_CAMPAIGNS: any[] = [
+  {
+    id: 'cmp-1788107291420',
+    category: 'kumtluang',
+    title: 'BMP Shillong Branch',
+    orgName: 'Baptist Kohhran Mualpui',
+    orgCode: 'BMPSHL',
+    upiId: 'bmp.shillong@oksbi',
+    imageUrl: '/images/bcm_ebenezer.jpg',
+    status: 'active',
+    subCategories: ['BMP Fund'],
+    generalPresets: ['Inkhawm Thawhlawm', 'General Hnathlang', 'Pathianni Chawhma Thawhlawm', 'Pathianni Chawhnu Thawhlawm', 'Pathianni Zan Thawhlawm', 'Nilai Zan Thawhlawm', 'Buhfaiṭham Thawhlawm'],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    isVerified: true,
+  },
+  {
+    id: 'cmp-kumtluang-1',
+    category: 'kumtluang',
+    title: 'BCM Ebenezer Church',
+    orgName: 'BCM Ebenezer',
+    orgCode: 'EBE',
+    upiId: 'bcm.ebenezer@okaxis',
+    imageUrl: '/images/bcm_ebenezer.jpg',
+    status: 'active',
+    subCategories: ['Biak In Sakna', 'Kohhran Hnathlang', 'Ramthar Thawhlawm'],
+    generalPresets: ['Pathianni Thawhlawm', 'Inkhawm Thawhlawm', 'Tawngtai Inkhawm'],
+    createdAt: '2025-01-02T00:00:00.000Z',
+    isVerified: true,
+  },
+  {
+    id: 'cmp-1787829303143',
+    category: 'ralna',
+    title: 'YMA Vengthar Relief Fund',
+    orgName: 'YMA Vengthar Branch',
+    orgCode: 'YMAVT',
+    upiId: 'yma.vengthar@icici',
+    imageUrl: '/images/bcm_ebenezer.jpg',
+    status: 'active',
+    subCategories: ['Chhiatni Thawhlawm', 'Ralna Bawm'],
+    generalPresets: ['Chhiatni Tanpuina', 'Mimal Thawhlawm'],
+    createdAt: '2025-01-03T00:00:00.000Z',
+    isVerified: true,
+  },
+  {
+    id: 'cmp-1787771373697',
+    category: 'kumtluang',
+    title: 'PCI Sikulpuikawn',
+    orgName: 'Presbyterian Church Sikulpuikawn',
+    orgCode: 'PCIS',
+    upiId: 'pci.sikulpuikawn@ybl',
+    imageUrl: '/images/bcm_ebenezer.jpg',
+    status: 'active',
+    subCategories: ['Kohhran Hnathlang', 'Pathianni Thawhlawm'],
+    generalPresets: ['Inkhawm Thawhlawm', 'Pathianni Thawhlawm'],
+    createdAt: '2025-01-04T00:00:00.000Z',
+    isVerified: true,
+  }
+];
 
-export const INITIAL_CAMPAIGNS: Campaign[] = (ronpayDb.campaigns || []) as unknown as Campaign[];
+export const INITIAL_TRANSACTIONS: any[] = [];
 
-export const INITIAL_TRANSACTIONS: Transaction[] = (ronpayDb.transactions || []) as unknown as Transaction[];
+export const INITIAL_EXPENSES: any[] = [];
 
-export const INITIAL_EXPENSES: any[] = (ronpayDb.expenses || []) as unknown as any[];
+export const BCM_EBENEZER_DEFAULT_LOGO: string = '/images/bcm_ebenezer.jpg';
 
-export const BCM_EBENEZER_DEFAULT_LOGO: string =
-  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-kumtluang-1')?.imageUrl || '/images/bcm_ebenezer.jpg';
+export const BMP_SHILLONG_DEFAULT_LOGO: string = '/images/bcm_ebenezer.jpg';
 
-export const BMP_SHILLONG_DEFAULT_LOGO: string =
-  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1788107291420')?.imageUrl || '/images/bcm_ebenezer.jpg';
-
-export const YMA_DEFAULT_LOGO: string =
-  INITIAL_CAMPAIGNS.find(c => c.id === 'cmp-1787829303143')?.imageUrl || '/images/bcm_ebenezer.jpg';
+export const YMA_DEFAULT_LOGO: string = '/images/bcm_ebenezer.jpg';
 
 export const BILL_SERVICES: BillService[] = [
   {

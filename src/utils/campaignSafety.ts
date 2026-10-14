@@ -9,7 +9,10 @@ import {
   recordAuditLog,
   getStoredAuditLogs 
 } from './storage';
-import { syncCampaignToFirestore, deleteCampaignFromFirestore } from '../services/firestoreSync';
+import { 
+  deleteCampaignFromFirestore, 
+  syncCampaignToFirestore 
+} from '../services/firestoreSync';
 
 export interface CampaignFinancialStats {
   totalCollected: number;

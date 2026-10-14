@@ -1,5 +1,5 @@
-import { getSupabase } from './src/lib/supabase';
-import { deleteMultipleSupabaseTransactions } from './src/services/supabaseService';
+import { getSupabase } from './src/lib/supabase.ts';
+import { deleteMultipleSupabaseTransactions } from './src/services/supabaseService.ts';
 
 async function cleanupAllTransactions() {
   const supabase = getSupabase();
@@ -8,21 +8,34 @@ async function cleanupAllTransactions() {
     return;
   }
   
-  // Fetch all
-  const { data, error } = await supabase
+  // Cleanup Transactions
+  const { data: txData, error: txError } = await supabase
     .from('transactions')
     .select('id');
     
-  if (error || !data) {
-    console.error("Error fetching transactions:", error);
-    return;
+  if (txError) {
+    console.error("Error fetching transactions:", txError);
+  } else if (txData) {
+    const ids = txData.map((t: any) => t.id);
+    console.log(`Deleting ${ids.length} transactions...`);
+    await deleteMultipleSupabaseTransactions(ids);
   }
-  
-  const ids = data.map((t: any) => t.id);
-  console.log(`Deleting ${ids.length} transactions...`);
-  
-  const success = await deleteMultipleSupabaseTransactions(ids);
-  console.log("Cleanup status:", success ? "Success" : "Failed");
+
+  // Cleanup Expenses
+  const { data: expData, error: expError } = await supabase
+    .from('expenses')
+    .select('id');
+    
+  if (expError) {
+    console.error("Error fetching expenses:", expError);
+  } else if (expData) {
+    const ids = expData.map((e: any) => e.id);
+    console.log(`Deleting ${ids.length} expenses...`);
+    for (const id of ids) {
+        await supabase.from('expenses').delete().eq('id', id);
+    }
+    console.log("Expenses cleanup complete.");
+  }
 }
 
 cleanupAllTransactions();

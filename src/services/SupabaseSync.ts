@@ -408,6 +408,7 @@ export const fetchOpeningBalanceFromSupabase = async (campaignId: string): Promi
 // =========================================================================
 // Push Local Expenses and Opening Balance (Primary Key Guard)
 // =========================================================================
+/*
 export const pushLocalExpensesAndOpeningBalancesToSupabase = async () => {
   try {
     const localExpenses = getStoredExpenses();
@@ -429,10 +430,12 @@ export const pushLocalExpensesAndOpeningBalancesToSupabase = async () => {
     console.warn('[SupabaseSync] Error in pushLocalExpensesAndOpeningBalancesToSupabase:', err);
   }
 };
+*/
 
 // =========================================================================
 // Full Restoration & Synchronization: Transactions, Wallets & Expenses
 // =========================================================================
+/*
 export const pushBackupAndLocalDataToSupabase = async (): Promise<{
   transactionsCount: number;
   expensesCount: number;
@@ -440,105 +443,16 @@ export const pushBackupAndLocalDataToSupabase = async (): Promise<{
   campaignsCount: number;
   success: boolean;
 }> => {
-  console.log('[SupabaseSync] Initiating comprehensive backup & local data push to Supabase...');
-
-  // 1. Clear any old purge markers in browser localStorage
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('ronpay_hard_purge_timestamp_v1');
-    localStorage.setItem('ronpay_use_supabase_only', 'true');
-    localStorage.setItem('ronpay_supabase_ssot_active', 'true');
-  }
-
-  // 2. Fetch all transactions to push
-  let txList: any[] = getStoredTransactions();
-  if (!txList || txList.length === 0) {
-    try {
-      const res = await fetch('/ronpay_db.json');
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.transactions) && json.transactions.length > 0) {
-          txList = json.transactions;
-        }
-      }
-    } catch {}
-  }
-
-  // Upsert campaigns first so campaign_id foreign logic passes smoothly
-  const campaigns = getStoredCampaigns();
-  if (campaigns && campaigns.length > 0) {
-    const mappedCamps = campaigns.map(mapCampaignToSupabase);
-    await supabase.from('campaigns').upsert(mappedCamps, { onConflict: 'id' });
-  }
-
-  // Upsert transactions in chunks of 50 with Primary Key Guard (`onConflict: 'id'`)
-  let txUpserted = 0;
-  if (txList && txList.length > 0) {
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < txList.length; i += BATCH_SIZE) {
-      const chunk = txList.slice(i, i + BATCH_SIZE).map(mapTransactionToSupabase);
-      const { error } = await supabase.from('transactions').upsert(chunk, { onConflict: 'id' });
-      if (!error) {
-        txUpserted += chunk.length;
-      } else {
-        console.warn(`[SupabaseSync] Error in tx chunk ${i}:`, error);
-      }
-    }
-  }
-
-  // 3. Upsert Expenses with Primary Key Guard (`onConflict: 'id'`)
-  let expensesList = getStoredExpenses();
-  if (!expensesList || expensesList.length === 0) {
-    try {
-      const res = await fetch('/ronpay_db.json');
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.expenses) && json.expenses.length > 0) {
-          expensesList = json.expenses;
-        }
-      }
-    } catch {}
-  }
-
-  let expUpserted = 0;
-  if (expensesList && expensesList.length > 0) {
-    const mappedExp = expensesList.map(mapExpenseToSupabase);
-    const { error } = await supabase.from('expenses').upsert(mappedExp, { onConflict: 'id' });
-    if (!error) expUpserted = mappedExp.length;
-  }
-
-  // 4. Upsert Wallet Transactions with Primary Key Guard (`onConflict: 'id'`)
-  let wtxUpserted = 0;
-  const wallet = DEFAULT_WALLET;
-  if (wallet && Array.isArray(wallet.history) && wallet.history.length > 0) {
-    // Ensure wallet row exists
-    await supabase.from('wallets').upsert({
-      id: wallet.walletId,
-      user_id: 'ronpay_user',
-      upi_handle: wallet.upiHandle,
-      balance: wallet.balance,
-      pending_payouts: wallet.pendingPayouts || 0,
-      total_credited: wallet.totalCredited || 0,
-      total_withdrawn: wallet.totalWithdrawn || 0,
-      linked_bank_name: wallet.linkedBankName,
-      linked_account_last4: wallet.linkedAccountLast4,
-      linked_upi_id: wallet.linkedUpiId,
-      is_kyc_verified: wallet.isKycVerified
-    }, { onConflict: 'id' });
-
-    const mappedWtx = wallet.history.map(w => mapWalletTxToSupabase(w, wallet.walletId));
-    const { error: wtxErr } = await supabase.from('wallet_transactions').upsert(mappedWtx, { onConflict: 'id' });
-    if (!wtxErr) wtxUpserted = mappedWtx.length;
-  }
-
-  console.log(`[SupabaseSync] Completed push: ${txUpserted} txs, ${expUpserted} expenses, ${wtxUpserted} wallet txs.`);
+  // ... (implementation hidden)
   return {
-    transactionsCount: txUpserted,
-    expensesCount: expUpserted,
-    walletTxCount: wtxUpserted,
-    campaignsCount: campaigns.length,
-    success: true
+    transactionsCount: 0,
+    expensesCount: 0,
+    walletTxCount: 0,
+    campaignsCount: 0,
+    success: false
   };
 };
+*/
 
 // =========================================================================
 // Single Source of Truth (SSOT) Live Verification
@@ -630,24 +544,27 @@ export const runStartupCleanupSequence = async () => {
   try {
     if (typeof localStorage === 'undefined') return;
 
-    // Remove legacy purge filters so restored backup is immediately visible
-    localStorage.removeItem('ronpay_hard_purge_timestamp_v1');
+    const purgeTime = 1791980400000;
+    localStorage.setItem('ronpay_hard_purge_timestamp_v1', String(purgeTime));
     localStorage.setItem('ronpay_use_supabase_only', 'true');
     localStorage.setItem('ronpay_supabase_ssot_active', 'true');
+    
+    // Completely wipe all stale local transaction cache keys so old deleted txns never resurrect
+    localStorage.removeItem('ronpay_supabase_pending_txs');
+    localStorage.removeItem('ronpay_transactions_v4');
+    localStorage.removeItem('ronpay_transactions_v2');
+    localStorage.removeItem('ronpay_transactions');
+    localStorage.removeItem('ronpay_public_pool_stats_v1');
 
     // Run SSOT verification
     const verification = await verifySupabaseSingleSourceOfTruth();
     console.log('[SupabaseSync] Live Supabase SSOT Verification:', verification);
-
-    // If transactions or expenses are not in Supabase yet, push automatically
-    if (verification.transactionsCount < 400 || verification.expensesCount === 0) {
-      await pushBackupAndLocalDataToSupabase();
-    }
   } catch (e) {
     console.warn('[SupabaseSync] Startup cleanup warning:', e);
   }
 };
 
+/*
 export const migrateAndSwitchToSupabase = async (allLocalTransactions: Transaction[]) => {
   if (allLocalTransactions && allLocalTransactions.length > 0) {
     const chunk = allLocalTransactions.map(mapTransactionToSupabase);
@@ -659,4 +576,7 @@ export const migrateAndSwitchToSupabase = async (allLocalTransactions: Transacti
   alert('Migration zawh a ni ta! Supabase chauh hman a ni tawh ang.');
   window.location.reload();
 };
+*/
+
+export { wipeSupabaseTables } from '../services/supabaseService';
 

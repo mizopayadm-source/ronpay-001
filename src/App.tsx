@@ -59,12 +59,9 @@ import {
   deleteTransaction,
   runStartupCleanupSequence
 } from './services/SupabaseSync';
-import {
-  getStoredPublicPoolStats,
-  syncCreatorToFirestore,
-  syncPricingConfigToFirestore,
-  syncAnnouncementToFirestore,
-} from './services/firestoreSync';
+
+import { fetchSupabaseFundPool, loadSupabaseInitialState } from './services/supabaseService';
+
 import {
   subscribeCrossTabSync,
   setupWindowFocusSync,
@@ -72,6 +69,11 @@ import {
 } from './services/crossTabSync';
 import { syncAllWithServer, subscribeServerEvents, saveTransactionToServer, pullLatestServerState } from './utils/syncEngine';
 import { INITIAL_CAMPAIGNS } from './data/initialData';
+import {
+  syncCreatorToFirestore,
+  syncPricingConfigToFirestore,
+  syncAnnouncementToFirestore,
+} from './services/firestoreSync';
 
 // Components
 import { Header } from './components/Header';
@@ -189,7 +191,7 @@ export default function App() {
 
   // App Core Data States
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => getStoredCampaigns());
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredTransactions());
   const [creators, setCreators] = useState<CreatorProfile[]>(() => getStoredCreatorsList());
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>(() => getStoredCreatorProfile());
   const [pricingConfig, setPricingConfig] = useState<SystemPricingConfig>(() => getStoredPricingConfig());
@@ -197,7 +199,15 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStoredAuditLogs());
   const [members, setMembersState] = useState<MemberRecord[]>(() => getMembers());
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
-  const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>(() => getStoredPublicPoolStats());
+  const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>({ totalAmount: 0, totalCount: 0, todayCount: 0 });
+
+  useEffect(() => {
+    async function loadStats() {
+      const stats = await fetchSupabaseFundPool();
+      if (stats) setPublicPoolStats(stats);
+    }
+    loadStats();
+  }, []);
 
   // Modals Visibility
   const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
@@ -303,17 +313,29 @@ export default function App() {
     const loadSupabaseData = async () => {
       try {
         await runStartupCleanupSequence().catch(() => {});
-        const txs = await fetchTableData('transactions') as Transaction[];
-        const camps = await fetchTableData('campaigns') as Campaign[];
+        const state = await loadSupabaseInitialState();
         if (isMounted) {
-          if (Array.isArray(txs)) {
-            setTransactions(txs);
+          if (Array.isArray(state.transactions)) {
+            setTransactions(state.transactions);
             try {
-              localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-              localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
+              window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: state.transactions }));
             } catch {}
           }
-          if (Array.isArray(camps) && camps.length > 0) setCampaigns(camps);
+          if (state.campaigns && state.campaigns.length > 0) {
+            setCampaigns(state.campaigns);
+            try {
+              window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: state.campaigns }));
+            } catch {}
+          }
+          if (state.members && state.members.length > 0) {
+            setMembersState(state.members);
+          }
+          if (state.creators && state.creators.length > 0) {
+            setCreators(state.creators);
+          }
+          if (state.fundPool) {
+            setPublicPoolStats(state.fundPool);
+          }
         }
       } catch (err) {
         console.warn('[App] Supabase initial load error:', err);
@@ -441,7 +463,8 @@ export default function App() {
       if (e && e.detail && typeof e.detail === 'object') {
         setPublicPoolStats(e.detail);
       } else {
-        setPublicPoolStats(getStoredPublicPoolStats());
+        // Local storage removed, fetch from Supabase instead
+        // setPublicPoolStats(getStoredPublicPoolStats());
       }
     };
 

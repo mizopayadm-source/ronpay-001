@@ -52,7 +52,7 @@ import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { CampaignTransferModal } from './CampaignTransferModal';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
-import { recalibratePublicPoolStatsFromFirestore } from '../services/firestoreSync';
+
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';

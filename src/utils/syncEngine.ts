@@ -39,18 +39,12 @@ import {
   SYSTEM_HARD_PURGE_TIMESTAMP
 } from './storage';
 import {
-  initFirestoreRealtimeSync,
-  syncTransactionToFirestore,
   syncCampaignToFirestore,
   syncMemberToFirestore,
   deleteMemberFromFirestore,
-  deleteCampaignFromFirestore,
-  deleteTransactionFromFirestore,
-  syncCreatorToFirestore,
+  syncTransactionToFirestore,
   syncAnnouncementToFirestore,
-  syncPricingConfigToFirestore,
-  pushAllLocalDataToFirestore,
-  isOnlineState
+  initFirestoreRealtimeSync,
 } from '../services/firestoreSync';
 
 export interface SyncDataState {
@@ -115,7 +109,7 @@ if (typeof window !== 'undefined') {
  */
 export async function syncAllWithServer(forceAuthoritative: boolean = false): Promise<SyncDataState | null> {
   // 1. Check network connectivity: browser navigator + Firestore listener state
-  const isOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true) && isOnlineState();
+  const isOnline = (typeof navigator !== 'undefined' ? navigator.onLine : true);
   if (!isOnline && !forceAuthoritative) {
     // Return local cache immediately without making any network calls
     return getLocalFallbackState();

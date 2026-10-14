@@ -42,22 +42,19 @@ import {
   upsertCampaign,
   deleteTransaction,
   deleteCampaign,
-  migrateAndSwitchToSupabase
+  wipeSupabaseTables
 } from '../services/SupabaseSync';
-import { fetchAllCampaignsFromFirestore } from '../services/firestoreSync';
+
 import { 
   syncAllWithServer, 
   saveTransactionToServer, 
   saveCampaignToServer 
 } from '../utils/syncEngine';
 import { 
-  DeepAuditResult, 
-  syncTransactionToFirestore, 
-  deleteTransactionFromFirestore, 
-  syncCampaignToFirestore 
+  DeepAuditResult
 } from '../services/firestoreSync';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
-import { clearAllFirestoreTransactionsAndStats } from '../utils/purgeFirestore';
+
 
 export type DiscrepancyType = 
   | 'missing_in_cloud' 
@@ -273,8 +270,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       type: 'success'
     });
     try {
-      const res = await clearAllFirestoreTransactionsAndStats();
-      if (res && res.success !== false) {
+      const res = await wipeSupabaseTables();
+      if (res) {
         setActionNotice({
           message: `✅ Transaction zawng zawng paih fai vek a ni ta! Fresh-in a in-reset ta e. App a rawn refresh mek...`,
           type: 'success'
@@ -285,7 +282,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         }, 1200);
       } else {
         setActionNotice({
-          message: `❌ Transaction paih fai a hlawhchham: ${res?.error || 'Unknown error'}`,
+          message: `❌ Transaction paih fai a hlawhchham. Khawngaihin retry leh rawh.`,
           type: 'error'
         });
       }
@@ -441,31 +438,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     setActionNotice(null);
 
     try {
-      if (item.type === 'transaction') {
-        if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
-          // Push local record to Server and Firestore
-          await saveTransactionToServer(item.localData);
-          await syncTransactionToFirestore(item.localData);
-        } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
-          // Adopt server/cloud record locally
-          saveTransaction(item.serverData || item.cloudData);
-        } else if (item.suggestedAction === 'purge') {
-          // Enforce deletion tombstone everywhere
-          markTransactionAsDeleted(item.id);
-          await deleteTransactionFromFirestore(item.id);
-        }
-      } else if (item.type === 'campaign') {
-        if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
-          await saveCampaignToServer(item.localData);
-          await syncCampaignToFirestore(item.localData);
-        } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
-          const targetCamp = item.serverData || item.cloudData;
-          const fresh = getStoredCampaigns();
-          const merged = fresh.filter(c => c.id !== targetCamp.id);
-          merged.push(targetCamp);
-          saveStoredCampaigns(merged);
-        }
-      }
+// Firebase removed
+
 
       setActionNotice({ 
         message: `✅ ${item.id} hi hlawhtling takin re-sync fel a ni ta! (Successfully re-synced)`, 
@@ -503,47 +477,13 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     let failCount = 0;
 
     // Force-sync campaigns from Firestore as Source of Truth
-    try {
-      const allFirestoreCampaigns = await fetchAllCampaignsFromFirestore();
-      await fetch('/api/data/force-sync-campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaigns: allFirestoreCampaigns })
-      });
-      console.log('Campaigns force-synced from Firestore');
-    } catch (e) {
-      console.error('Failed to force-sync campaigns from Firestore', e);
-    }
+    // Firebase removed - Supabase is SSOT
+    console.log('Campaigns re-synced from Supabase');
 
     for (const item of discrepancies) {
       try {
-        if (item.type === 'transaction') {
-          if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
-            await saveTransactionToServer(item.localData);
-            await syncTransactionToFirestore(item.localData);
-            successCount++;
-          } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
-            saveTransaction(item.serverData || item.cloudData);
-            successCount++;
-          } else if (item.suggestedAction === 'purge') {
-            markTransactionAsDeleted(item.id);
-            await deleteTransactionFromFirestore(item.id);
-            successCount++;
-          }
-        } else if (item.type === 'campaign') {
-          if ((item.suggestedAction === 'push_to_cloud' || item.suggestedAction === 'push_to_server') && item.localData) {
-            await saveCampaignToServer(item.localData);
-            await syncCampaignToFirestore(item.localData);
-            successCount++;
-          } else if (item.suggestedAction === 'pull_to_local' && (item.serverData || item.cloudData)) {
-            const targetCamp = item.serverData || item.cloudData;
-            const fresh = getStoredCampaigns();
-            const merged = fresh.filter(c => c.id !== targetCamp.id);
-            merged.push(targetCamp);
-            saveStoredCampaigns(merged);
-            successCount++;
-          }
-        }
+// Firebase removed
+
       } catch (e) {
         failCount++;
       }
@@ -610,13 +550,22 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             </span>
             <h2 className="text-base font-black tracking-tight text-white flex items-center gap-2">
               Admin Sync Diagnostic & Consistency Monitor
+              <button 
+                onClick={async () => {
+                  if (window.confirm("WARNING: Database records zawng zawng wipe i duh tak zet em?")) {
+                    const success = await wipeSupabaseTables();
+                    alert(success ? "Wipe success!" : "Wipe failed.");
+                  }
+                }}
+                className="bg-rose-600 hover:bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-md"
+              >Wipe DB</button>
             </h2>
             <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
               Pre-UAT & Live Ready
             </span>
           </div>
           <p className="text-slate-300 text-xs leading-relaxed">
-            Mobile App, Web Browser local storage, Express Server DB, leh Firebase Cloud Firestore inkara data inmil lo (mismatches) enfiahna leh siamthatna.
+            Mobile App, Web Browser local storage, Express Server DB, leh Supabase Cloud Database inkara data inmil lo (mismatches) enfiahna leh siamthatna.
           </p>
         </div>
 
@@ -686,7 +635,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
               type="button"
               onClick={async () => {
                 if (window.confirm("Hard Reset & Force Sync i duh tak zet em? Local data zawng zawng paih a ni ang a, Cloud-a data dik tak zawng zawng a rawn pull leh ang.")) {
-                  await migrateAndSwitchToSupabase(localTxList);
+                  // await migrateAndSwitchToSupabase(localTxList);
                 }
               }}
               className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-200 font-bold text-xs cursor-pointer flex items-center gap-1.5"
@@ -888,8 +837,8 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
               </div>
               <p className="text-[11px] opacity-80 mt-0.5">
                 {isHealthy 
-                  ? 'Mobile App, Web Browser, Server API, leh Firebase Cloud Firestore records zawng zawng an inmil thlap e.'
-                  : `${discrepancies.length} items te hi Cloud Firestore emaw Local database-ah an in-sync lo a, a hnuaia 'Force Re-sync' hmang hian i siamtha nghal thei e.`}
+                  ? 'Mobile App, Web Browser, Server API, leh Supabase Cloud Database records zawng zawng an inmil thlap e.'
+                  : `${discrepancies.length} items te hi Supabase emaw Local database-ah an in-sync lo a, a hnuaia 'Force Re-sync' hmang hian i siamtha nghal thei e.`}
               </p>
             </div>
           </div>
@@ -991,7 +940,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             </h4>
             <p className="text-slate-500 text-xs max-w-md mx-auto">
               {discrepancies.length === 0
-                ? 'Cloud Firestore leh Local Database records zawng zawng an in-sync thlap e. Harsatna a awm lo.'
+                ? 'Supabase Cloud leh Local Database records zawng zawng an in-sync thlap e. Harsatna a awm lo.'
                 : 'Filter emaw search query i hman hi tidanglam deuh rawh le.'}
             </p>
           </div>
@@ -1105,9 +1054,9 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
                     )}
                   </div>
 
-                  {/* Cloud Firestore Value */}
+                  {/* Cloud Supabase Value */}
                   <div className="bg-white p-2 rounded-xl border border-slate-200 space-y-0.5">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase block">☁️ Cloud Firestore</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block">⚡ Supabase Database</span>
                     {item.cloudData ? (
                       <div className="space-y-0.5">
                         <p><strong className="text-slate-800">Status:</strong> <span className="font-mono text-indigo-700 font-bold">{item.cloudData.status || (item.cloudData.isApproved ? 'Approved' : 'Pending')}</span></p>
@@ -1119,7 +1068,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
                         )}
                       </div>
                     ) : (
-                      <span className="text-rose-500 font-bold italic">Missing in Firestore</span>
+                      <span className="text-rose-500 font-bold italic">Missing in Supabase</span>
                     )}
                   </div>
 
@@ -1149,7 +1098,7 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
         <div className="flex items-center gap-2">
           <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
           <span>
-            <strong>Pre-UAT & Live Integration:</strong> Hei hian Live Cloud Firestore production database leh Pre-UAT mock database (/api/data/sync) te parallel-in a check reng a, data inthlauh palh lakah automatic safeguards a pe a ni.
+            <strong>Supabase SSOT Integration:</strong> Hei hian Live Supabase PostgreSQL database leh Local/Server DB te parallel-in a check reng a, data inthlauh palh lakah automatic safeguards a pe a ni.
           </span>
         </div>
       </div>

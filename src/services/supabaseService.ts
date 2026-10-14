@@ -11,7 +11,7 @@ import {
   getMembers, 
   saveMembers 
 } from '../utils/storage';
-import { getStoredPublicPoolStats } from './firestoreSync';
+
 
 export interface SupabaseTableStatus {
   tableName: string;
@@ -712,7 +712,7 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
     category: row.category,
     orgName: row.org_name,
     targetUpiId: row.target_upi_id,
-    status: row.status,
+    status: row.status || 'active',
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     customAmount: row.custom_amount ? Number(row.custom_amount) : undefined,
@@ -933,9 +933,8 @@ export async function syncAllLocalToSupabase(): Promise<{
       if (ok) walletsSynced = 1;
     }
 
-    // 5. Sync Fund Pool
-    const localPool = getStoredPublicPoolStats();
-    const poolSynced = await upsertSupabaseFundPool(localPool, 'public_pool');
+    // 5. Sync Fund Pool removed (Fetch-Only mode)
+
 
     // 6. Sync Members
     const localMembers = getMembers();
@@ -951,7 +950,7 @@ export async function syncAllLocalToSupabase(): Promise<{
       campaignsSynced,
       transactionsSynced,
       walletsSynced,
-      poolSynced,
+      poolSynced: false,
       membersSynced,
     };
   } catch (err: any) {
@@ -1167,7 +1166,7 @@ export async function loadSupabaseInitialState(): Promise<{
     ]);
 
     // Update secondary cache safely
-    if (txns && txns.length > 0) saveStoredTransactions(txns, true);
+    if (Array.isArray(txns)) saveStoredTransactions(txns, true);
     if (camps && camps.length > 0) saveStoredCampaigns(camps, true);
     if (mems && mems.length > 0) saveMembers(mems, true);
     if (pool) {
@@ -1177,7 +1176,7 @@ export async function loadSupabaseInitialState(): Promise<{
     }
 
     return {
-      transactions: txns && txns.length > 0 ? txns : getStoredTransactions(),
+      transactions: Array.isArray(txns) ? txns : getStoredTransactions(),
       campaigns: camps && camps.length > 0 ? camps : getStoredCampaigns(),
       members: mems && mems.length > 0 ? mems : getMembers(),
       creators: users && users.length > 0 ? users : getStoredCreatorsList(),
@@ -1381,4 +1380,41 @@ export function initSupabaseRealtimeSync(callbacks: SupabaseRealtimeCallbacks): 
       supabase.removeChannel(channel);
     } catch {}
   };
+}
+
+export async function getSupabaseTableCount(table: string): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
+  return error ? 0 : (count || 0);
+}
+
+export async function wipeSupabaseTables(): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  try {
+    await supabase.from('transactions').delete().neq('id', '0');
+    await supabase.from('expenses').delete().neq('id', '0');
+    await supabase.from('wallet_transactions').delete().neq('id', '0');
+    await supabase.from('fund_pools').upsert({
+      id: 'public_pool',
+      name: 'RonPay Public Fund Pool',
+      total_amount: 0,
+      total_count: 0,
+      today_count: 0,
+      last_updated: new Date().toISOString()
+    }, { onConflict: 'id' });
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('ronpay_transactions_v4');
+      localStorage.removeItem('ronpay_transactions_v2');
+      localStorage.removeItem('ronpay_transactions');
+      localStorage.removeItem('ronpay_supabase_pending_txs');
+      localStorage.removeItem('ronpay_public_pool_stats_v1');
+    }
+    return true;
+  } catch (e) {
+    console.error('Error wiping tables:', e);
+    return false;
+  }
 }

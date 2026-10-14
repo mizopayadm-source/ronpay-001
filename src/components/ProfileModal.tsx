@@ -626,7 +626,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
               <div className="text-left">
                 <p className="font-black text-white text-xs">Admin Sync Diagnostic</p>
-                <p className="text-[9.5px] text-slate-300">Compare Local vs Firestore • Fix Discrepancies</p>
+                <p className="text-[9.5px] text-slate-300">Compare Local vs Supabase • Fix Discrepancies</p>
               </div>
             </div>
             <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-1 rounded-full font-black uppercase shadow-xs group-hover:scale-105 transition-transform">
