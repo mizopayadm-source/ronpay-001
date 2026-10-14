@@ -301,6 +301,10 @@ import { resolveApiUrl } from './apiConfig';
  * Resilient, offline-aware fetch wrapper that prevents connection reset crashes when offline or reconnecting
  */
 export const safeApiFetch = async (url: string, options?: RequestInit): Promise<Response | null> => {
+  if (url.includes('/api/data/sync')) {
+    // /api/data/sync endpoint has been completely removed in favor of Supabase SSOT
+    return null;
+  }
   if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && !navigator.onLine) {
     return null;
   }

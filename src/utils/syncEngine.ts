@@ -156,28 +156,12 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         return (t.isSynced !== true || (t as any).isOfflinePending);
       });
 
-      const response = await fetch('/api/data/sync', {
-        method: 'POST',
+      const response = await fetch('/api/data/state', {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
         signal: controller ? controller.signal : undefined,
-        body: JSON.stringify({
-          campaigns: localCampaigns,
-          deletedCampaignIds: Array.from(getDeletedCampaignIds()),
-          members: localMembers,
-          deletedMemberIds: Array.from(getDeletedMemberIds()),
-          transactions: unsyncedTransactions,
-          deletedTransactionIds: Array.from(deletedTxSet),
-          creators: localCreators,
-          pricingConfig: localPricingConfig,
-          announcement: localAnnouncement,
-          auditLogs: localAuditLogs,
-          staffAccounts: localStaff,
-          deletedStaffIds: Array.from(getDeletedStaffIds()),
-          expenses: getStoredExpenses(),
-          deletedExpenseIds: Array.from(getDeletedExpenseIds())
-        }),
       });
 
       if (timeoutId) clearTimeout(timeoutId);
@@ -406,14 +390,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             }
           }
 
-          // If there are genuine recent offline transactions created on this device, push them
-          if (newLocalTxsToPush.length > 0) {
-            safeApiFetch('/api/data/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: newLocalTxsToPush })
-            }).catch(() => {});
-          }
+
 
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {
@@ -903,14 +880,7 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
             }
           }
 
-          // Only push if there are genuinely unpushed offline transactions created right now
-          if (unpushedFreshOfflineTxs.length > 0) {
-            safeApiFetch('/api/data/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: unpushedFreshOfflineTxs })
-            }).catch(() => {});
-          }
+
 
           const cleanTxs = Array.from(txMap.values());
           cleanTxs.sort((a, b) => {
