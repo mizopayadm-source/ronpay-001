@@ -60,6 +60,8 @@ import {
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 import { syncAllLocalExpensesToFirestore, fetchExpensesFromFirestore } from '../services/firestoreSync';
+import { broadcastStateChange } from '../services/crossTabSync';
+import { updateSupabaseOpeningBalance } from '../services/supabaseService';
 
 import { 
   fetchOpeningBalanceFromSupabase, 
@@ -122,6 +124,41 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   });
   const [isEditingOpeningBalance, setIsEditingOpeningBalance] = useState<boolean>(false);
   const [tempOpeningBalance, setTempOpeningBalance] = useState<string>(() => String(Number(campaign.openingBalance) || 0));
+
+  // Sync opening balance when campaign changes from server/Supabase
+  useEffect(() => {
+    if (campaign && campaign.openingBalance !== undefined) {
+      const val = Number(campaign.openingBalance) || 0;
+      setOpeningBalance(val);
+      if (!isEditingOpeningBalance) {
+        setTempOpeningBalance(String(val));
+      }
+    }
+  }, [campaign.openingBalance, isEditingOpeningBalance]);
+
+  // Real-time listener for campaign updates (Opening Balance)
+  useEffect(() => {
+    const handleCamps = (e: Event) => {
+      const customEvent = e as CustomEvent<Campaign[] | Campaign>;
+      const detail = customEvent.detail;
+      if (!detail) return;
+      const list = Array.isArray(detail) ? detail : [detail];
+      const matched = list.find((c: any) => c && c.id === campaign.id);
+      if (matched && matched.openingBalance !== undefined) {
+        const val = Number(matched.openingBalance) || 0;
+        setOpeningBalance(val);
+        if (!isEditingOpeningBalance) {
+          setTempOpeningBalance(String(val));
+        }
+      }
+    };
+    window.addEventListener('ronpay_campaigns_updated', handleCamps);
+    window.addEventListener('ronpay-campaigns-updated', handleCamps);
+    return () => {
+      window.removeEventListener('ronpay_campaigns_updated', handleCamps);
+      window.removeEventListener('ronpay-campaigns-updated', handleCamps);
+    };
+  }, [campaign.id, isEditingOpeningBalance]);
 
   // Date-wise Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -879,9 +916,13 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       updatedAt: new Date().toISOString()
     };
     saveCampaign(updatedCamp);
+    updateSupabaseOpeningBalance(campaign.id, safeVal).catch(() => {});
     if (onUpdateCampaign) {
       onUpdateCampaign(updatedCamp);
     }
+    broadcastStateChange('campaigns', updatedCamp);
+    window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: [updatedCamp] }));
+    window.dispatchEvent(new CustomEvent('ronpay-campaigns-updated', { detail: [updatedCamp] }));
     showToast(`Opening Balance ₹${safeVal.toLocaleString('en-IN')} vawng tha ta e!`, 'success');
   };
 

@@ -745,6 +745,7 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     customAmount: row.custom_amount ? Number(row.custom_amount) : undefined,
+    openingBalance: Number(row.opening_balance ?? row.openingBalance ?? 0),
     location: row.location,
     description: row.description,
     imageUrl: row.image_url,
@@ -770,6 +771,7 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
     created_by: camp.createdBy || 'ronpay_admin',
     created_by_name: (camp as any).createdByName || null,
     custom_amount: camp.customAmount ? Number(camp.customAmount) : null,
+    opening_balance: Number(camp.openingBalance ?? (camp as any).opening_balance ?? 0),
     location: camp.location || null,
     description: camp.description || null,
     image_url: camp.imageUrl || null,
@@ -788,6 +790,23 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
 
   if (error) {
     console.error('[Supabase] Error upserting campaign:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function updateSupabaseOpeningBalance(campaignId: string, openingBalance: number): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !campaignId) return false;
+  const { error } = await supabase
+    .from('campaigns')
+    .update({
+      opening_balance: Number(openingBalance) || 0,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', campaignId);
+  if (error) {
+    console.warn('[Supabase] Error updating opening balance:', error.message);
     return false;
   }
   return true;

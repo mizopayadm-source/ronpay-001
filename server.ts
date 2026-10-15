@@ -4885,6 +4885,7 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
             createdBy: r.created_by || r.createdBy,
             createdByName: r.created_by_name || r.createdByName,
             customAmount: r.custom_amount ? Number(r.custom_amount) : undefined,
+            openingBalance: Number(r.opening_balance ?? r.openingBalance ?? 0),
             location: r.location,
             description: r.description,
             imageUrl: r.image_url || r.imageUrl,
@@ -4962,6 +4963,25 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
     const db = getDatabase();
     db.campaigns = mergeCollections(db.campaigns, [stamped], 'id');
     saveDatabase(db);
+
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+    if (sbUrl && sbKey && stamped.id) {
+      fetch(`${sbUrl}/rest/v1/campaigns?id=eq.${stamped.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          opening_balance: Number(stamped.openingBalance ?? (stamped as any).opening_balance ?? 0),
+          updated_at: new Date().toISOString()
+        })
+      }).catch(() => {});
+    }
+
     res.json({ success: true, campaign: stamped, data: db });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
