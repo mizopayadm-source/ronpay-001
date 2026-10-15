@@ -3692,30 +3692,7 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
       }
     }
 
-    // 2. Filter out non-canonical BMP records (stale / deleted / test items) unless fresh offline pending
-    const bmpCanonIds = new Set(
-      INITIAL_KUMTLUANG_EXPENSES
-        .filter(e => e && String(e.campaignId).trim().toLowerCase() === 'cmp-1788107291420')
-        .map(e => String(e.id).toLowerCase().trim())
-    );
-    const beforeBmpFilterLen = cleanList.length;
-    cleanList = cleanList.filter(e => {
-      if (!e || !e.id) return false;
-      const k = String(e.id).toLowerCase().trim();
-      const isBmp = String(e.campaignId).trim().toLowerCase() === 'cmp-1788107291420' ||
-                    String(e.campaignTitle || '').toLowerCase().includes('bmp shillong');
-      if (isBmp && !bmpCanonIds.has(k)) {
-        const isFreshPending = (e as any).isOfflinePending === true &&
-          e.createdAt ? (Date.now() - new Date(e.createdAt).getTime() < 15 * 60 * 1000) : false;
-        return isFreshPending;
-      }
-      return true;
-    });
-    if (cleanList.length !== beforeBmpFilterLen) {
-      reconciled = true;
-    }
-
-    // 3. Backfill any active canonical expenses from INITIAL_KUMTLUANG_EXPENSES that may be missing
+    // 2. Backfill any active canonical expenses from INITIAL_KUMTLUANG_EXPENSES that may be missing
     const seenIds = new Set(cleanList.map(e => String(e.id).toLowerCase().trim()));
     for (const initExp of INITIAL_KUMTLUANG_EXPENSES) {
       if (!initExp || !initExp.id) continue;

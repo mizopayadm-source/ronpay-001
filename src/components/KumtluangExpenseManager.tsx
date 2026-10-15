@@ -266,10 +266,13 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
     // Fetch expenses directly from Supabase as Single Source of Truth
     fetchTableData<KumtluangExpense>('expenses').then((fresh) => {
-      if (Array.isArray(fresh) && fresh.length > 0 && !isUserInteractingRef.current) {
-        const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
-        if (campExpenses.length > 0) {
-          setExpenseList(campExpenses);
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        saveStoredExpenses(fresh, true);
+        if (!isUserInteractingRef.current) {
+          const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+          if (campExpenses.length > 0) {
+            setExpenseList(campExpenses);
+          }
         }
       }
     }).catch(() => {});
@@ -279,6 +282,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       if (!isUserInteractingRef.current) {
         fetchTableData<KumtluangExpense>('expenses').then((fresh) => {
           if (Array.isArray(fresh) && fresh.length > 0) {
+            saveStoredExpenses(fresh, true);
             const campExpenses = fresh.filter(e => e && String(e.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
             setExpenseList(campExpenses);
           }
