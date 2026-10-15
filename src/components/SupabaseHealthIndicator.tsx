@@ -3,8 +3,10 @@ import { Database, Zap, ShieldCheck, Activity, RefreshCw, CheckCircle2, AlertTri
 import { supabase, getSupabaseUrl } from '../lib/supabase';
 import { 
   verifySupabaseSingleSourceOfTruth,
-  SSOTVerificationResult 
+  SSOTVerificationResult,
+  normalizeTransaction 
 } from '../services/SupabaseSync';
+import { saveStoredTransactions } from '../utils/storage';
 
 interface SupabaseHealthIndicatorProps {
   compact?: boolean;
@@ -20,11 +22,11 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [lastChecked, setLastChecked] = useState<string>(new Date().toLocaleTimeString());
   
-  const [transactionCount, setTransactionCount] = useState<number>(474);
-  const [transactionTotal, setTransactionTotal] = useState<number>(280479.9);
+  const [transactionCount, setTransactionCount] = useState<number>(64);
+  const [transactionTotal, setTransactionTotal] = useState<number>(0);
   const [campaignCount, setCampaignCount] = useState<number>(20);
-  const [expenseCount, setExpenseCount] = useState<number>(11);
-  const [expenseTotal, setExpenseTotal] = useState<number>(35805);
+  const [expenseCount, setExpenseCount] = useState<number>(0);
+  const [expenseTotal, setExpenseTotal] = useState<number>(0);
   const [walletTxCount, setWalletTxCount] = useState<number>(4);
   const [openingBalance, setOpeningBalance] = useState<number>(7827);
   const [verificationResult, setVerificationResult] = useState<SSOTVerificationResult | null>(null);
@@ -93,6 +95,19 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
 
   const handleManualPing = useCallback(async () => {
     await checkHealth();
+    try {
+      const { data: freshTxns } = await supabase
+        .from('transactions')
+        .select('*')
+        .range(0, 9999)
+        .neq('status', 'deleted')
+        .order('timestamp', { ascending: false });
+      if (Array.isArray(freshTxns)) {
+        const normalized = freshTxns.map(normalizeTransaction);
+        saveStoredTransactions(normalized, true);
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: normalized }));
+      }
+    } catch {}
     if (onRefreshRef.current) {
       onRefreshRef.current();
     }

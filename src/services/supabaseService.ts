@@ -11,6 +11,7 @@ import {
   getMembers, 
   saveMembers 
 } from '../utils/storage';
+import { broadcastStateChange } from './crossTabSync';
 
 
 export interface SupabaseTableStatus {
@@ -39,6 +40,7 @@ export async function fetchSupabaseUsers(): Promise<CreatorProfile[]> {
   const { data, error } = await supabase
     .from('users')
     .select('*')
+    .range(0, 9999)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -159,6 +161,7 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
   let query = supabase
     .from('transactions')
     .select('*')
+    .range(0, 9999)
     .neq('status', 'deleted')
     .order('timestamp', { ascending: false });
 
@@ -325,6 +328,13 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
 
   // Recalibrate fund pool immediately
   await recalibrateSupabaseFundPool('public_pool');
+  try {
+    if (typeof window !== 'undefined') {
+      broadcastStateChange('transactions', [tx]);
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: [tx] }));
+      window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: [tx] }));
+    }
+  } catch {}
   return true;
 }
 
@@ -352,6 +362,12 @@ export async function updateSupabaseTransaction(tx: Partial<Transaction> & { id:
   }
 
   await recalibrateSupabaseFundPool('public_pool');
+  try {
+    if (typeof window !== 'undefined') {
+      broadcastStateChange('transactions', [tx]);
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: [tx] }));
+    }
+  } catch {}
   return true;
 }
 
@@ -379,6 +395,12 @@ export async function deleteSupabaseTransaction(id: string): Promise<boolean> {
   } catch {}
 
   await recalibrateSupabaseFundPool('public_pool');
+  try {
+    if (typeof window !== 'undefined') {
+      broadcastStateChange('transactions', { deletedId: id });
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: { deletedId: id } }));
+    }
+  } catch {}
   return true;
 }
 
@@ -411,6 +433,12 @@ export async function deleteMultipleSupabaseTransactions(ids: string[]): Promise
   } catch {}
 
   await recalibrateSupabaseFundPool('public_pool');
+  try {
+    if (typeof window !== 'undefined') {
+      broadcastStateChange('transactions', { deletedIds: idArray });
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: { deletedIds: idArray } }));
+    }
+  } catch {}
   return true;
 }
 
@@ -699,6 +727,7 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
   const { data, error } = await supabase
     .from('campaigns')
     .select('*')
+    .range(0, 9999)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -988,7 +1017,7 @@ export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberR
   const supabase = getSupabase();
   if (!supabase) return [];
 
-  let query = supabase.from('members').select('*');
+  let query = supabase.from('members').select('*').range(0, 9999);
   if (campaignId && campaignId !== 'all') {
     query = query.eq('campaign_id', campaignId);
   }

@@ -288,6 +288,8 @@ export default function App() {
 
   // Reload helper
   const reloadLocalData = useCallback(() => {
+    const freshTx = getStoredTransactions();
+    setTransactions(freshTx);
     const freshCampaigns = getStoredCampaigns();
     campaignsRef.current = freshCampaigns;
     setCampaigns(freshCampaigns);
@@ -317,6 +319,7 @@ export default function App() {
         if (isMounted) {
           if (Array.isArray(state.transactions)) {
             setTransactions(state.transactions);
+            saveStoredTransactions(state.transactions, true);
             try {
               window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: state.transactions }));
             } catch {}
@@ -348,10 +351,7 @@ export default function App() {
       fetchTableData('transactions').then(txs => {
         if (isMounted && Array.isArray(txs)) {
           setTransactions(txs as Transaction[]);
-          try {
-            localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-            localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
-          } catch {}
+          saveStoredTransactions(txs as Transaction[], true);
         }
       }).catch(() => {});
     });

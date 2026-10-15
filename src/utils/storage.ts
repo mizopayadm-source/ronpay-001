@@ -130,47 +130,7 @@ export const markMemberAsDeleted = (memberId: string): void => {
   } catch (e) {}
 };
 
-// Automatic cleanup of single-character test artifacts ("hawrawp mal khat") from client storage
-if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-  try {
-    const rawMems = localStorage.getItem(MEMBERS_LIST_KEY);
-    if (rawMems) {
-      const parsed = JSON.parse(rawMems);
-      if (Array.isArray(parsed)) {
-        const cleanList = parsed.filter(m => {
-          if (!m || !m.id) return false;
-          const name = String(m.name || m.fullName || '').trim();
-          if (name.length <= 1) {
-            markMemberAsDeleted(m.id);
-            return false;
-          }
-          return true;
-        });
-        if (cleanList.length !== parsed.length) {
-          localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(cleanList));
-        }
-      }
-    }
-    const rawKumtluang = localStorage.getItem('ronpay_kumtluang_members_v1');
-    if (rawKumtluang) {
-      const parsed = JSON.parse(rawKumtluang);
-      if (Array.isArray(parsed)) {
-        const cleanList = parsed.filter((m: any) => {
-          if (!m || !m.id) return false;
-          const name = String(m.name || m.fullName || '').trim();
-          if (name.length <= 1) {
-            markMemberAsDeleted(m.id);
-            return false;
-          }
-          return true;
-        });
-        if (cleanList.length !== parsed.length) {
-          localStorage.setItem('ronpay_kumtluang_members_v1', JSON.stringify(cleanList));
-        }
-      }
-    }
-  } catch (e) {}
-}
+
 
 export const clearDeletedMemberId = (memberId: string): void => {
   if (!memberId) return;
@@ -1066,13 +1026,10 @@ export const markTransactionAsDeleted = (txId: string, syncFirestore: boolean = 
   } catch (e) {}
 };
 
-export const SYSTEM_HARD_PURGE_TIMESTAMP = 1791980400000;
+export const SYSTEM_HARD_PURGE_TIMESTAMP = 0;
 
 export const getStoredTransactions = (): Transaction[] => {
   try {
-    const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
-    const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
-
     const raw = typeof localStorage !== 'undefined' 
       ? (localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions'))
       : null;
@@ -1087,10 +1044,6 @@ export const getStoredTransactions = (): Transaction[] => {
           if (!t || !t.id) continue;
           const cleanId = String(t.id).toLowerCase().trim();
           if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId) || seen.has(cleanId)) continue;
-          if (hardPurgeTs > 0) {
-            const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-            if (tTime <= hardPurgeTs) continue;
-          }
           seen.add(cleanId);
           result.push(t);
         }
@@ -4010,8 +3963,6 @@ export const resetCampaignExpenseHeadsToDefault = (campaignId: string): string[]
 
 
 export function mergeTransactions(existing: Transaction[], incoming: Transaction[]): Transaction[] {
-  const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
-  const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
   const delIds = getDeletedTransactionIds();
   const map = new Map<string, Transaction>();
   
@@ -4019,16 +3970,12 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
     if (!t || !t.id) return false;
     const cleanId = String(t.id).toLowerCase().trim();
     if (delIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-    if (hardPurgeTs > 0) {
-      const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-      if (tTime <= hardPurgeTs) return false;
-    }
     return true;
   };
 
   (existing || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
   (incoming || []).filter(filterValid).forEach(t => map.set(String(t.id).toLowerCase().trim(), t));
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
 }
 export const clearRonpayLocalStorage = (): void => {
   if (typeof localStorage === 'undefined') return;

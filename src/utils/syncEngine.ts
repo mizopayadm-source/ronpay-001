@@ -142,17 +142,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
 
-      const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
-      const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
       const deletedTxSet = getDeletedTransactionIds();
       const unsyncedTransactions = localTransactions.filter(t => {
         if (!t || !t.id) return false;
         const cleanId = String(t.id).toLowerCase().trim();
         if (deletedTxSet.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) return false;
-        if (hardPurgeTs > 0) {
-          const tTime = new Date(t.timestamp || t.createdAt || 0).getTime();
-          if (tTime <= hardPurgeTs) return false;
-        }
         return (t.isSynced !== true || (t as any).isOfflinePending);
       });
 
@@ -337,18 +331,11 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
           const currentTxs = getStoredTransactions();
           const txMap = new Map<string, any>();
 
-          const storedPurgeTs = Number(typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_hard_purge_timestamp_v1') || 0 : 0);
-          const hardPurgeTs = Math.max(SYSTEM_HARD_PURGE_TIMESTAMP, storedPurgeTs);
-
           // 1. Authoritative server transactions FIRST
           for (const st of serverData.transactions) {
             if (st && st.id) {
               const k = String(st.id).toLowerCase().trim();
               if (deletedIds.has(k) || PERMANENTLY_PURGED_TX_IDS.has(k)) continue;
-              if (hardPurgeTs > 0) {
-                const tTime = new Date(st.timestamp || st.createdAt || 0).getTime();
-                if (tTime <= hardPurgeTs) continue;
-              }
               txMap.set(k, { ...st, isSynced: true });
             }
           }
@@ -363,8 +350,6 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
                 txMap.delete(k);
                 continue;
               }
-              const tTime = new Date(ct.timestamp || ct.createdAt || 0).getTime();
-              if (tTime <= hardPurgeTs) continue;
               const amt = Number(ct.amount);
               if (!isFinite(amt) || isNaN(amt) || amt <= 0) continue;
 

@@ -196,7 +196,11 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     setActionNotice(null);
 
     try {
-      await fetchTableData('transactions');
+      const fresh = await fetchTableData('transactions');
+      if (Array.isArray(fresh)) {
+        saveStoredTransactions(fresh as Transaction[], true);
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: fresh }));
+      }
       
       setActionNotice({
         message: 'Deep Audit Complete: Supabase database is the authoritative source.',

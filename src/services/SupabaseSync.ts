@@ -258,19 +258,17 @@ export const normalizeCampaign = (row: any): Campaign => {
 // =========================================================================
 export const fetchTableData = async <T>(table: string): Promise<T[]> => {
   try {
-    let query = supabase.from(table).select('*');
+    let query = supabase.from(table).select('*').range(0, 9999);
     if (table === 'transactions') {
       query = query.neq('status', 'deleted');
     }
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
       if (table === 'transactions') {
-        const deletedIds = getDeletedTransactionIds();
         const validRows = data.filter((row: any) => {
           if (!row || !row.id) return false;
-          const cleanId = String(row.id).toLowerCase().trim();
           const st = String(row.status || '').toLowerCase().trim();
-          if (st === 'deleted' || deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId)) {
+          if (st === 'deleted') {
             return false;
           }
           return true;
@@ -544,17 +542,10 @@ export const runStartupCleanupSequence = async () => {
   try {
     if (typeof localStorage === 'undefined') return;
 
-    const purgeTime = 1791980400000;
-    localStorage.setItem('ronpay_hard_purge_timestamp_v1', String(purgeTime));
+    localStorage.removeItem('ronpay_hard_purge_timestamp_v1');
     localStorage.setItem('ronpay_use_supabase_only', 'true');
     localStorage.setItem('ronpay_supabase_ssot_active', 'true');
-    
-    // Completely wipe all stale local transaction cache keys so old deleted txns never resurrect
     localStorage.removeItem('ronpay_supabase_pending_txs');
-    localStorage.removeItem('ronpay_transactions_v4');
-    localStorage.removeItem('ronpay_transactions_v2');
-    localStorage.removeItem('ronpay_transactions');
-    localStorage.removeItem('ronpay_public_pool_stats_v1');
 
     // Run SSOT verification
     const verification = await verifySupabaseSingleSourceOfTruth();
