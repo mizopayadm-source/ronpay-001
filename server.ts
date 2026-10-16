@@ -4508,12 +4508,12 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
   }
 
   // 5. Ensure expenses array exists without injecting mock data
-  const dummyExpenseIds = new Set(['exp-1789003', 'exp-1789002', 'exp-1789001', 'exp-kt-2026-001', 'exp-kt-2026-002', 'exp-kt-2026-003']);
+  const dummyExpenseIds = new Set(['exp-1791226950000', 'exp-1789003', 'exp-1789002', 'exp-1789001', 'exp-kt-2026-001', 'exp-kt-2026-002', 'exp-kt-2026-003']);
   if (!Array.isArray(db.expenses)) {
     db.expenses = [];
     changed = true;
   } else {
-    const filtered = db.expenses.filter((e: any) => e && e.id && !dummyExpenseIds.has(String(e.id).toLowerCase().trim()));
+    const filtered = db.expenses.filter((e: any) => e && e.id && !dummyExpenseIds.has(String(e.id).toLowerCase().trim()) && Number(e.amount) !== 6565);
     if (filtered.length !== db.expenses.length) {
       db.expenses = filtered;
       changed = true;
@@ -4529,31 +4529,6 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       changed = true;
     }
   });
-
-  // Ensure canonical 11th expense VCH-2026-011 (₹6,565) exists
-  const exp11 = (db.expenses || []).find((e: any) => e && (e.id === 'EXP-1791226950000' || e.voucherNo === 'VCH-2026-011'));
-  if (!exp11) {
-    db.expenses!.push({
-      id: 'EXP-1791226950000',
-      campaignId: 'cmp-1788107291420',
-      campaignTitle: 'BMP Shillong',
-      voucherNo: 'VCH-2026-011',
-      amount: 6565,
-      head: 'Bial BMP',
-      purpose: 'Bial BMP Inkhawmpui hmanna (Palai kal, Thingpui & Hmanral)',
-      paidTo: 'Bial Inkhawmpui Organising Committee',
-      paymentMode: 'Cash',
-      spentDate: '2026-10-04',
-      recordedBy: 'Super Admin (Master)',
-      recordedByPhone: '9862000001',
-      recordedAt: '2026-10-04T14:30:00.000Z',
-      createdAt: '2026-10-04T14:30:00.000Z',
-      updatedAt: '2026-10-11T18:00:00.000Z',
-      status: 'approved',
-      attachmentUrl: null
-    });
-    changed = true;
-  }
 
   // Ensure transactions are unique by ID and no purged test items exist
   if (Array.isArray(db.transactions)) {
@@ -4875,26 +4850,83 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
         if (Array.isArray(campRows) && campRows.length > 0) {
           const delCampSet = new Set((db.deletedCampaignIds || []).map((id: string) => String(id).toLowerCase().trim()));
           const validCamps = campRows.filter(c => c && c.id && !delCampSet.has(String(c.id).toLowerCase().trim()));
-          db.campaigns = validCamps.map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            category: r.category || 'ralna',
-            orgName: r.org_name || r.orgName,
-            targetUpiId: r.target_upi_id || r.targetUpiId || 'ronpay@upi',
-            status: r.status || 'active',
-            createdBy: r.created_by || r.createdBy,
-            createdByName: r.created_by_name || r.createdByName,
-            customAmount: r.custom_amount ? Number(r.custom_amount) : undefined,
-            openingBalance: Number(r.opening_balance ?? r.openingBalance ?? 0),
-            location: r.location,
-            description: r.description,
-            imageUrl: r.image_url || r.imageUrl,
-            isApproved: r.is_approved ?? r.isApproved ?? true,
-            allowPublicGroupDeposits: r.allow_public_group_deposits ?? r.allowPublicGroupDeposits ?? true,
-            createdAt: r.created_at || r.createdAt,
-            updatedAt: r.updated_at || r.updatedAt,
-            ...(r.metadata || {})
-          }));
+          db.campaigns = validCamps.map((r: any) => {
+            const meta = r.metadata || {};
+            return {
+              id: r.id,
+              title: r.title,
+              category: r.category || 'ralna',
+              orgName: r.org_name || r.orgName,
+              targetUpiId: r.target_upi_id || r.targetUpiId || 'ronpay@upi',
+              upiId: r.target_upi_id || r.upiId || 'ronpay@upi',
+              status: r.status || 'active',
+              createdBy: r.created_by || r.createdBy,
+              createdByName: r.created_by_name || r.createdByName,
+              customAmount: r.custom_amount ? Number(r.custom_amount) : undefined,
+              openingBalance: Number(r.opening_balance ?? r.openingBalance ?? 0),
+              location: r.location,
+              description: r.description,
+              imageUrl: r.image_url || r.imageUrl,
+              isApproved: r.is_approved ?? r.isApproved ?? true,
+              allowPublicGroupDeposits: r.allow_public_group_deposits ?? r.allowPublicGroupDeposits ?? true,
+              createdAt: r.created_at || r.createdAt,
+              updatedAt: r.updated_at || r.updatedAt,
+              subCategories: meta.subCategories ?? r.subCategories,
+              definedSections: meta.definedSections ?? r.definedSections,
+              sectionLabel: meta.sectionLabel ?? r.sectionLabel ?? 'Bial / Section',
+              groupPresets: meta.groupPresets ?? r.groupPresets,
+              generalPresets: meta.generalPresets ?? r.generalPresets,
+              orgCode: meta.orgCode ?? r.orgCode,
+              cause: meta.cause ?? r.cause,
+              causeMizo: meta.causeMizo ?? r.causeMizo,
+              causeEn: meta.causeEn ?? r.causeEn,
+              validityDate: meta.validityDate ?? r.validityDate,
+              gpsCoords: meta.gpsCoords ?? r.gpsCoords,
+              kumtluangFeeBearer: meta.kumtluangFeeBearer ?? r.kumtluangFeeBearer,
+              metadata: meta
+            };
+          });
+        }
+      }
+    } catch {}
+
+    // 3. Fetch expenses from Supabase (skipping deleted dummy items)
+    try {
+      const expRes = await fetch(`${sbUrl}/rest/v1/expenses?select=*&order=created_at.desc`, {
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (expRes.ok) {
+        const expRows: any[] = await expRes.json();
+        if (Array.isArray(expRows)) {
+          const delExpSet = new Set([
+            'exp-1791226950000',
+            ...(db.deletedExpenseIds || []).map((id: string) => String(id).toLowerCase().trim())
+          ]);
+          db.expenses = expRows
+            .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()) && Number(r.amount) !== 6565)
+            .map((r: any) => ({
+              id: r.id,
+              campaignId: r.campaign_id || r.campaignId,
+              voucherNo: r.voucher_no || r.voucherNo,
+              payee: r.payee,
+              purpose: r.purpose,
+              amount: Number(r.amount) || 0,
+              date: r.date,
+              createdAt: r.created_at || r.createdAt,
+              updatedAt: r.updated_at || r.updatedAt,
+              head: r.metadata?.head || r.head || 'Miscellaneous',
+              paymentMode: r.metadata?.paymentMode || r.paymentMode || 'Cash',
+              recordedBy: r.metadata?.recordedBy || r.recordedBy || 'Admin',
+              recordedByPhone: r.metadata?.recordedByPhone || r.recordedByPhone,
+              status: r.metadata?.status || r.status || 'approved',
+              attachmentUrl: r.metadata?.attachmentUrl || r.attachmentUrl || null,
+              campaignTitle: r.metadata?.campaignTitle || r.campaignTitle,
+              metadata: r.metadata || {}
+            }));
         }
       }
     } catch {}
@@ -4976,7 +5008,35 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          title: stamped.title,
+          category: stamped.category,
+          org_name: stamped.orgName || null,
+          target_upi_id: stamped.targetUpiId || stamped.upiId || 'ronpay@upi',
+          custom_amount: stamped.customAmount ? Number(stamped.customAmount) : null,
           opening_balance: Number(stamped.openingBalance ?? (stamped as any).opening_balance ?? 0),
+          location: stamped.location || null,
+          description: stamped.description || null,
+          image_url: stamped.imageUrl || null,
+          is_approved: stamped.isApproved ?? true,
+          allow_public_group_deposits: stamped.allowPublicGroupDeposits ?? true,
+          metadata: {
+            ...(stamped.metadata || {}),
+            subCategories: stamped.subCategories,
+            definedSections: stamped.definedSections,
+            sectionLabel: stamped.sectionLabel,
+            groupPresets: stamped.groupPresets,
+            generalPresets: stamped.generalPresets,
+            orgCode: stamped.orgCode,
+            cause: stamped.cause,
+            causeMizo: stamped.causeMizo,
+            causeEn: stamped.causeEn,
+            validityDate: stamped.validityDate,
+            gpsCoords: stamped.gpsCoords,
+            kumtluangFeeBearer: stamped.kumtluangFeeBearer,
+            officerPasscode: stamped.officerPasscode,
+            authorizedOfficers: stamped.authorizedOfficers,
+            expenseHeads: stamped.expenseHeads,
+          },
           updated_at: new Date().toISOString()
         })
       }).catch(() => {});

@@ -223,13 +223,42 @@ export const mapCampaignToSupabase = (camp: any) => {
     allow_public_group_deposits: camp.allowPublicGroupDeposits ?? camp.allow_public_group_deposits ?? true,
     created_at: camp.createdAt ? new Date(camp.createdAt).toISOString() : new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    metadata: camp.metadata || {}
+    metadata: {
+      ...(camp.metadata || {}),
+      subCategories: camp.subCategories,
+      definedSections: camp.definedSections,
+      sectionLabel: camp.sectionLabel,
+      groupPresets: camp.groupPresets,
+      generalPresets: camp.generalPresets,
+      orgCode: camp.orgCode,
+      cause: camp.cause,
+      causeMizo: camp.causeMizo,
+      causeEn: camp.causeEn,
+      validityDate: camp.validityDate,
+      gpsCoords: camp.gpsCoords,
+      kumtluangFeeBearer: camp.kumtluangFeeBearer,
+      mitthiHming: camp.mitthiHming,
+      age: camp.age,
+      vuitu: camp.vuitu,
+      thihni: camp.thihni,
+      vuiHun: camp.vuiHun,
+      targetAmount: camp.targetAmount,
+      targetPeriod: camp.targetPeriod,
+      maxLimit: camp.maxLimit,
+      urgencyDeadline: camp.urgencyDeadline,
+      urgencyLevel: camp.urgencyLevel,
+      officerPasscode: camp.officerPasscode,
+      authorizedOfficers: camp.authorizedOfficers,
+      expenseHeads: camp.expenseHeads,
+    }
   };
 };
 
 export const normalizeCampaign = (row: any): Campaign => {
   if (!row) return row;
+  const meta = row.metadata || {};
   return {
+    ...meta,
     ...row,
     id: row.id,
     title: row.title || '',
@@ -249,7 +278,32 @@ export const normalizeCampaign = (row: any): Campaign => {
     allowPublicGroupDeposits: row.allow_public_group_deposits ?? row.allowPublicGroupDeposits ?? false,
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
-    metadata: row.metadata || {}
+    subCategories: (meta.subCategories && meta.subCategories.length > 0) ? meta.subCategories : (row.subCategories || []),
+    definedSections: (meta.definedSections && meta.definedSections.length > 0) ? meta.definedSections : (row.definedSections || []),
+    sectionLabel: meta.sectionLabel || row.sectionLabel || 'Bial / Section',
+    groupPresets: (meta.groupPresets && meta.groupPresets.length > 0) ? meta.groupPresets : (row.groupPresets || []),
+    generalPresets: (meta.generalPresets && meta.generalPresets.length > 0) ? meta.generalPresets : (row.generalPresets || []),
+    orgCode: meta.orgCode || row.orgCode || '',
+    cause: meta.cause ?? row.cause ?? '',
+    causeMizo: meta.causeMizo ?? row.causeMizo ?? '',
+    causeEn: meta.causeEn ?? row.causeEn ?? '',
+    validityDate: meta.validityDate ?? row.validityDate,
+    gpsCoords: meta.gpsCoords ?? row.gpsCoords,
+    kumtluangFeeBearer: meta.kumtluangFeeBearer ?? row.kumtluangFeeBearer,
+    mitthiHming: meta.mitthiHming ?? row.mitthiHming,
+    age: meta.age ?? row.age,
+    vuitu: meta.vuitu ?? row.vuitu,
+    thihni: meta.thihni ?? row.thihni,
+    vuiHun: meta.vuiHun ?? row.vuiHun,
+    targetAmount: meta.targetAmount ?? row.targetAmount,
+    targetPeriod: meta.targetPeriod ?? row.targetPeriod,
+    maxLimit: meta.maxLimit ?? row.maxLimit,
+    urgencyDeadline: meta.urgencyDeadline ?? row.urgencyDeadline,
+    urgencyLevel: meta.urgencyLevel ?? row.urgencyLevel,
+    officerPasscode: meta.officerPasscode ?? row.officerPasscode,
+    authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
+    expenseHeads: meta.expenseHeads ?? row.expenseHeads,
+    metadata: meta
   };
 };
 
@@ -280,7 +334,14 @@ export const fetchTableData = async <T>(table: string): Promise<T[]> => {
         return data.map(normalizeCampaign) as unknown as T[];
       }
       if (table === 'expenses') {
-        return data.map(normalizeExpense) as unknown as T[];
+        const validRows = data.filter((row: any) => {
+          if (!row || !row.id) return false;
+          if (Number(row.amount) === 6565) return false;
+          const k = String(row.id).toLowerCase().trim();
+          if (k === 'exp-1792118935402' || k === 'exp-1791226950000') return false;
+          return true;
+        });
+        return validRows.map(normalizeExpense) as unknown as T[];
       }
       if (table === 'wallet_transactions') {
         return data.map(normalizeWalletTx) as unknown as T[];

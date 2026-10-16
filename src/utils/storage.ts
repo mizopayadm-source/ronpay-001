@@ -440,7 +440,9 @@ export const getStoredCampaigns = (): Campaign[] => {
               if (updated.title) {
                 updated.title = updated.title.replace(/,+$/, '').trim();
               }
-              updated.subCategories = ['BMP Fund'];
+              if (!updated.subCategories || updated.subCategories.length === 0) {
+                updated.subCategories = ['BMP Fund'];
+              }
               if (!updated.imageUrl) {
                 updated.imageUrl = BMP_SHILLONG_DEFAULT_LOGO;
               }
@@ -479,11 +481,11 @@ export const getStoredCampaigns = (): Campaign[] => {
               changed = true;
             }
             if (String(updated.id).toLowerCase().trim() === 'cmp-1788107291420') {
-              if (!updated.subCategories || updated.subCategories.length !== 1 || updated.subCategories[0] !== 'BMP Fund') {
+              if (!updated.subCategories || updated.subCategories.length === 0) {
                 updated.subCategories = ['BMP Fund'];
                 changed = true;
               }
-              if (!updated.generalPresets || !updated.generalPresets.includes('Inkhawm Thawhlawm')) {
+              if (!updated.generalPresets || updated.generalPresets.length === 0) {
                 updated.generalPresets = ['Inkhawm Thawhlawm', 'General Hnathlang', 'Pathianni Chawhma Thawhlawm', 'Pathianni Chawhnu Thawhlawm', 'Pathianni Zan Thawhlawm', 'Nilai Zan Thawhlawm', 'Buhfaiṭham Thawhlawm'];
                 changed = true;
               }
@@ -3623,6 +3625,8 @@ const EXPENSE_HEADS_PREFIX = 'ronpay_expense_heads_';
 const DELETED_EXPENSES_KEY = 'ronpay_deleted_expenses_v1';
 
 const KNOWN_DUMMY_EXPENSE_IDS = new Set([
+  'exp-1791226950000',
+  'exp-1792118935402',
   'exp-1789003',
   'exp-1789002',
   'exp-1789001',
@@ -3667,7 +3671,13 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
       }
     }
     const delSet = getDeletedExpenseIds();
-    let cleanList = list.filter(e => e && e.id && !delSet.has(String(e.id).toLowerCase().trim()) && !KNOWN_DUMMY_EXPENSE_IDS.has(String(e.id).toLowerCase().trim()));
+    let cleanList = list.filter(e => {
+      if (!e || !e.id) return false;
+      const k = String(e.id).toLowerCase().trim();
+      if (delSet.has(k) || KNOWN_DUMMY_EXPENSE_IDS.has(k)) return false;
+      if (Number(e.amount) === 6565) return false;
+      return true;
+    });
     
     // Reconcile and ensure authoritative canonical expenses from INITIAL_KUMTLUANG_EXPENSES
     const canonicalMap = new Map<string, KumtluangExpense>();
@@ -3769,7 +3779,10 @@ export const deleteStoredExpense = (expenseId: string): void => {
   const updated = current.filter(e => String(e.id).toLowerCase().trim() !== String(expenseId).toLowerCase().trim());
   saveStoredExpenses(updated);
 
-  // Directly notify Firestore and server endpoint
+  // Directly notify Supabase, Firestore, and server endpoint
+  import('../services/SupabaseSync').then(({ deleteExpense }) => {
+    deleteExpense(expenseId).catch(() => {});
+  }).catch(() => {});
   deleteExpenseFromFirestore(expenseId).catch(() => {});
   safeApiFetch(`/api/expenses/${encodeURIComponent(expenseId)}`, {
     method: 'DELETE'
@@ -3783,6 +3796,9 @@ export const deleteAllCampaignExpenses = (campaignId: string): void => {
   const targetExpenses = current.filter(e => String(e.campaignId).toLowerCase().trim() === cleanCampId);
   targetExpenses.forEach(e => {
     markExpenseAsDeleted(e.id);
+    import('../services/SupabaseSync').then(({ deleteExpense }) => {
+      deleteExpense(e.id).catch(() => {});
+    }).catch(() => {});
     deleteExpenseFromFirestore(e.id).catch(() => {});
   });
   const remaining = current.filter(e => String(e.campaignId).toLowerCase().trim() !== cleanCampId);

@@ -56,7 +56,8 @@ import {
   DEFAULT_KUMTLUANG_EXPENSE_HEADS,
   isConfirmedTransaction,
   isTransactionForCampaign,
-  saveCampaign
+  saveCampaign,
+  safeApiFetch
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
 import { syncAllLocalExpensesToFirestore, fetchExpensesFromFirestore } from '../services/firestoreSync';
@@ -258,7 +259,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   useEffect(() => {
     // Fetch opening balance directly from Supabase as Single Source of Truth
     fetchOpeningBalanceFromSupabase(campaign.id).then((val) => {
-      if (val > 0) {
+      if (typeof val === 'number' && !isNaN(val)) {
         setOpeningBalance(val);
         setTempOpeningBalance(String(val));
       }
@@ -290,6 +291,16 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       }
     });
 
+    // Realtime Supabase listener for live opening balance and campaign updates
+    const campChannel = subscribeToTable('campaigns', () => {
+      fetchOpeningBalanceFromSupabase(campaign.id).then((val) => {
+        if (typeof val === 'number' && !isNaN(val)) {
+          setOpeningBalance(val);
+          setTempOpeningBalance(String(val));
+        }
+      }).catch(() => {});
+    });
+
     // When opened, fetch from central sync server and Firestore in background to ensure 100% consistent data across Web, Mobile & Preview
     syncAllWithServer(true).then(() => {
       if (!isUserInteractingRef.current) {
@@ -314,6 +325,11 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
           supabase.removeChannel(expChannel);
         } catch {}
       }
+      if (campChannel) {
+        try {
+          supabase.removeChannel(campChannel);
+        } catch {}
+      }
     };
   }, [campaign.id]);
 
@@ -335,11 +351,35 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         }
       }
     };
+    const handleOpeningBalUpdated = (e: any) => {
+      if (e?.detail && String(e.detail.campaignId).toLowerCase().trim() === String(campaign.id).toLowerCase().trim()) {
+        const val = Number(e.detail.openingBalance) || 0;
+        setOpeningBalance(val);
+        setTempOpeningBalance(String(val));
+      }
+    };
+    const handleCampaignsUpdated = (e: any) => {
+      if (Array.isArray(e?.detail)) {
+        const found = e.detail.find((c: any) => String(c.id).toLowerCase().trim() === String(campaign.id).toLowerCase().trim());
+        if (found && found.openingBalance !== undefined) {
+          const val = Number(found.openingBalance) || 0;
+          setOpeningBalance(val);
+          setTempOpeningBalance(String(val));
+        }
+      }
+    };
+
     window.addEventListener('ronpay_expenses_updated', handleUpdated);
     window.addEventListener('ronpay_expense_heads_updated', handleHeadsUpdated);
+    window.addEventListener('ronpay_opening_balance_updated', handleOpeningBalUpdated);
+    window.addEventListener('ronpay_campaigns_updated', handleCampaignsUpdated);
+    window.addEventListener('ronpay-campaigns-updated', handleCampaignsUpdated);
     return () => {
       window.removeEventListener('ronpay_expenses_updated', handleUpdated);
       window.removeEventListener('ronpay_expense_heads_updated', handleHeadsUpdated);
+      window.removeEventListener('ronpay_opening_balance_updated', handleOpeningBalUpdated);
+      window.removeEventListener('ronpay_campaigns_updated', handleCampaignsUpdated);
+      window.removeEventListener('ronpay-campaigns-updated', handleCampaignsUpdated);
     };
   }, [campaign.id]);
 

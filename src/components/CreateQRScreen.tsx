@@ -2874,6 +2874,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       causeEn: (trimmedCause === campaign.cause && campaign.causeEn) ? campaign.causeEn : (trimmedCause ? formatMizoTextToEnglish(trimmedCause) : undefined),
       causeMizo: trimmedCause || undefined,
       upiId: upiId.trim(),
+      targetUpiId: upiId.trim(),
       validityDate: validityDate,
       status: finalStatus,
       approvalRemarks: remarks,
@@ -2894,13 +2895,13 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       urgencyDeadline: urgencyDeadline || undefined,
       urgencyLevel: campaign.category === 'rikrum' ? urgencyLevel : undefined,
       
-      orgName: campaign.category === 'kumtluang' ? (orgName.trim() || undefined) : campaign.orgName,
-      subCategories: campaign.category === 'kumtluang' ? subCategories : campaign.subCategories,
-      kumtluangFeeBearer: campaign.category === 'kumtluang' ? kumtluangFeeBearer : undefined,
-      sectionLabel: campaign.category === 'kumtluang' ? (kumtluangSectionLabel.trim() || 'Bial / Section') : campaign.sectionLabel,
-      definedSections: campaign.category === 'kumtluang' ? kumtluangSections : campaign.definedSections,
-      groupPresets: campaign.category === 'kumtluang' ? kumtluangGroupPresets : campaign.groupPresets,
-      generalPresets: campaign.category === 'kumtluang' ? kumtluangGeneralPresets : campaign.generalPresets,
+      orgName: orgName.trim() || campaign.orgName,
+      subCategories: subCategories && subCategories.length > 0 ? subCategories : campaign.subCategories,
+      kumtluangFeeBearer: kumtluangFeeBearer || campaign.kumtluangFeeBearer,
+      sectionLabel: kumtluangSectionLabel.trim() || campaign.sectionLabel || 'Bial / Section',
+      definedSections: kumtluangSections && kumtluangSections.length > 0 ? kumtluangSections : campaign.definedSections,
+      groupPresets: kumtluangGroupPresets && kumtluangGroupPresets.length > 0 ? kumtluangGroupPresets : campaign.groupPresets,
+      generalPresets: kumtluangGeneralPresets && kumtluangGeneralPresets.length > 0 ? kumtluangGeneralPresets : campaign.generalPresets,
     };
 
     onSave(updated);

@@ -248,6 +248,23 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               if (Array.isArray(local.groupPresets) && local.groupPresets.length > 0 && (!Array.isArray(updated.groupPresets) || updated.groupPresets.length === 0 || localTime >= serverTime)) {
                 updated.groupPresets = local.groupPresets;
               }
+              if (Array.isArray(local.definedSections) && local.definedSections.length > 0 && (!Array.isArray(updated.definedSections) || updated.definedSections.length === 0 || localTime >= serverTime)) {
+                updated.definedSections = local.definedSections;
+              }
+              if (local.sectionLabel && (!updated.sectionLabel || localTime >= serverTime)) {
+                updated.sectionLabel = local.sectionLabel;
+              }
+              if (Array.isArray(local.generalPresets) && local.generalPresets.length > 0 && (!Array.isArray(updated.generalPresets) || updated.generalPresets.length === 0 || localTime >= serverTime)) {
+                updated.generalPresets = local.generalPresets;
+              }
+              if (Array.isArray(local.subCategories) && local.subCategories.length > 0 && (!Array.isArray(updated.subCategories) || updated.subCategories.length === 0 || localTime >= serverTime)) {
+                updated.subCategories = local.subCategories;
+              }
+              if (typeof local.openingBalance === 'number' && local.openingBalance > 0 && (!updated.openingBalance || localTime >= serverTime)) {
+                updated.openingBalance = local.openingBalance;
+              } else if (typeof sc.openingBalance === 'number' && sc.openingBalance > 0 && !updated.openingBalance) {
+                updated.openingBalance = sc.openingBalance;
+              }
               // Protect local custom uploaded logo from being overwritten by server unsplash or empty logo
               if (isCustom(local.imageUrl) && !isCustom(updated.imageUrl)) {
                 updated.imageUrl = local.imageUrl;
