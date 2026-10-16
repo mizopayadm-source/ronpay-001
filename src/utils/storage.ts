@@ -3675,7 +3675,6 @@ export const getStoredExpenses = (campaignId?: string): KumtluangExpense[] => {
       if (!e || !e.id) return false;
       const k = String(e.id).toLowerCase().trim();
       if (delSet.has(k) || KNOWN_DUMMY_EXPENSE_IDS.has(k)) return false;
-      if (Number(e.amount) === 6565) return false;
       return true;
     });
     
@@ -3823,6 +3822,22 @@ export const updateStoredExpense = (expense: KumtluangExpense): void => {
   }
   saveStoredExpenses(updated);
   syncExpenseToFirestore(expenseWithStamp).catch(() => {});
+  import('../services/SupabaseSync').then(({ upsertExpense }) => {
+    upsertExpense(expenseWithStamp).catch((err) => {
+      console.warn('[Supabase] Live expense upsert note:', err);
+    });
+  }).catch(() => {});
+  import('../services/crossTabSync').then(({ broadcastStateChange }) => {
+    broadcastStateChange('expenses', expenseWithStamp);
+  }).catch(() => {});
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: updated }));
+  }
+  safeApiFetch('/api/expenses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(expenseWithStamp)
+  }).catch(() => {});
 };
 
 export const getCampaignExpenseHeads = (campaignId: string, customHeadsFromCampaign?: string[]): string[] => {

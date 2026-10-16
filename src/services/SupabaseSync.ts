@@ -336,9 +336,8 @@ export const fetchTableData = async <T>(table: string): Promise<T[]> => {
       if (table === 'expenses') {
         const validRows = data.filter((row: any) => {
           if (!row || !row.id) return false;
-          if (Number(row.amount) === 6565) return false;
           const k = String(row.id).toLowerCase().trim();
-          if (k === 'exp-1792118935402' || k === 'exp-1791226950000') return false;
+          if (k === 'exp-1791226950000') return false;
           return true;
         });
         return validRows.map(normalizeExpense) as unknown as T[];

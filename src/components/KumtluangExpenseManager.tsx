@@ -823,7 +823,11 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     };
 
     updateStoredExpense(updated);
-    upsertExpense(updated).catch(() => {});
+    upsertExpense(updated).then(() => {
+      broadcastStateChange('expenses', updated);
+      window.dispatchEvent(new CustomEvent('ronpay_expenses_updated', { detail: [updated] }));
+      window.dispatchEvent(new CustomEvent('ronpay-expenses-updated', { detail: [updated] }));
+    }).catch(() => {});
     setExpenseList(prev => prev.map(e => e.id === updated.id ? updated : e));
     setEditFormSuccess('Voucher siamthatna vawn that a ni ta e!');
     showToast(`Voucher ${updated.voucherNo} siamthat fel a ni e!`, 'success');

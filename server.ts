@@ -4871,12 +4871,12 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
               allowPublicGroupDeposits: r.allow_public_group_deposits ?? r.allowPublicGroupDeposits ?? true,
               createdAt: r.created_at || r.createdAt,
               updatedAt: r.updated_at || r.updatedAt,
-              subCategories: meta.subCategories ?? r.subCategories,
-              definedSections: meta.definedSections ?? r.definedSections,
-              sectionLabel: meta.sectionLabel ?? r.sectionLabel ?? 'Bial / Section',
-              groupPresets: meta.groupPresets ?? r.groupPresets,
-              generalPresets: meta.generalPresets ?? r.generalPresets,
-              orgCode: meta.orgCode ?? r.orgCode,
+              subCategories: (meta.subCategories && meta.subCategories.length > 0) ? meta.subCategories : (r.subCategories || []),
+              definedSections: (meta.definedSections && meta.definedSections.length > 0) ? meta.definedSections : (r.definedSections || []),
+              sectionLabel: meta.sectionLabel || r.sectionLabel || 'Bial / Section',
+              groupPresets: (meta.groupPresets && meta.groupPresets.length > 0) ? meta.groupPresets : (r.groupPresets || []),
+              generalPresets: (meta.generalPresets && meta.generalPresets.length > 0) ? meta.generalPresets : (r.generalPresets || []),
+              orgCode: meta.orgCode || r.orgCode || '',
               cause: meta.cause ?? r.cause,
               causeMizo: meta.causeMizo ?? r.causeMizo,
               causeEn: meta.causeEn ?? r.causeEn,
@@ -4907,7 +4907,7 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
             ...(db.deletedExpenseIds || []).map((id: string) => String(id).toLowerCase().trim())
           ]);
           db.expenses = expRows
-            .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()) && Number(r.amount) !== 6565)
+            .filter(r => r && r.id && !delExpSet.has(String(r.id).toLowerCase().trim()))
             .map((r: any) => ({
               id: r.id,
               campaignId: r.campaign_id || r.campaignId,
