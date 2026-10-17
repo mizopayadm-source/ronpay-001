@@ -38,7 +38,9 @@ import {
   SlidersHorizontal,
   Layers,
   FileSpreadsheet,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Campaign, CreatorProfile, KumtluangExpense, Transaction } from '../types';
 import { 
@@ -76,6 +78,7 @@ import { formatDateDDMMYYYY, getTodayDateTimeLocal } from '../utils/date';
 import { compressDataUrl } from '../utils/imageCompressor';
 import { 
   exportCashBookPrint, 
+  exportManualStyleLedgerPrint,
   exportExpenditureStatementPrint, 
   exportPaymentVoucherSlipPrint,
   exportCashBookToCSV,
@@ -225,7 +228,15 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   // Cash Book search, filter & view mode
   const [cashBookSearch, setCashBookSearch] = useState<string>('');
   const [cashBookTypeFilter, setCashBookTypeFilter] = useState<'all' | 'receipt' | 'payment'>('all');
-  const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table'>('responsive');
+  const [cashBookDateFilter, setCashBookDateFilter] = useState<'all' | 'this_month' | 'today'>('all');
+  const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table' | 'ledger'>('responsive');
+
+  // Cash Book Receipts Head-wise Aggregation & Subsidiary Ledger states
+  const [ledgerReceiptsMode, setLedgerReceiptsMode] = useState<'head_wise' | 'detailed'>('head_wise');
+  const [expandedReceiptHeads, setExpandedReceiptHeads] = useState<Record<string, boolean>>({});
+  const [showPrintLedgerModal, setShowPrintLedgerModal] = useState<boolean>(false);
+  const [printLedgerReceiptMode, setPrintLedgerReceiptMode] = useState<'head_wise' | 'detailed'>('head_wise');
+  const [printIncludeSubsidiary, setPrintIncludeSubsidiary] = useState<boolean>(true);
 
   // Notification Toast for user action
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -608,6 +619,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       if (cashBookTypeFilter !== 'all' && item.type !== cashBookTypeFilter) {
         return false;
       }
+      if (cashBookDateFilter === 'today') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (item.date !== todayStr) return false;
+      } else if (cashBookDateFilter === 'this_month') {
+        const now = new Date();
+        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (!item.date.startsWith(ym)) return false;
+      }
       if (cashBookSearch) {
         const q = cashBookSearch.toLowerCase().trim();
         const matchParticulars = (item.particulars || '').toLowerCase().includes(q);
@@ -620,9 +639,113 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       }
       return true;
     });
-  }, [cashBookEntries, cashBookSearch, cashBookTypeFilter]);
+  }, [cashBookEntries, cashBookSearch, cashBookTypeFilter, cashBookDateFilter]);
+
+  // Head-wise Aggregated Receipts for Clean Ledger & Subsidiary Drill-down
+  const aggregatedReceiptGroups = useMemo(() => {
+    const rawReceipts = filteredCashBookEntries
+      .filter(e => e.type === 'receipt')
+      .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+    const groupsMap = new Map<string, {
+      key: string;
+      head: string;
+      monthYear: string;
+      latestDate: string;
+      totalAmount: number;
+      count: number;
+      items: typeof filteredCashBookEntries;
+    }>();
+
+    rawReceipts.forEach(e => {
+      const d = new Date(e.date || 0);
+      const isValid = !isNaN(d.getTime());
+      const monthYear = isValid
+        ? d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+        : 'All Time';
+      const headName = e.head || 'General Receipts';
+      const key = `${headName}___${monthYear}`;
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          key,
+          head: headName,
+          monthYear,
+          latestDate: e.date,
+          totalAmount: 0,
+          count: 0,
+          items: []
+        });
+      }
+
+      const g = groupsMap.get(key)!;
+      g.totalAmount += e.receiptAmount;
+      g.count += 1;
+      g.latestDate = e.date;
+      g.items.push(e);
+    });
+
+    return Array.from(groupsMap.values());
+  }, [filteredCashBookEntries]);
+
+  const toggleReceiptHead = (key: string) => {
+    setExpandedReceiptHeads(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleExpandAllReceiptHeads = () => {
+    const allExpanded: Record<string, boolean> = {};
+    aggregatedReceiptGroups.forEach(g => {
+      allExpanded[g.key] = true;
+    });
+    setExpandedReceiptHeads(allExpanded);
+  };
+
+  const handleCollapseAllReceiptHeads = () => {
+    setExpandedReceiptHeads({});
+  };
 
   // Direct Print & PDF Export handlers
+  const handlePrintManualLedger = (
+    modeOrEvent?: 'head_wise' | 'detailed' | React.SyntheticEvent,
+    includeSub?: boolean
+  ) => {
+    const actualMode: 'head_wise' | 'detailed' = 
+      (typeof modeOrEvent === 'string' && (modeOrEvent === 'head_wise' || modeOrEvent === 'detailed'))
+        ? modeOrEvent
+        : ledgerReceiptsMode;
+    const actualIncludeSub = typeof includeSub === 'boolean' ? includeSub : printIncludeSubsidiary;
+
+    let dateRangeText = 'All Time Statement';
+    if (cashBookDateFilter === 'today') {
+      dateRangeText = `Today (${formatDateDDMMYYYY(new Date())})`;
+    } else if (cashBookDateFilter === 'this_month') {
+      const now = new Date();
+      dateRangeText = `${now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`;
+    } else if (fromDateFilter || toDateFilter) {
+      dateRangeText = `${fromDateFilter ? formatDateDDMMYYYY(fromDateFilter) : 'Start'} to ${toDateFilter ? formatDateDDMMYYYY(toDateFilter) : 'Till Date'}`;
+    }
+
+    exportManualStyleLedgerPrint({
+      campaign,
+      creatorProfile,
+      openingBalance,
+      totalCollections,
+      totalExpenses,
+      netBalance,
+      headLedgerSummary,
+      cashBookEntries: filteredCashBookEntries,
+      dateRangeText,
+      treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary',
+      auditorName: 'Internal Auditor / Accountant',
+      chairmanName: 'Chairman / President',
+      receiptGroupingMode: actualMode,
+      includeSubsidiarySchedule: actualIncludeSub
+    });
+  };
+
   const handlePrintCashBook = () => {
     exportCashBookPrint({
       campaign,
@@ -1559,6 +1682,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
+                onClick={handlePrintManualLedger}
+                className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95 border border-indigo-900"
+                title="Print Traditional Two-Column Manual Ledger & Export PDF"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-300" /> Print Ledger / Export PDF
+              </button>
+              <button
+                type="button"
                 onClick={handlePrintCashBook}
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 title="Print official Cash Book with Running Balances"
@@ -1639,7 +1770,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
             </div>
           </div>
 
-          {/* Cash Book Toolbar: Search + Type Filter + View Mode Toggle */}
+          {/* Cash Book Toolbar: Search + Date Filter + Type Filter + View Mode Toggle */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
               {/* Search Box */}
@@ -1663,23 +1794,105 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 )}
               </div>
 
-              {/* Type Filter Buttons */}
+              {/* View Mode Toggle: Cards, Table, Ledger (Dr/Cr) */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-xl shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setCashBookViewMode('responsive')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    cashBookViewMode === 'responsive'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Mobile-friendly card list"
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookViewMode('table')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    cashBookViewMode === 'table'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Single chronological table"
+                >
+                  Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookViewMode('ledger')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                    cashBookViewMode === 'ledger'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50'
+                  }`}
+                  title="Traditional Two-Sided Physical Ledger (Dr/Cr)"
+                >
+                  <BookOpen className="w-3 h-3" /> Ledger (Dr/Cr)
+                </button>
+              </div>
+            </div>
+
+            {/* Second Row: Date Filter & Type Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+              {/* Date Filter Pills */}
               <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                <span className="text-[10px] font-black uppercase text-slate-400 shrink-0 mr-1">Hun Bi:</span>
+                <button
+                  type="button"
+                  onClick={() => setCashBookDateFilter('all')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                    cashBookDateFilter === 'all'
+                      ? 'bg-indigo-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  A Zavai
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookDateFilter('this_month')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                    cashBookDateFilter === 'this_month'
+                      ? 'bg-indigo-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  Kumin Thla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookDateFilter('today')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                    cashBookDateFilter === 'today'
+                      ? 'bg-indigo-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  Vawiin (Today)
+                </button>
+              </div>
+
+              {/* Type Filter Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                <span className="text-[10px] font-black uppercase text-slate-400 shrink-0 mr-1">Zia:</span>
                 <button
                   type="button"
                   onClick={() => setCashBookTypeFilter('all')}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
                     cashBookTypeFilter === 'all'
                       ? 'bg-slate-900 text-white shadow-2xs'
                       : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  A Zavai ({cashBookEntries.length})
+                  Zavai ({cashBookEntries.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setCashBookTypeFilter('receipt')}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
                     cashBookTypeFilter === 'receipt'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-slate-200'
@@ -1690,39 +1903,13 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 <button
                   type="button"
                   onClick={() => setCashBookTypeFilter('payment')}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
                     cashBookTypeFilter === 'payment'
                       ? 'bg-rose-600 text-white shadow-2xs'
                       : 'bg-white text-rose-700 hover:bg-rose-50 border border-slate-200'
                   }`}
                 >
                   Payments (-)
-                </button>
-              </div>
-
-              {/* View Mode Toggle */}
-              <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-xl shrink-0 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setCashBookViewMode('responsive')}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                    cashBookViewMode === 'responsive'
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Cards
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCashBookViewMode('table')}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                    cashBookViewMode === 'table'
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Table
                 </button>
               </div>
             </div>
@@ -1808,7 +1995,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : cashBookViewMode === 'table' ? (
               /* Traditional Full Ledger Table (Scrollable on small screens) */
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-left text-xs">
@@ -1862,6 +2049,198 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ) : (
+              /* Traditional Two-Sided Physical Ledger View (Dr. Receipts / Cr. Payments) */
+              <div className="space-y-3 animate-fadeIn">
+                {/* On-screen Print / Export Action Banner */}
+                <div className="p-3 bg-indigo-50/90 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 print:hidden">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-700 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-black text-indigo-950 uppercase tracking-tight">
+                        Manual-Style Two-Sided Cash Book & Ledger
+                      </h4>
+                      <p className="text-[10.5px] text-indigo-700 font-medium">
+                        Physical ledger register layout: Receipts on left, Payments on right with balanced totals.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePrintManualLedger}
+                    className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                    title="Print A4 landscape manual ledger or save as PDF"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-amber-300" /> Print Ledger / Export PDF
+                  </button>
+                </div>
+
+                {/* The Two-Sided Ledger Register Sheet */}
+                <div className="overflow-x-auto rounded-2xl border-2 border-slate-900 bg-white shadow-xs">
+                  {(() => {
+                    const receiptSide = [
+                      ...(openingBalance > 0 ? [{
+                        date: 'Start',
+                        particulars: 'To Opening Balance (B/F) - Cash in Hand',
+                        refNo: 'B/F',
+                        head: 'Opening Balance',
+                        amount: openingBalance
+                      }] : []),
+                      ...filteredCashBookEntries
+                        .filter(e => e.type === 'receipt')
+                        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+                        .map(e => ({
+                          date: formatDateDDMMYYYY(e.date),
+                          particulars: `To ${e.particulars}`,
+                          refNo: e.refNo || '--',
+                          head: e.head,
+                          amount: e.receiptAmount
+                        }))
+                    ];
+
+                    const paymentSide = [
+                      ...filteredCashBookEntries
+                        .filter(e => e.type === 'payment')
+                        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+                        .map(e => ({
+                          date: formatDateDDMMYYYY(e.date),
+                          particulars: `By ${e.particulars}`,
+                          refNo: e.refNo || '--',
+                          head: e.head,
+                          amount: e.paymentAmount
+                        })),
+                      {
+                        date: 'Closing',
+                        particulars: 'By Closing Balance (C/D) - Cash in Hand',
+                        refNo: 'C/D',
+                        head: 'Closing Cash',
+                        amount: netBalance
+                      }
+                    ];
+
+                    const maxRows = Math.max(receiptSide.length, paymentSide.length);
+                    const grandDr = openingBalance + totalCollections;
+                    const grandCr = totalExpenses + netBalance;
+
+                    return (
+                      <table className="w-full text-left border-collapse text-xs min-w-[720px]">
+                        <thead>
+                          <tr className="text-white">
+                            <th colSpan={4} className="bg-emerald-900 p-2 text-center text-xs font-black tracking-wider border-r-2 border-slate-900 uppercase">
+                              Dr. &nbsp;&nbsp; (RECEIPTS / DEBIT / SUM LUT)
+                            </th>
+                            <th colSpan={4} className="bg-rose-900 p-2 text-center text-xs font-black tracking-wider uppercase">
+                              Cr. &nbsp;&nbsp; (PAYMENTS / CREDIT / SUM CHHUAK)
+                            </th>
+                          </tr>
+                          <tr className="bg-slate-900 text-slate-100 text-[10px] uppercase tracking-wider font-bold">
+                            {/* Dr Columns */}
+                            <th className="p-2 w-20 text-center border-r border-slate-700">Date</th>
+                            <th className="p-2 border-r border-slate-700">Particulars (Narration)</th>
+                            <th className="p-2 w-20 text-center border-r border-slate-700">Ref / Rec</th>
+                            <th className="p-2 w-24 text-right border-r-2 border-slate-900 bg-emerald-950">Amount (₹)</th>
+
+                            {/* Cr Columns */}
+                            <th className="p-2 w-20 text-center border-r border-slate-700">Date</th>
+                            <th className="p-2 border-r border-slate-700">Particulars (Narration)</th>
+                            <th className="p-2 w-20 text-center border-r border-slate-700">Vch No</th>
+                            <th className="p-2 w-24 text-right bg-rose-950">Amount (₹)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 font-sans">
+                          {Array.from({ length: maxRows }).map((_, idx) => {
+                            const dr = receiptSide[idx];
+                            const cr = paymentSide[idx];
+                            return (
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
+                                {/* Dr cell 1 */}
+                                <td className="p-2 font-mono text-[10.5px] text-slate-500 text-center border-r border-slate-200 whitespace-nowrap">
+                                  {dr ? dr.date : ''}
+                                </td>
+                                {/* Dr cell 2 */}
+                                <td className="p-2 text-slate-800 text-[11px] border-r border-slate-200">
+                                  {dr ? (
+                                    <div>
+                                      <div className="font-bold text-slate-900">{dr.particulars}</div>
+                                      {dr.head && (
+                                        <div className="text-[9.5px] text-indigo-600 font-medium">🏷️ {dr.head}</div>
+                                      )}
+                                    </div>
+                                  ) : ''}
+                                </td>
+                                {/* Dr cell 3 */}
+                                <td className="p-2 font-mono text-[10px] text-slate-500 text-center border-r border-slate-200 whitespace-nowrap">
+                                  {dr ? dr.refNo : ''}
+                                </td>
+                                {/* Dr cell 4 */}
+                                <td className={`p-2 font-mono font-black text-xs text-right border-r-2 border-slate-900 whitespace-nowrap ${dr ? (dr.refNo === 'B/F' ? 'bg-indigo-50 text-indigo-900' : 'bg-emerald-50/60 text-emerald-700') : ''}`}>
+                                  {dr ? `₹${dr.amount.toLocaleString('en-IN')}` : ''}
+                                </td>
+
+                                {/* Cr cell 1 */}
+                                <td className="p-2 font-mono text-[10.5px] text-slate-500 text-center border-r border-slate-200 whitespace-nowrap">
+                                  {cr ? cr.date : ''}
+                                </td>
+                                {/* Cr cell 2 */}
+                                <td className="p-2 text-slate-800 text-[11px] border-r border-slate-200">
+                                  {cr ? (
+                                    <div>
+                                      <div className="font-bold text-slate-900">{cr.particulars}</div>
+                                      {cr.head && (
+                                        <div className="text-[9.5px] text-rose-600 font-medium">🏷️ {cr.head}</div>
+                                      )}
+                                    </div>
+                                  ) : ''}
+                                </td>
+                                {/* Cr cell 3 */}
+                                <td className="p-2 font-mono text-[10px] text-slate-500 text-center border-r border-slate-200 whitespace-nowrap">
+                                  {cr ? cr.refNo : ''}
+                                </td>
+                                {/* Cr cell 4 */}
+                                <td className={`p-2 font-mono font-black text-xs text-right whitespace-nowrap ${cr ? (cr.refNo === 'C/D' ? 'bg-purple-50 text-purple-900' : 'bg-rose-50/60 text-rose-700') : ''}`}>
+                                  {cr ? `₹${cr.amount.toLocaleString('en-IN')}` : ''}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="border-t-2 border-slate-900 bg-slate-900 text-white font-black text-xs">
+                          <tr className="border-b-4 border-double border-slate-900">
+                            <td colSpan={3} className="p-2.5 text-right uppercase tracking-wider text-[11px] border-r border-slate-700">
+                              Grand Total Receipts (Dr):
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-emerald-400 border-r-2 border-slate-900 bg-emerald-950 underline underline-offset-4">
+                              ₹{grandDr.toLocaleString('en-IN')}
+                            </td>
+                            <td colSpan={3} className="p-2.5 text-right uppercase tracking-wider text-[11px] border-r border-slate-700">
+                              Grand Total Payments (Cr):
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-rose-300 bg-rose-950 underline underline-offset-4">
+                              ₹{grandCr.toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    );
+                  })()}
+                </div>
+
+                {/* Ledger Signatures */}
+                <div className="pt-4 grid grid-cols-3 gap-4 text-center">
+                  <div className="border-t-2 border-dashed border-slate-300 pt-2">
+                    <span className="font-bold text-xs text-slate-800 block">{creatorProfile?.name || 'Treasurer'}</span>
+                    <span className="text-[10px] text-slate-500">Prepared by (Treasurer / Fin. Secy)</span>
+                  </div>
+                  <div className="border-t-2 border-dashed border-slate-300 pt-2">
+                    <span className="font-bold text-xs text-slate-800 block">Internal Auditor</span>
+                    <span className="text-[10px] text-slate-500">Audited & Verified by</span>
+                  </div>
+                  <div className="border-t-2 border-dashed border-slate-300 pt-2">
+                    <span className="font-bold text-xs text-slate-800 block">Chairman / President</span>
+                    <span className="text-[10px] text-slate-500">Approved by</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2320,63 +2699,58 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
             </div>
           </div>
 
-          {/* Report Date & Category Filter Controls (print:hidden) - Fel fai, hnawk lo & Custom date awlsam tak */}
+          {/* Report Date & Category Filter Controls (print:hidden) - Uncluttered, Clean & Custom Date Range */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl print:hidden flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* Left: Direct Date Range (From - To) & Quick Preset */}
+            {/* Left: Clean Preset & Conditional Date Range */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
                 <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>Hun Bi (Date Range):</span>
+                <span>Hun Bi (Period):</span>
               </div>
 
-              {/* Direct From - To Date Inputs */}
-              <div className="flex items-center gap-1.5 bg-white border border-slate-300 px-2.5 py-1.5 rounded-xl shadow-2xs">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">From:</span>
-                <input
-                  type="date"
-                  value={fromDateFilter}
-                  onChange={(e) => {
-                    setFromDateFilter(e.target.value);
-                    setDateFilterPreset('custom');
-                  }}
-                  className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
-                  title="A tan ni (Start Date)"
-                />
-                <span className="text-slate-300 font-bold px-0.5">-</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">To:</span>
-                <input
-                  type="date"
-                  value={toDateFilter}
-                  onChange={(e) => {
-                    setToDateFilter(e.target.value);
-                    setDateFilterPreset('custom');
-                  }}
-                  className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
-                  title="A tawp ni (End Date)"
-                />
-              </div>
-
-              {/* Quick Preset Dropdown - Quiet & Unobtrusive */}
+              {/* Clean Preset Selector */}
               <select
                 value={dateFilterPreset}
                 onChange={(e) => handleDatePresetChange(e.target.value as any)}
-                className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-400 transition"
-                title="Quick Date Presets"
+                className="px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-400 transition shadow-2xs"
               >
-                <option value="all">Hun Zavai (All Time)</option>
+                <option value="all">A Zavai (All Time)</option>
                 <option value="this_month">Kumin Thla (This Month)</option>
-                <option value="last_month">Thla Hmasa (Last Month)</option>
-                <option value="this_year">Kumin (This Year)</option>
-                <option value="today">Vawiin (Today)</option>
-                <option value="custom">Custom Range</option>
+                <option value="custom">Custom Date Range...</option>
               </select>
+
+              {/* Conditional Direct From - To Date Inputs (Only when Custom or active) */}
+              {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
+                <div className="flex items-center gap-1.5 bg-white border border-slate-300 px-2.5 py-1.5 rounded-xl shadow-2xs animate-fadeIn">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">From:</span>
+                  <input
+                    type="date"
+                    value={fromDateFilter}
+                    onChange={(e) => {
+                      setFromDateFilter(e.target.value);
+                      setDateFilterPreset('custom');
+                    }}
+                    className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  />
+                  <span className="text-slate-300 font-bold px-0.5">-</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">To:</span>
+                  <input
+                    type="date"
+                    value={toDateFilter}
+                    onChange={(e) => {
+                      setToDateFilter(e.target.value);
+                      setDateFilterPreset('custom');
+                    }}
+                    className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  />
+                </div>
+              )}
 
               {(fromDateFilter || toDateFilter || dateFilterPreset !== 'all') && (
                 <button
                   type="button"
                   onClick={() => handleDatePresetChange('all')}
                   className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer px-1"
-                  title="Reset date to all time"
                 >
                   Reset
                 </button>

@@ -65,11 +65,28 @@
 }
 
 @media print {
-  .no-print, [data-no-print="true"] {
+  .no-print, [data-no-print="true"], button:not(.allow-print), nav, .print-hidden {
     display: none !important;
   }
   body {
     background: #ffffff !important;
     color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
   }
 }

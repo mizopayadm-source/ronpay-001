@@ -3811,6 +3811,8 @@ export interface CashBookPrintOptions {
   treasurerName?: string;
   auditorName?: string;
   chairmanName?: string;
+  receiptGroupingMode?: 'head_wise' | 'detailed';
+  includeSubsidiarySchedule?: boolean;
 }
 
 /**
@@ -4218,6 +4220,539 @@ export const exportCashBookPrint = (options: CashBookPrintOptions) => {
     .trim()
     .replace(/\s+/g, '_');
   printHtmlSafely(html, `Cash Book • ${options.campaign.orgName || options.campaign.title}`, `RonPay_CashBook_${cleanTarget}.pdf`);
+};
+
+/**
+ * Generates official Manual-Style Cash Book & Ledger HTML (Two-Column Traditional Register)
+ * Formats exactly like a traditional physical paper accounting ledger book:
+ * - Two distinct sections: Dr. (RECEIPTS / DEBIT) on left, Cr. (PAYMENTS / CREDIT) on right.
+ * - Columns: Date, Particulars (To/By), Ref/Voucher No, Amount (₹).
+ * - Running Balance and Final Closing Balance calculations.
+ * - Treasurer, Auditor, and Chairman Signatures.
+ * - High-res printable A4 landscape layout with @media print CSS hiding buttons, bars, and toolbars.
+ */
+export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions): string => {
+  const {
+    campaign,
+    creatorProfile,
+    openingBalance,
+    totalCollections,
+    totalExpenses,
+    netBalance,
+    cashBookEntries,
+    dateRangeText = 'All Time Statement',
+    treasurerName = creatorProfile?.name || 'Treasurer / Fin. Secretary',
+    auditorName = 'Auditor / Accountant',
+    chairmanName = 'Chairman / President',
+    receiptGroupingMode = 'head_wise',
+    includeSubsidiarySchedule = true
+  } = options;
+
+  const orgDisplay = campaign.orgName || creatorProfile?.orgName || campaign.title;
+  const logoDisplay = campaign.imageUrl || (campaign as any).logoUrl || creatorProfile?.logoUrl;
+  const locationDisplay = creatorProfile?.address || campaign.location || 'Mizoram, India';
+  const todayStr = formatDateDDMMYYYY(new Date());
+
+  // 1. Prepare DEBIT / RECEIPTS (Dr.) entries
+  interface LedgerSideEntry {
+    date: string;
+    particulars: string;
+    refNo: string;
+    head?: string;
+    amount: number;
+    subCount?: number;
+  }
+
+  interface SubsidiaryHeadGroup {
+    key: string;
+    head: string;
+    monthYear: string;
+    date: string;
+    totalAmount: number;
+    items: Array<{
+      date: string;
+      particulars: string;
+      refNo: string;
+      amount: number;
+    }>;
+  }
+
+  const receiptEntries: LedgerSideEntry[] = [];
+
+  // Opening Balance b/f as first row on Dr. side
+  if (openingBalance > 0) {
+    receiptEntries.push({
+      date: dateRangeText.includes('to') ? dateRangeText.split('to')[0].replace(/Period:?/i, '').trim() : 'Start',
+      particulars: 'To Opening Balance (B/F) - Cash in Hand / Bank',
+      refNo: 'B/F',
+      head: 'Opening Balance',
+      amount: openingBalance
+    });
+  }
+
+  const rawReceipts = cashBookEntries
+    .filter(e => e.type === 'receipt')
+    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+  // Build Subsidiary Groups (Grouped by Head & Month for clean accounting)
+  const subsidiaryGroupsMap = new Map<string, SubsidiaryHeadGroup>();
+
+  rawReceipts.forEach(e => {
+    const d = new Date(e.date || 0);
+    const isValidDate = !isNaN(d.getTime());
+    const monthYear = isValidDate 
+      ? d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+      : 'All Time';
+    const headName = e.head || 'General Receipts';
+    const groupKey = `${headName}___${monthYear}`;
+
+    if (!subsidiaryGroupsMap.has(groupKey)) {
+      subsidiaryGroupsMap.set(groupKey, {
+        key: groupKey,
+        head: headName,
+        monthYear,
+        date: formatDateDDMMYYYY(e.date),
+        totalAmount: 0,
+        items: []
+      });
+    }
+
+    const grp = subsidiaryGroupsMap.get(groupKey)!;
+    grp.totalAmount += e.receiptAmount;
+    grp.date = formatDateDDMMYYYY(e.date);
+    grp.items.push({
+      date: formatDateDDMMYYYY(e.date),
+      particulars: e.particulars,
+      refNo: e.refNo || '--',
+      amount: e.receiptAmount
+    });
+  });
+
+  const subsidiaryGroups = Array.from(subsidiaryGroupsMap.values());
+
+  if (receiptGroupingMode === 'head_wise') {
+    // Grouped by Category/Head & Month (Paper-friendly, manual ledger style)
+    subsidiaryGroups.forEach(grp => {
+      receiptEntries.push({
+        date: grp.monthYear,
+        particulars: `To ${grp.head} - ${grp.monthYear} Collection`,
+        refNo: 'SUB-LDG',
+        head: grp.head,
+        amount: grp.totalAmount,
+        subCount: grp.items.length
+      });
+    });
+  } else {
+    // Member-wise detailed transactions
+    rawReceipts.forEach(e => {
+      receiptEntries.push({
+        date: formatDateDDMMYYYY(e.date),
+        particulars: `To ${e.particulars}`,
+        refNo: e.refNo || '--',
+        head: e.head,
+        amount: e.receiptAmount
+      });
+    });
+  }
+
+  // 2. Prepare CREDIT / PAYMENTS (Cr.) entries
+  const paymentEntries: LedgerSideEntry[] = [];
+
+  cashBookEntries
+    .filter(e => e.type === 'payment')
+    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+    .forEach(e => {
+      paymentEntries.push({
+        date: formatDateDDMMYYYY(e.date),
+        particulars: `By ${e.particulars}`,
+        refNo: e.refNo || '--',
+        head: e.head,
+        amount: e.paymentAmount
+      });
+    });
+
+  // Closing Balance c/d as the balancing row on Cr. side
+  paymentEntries.push({
+    date: dateRangeText.includes('to') ? dateRangeText.split('to')[1].trim() : todayStr,
+    particulars: 'By Closing Balance (C/D) - Cash in Hand / Bank',
+    refNo: 'C/D',
+    head: 'Closing Cash',
+    amount: netBalance
+  });
+
+  const grandDrTotal = openingBalance + totalCollections;
+  const grandCrTotal = totalExpenses + netBalance;
+
+  // Max rows to align both columns evenly
+  const maxRows = Math.max(receiptEntries.length, paymentEntries.length);
+  let rowsHtml = '';
+
+  for (let i = 0; i < maxRows; i++) {
+    const dr = receiptEntries[i];
+    const cr = paymentEntries[i];
+    const rowBg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+    rowsHtml += `
+      <tr style="background: ${rowBg}; border-bottom: 1px solid #cbd5e1;">
+        <!-- DR / RECEIPTS (LEFT HALF) -->
+        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #475569; text-align: center; border-right: 1px solid #e2e8f0; white-space: nowrap;">
+          ${dr ? dr.date : ''}
+        </td>
+        <td style="padding: 6px 7px; font-size: 10px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.35;">
+          ${dr ? `
+            <div style="font-weight: 700; color: #1e3a8a;">${dr.particulars}</div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
+              ${dr.head ? `<span style="font-size: 8.5px; color: #4f46e5; font-weight: 600;">🏷️ ${dr.head}</span>` : ''}
+              ${dr.subCount ? `<span style="font-size: 8px; color: #047857; font-weight: 700; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.5px 4px; border-radius: 3px;">👥 ${dr.subCount} collections</span>` : ''}
+            </div>
+          ` : ''}
+        </td>
+        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; white-space: nowrap;">
+          ${dr ? dr.refNo : ''}
+        </td>
+        <td style="padding: 6px 7px; font-family: monospace; font-weight: 800; font-size: 10.5px; color: #047857; text-align: right; border-right: 2.5px solid #0f172a; white-space: nowrap; background: ${dr ? (dr.refNo === 'B/F' ? '#eff6ff' : '#f0fdf4') : 'transparent'};">
+          ${dr ? `₹${dr.amount.toLocaleString('en-IN')}` : ''}
+        </td>
+
+        <!-- CR / PAYMENTS (RIGHT HALF) -->
+        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #475569; text-align: center; border-right: 1px solid #e2e8f0; white-space: nowrap;">
+          ${cr ? cr.date : ''}
+        </td>
+        <td style="padding: 6px 7px; font-size: 10px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.35;">
+          ${cr ? `
+            <div style="font-weight: 700; color: #9f1239;">${cr.particulars}</div>
+            ${cr.head ? `<span style="font-size: 8.5px; color: #e11d48; font-weight: 600;">🏷️ ${cr.head}</span>` : ''}
+          ` : ''}
+        </td>
+        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; white-space: nowrap;">
+          ${cr ? cr.refNo : ''}
+        </td>
+        <td style="padding: 6px 7px; font-family: monospace; font-weight: 800; font-size: 10.5px; color: #be123c; text-align: right; white-space: nowrap; background: ${cr ? (cr.refNo === 'C/D' ? '#f5f3ff' : '#fff1f2') : 'transparent'};">
+          ${cr ? `₹${cr.amount.toLocaleString('en-IN')}` : ''}
+        </td>
+      </tr>
+    `;
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Manual Cash Book & Ledger • ${orgDisplay}</title>
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 7mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 12px;
+            font-size: 10px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sheet {
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          .header-banner {
+            border: 2px solid #0f172a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .header-title-box {
+            text-align: center;
+            flex: 1;
+          }
+          .ledger-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5px;
+            border: 2px solid #0f172a;
+            page-break-inside: auto;
+          }
+          .ledger-table thead {
+            display: table-header-group;
+          }
+          .ledger-table tfoot {
+            display: table-footer-group;
+          }
+          .ledger-table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .summary-strip {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .summary-card {
+            background: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 7px 10px;
+            text-align: center;
+          }
+          .sign-grid {
+            margin-top: 26px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            text-align: center;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .sign-box {
+            border-top: 1.5px dashed #475569;
+            padding-top: 5px;
+          }
+          .footer-note {
+            margin-top: 16px;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 6px;
+            font-size: 8.5px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          @media print {
+            body {
+              padding: 0 !important;
+              margin: 0 !important;
+              background: #ffffff !important;
+            }
+            .header-banner {
+              margin-top: 0 !important;
+            }
+            .no-print, button, nav, .print-hidden {
+              display: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sheet">
+          <!-- Traditional Ledger Header -->
+          <div class="header-banner">
+            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+              ${logoDisplay 
+                ? `<img src="${logoDisplay}" style="width: 50px; height: 50px; border-radius: 8px; object-fit: cover; border: 1.5px solid #0f172a;" alt="Logo" />` 
+                : `<div style="width: 50px; height: 50px; border-radius: 8px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 20px;">📖</div>`
+              }
+              <div>
+                <h1 style="margin: 0; font-size: 15px; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: 0.3px;">
+                  ${orgDisplay}
+                </h1>
+                <div style="font-size: 10px; font-weight: 700; color: #475569;">📍 ${locationDisplay}</div>
+                <div style="font-size: 9px; color: #64748b;">RonPay Financial Accounting System</div>
+              </div>
+            </div>
+
+            <div class="header-title-box">
+              <div style="display: inline-block; background: #0f172a; color: #ffffff; padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">
+                MANUAL CASH BOOK & LEDGER REGISTER
+              </div>
+              <div style="font-size: 11.5px; font-weight: 800; color: #1e3a8a; margin-top: 3px;">
+                Bawm / Campaign: <u>${campaign.title}</u>
+              </div>
+              <div style="font-size: 9.5px; font-weight: 700; color: #475569; margin-top: 1px;">
+                Hun Bi (Period): <b>${dateRangeText}</b>
+              </div>
+            </div>
+
+            <div style="text-align: right; font-size: 9px; color: #475569; flex-shrink: 0; border-left: 1.5px dashed #cbd5e1; padding-left: 12px;">
+              <div>Register: <b>Two-Column Cash Book</b></div>
+              <div style="margin-top: 2px;">Print Date: <b>${todayStr}</b></div>
+              <div style="color: #047857; font-weight: 900; margin-top: 3px; font-size: 9.5px;">OFFICIAL AUDIT REGISTER</div>
+            </div>
+          </div>
+
+          <!-- The Two-Column Traditional Manual Ledger Table -->
+          <table class="ledger-table">
+            <thead>
+              <!-- Top Row: Dr. vs Cr. Labels -->
+              <tr style="background: #0f172a; color: #ffffff;">
+                <th colspan="4" style="padding: 7px 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; text-align: center; border-right: 2.5px solid #0f172a; background: #064e3b; color: #ffffff;">
+                  Dr. &nbsp;&nbsp; (RECEIPTS / DEBIT / SUM LUT)
+                </th>
+                <th colspan="4" style="padding: 7px 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; text-align: center; background: #881337; color: #ffffff;">
+                  Cr. &nbsp;&nbsp; (PAYMENTS / CREDIT / SUM CHHUAK)
+                </th>
+              </tr>
+              <!-- Column Sub-headers -->
+              <tr style="background: #1e293b; color: #f8fafc; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.3px;">
+                <!-- Debit Columns -->
+                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
+                <th style="padding: 6px 6px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
+                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Ref / Rec No</th>
+                <th style="width: 90px; padding: 6px 6px; border-right: 2.5px solid #0f172a; text-align: right; background: #064e3b;">Amount (₹)</th>
+
+                <!-- Credit Columns -->
+                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
+                <th style="padding: 6px 6px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
+                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Voucher No</th>
+                <th style="width: 90px; padding: 6px 6px; text-align: right; background: #881337;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <!-- Double-lined Grand Total Balancing Row -->
+              <tr style="background: #0f172a; color: #ffffff; font-weight: 900; border-top: 2px solid #000000; border-bottom: 3.5px double #000000;">
+                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155; letter-spacing: 0.3px;">
+                  Grand Total Receipts & Opening (Dr):
+                </td>
+                <td style="padding: 8px 7px; text-align: right; font-family: monospace; font-size: 11.5px; color: #4ade80; border-right: 2.5px solid #ffffff; background: #064e3b; text-decoration: underline; text-underline-offset: 3px;">
+                  ₹${grandDrTotal.toLocaleString('en-IN')}
+                </td>
+                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155; letter-spacing: 0.3px;">
+                  Grand Total Payments & Closing (Cr):
+                </td>
+                <td style="padding: 8px 7px; text-align: right; font-family: monospace; font-size: 11.5px; color: #fda4af; background: #881337; text-decoration: underline; text-underline-offset: 3px;">
+                  ₹${grandCrTotal.toLocaleString('en-IN')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- 4-Pillar Financial Summary Strip -->
+          <div class="summary-strip">
+            <div class="summary-card" style="border-color: #93c5fd; background: #eff6ff;">
+              <span style="font-size: 8px; font-weight: 800; color: #1e40af; text-transform: uppercase; display: block;">1. Opening Balance (B/F)</span>
+              <span style="font-size: 12.5px; font-weight: 900; color: #1e3a8a; margin-top: 2px; display: block;">₹${openingBalance.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #86efac; background: #f0fdf4;">
+              <span style="font-size: 8px; font-weight: 800; color: #166534; text-transform: uppercase; display: block;">2. Total Receipts (+)</span>
+              <span style="font-size: 12.5px; font-weight: 900; color: #15803d; margin-top: 2px; display: block;">₹${totalCollections.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #fecdd3; background: #fff1f2;">
+              <span style="font-size: 8px; font-weight: 800; color: #9f1239; text-transform: uppercase; display: block;">3. Total Payments (-)</span>
+              <span style="font-size: 12.5px; font-weight: 900; color: #be123c; margin-top: 2px; display: block;">₹${totalExpenses.toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-card" style="border-color: #c7d2fe; background: #eef2ff;">
+              <span style="font-size: 8px; font-weight: 800; color: #3730a3; text-transform: uppercase; display: block;">4. Net Closing Balance (C/D)</span>
+              <span style="font-size: 12.5px; font-weight: 900; color: #312e81; margin-top: 2px; display: block;">₹${netBalance.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          <!-- Official Verification Signatures -->
+          <div class="sign-grid">
+            <div class="sign-box">
+              <div style="font-size: 10px; font-weight: 800; color: #0f172a;">${treasurerName}</div>
+              <div style="font-size: 8.5px; color: #475569; margin-top: 1px;">Prepared by (Treasurer / Financial Secretary)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10px; font-weight: 800; color: #0f172a;">${auditorName}</div>
+              <div style="font-size: 8.5px; color: #475569; margin-top: 1px;">Audited & Verified by (Internal Auditor)</div>
+            </div>
+            <div class="sign-box">
+              <div style="font-size: 10px; font-weight: 800; color: #0f172a;">${chairmanName}</div>
+              <div style="font-size: 8.5px; color: #475569; margin-top: 1px;">Approved by (President / Chairman / Secretary)</div>
+            </div>
+          </div>
+
+          <!-- Footer note -->
+          <div class="footer-note">
+            <span>${orgDisplay} • Official Manual-Style Two-Column Cash Book & Ledger</span>
+            <span>Generated on: ${todayStr} • RonPay Financial Accounting System</span>
+          </div>
+
+          <!-- SUBSIDIARY LEDGER: ITEMIZED HEAD RECEIPTS SCHEDULE (Member-wise Breakdown) -->
+          ${includeSubsidiarySchedule && subsidiaryGroups.length > 0 && receiptGroupingMode === 'head_wise' ? `
+            <div style="page-break-before: always; margin-top: 26px;">
+              <div style="border: 2px solid #064e3b; border-radius: 6px; padding: 10px 14px; background: #f0fdf4; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <div style="font-size: 13px; font-weight: 900; color: #064e3b; text-transform: uppercase; letter-spacing: 0.5px;">
+                    📖 SUBSIDIARY CASH LEDGER • ITEMIZED RECEIPTS REGISTER
+                  </div>
+                  <div style="font-size: 9.5px; color: #334155; margin-top: 2px;">
+                    Detailed Member-Wise Collections & Sub-Schedules for Category Totals • <b>${campaign.title}</b> (${dateRangeText})
+                  </div>
+                </div>
+                <div style="font-size: 9.5px; font-weight: 800; color: #064e3b; text-align: right; border-left: 1.5px dashed #a7f3d0; padding-left: 12px;">
+                  <div>Active Heads: <b>${subsidiaryGroups.length} Categories</b></div>
+                  <div style="margin-top: 2px;">Total Members: <b>${rawReceipts.length} collections</b></div>
+                  <div style="font-size: 11px; font-weight: 900; color: #047857; margin-top: 2px;">Sum: ₹${totalCollections.toLocaleString('en-IN')}</div>
+                </div>
+              </div>
+
+              ${subsidiaryGroups.map(grp => `
+                <div style="margin-bottom: 16px; border: 1.5px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+                  <div style="background: #0f172a; color: #ffffff; padding: 6px 12px; font-size: 10px; font-weight: 800; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="letter-spacing: 0.3px;">🏷️ ${grp.head} - ${grp.monthYear} Collection (${grp.items.length} collections)</span>
+                    <span style="color: #4ade80; font-family: monospace; font-size: 11px; font-weight: 900;">Category Sub-Total: ₹${grp.totalAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 9.5px;">
+                    <thead>
+                      <tr style="background: #f1f5f9; color: #334155; border-bottom: 1px solid #cbd5e1; text-transform: uppercase; font-size: 8.5px; font-weight: 800;">
+                        <th style="padding: 5px 8px; text-align: center; width: 75px; border-right: 1px solid #e2e8f0;">Date</th>
+                        <th style="padding: 5px 8px; text-align: left; border-right: 1px solid #e2e8f0;">Donor / Member Name & Narration</th>
+                        <th style="padding: 5px 8px; text-align: center; width: 100px; border-right: 1px solid #e2e8f0;">Ref / Voucher No</th>
+                        <th style="padding: 5px 8px; text-align: right; width: 105px;">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${grp.items.map((it, idx) => `
+                        <tr style="border-bottom: 1px solid #f1f5f9; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                          <td style="padding: 5px 8px; text-align: center; font-family: monospace; color: #475569; border-right: 1px solid #e2e8f0;">${it.date}</td>
+                          <td style="padding: 5px 8px; color: #0f172a; font-weight: 600; border-right: 1px solid #e2e8f0;">${it.particulars}</td>
+                          <td style="padding: 5px 8px; text-align: center; font-family: monospace; color: #64748b; border-right: 1px solid #e2e8f0;">${it.refNo}</td>
+                          <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-weight: 800; color: #047857;">₹${it.amount.toLocaleString('en-IN')}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                    <tfoot>
+                      <tr style="background: #f8fafc; font-weight: 900; border-top: 1.5px solid #0f172a;">
+                        <td colspan="3" style="padding: 6px 8px; text-align: right; font-size: 9.5px; text-transform: uppercase; color: #0f172a; border-right: 1px solid #cbd5e1;">
+                          ${grp.head} Aggregate Sub-Total:
+                        </td>
+                        <td style="padding: 6px 8px; text-align: right; font-family: monospace; color: #047857; font-size: 11px;">
+                          ₹${grp.totalAmount.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+/**
+ * Triggers safe modal print preview & PDF download for Traditional Manual Cash Book & Ledger
+ */
+export const exportManualStyleLedgerPrint = (options: CashBookPrintOptions) => {
+  const html = generateManualStyleLedgerPrintHtml(options);
+  const cleanTarget = (options.campaign.title || options.campaign.orgName || 'ManualLedger')
+    .replace(/[/\\?%*:|"<>]/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+  printHtmlSafely(html, `Manual Ledger • ${options.campaign.orgName || options.campaign.title}`, `RonPay_Manual_Ledger_${cleanTarget}.pdf`);
 };
 
 export interface ExpenditureStatementPrintOptions {
