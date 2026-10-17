@@ -1179,21 +1179,22 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         )}
       </div>
 
-      {/* 5-Tab Segmented Navigation - Clean single bar on mobile & desktop */}
-      <div className="bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl border border-slate-300 flex items-center gap-1 sm:gap-1.5 shadow-2xs overflow-x-auto scrollbar-none">
+      {/* 5-Tab Segmented Navigation - 100% Visible & Balanced on All Screen Sizes */}
+      <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full bg-slate-200/90 p-1 sm:p-1.5 rounded-2xl border border-slate-300 shadow-2xs">
         {/* Tab 1: Hmanral List */}
         <button
           type="button"
           onClick={() => setSubTab('vouchers')}
-          className={`flex-1 min-w-[70px] sm:min-w-[80px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`w-full min-w-0 py-1.5 sm:py-2 px-0.5 sm:px-1.5 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition cursor-pointer select-none ${
             subTab === 'vouchers'
-              ? 'bg-white text-indigo-950 shadow-sm border border-indigo-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              ? 'bg-white text-indigo-950 shadow-sm border border-indigo-200 font-black'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
           }`}
+          title="Hmanral List & Search"
         >
-          <Receipt className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-          <span className="truncate">Hmanral</span>
-          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 font-bold">
+          <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0" />
+          <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Hmanral</span>
+          <span className="text-[8.5px] sm:text-[9.5px] px-1 py-0.2 rounded-full bg-indigo-50 text-indigo-700 font-bold">
             {expenseList.length}
           </span>
         </button>
@@ -1202,56 +1203,60 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         <button
           type="button"
           onClick={() => setSubTab('record_expense')}
-          className={`flex-1 min-w-[75px] sm:min-w-[85px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`w-full min-w-0 py-1.5 sm:py-2 px-0.5 sm:px-1.5 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition cursor-pointer select-none ${
             subTab === 'record_expense'
               ? 'bg-rose-600 text-white shadow-sm border border-rose-700 font-black'
               : 'text-rose-700 hover:text-rose-900 hover:bg-white/60 bg-rose-50/70 border border-rose-200/60 font-bold'
           }`}
+          title="Hmanna Thar Record Rawh"
         >
-          <Plus className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">+ Record</span>
+          <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">+ Record</span>
         </button>
 
         {/* Tab 3: Cash Book & Ledger */}
         <button
           type="button"
           onClick={() => setSubTab('cashbook')}
-          className={`flex-1 min-w-[75px] sm:min-w-[85px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`w-full min-w-0 py-1.5 sm:py-2 px-0.5 sm:px-1.5 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition cursor-pointer select-none ${
             subTab === 'cashbook'
-              ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200 font-black'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
           }`}
+          title="Cash Book & Running Balance"
         >
-          <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="truncate">Cash Book</span>
+          <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
+          <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Cash Book</span>
         </button>
 
         {/* Tab 4: Report & Statement */}
         <button
           type="button"
           onClick={() => setSubTab('statement')}
-          className={`flex-1 min-w-[70px] sm:min-w-[80px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`w-full min-w-0 py-1.5 sm:py-2 px-0.5 sm:px-1.5 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition cursor-pointer select-none ${
             subTab === 'statement'
-              ? 'bg-white text-blue-950 shadow-sm border border-blue-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              ? 'bg-white text-blue-950 shadow-sm border border-blue-200 font-black'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
           }`}
+          title="Statement Print & Audit Report"
         >
-          <Printer className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-          <span className="truncate">Report</span>
+          <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
+          <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Report</span>
         </button>
 
         {/* Tab 5: Setup & Heads */}
         <button
           type="button"
           onClick={() => setSubTab('manage_heads')}
-          className={`flex-1 min-w-[65px] sm:min-w-[75px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`w-full min-w-0 py-1.5 sm:py-2 px-0.5 sm:px-1.5 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition cursor-pointer select-none ${
             subTab === 'manage_heads' || subTab === 'manage_officers'
-              ? 'bg-white text-purple-950 shadow-sm border border-purple-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              ? 'bg-white text-purple-950 shadow-sm border border-purple-200 font-black'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
           }`}
+          title="Heads & Officers Setup"
         >
-          <Tag className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-          <span className="truncate">Setup</span>
+          <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 shrink-0" />
+          <span className="text-[10px] sm:text-xs font-black tracking-tight truncate">Setup</span>
         </button>
       </div>
 
@@ -1283,74 +1288,55 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 )}
               </div>
 
-              {/* Date Presets Quick Pills */}
-              <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 lg:pb-0">
-                {(['all', 'today', 'this_month', 'last_month', 'this_year', 'custom'] as const).map(preset => {
-                  const labels: Record<string, string> = {
-                    all: 'A Zavai',
-                    today: 'Vawiin',
-                    this_month: 'Kumin Thla',
-                    last_month: 'Thla Hmasa',
-                    this_year: 'Kumin (Year)',
-                    custom: 'Custom Range'
-                  };
-                  return (
+              {/* Date Presets Dropdown & Inline Custom Range */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  value={dateFilterPreset}
+                  onChange={(e) => handleDatePresetChange(e.target.value as any)}
+                  className="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-white transition"
+                >
+                  <option value="all">Hun Zavai (All Time)</option>
+                  <option value="this_month">Kumin Thla (This Month)</option>
+                  <option value="last_month">Thla Hmasa (Last Month)</option>
+                  <option value="this_year">Kumin (This Year)</option>
+                  <option value="today">Vawiin (Today)</option>
+                  <option value="custom">Custom Date Range...</option>
+                </select>
+
+                {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl text-xs shadow-2xs">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">From:</span>
+                    <input
+                      type="date"
+                      value={fromDateFilter}
+                      onChange={(e) => {
+                        setFromDateFilter(e.target.value);
+                        setDateFilterPreset('custom');
+                      }}
+                      className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
+                    />
+                    <span className="text-slate-300 font-bold">-</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">To:</span>
+                    <input
+                      type="date"
+                      value={toDateFilter}
+                      onChange={(e) => {
+                        setToDateFilter(e.target.value);
+                        setDateFilterPreset('custom');
+                      }}
+                      className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
+                    />
                     <button
-                      key={preset}
                       type="button"
-                      onClick={() => handleDatePresetChange(preset)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
-                        dateFilterPreset === preset
-                          ? 'bg-indigo-600 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+                      onClick={() => handleDatePresetChange('all')}
+                      className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer ml-1"
                     >
-                      {labels[preset]}
+                      Reset
                     </button>
-                  );
-                })}
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Custom Date Pickers (Shown when custom is selected or dates set) */}
-            {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
-              <div className="p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center gap-2 flex-wrap text-xs">
-                <span className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Custom Date Range:
-                </span>
-                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                  <span className="text-[10px] text-slate-400 font-bold">From:</span>
-                  <input
-                    type="date"
-                    value={fromDateFilter}
-                    onChange={(e) => {
-                      setFromDateFilter(e.target.value);
-                      setDateFilterPreset('custom');
-                    }}
-                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                  <span className="text-[10px] text-slate-400 font-bold">To:</span>
-                  <input
-                    type="date"
-                    value={toDateFilter}
-                    onChange={(e) => {
-                      setToDateFilter(e.target.value);
-                      setDateFilterPreset('custom');
-                    }}
-                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDatePresetChange('all')}
-                  className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer ml-auto"
-                >
-                  Reset Date
-                </button>
-              </div>
-            )}
 
             {/* Row 2: Secondary Filters (Head, Payment Mode, Sort) & Filter Summary */}
             <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
@@ -2334,96 +2320,85 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
             </div>
           </div>
 
-          {/* Report Date & Category Filter Controls (print:hidden) */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 print:hidden">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Hun (Period):
-                </span>
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-                  {(['all', 'today', 'this_month', 'last_month', 'this_year', 'custom'] as const).map(preset => {
-                    const labels: Record<string, string> = {
-                      all: 'A Zavai',
-                      today: 'Vawiin',
-                      this_month: 'Kumin Thla',
-                      last_month: 'Thla Hmasa',
-                      this_year: 'Kumin (Year)',
-                      custom: 'Custom'
-                    };
-                    return (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => handleDatePresetChange(preset)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shrink-0 ${
-                          dateFilterPreset === preset
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                        }`}
-                      >
-                        {labels[preset]}
-                      </button>
-                    );
-                  })}
-                </div>
+          {/* Report Date & Category Filter Controls (print:hidden) - Fel fai, hnawk lo & Custom date awlsam tak */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl print:hidden flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Left: Direct Date Range (From - To) & Quick Preset */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
+                <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Hun Bi (Date Range):</span>
               </div>
 
-              {/* Head Filter */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-purple-600" /> Head:
-                </span>
-                <select
-                  value={selectedHeadFilter}
-                  onChange={(e) => setSelectedHeadFilter(e.target.value)}
-                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none cursor-pointer"
-                >
-                  <option value="all">Heads Zawng Zawng ({expenseHeads.length})</option>
-                  {expenseHeads.map(h => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
+              {/* Direct From - To Date Inputs */}
+              <div className="flex items-center gap-1.5 bg-white border border-slate-300 px-2.5 py-1.5 rounded-xl shadow-2xs">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">From:</span>
+                <input
+                  type="date"
+                  value={fromDateFilter}
+                  onChange={(e) => {
+                    setFromDateFilter(e.target.value);
+                    setDateFilterPreset('custom');
+                  }}
+                  className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  title="A tan ni (Start Date)"
+                />
+                <span className="text-slate-300 font-bold px-0.5">-</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">To:</span>
+                <input
+                  type="date"
+                  value={toDateFilter}
+                  onChange={(e) => {
+                    setToDateFilter(e.target.value);
+                    setDateFilterPreset('custom');
+                  }}
+                  className="text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  title="A tawp ni (End Date)"
+                />
               </div>
-            </div>
 
-            {/* Custom Date Pickers */}
-            {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
-              <div className="pt-2 border-t border-slate-200 flex items-center gap-2 flex-wrap text-xs">
-                <span className="text-[11px] font-bold text-slate-600">Select Range:</span>
-                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                  <span className="text-[10px] text-slate-400 font-bold">From:</span>
-                  <input
-                    type="date"
-                    value={fromDateFilter}
-                    onChange={(e) => {
-                      setFromDateFilter(e.target.value);
-                      setDateFilterPreset('custom');
-                    }}
-                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
-                  <span className="text-[10px] text-slate-400 font-bold">To:</span>
-                  <input
-                    type="date"
-                    value={toDateFilter}
-                    onChange={(e) => {
-                      setToDateFilter(e.target.value);
-                      setDateFilterPreset('custom');
-                    }}
-                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
-                  />
-                </div>
+              {/* Quick Preset Dropdown - Quiet & Unobtrusive */}
+              <select
+                value={dateFilterPreset}
+                onChange={(e) => handleDatePresetChange(e.target.value as any)}
+                className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer hover:border-slate-400 transition"
+                title="Quick Date Presets"
+              >
+                <option value="all">Hun Zavai (All Time)</option>
+                <option value="this_month">Kumin Thla (This Month)</option>
+                <option value="last_month">Thla Hmasa (Last Month)</option>
+                <option value="this_year">Kumin (This Year)</option>
+                <option value="today">Vawiin (Today)</option>
+                <option value="custom">Custom Range</option>
+              </select>
+
+              {(fromDateFilter || toDateFilter || dateFilterPreset !== 'all') && (
                 <button
                   type="button"
                   onClick={() => handleDatePresetChange('all')}
-                  className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer ml-auto"
+                  className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer px-1"
+                  title="Reset date to all time"
                 >
-                  Reset Date
+                  Reset
                 </button>
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Right: Category Head Filter */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5 text-purple-600" /> Head:
+              </span>
+              <select
+                value={selectedHeadFilter}
+                onChange={(e) => setSelectedHeadFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-400 transition"
+              >
+                <option value="all">Heads Zawng Zawng ({expenseHeads.length})</option>
+                {expenseHeads.map(h => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Official Printable Statement Sheet */}

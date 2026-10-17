@@ -1260,13 +1260,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
         {/* Tab Navigation - Ultra-Clean Single Row for Mobile & Desktop */}
         <div className="p-2 sm:p-3 bg-slate-50/95 border-b border-slate-200 shrink-0 space-y-2">
-          <div className="bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 flex items-center gap-1 sm:gap-1.5 shadow-2xs">
+          <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xs">
             {/* Tab 1: Quick Entry (Digit 4) */}
             <button
               type="button"
               id="tab-btn-quick-entry"
               onClick={() => setActiveTab('quick_entry')}
-              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
                 activeTab === 'quick_entry'
                   ? 'bg-white text-indigo-950 shadow-sm border border-indigo-200 font-black'
                   : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
@@ -1282,7 +1282,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               type="button"
               id="tab-btn-register-member"
               onClick={() => setActiveTab('register_member')}
-              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
                 activeTab === 'register_member'
                   ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200 font-black'
                   : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
@@ -1298,7 +1298,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               type="button"
               id="tab-btn-print-reports"
               onClick={() => setActiveTab('print_reports')}
-              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
                 activeTab === 'print_reports'
                   ? 'bg-white text-blue-950 shadow-sm border border-blue-200 font-black'
                   : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
@@ -1314,7 +1314,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               type="button"
               id="tab-btn-members-list"
               onClick={() => setActiveTab('members_list')}
-              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
                 activeTab === 'members_list'
                   ? 'bg-white text-purple-950 shadow-sm border border-purple-200 font-black'
                   : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
@@ -1332,7 +1332,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               type="button"
               id="tab-btn-expenses"
               onClick={() => setActiveTab('expenses')}
-              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
                 activeTab === 'expenses'
                   ? 'bg-white text-rose-950 shadow-md border-2 border-rose-500 font-black ring-2 ring-rose-200'
                   : 'bg-white/80 text-rose-700 border border-rose-300 hover:bg-white font-bold'
