@@ -222,6 +222,11 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   const [showRestoreConfirm, setShowRestoreConfirm] = useState<boolean>(false);
   const [showClearAllVouchersConfirm, setShowClearAllVouchersConfirm] = useState<boolean>(false);
 
+  // Cash Book search, filter & view mode
+  const [cashBookSearch, setCashBookSearch] = useState<string>('');
+  const [cashBookTypeFilter, setCashBookTypeFilter] = useState<'all' | 'receipt' | 'payment'>('all');
+  const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table'>('responsive');
+
   // Notification Toast for user action
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -596,6 +601,26 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       percentage: totalExpenses > 0 ? ((data.total / totalExpenses) * 100).toFixed(1) : '0.0'
     })).sort((a, b) => b.total - a.total);
   }, [expenseHeads, expenseList, totalExpenses]);
+
+  // Filtered Cash Book Entries for quick search, type filtering & responsive rendering
+  const filteredCashBookEntries = useMemo(() => {
+    return cashBookEntries.filter(item => {
+      if (cashBookTypeFilter !== 'all' && item.type !== cashBookTypeFilter) {
+        return false;
+      }
+      if (cashBookSearch) {
+        const q = cashBookSearch.toLowerCase().trim();
+        const matchParticulars = (item.particulars || '').toLowerCase().includes(q);
+        const matchRef = (item.refNo || '').toLowerCase().includes(q);
+        const matchHead = (item.head || '').toLowerCase().includes(q);
+        const matchDate = (item.date || '').toLowerCase().includes(q);
+        if (!matchParticulars && !matchRef && !matchHead && !matchDate) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [cashBookEntries, cashBookSearch, cashBookTypeFilter]);
 
   // Direct Print & PDF Export handlers
   const handlePrintCashBook = () => {
@@ -1036,57 +1061,80 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         </div>
       )}
 
-      {/* Top Banner & Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-3xl shadow-md border border-indigo-900/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-xl bg-indigo-600/40 border border-indigo-400/30 text-indigo-300">
-              <BookOpen className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-black tracking-tight text-white flex items-center gap-2">
-              Pawisa Hman Chhuahna & Cash Book Desk
-            </h2>
-            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-              Kumtluang Ledger
-            </span>
+      {/* Consolidated Financial Hub - High Contrast, Space-Efficient & Mobile-Optimized */}
+      <div className="bg-slate-900 text-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-sm space-y-3">
+        {/* Header row: Title + Live Sync + Balance Badge */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-400 flex items-center justify-center shrink-0">
+              <BookOpen className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-black text-white tracking-tight truncate">
+                  Pawisa Hmanral & Cash Book
+                </h2>
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  netBalance >= 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {netBalance >= 0 ? 'Surplus' : 'Deficit'}
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">
+                {campaign.orgName || campaign.title}
+              </p>
+            </div>
           </div>
-          <p className="text-slate-300 text-xs">
-            {campaign.title} • Sum lakluh, hman chhuah, Cash Book leh Date-wise print felna.
-          </p>
-        </div>
 
-        {/* Sync Status & Role Badge */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={handleManualCloudSync}
-            disabled={isCloudSyncing}
-            className="px-2.5 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 border border-slate-700 text-slate-200 flex items-center gap-1.5 text-[10.5px] font-bold cursor-pointer transition shadow-2xs"
-            title="Hmet la, Mobile App, Web leh Preview atangin live data sync rawh"
-          >
-            <RotateCcw className={`w-3 h-3 text-emerald-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
-            <span>{isCloudSyncing ? 'Syncing Cloud...' : 'Live Cloud Sync (Web & Mobile)'}</span>
-          </button>
-
-          <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold ${
-            permissionStatus.allowed 
-              ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300' 
-              : 'bg-amber-500/20 border-amber-400/40 text-amber-300'
-          }`}>
-            {permissionStatus.allowed ? <ShieldCheck className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-            <span>{permissionStatus.roleName}</span>
+          {/* Sync Button */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            <button
+              type="button"
+              onClick={handleManualCloudSync}
+              disabled={isCloudSyncing}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1.5 text-xs font-bold transition cursor-pointer active:scale-95 shadow-2xs"
+              title="Cloud Live Sync"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 text-emerald-400 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+              <span className="text-[11px] font-bold">{isCloudSyncing ? 'Syncing...' : 'Live Sync'}</span>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* 4-Card Financial Overview (Opening + Collections vs Expenses = Net Balance) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        {/* Card 1: Opening Balance (B/F) */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1 relative">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-500" /> Opening Bal (B/F)
+        {/* 4 Financial Metric Cards - Compact Grid for Mobile (2x2) and Desktop (4 cols) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          {/* 1. Balance Kawl Lai */}
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl">
+            <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">Balance Kawl Lai</span>
+            <span className="text-sm sm:text-lg font-black text-white block mt-0.5 truncate">
+              ₹{netBalance.toLocaleString('en-IN')}
             </span>
+          </div>
+
+          {/* 2. Sum Lut (Receipts) */}
+          <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
+            <span className="text-[9.5px] font-bold text-emerald-300 uppercase tracking-wider block">Sum Lut (Receipts)</span>
+            <span className="text-sm sm:text-lg font-black text-emerald-400 block mt-0.5 truncate">
+              ₹{totalCollections.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          {/* 3. Hmanral (Expenses) */}
+          <div className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+            <span className="text-[9.5px] font-bold text-rose-300 uppercase tracking-wider block">Hmanral (Expenses)</span>
+            <span className="text-sm sm:text-lg font-black text-rose-400 block mt-0.5 truncate">
+              -₹{totalExpenses.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          {/* 4. Opening Bal (B/F) */}
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-xl flex items-center justify-between">
+            <div className="min-w-0">
+              <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">Opening (B/F)</span>
+              <span className="text-sm sm:text-lg font-black text-slate-200 block mt-0.5 truncate">
+                ₹{openingBalance.toLocaleString('en-IN')}
+              </span>
+            </div>
             {permissionStatus.allowed && !isEditingOpeningBalance && (
               <button
                 type="button"
@@ -1094,262 +1142,153 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                   setTempOpeningBalance(String(openingBalance));
                   setIsEditingOpeningBalance(true);
                 }}
-                className="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 text-[10px] font-bold cursor-pointer transition shrink-0 ml-1"
               >
                 Set
               </button>
             )}
           </div>
-          {isEditingOpeningBalance ? (
-            <div className="flex items-center gap-1 pt-0.5">
-              <span className="text-xs font-black text-slate-400">₹</span>
-              <input
-                type="number"
-                value={tempOpeningBalance}
-                onChange={(e) => setTempOpeningBalance(e.target.value)}
-                className="w-20 px-1.5 py-0.5 border border-indigo-400 rounded text-xs font-bold"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={handleSaveOpeningBalance}
-                className="p-1 bg-indigo-600 text-white rounded text-[10px] font-bold"
-              >
-                ✓
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsEditingOpeningBalance(false)}
-                className="p-1 bg-slate-200 text-slate-700 rounded text-[10px]"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="text-lg font-black text-slate-900 tracking-tight">
-              ₹{openingBalance.toLocaleString('en-IN')}
-            </div>
-          )}
-          <p className="text-[9.5px] text-slate-400 truncate">
-            Kum tir / Hma lama sum la awm
-          </p>
         </div>
 
-        {/* Card 2: Total Collections */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-              <TrendingUp className="w-3 h-3 text-emerald-600" /> Sum Lut (Receipts)
-            </span>
-            <span className="text-[8.5px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700">
-              Donations
-            </span>
+        {/* Inline Opening Balance Editor */}
+        {isEditingOpeningBalance && (
+          <div className="p-2.5 bg-indigo-950/80 border border-indigo-500/40 rounded-xl flex items-center gap-2 text-xs flex-wrap">
+            <span className="font-bold text-indigo-200 text-xs">Opening Bal (B/F): ₹</span>
+            <input
+              type="number"
+              value={tempOpeningBalance}
+              onChange={(e) => setTempOpeningBalance(e.target.value)}
+              className="w-28 px-2.5 py-1 bg-slate-900 border border-indigo-400 rounded-lg text-xs font-bold text-white outline-none"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={handleSaveOpeningBalance}
+              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsEditingOpeningBalance(false)}
+              className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg text-xs cursor-pointer hover:bg-slate-700"
+            >
+              Cancel
+            </button>
           </div>
-          <div className="text-lg font-black text-emerald-700 tracking-tight">
-            ₹{totalCollections.toLocaleString('en-IN')}
-          </div>
-          <p className="text-[9.5px] text-slate-400 truncate">
-            Member thawh & QR donation
-          </p>
-        </div>
-
-        {/* Card 3: Total Expenses */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-              <TrendingDown className="w-3 h-3 text-rose-600" /> Sum Chhuak (Expenses)
-            </span>
-            <span className="text-[8.5px] font-extrabold px-1.5 py-0.2 rounded bg-rose-50 text-rose-700">
-              {expenseList.length} Vouchers
-            </span>
-          </div>
-          <div className="text-lg font-black text-rose-600 tracking-tight">
-            -₹{totalExpenses.toLocaleString('en-IN')}
-          </div>
-          <p className="text-[9.5px] text-slate-400 truncate">
-            Hman chhuah zawng zawng
-          </p>
-        </div>
-
-        {/* Card 4: Net Balance */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
-              <Scale className="w-3 h-3 text-indigo-600" /> Balance Kawl Lai
-            </span>
-            <span className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded ${
-              netBalance >= 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-rose-50 text-rose-700'
-            }`}>
-              {netBalance >= 0 ? 'Surplus' : 'Deficit'}
-            </span>
-          </div>
-          <div className={`text-lg font-black tracking-tight ${netBalance >= 0 ? 'text-indigo-900' : 'text-rose-700'}`}>
-            ₹{netBalance.toLocaleString('en-IN')}
-          </div>
-          <p className="text-[9.5px] text-slate-400 truncate">
-            Cash in hand & Bank balance
-          </p>
-        </div>
+        )}
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-1 overflow-x-auto no-scrollbar">
+      {/* 5-Tab Segmented Navigation - Clean single bar on mobile & desktop */}
+      <div className="bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl border border-slate-300 flex items-center gap-1 sm:gap-1.5 shadow-2xs overflow-x-auto scrollbar-none">
+        {/* Tab 1: Hmanral List */}
         <button
           type="button"
           onClick={() => setSubTab('vouchers')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+          className={`flex-1 min-w-[70px] sm:min-w-[80px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
             subTab === 'vouchers'
-              ? 'bg-indigo-600 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-white text-indigo-950 shadow-sm border border-indigo-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <Receipt className="w-3.5 h-3.5" />
-          <span>Vouchers List ({expenseList.length})</span>
+          <Receipt className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+          <span className="truncate">Hmanral</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 font-bold">
+            {expenseList.length}
+          </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setSubTab('cashbook')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
-            subTab === 'cashbook'
-              ? 'bg-emerald-600 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>Cash Book & Ledger (Sum Vawnna)</span>
-        </button>
-
+        {/* Tab 2: + Hmanna Thar */}
         <button
           type="button"
           onClick={() => setSubTab('record_expense')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+          className={`flex-1 min-w-[75px] sm:min-w-[85px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
             subTab === 'record_expense'
-              ? 'bg-rose-600 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-rose-600 text-white shadow-sm border border-rose-700 font-black'
+              : 'text-rose-700 hover:text-rose-900 hover:bg-white/60 bg-rose-50/70 border border-rose-200/60 font-bold'
           }`}
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Hmanna Thar Record (+ Add)</span>
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">+ Record</span>
         </button>
 
+        {/* Tab 3: Cash Book & Ledger */}
         <button
           type="button"
-          onClick={() => setSubTab('manage_heads')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
-            subTab === 'manage_heads'
-              ? 'bg-purple-600 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          onClick={() => setSubTab('cashbook')}
+          className={`flex-1 min-w-[75px] sm:min-w-[85px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+            subTab === 'cashbook'
+              ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <Tag className="w-3.5 h-3.5" />
-          <span>Expense Heads ({expenseHeads.length})</span>
+          <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="truncate">Cash Book</span>
         </button>
 
+        {/* Tab 4: Report & Statement */}
         <button
           type="button"
           onClick={() => setSubTab('statement')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+          className={`flex-1 min-w-[70px] sm:min-w-[80px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
             subTab === 'statement'
-              ? 'bg-indigo-900 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-white text-blue-950 shadow-sm border border-blue-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Date-wise Statement Print</span>
+          <Printer className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          <span className="truncate">Report</span>
         </button>
 
+        {/* Tab 5: Setup & Heads */}
         <button
           type="button"
-          onClick={() => setSubTab('manage_officers')}
-          className={`px-3 py-2 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ml-auto ${
-            subTab === 'manage_officers'
-              ? 'bg-slate-900 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          onClick={() => setSubTab('manage_heads')}
+          className={`flex-1 min-w-[65px] sm:min-w-[75px] py-1.5 px-1 sm:px-2 rounded-xl text-xs font-black transition cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+            subTab === 'manage_heads' || subTab === 'manage_officers'
+              ? 'bg-white text-purple-950 shadow-sm border border-purple-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <Users className="w-3.5 h-3.5" />
-          <span>Authorized Officers</span>
+          <Tag className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+          <span className="truncate">Setup</span>
         </button>
       </div>
 
-      {/* SUB-TAB 1: VOUCHERS LIST WITH DATE-WISE FILTERING & EDITING */}
+      {/* SUB-TAB 1: VOUCHERS LIST WITH CLEAR, INTUITIVE FILTERING */}
       {subTab === 'vouchers' && (
         <div className="space-y-3 animate-fadeIn">
-          {/* Date-wise & Search Filter Panel (Requirement 3) */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5">
-            {/* Row 1: Search Box & Sort */}
-            <div className="flex flex-col sm:flex-row gap-2 items-center justify-between">
-              <div className="relative w-full sm:w-80">
+          {/* Streamlined Search & Filter Panel */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            {/* Row 1: Search Box + Date Presets */}
+            <div className="flex flex-col lg:flex-row gap-2.5 items-stretch lg:items-center justify-between">
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-md">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search purpose, payee, voucher no, ref..."
+                  placeholder="Zawnna (Search purpose, payee, voucher no, ref...)"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-8 py-2 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-medium"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
                   >
                     ✕
                   </button>
                 )}
               </div>
 
-              {/* Sort Order Selector */}
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                  <ArrowUpDown className="w-3 h-3" /> Sort:
-                </span>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as any)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                >
-                  <option value="date_desc">Date: Newest First</option>
-                  <option value="date_asc">Date: Oldest First</option>
-                  <option value="amount_desc">Amount: High to Low</option>
-                  <option value="amount_asc">Amount: Low to High</option>
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => setSubTab('record_expense')}
-                  className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Hmanna Thar</span>
-                </button>
-
-                {expenseList.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowClearAllVouchersConfirm(true)}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-700 font-bold text-xs flex items-center gap-1 border border-slate-200 transition cursor-pointer shrink-0"
-                    title="Bawm expenditure zawng zawng paih fai vekna"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                    <span>Paih Fai Vek</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Row 2: Date Filters & Presets (Date-wise feature) */}
-            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 justify-between">
-              {/* Preset buttons */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className="text-[10px] font-bold text-slate-400 mr-1 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-slate-500" /> Date Filter:
-                </span>
+              {/* Date Presets Quick Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 lg:pb-0">
                 {(['all', 'today', 'this_month', 'last_month', 'this_year', 'custom'] as const).map(preset => {
                   const labels: Record<string, string> = {
-                    all: 'A Zavai (All)',
-                    today: 'Vawiin (Today)',
+                    all: 'A Zavai',
+                    today: 'Vawiin',
                     this_month: 'Kumin Thla',
                     last_month: 'Thla Hmasa',
                     this_year: 'Kumin (Year)',
@@ -1360,7 +1299,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       key={preset}
                       type="button"
                       onClick={() => handleDatePresetChange(preset)}
-                      className={`px-2 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
                         dateFilterPreset === preset
                           ? 'bg-indigo-600 text-white shadow-2xs'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1371,10 +1310,15 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                   );
                 })}
               </div>
+            </div>
 
-              {/* Custom Date Pickers (From - To) */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl">
+            {/* Custom Date Pickers (Shown when custom is selected or dates set) */}
+            {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
+              <div className="p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Custom Date Range:
+                </span>
+                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
                   <span className="text-[10px] text-slate-400 font-bold">From:</span>
                   <input
                     type="date"
@@ -1383,10 +1327,10 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       setFromDateFilter(e.target.value);
                       setDateFilterPreset('custom');
                     }}
-                    className="text-[11px] font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
+                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
                   />
                 </div>
-                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl">
+                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
                   <span className="text-[10px] text-slate-400 font-bold">To:</span>
                   <input
                     type="date"
@@ -1395,133 +1339,179 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       setToDateFilter(e.target.value);
                       setDateFilterPreset('custom');
                     }}
-                    className="text-[11px] font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
+                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
                   />
                 </div>
-                {(fromDateFilter || toDateFilter) && (
+                <button
+                  type="button"
+                  onClick={() => handleDatePresetChange('all')}
+                  className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer ml-auto"
+                >
+                  Reset Date
+                </button>
+              </div>
+            )}
+
+            {/* Row 2: Secondary Filters (Head, Payment Mode, Sort) & Filter Summary */}
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={selectedHeadFilter}
+                  onChange={(e) => setSelectedHeadFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value="all">Heads Zawng Zawng ({expenseHeads.length})</option>
+                  {expenseHeads.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedModeFilter}
+                  onChange={(e) => setSelectedModeFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value="all">Payment Mode (All)</option>
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">PhonePe / UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value="date_desc">Ni (Date): Thar Ber Hmasa</option>
+                  <option value="date_asc">Ni (Date): Hma Ber Hmasa</option>
+                  <option value="amount_desc">Amount: Tam Ber Hmasa</option>
+                  <option value="amount_asc">Amount: Tlem Ber Hmasa</option>
+                </select>
+
+                {(searchQuery || selectedHeadFilter !== 'all' || selectedModeFilter !== 'all' || dateFilterPreset !== 'all' || fromDateFilter || toDateFilter) && (
                   <button
                     type="button"
-                    onClick={() => handleDatePresetChange('all')}
-                    className="text-[10px] text-rose-600 font-bold hover:underline px-1 cursor-pointer"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedHeadFilter('all');
+                      setSelectedModeFilter('all');
+                      handleDatePresetChange('all');
+                    }}
+                    className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
                   >
-                    Reset Date
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Counter summary */}
+              <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5 bg-slate-50 px-3 py-1 rounded-xl border border-slate-200">
+                <span>Vouchers: <strong className="text-slate-900">{filteredExpenses.length}</strong></span>
+                <span>•</span>
+                <span>Total: <strong className="text-rose-600 font-black">₹{filteredTotalExpenses.toLocaleString('en-IN')}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Vouchers List / Empty State */}
+          {filteredExpenses.length === 0 ? (
+            <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-2xs">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center border border-rose-100 shadow-xs">
+                <Receipt className="w-7 h-7" />
+              </div>
+              <h4 className="font-black text-slate-800 text-base">
+                Expense Voucher engmah hmuh a ni rih lo
+              </h4>
+              <p className="text-slate-500 text-xs max-w-md mx-auto leading-relaxed">
+                {fromDateFilter || toDateFilter || searchQuery || selectedHeadFilter !== 'all' || selectedModeFilter !== 'all'
+                  ? 'I filter zawnna mil voucher a awm lo e. Filter dang thlang la emaw Reset rawh le.'
+                  : 'Bawm atanga pawisa hman chhuah a awm chuan a chunga "+ Hmanna Thar" hmet hian record rawh le.'}
+              </p>
+              <div className="pt-2 flex items-center justify-center gap-2">
+                {(fromDateFilter || toDateFilter || searchQuery || selectedHeadFilter !== 'all' || selectedModeFilter !== 'all') ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDatePresetChange('all');
+                      setSelectedHeadFilter('all');
+                      setSelectedModeFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
+                  >
+                    Reset All Filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSubTab('record_expense')}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Hmanna Thar Record Rawh</span>
                   </button>
                 )}
               </div>
             </div>
-
-            {/* Row 3: Category & Payment Mode Dropdowns */}
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedHeadFilter}
-                onChange={(e) => setSelectedHeadFilter(e.target.value)}
-                className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-              >
-                <option value="all">Heads Zawng Zawng ({expenseHeads.length})</option>
-                {expenseHeads.map(h => (
-                  <option key={h} value={h}>{h}</option>
-                ))}
-              </select>
-
-              <select
-                value={selectedModeFilter}
-                onChange={(e) => setSelectedModeFilter(e.target.value)}
-                className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-              >
-                <option value="all">Payment Mode (All)</option>
-                <option value="Cash">Cash</option>
-                <option value="UPI">PhonePe / UPI</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Cheque">Cheque</option>
-              </select>
-
-              {/* Filter result summary */}
-              <span className="ml-auto text-[10.5px] font-bold text-slate-500">
-                Filtered: <strong className="text-slate-900">{filteredExpenses.length}</strong> Vouchers • Total: <strong className="text-rose-600">₹{filteredTotalExpenses.toLocaleString('en-IN')}</strong>
-              </span>
-            </div>
-          </div>
-
-          {/* Vouchers Cards List */}
-          {filteredExpenses.length === 0 ? (
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 text-center space-y-2 shadow-2xs">
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                <Receipt className="w-6 h-6" />
-              </div>
-              <h4 className="font-black text-slate-800 text-sm">
-                Expense Voucher engmah hmuh a ni rih lo
-              </h4>
-              <p className="text-slate-500 text-xs max-w-sm mx-auto">
-                {fromDateFilter || toDateFilter || searchQuery || selectedHeadFilter !== 'all'
-                  ? 'I filter zawnna mil voucher a awm lo e. Filter dang thlang la emaw Reset rawh le.'
-                  : 'Bawm atanga pawisa hman chhuah a awm chuan a chunga "Hmanna Thar Record" hmet hian record rawh le.'}
-              </p>
-              {(fromDateFilter || toDateFilter || searchQuery || selectedHeadFilter !== 'all') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDatePresetChange('all');
-                    setSelectedHeadFilter('all');
-                    setSelectedModeFilter('all');
-                    setSearchQuery('');
-                  }}
-                  className="mt-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {filteredExpenses.map((exp) => (
                 <div
                   key={exp.id}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition space-y-2.5"
+                  className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition space-y-3"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <span className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 shrink-0 mt-0.5">
-                        <TrendingDown className="w-4 h-4" />
-                      </span>
-                      <div className="min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Left: Info */}
+                    <div className="flex items-start gap-3 min-w-0">
+                      {/* Date Badge */}
+                      <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-center shrink-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Date</span>
+                        <span className="text-xs font-black text-slate-800 font-mono">
+                          {formatDateDDMMYYYY(exp.spentDate)}
+                        </span>
+                      </div>
+
+                      <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-black text-slate-900 text-xs">
+                          <span className="font-black text-slate-900 text-sm">
                             {exp.purpose}
                           </span>
-                          <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200">
                             {exp.head}
                           </span>
-                          <span className="text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
                             {exp.voucherNo || 'VCH'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          Paid To: <strong className="text-slate-700">{exp.paidTo}</strong> • Mode: <span className="font-semibold text-slate-700">{exp.paymentMode}</span>
-                          {exp.referenceNo && <span> • Ref: <span className="font-mono text-slate-600">{exp.referenceNo}</span></span>}
+                        <p className="text-xs text-slate-600 font-medium">
+                          Tu hnenah: <strong className="text-slate-800">{exp.paidTo}</strong> • Mode: <span className="font-bold text-slate-700">{exp.paymentMode}</span>
+                          {exp.referenceNo && <span> • Ref: <span className="font-mono text-slate-700">{exp.referenceNo}</span></span>}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0 sm:self-center pl-8 sm:pl-0">
-                      <div className="text-right">
-                        <div className="text-sm font-black text-rose-600">
+                    {/* Right: Amount & Actions */}
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <div className="text-left sm:text-right">
+                        <div className="text-base sm:text-lg font-black text-rose-600 tracking-tight">
                           -₹{exp.amount?.toLocaleString('en-IN')}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">
-                          {formatDateDDMMYYYY(exp.spentDate)}
+                          Recorded by: {exp.recordedBy || 'Official'}
                         </div>
                       </div>
 
-                      {/* Action buttons: Print Slip, Edit, Delete, View Receipt */}
-                      <div className="flex items-center gap-1">
+                      {/* Action buttons: Print Slip, View Receipt, Edit, Delete */}
+                      <div className="flex items-center gap-1.5">
                         {/* Print Individual Voucher Slip */}
                         <button
                           type="button"
                           onClick={() => setPrintingVoucher(exp)}
-                          className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition cursor-pointer"
+                          className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition cursor-pointer"
                           title="Print Payment Voucher Slip"
                         >
-                          <Printer className="w-3.5 h-3.5" />
+                          <Printer className="w-3.5 h-3.5 text-blue-600" />
                         </button>
 
                         {/* View Receipt Image */}
@@ -1529,7 +1519,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           <button
                             type="button"
                             onClick={() => setPreviewReceiptUrl(exp.attachmentUrl || null)}
-                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer"
+                            className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer"
                             title="View Receipt Attachment"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -1540,7 +1530,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         <button
                           type="button"
                           onClick={() => handleOpenEditExpense(exp)}
-                          className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition cursor-pointer flex items-center gap-1 text-[11px] font-bold"
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
                           title="Voucher siamtha rawh"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1551,7 +1541,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         <button
                           type="button"
                           onClick={() => handleDeleteExpense(exp.id)}
-                          className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer flex items-center gap-1 text-[11px] font-bold"
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
                           title="Voucher paih rawh"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1560,11 +1550,6 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                       </div>
                     </div>
                   </div>
-
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                    <span>Recorded by: <strong>{exp.recordedBy}</strong></span>
-                    <span>Date: {formatDateDDMMYYYY(exp.spentDate)}</span>
-                  </div>
                 </div>
               ))}
             </div>
@@ -1572,35 +1557,35 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         </div>
       )}
 
-      {/* SUB-TAB 2: CASH BOOK & LEDGER VIEW (Requirement 4) */}
+      {/* SUB-TAB 3: CASH BOOK & LEDGER VIEW (High Polish, Mobile-Optimized) */}
       {subTab === 'cashbook' && (
-        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-2xs space-y-4 animate-fadeIn">
-          {/* Header & Print Button */}
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4 animate-fadeIn">
+          {/* Header & Quick Action Buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                 <BookOpen className="w-4 h-4 text-emerald-600" /> Cash Book & Ledger (Sum Vawnna Lehkhabu)
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 font-medium">
                 Opening Balance, Sum Lut (Receipts), Sum Chhuak (Payments), leh Running Balance vawn felna.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={handlePrintCashBook}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 title="Print official Cash Book with Running Balances"
               >
-                <Printer className="w-3.5 h-3.5" /> Print Cash Book
+                <Printer className="w-3.5 h-3.5" /> Print Book
               </button>
               <button
                 type="button"
                 onClick={handleDownloadCashBookPDF}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 title="Download Cash Book as A4 PDF"
               >
-                <Download className="w-3.5 h-3.5" /> PDF Download
+                <Download className="w-3.5 h-3.5" /> PDF
               </button>
               <button
                 type="button"
@@ -1613,47 +1598,54 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
               <button
                 type="button"
                 onClick={() => setSubTab('statement')}
-                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer border border-rose-200"
                 title="View Date-wise Expenditure Statement"
               >
-                <FileText className="w-3.5 h-3.5 text-rose-600" /> Expense Statement
+                <FileText className="w-3.5 h-3.5 text-rose-600" /> Statement
               </button>
             </div>
           </div>
 
-          {/* Cash Book Summary Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-            <div>
+          {/* Cash Book 4-Pillar Financial Summary Strip */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
               <span className="text-[9.5px] font-bold text-slate-500 block uppercase">1. Opening Balance (B/F)</span>
-              <span className="text-xs font-black text-slate-800">₹{openingBalance.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800">₹{openingBalance.toLocaleString('en-IN')}</span>
             </div>
-            <div>
-              <span className="text-[9.5px] font-bold text-emerald-600 block uppercase">2. Total Receipts (+)</span>
-              <span className="text-xs font-black text-emerald-700">₹{totalCollections.toLocaleString('en-IN')}</span>
+            <div className="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200/80">
+              <span className="text-[9.5px] font-bold text-emerald-700 block uppercase">2. Total Receipts (+)</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-700">₹{totalCollections.toLocaleString('en-IN')}</span>
             </div>
-            <div>
-              <span className="text-[9.5px] font-bold text-rose-600 block uppercase">3. Total Payments (-)</span>
-              <span className="text-xs font-black text-rose-600">₹{totalExpenses.toLocaleString('en-IN')}</span>
+            <div className="bg-rose-50/60 p-2.5 rounded-xl border border-rose-200/80">
+              <span className="text-[9.5px] font-bold text-rose-700 block uppercase">3. Total Payments (-)</span>
+              <span className="text-xs sm:text-sm font-black text-rose-700">₹{totalExpenses.toLocaleString('en-IN')}</span>
             </div>
-            <div>
+            <div className="bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-200/80">
               <span className="text-[9.5px] font-bold text-indigo-900 block uppercase">4. Closing Cash Balance (=)</span>
-              <span className="text-xs font-black text-indigo-950">₹{netBalance.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-indigo-950">₹{netBalance.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
           {/* Head-wise Ledger Breakdown (Trial Balance / Category totals) */}
           <div className="space-y-2">
-            <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-purple-600" /> Head-Wise Expenditure Ledger (Hmanna Category Tlangpui)
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-purple-600" /> Head-Wise Ledger (Hmanna Category Tlangpui)
+              </h4>
+              <span className="text-[10px] text-slate-400 font-bold">
+                {headLedgerSummary.filter(h => h.total > 0).length} Active Categories
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {headLedgerSummary.map(item => (
-                <div key={item.head} className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 flex justify-between items-center">
+                <div key={item.head} className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex justify-between items-center transition">
                   <div className="min-w-0 pr-2">
                     <span className="text-xs font-bold text-slate-800 block truncate">{item.head}</span>
-                    <span className="text-[10px] text-slate-400">{item.count} voucher{item.count === 1 ? '' : 's'} ({item.percentage}%)</span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {item.count} voucher{item.count === 1 ? '' : 's'} · {item.percentage}%
+                    </span>
                   </div>
-                  <span className="text-xs font-black text-rose-600 shrink-0">
+                  <span className={`text-xs font-black shrink-0 ${item.total > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                     ₹{item.total.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -1661,48 +1653,192 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
             </div>
           </div>
 
-          {/* Chronological Unified Cash Book Table */}
-          <div className="space-y-2 pt-2">
-            <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" /> Daily Cash Transactions & Running Balance
-            </h4>
-            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="p-2.5">Date</th>
-                    <th className="p-2.5">Type</th>
-                    <th className="p-2.5">Voucher / Ref</th>
-                    <th className="p-2.5">Particulars / Narration</th>
-                    <th className="p-2.5 text-right">Receipt (₹)</th>
-                    <th className="p-2.5 text-right">Payment (₹)</th>
-                    <th className="p-2.5 text-right">Balance (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {/* Opening Balance Row */}
-                  {openingBalance > 0 && (
-                    <tr className="bg-indigo-50/40 font-bold text-indigo-950">
-                      <td className="p-2.5 font-mono text-[10.5px]">--</td>
-                      <td className="p-2.5">
-                        <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-extrabold">B/F</span>
-                      </td>
-                      <td className="p-2.5 font-mono text-[10.5px]">OPENING</td>
-                      <td className="p-2.5 font-bold">Opening Balance in Hand / Bank B/F</td>
-                      <td className="p-2.5 text-right font-black text-emerald-700">₹{openingBalance.toLocaleString('en-IN')}</td>
-                      <td className="p-2.5 text-right">--</td>
-                      <td className="p-2.5 text-right font-black text-indigo-950">₹{openingBalance.toLocaleString('en-IN')}</td>
-                    </tr>
-                  )}
+          {/* Cash Book Toolbar: Search + Type Filter + View Mode Toggle */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cash Book zawnna (Particulars, Ref, Head, Date...)"
+                  value={cashBookSearch}
+                  onChange={(e) => setCashBookSearch(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl pl-8.5 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 outline-none font-medium"
+                />
+                {cashBookSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCashBookSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
-                  {cashBookEntries.length === 0 ? (
+              {/* Type Filter Buttons */}
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setCashBookTypeFilter('all')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                    cashBookTypeFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  A Zavai ({cashBookEntries.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookTypeFilter('receipt')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                    cashBookTypeFilter === 'receipt'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-slate-200'
+                  }`}
+                >
+                  Receipts (+)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookTypeFilter('payment')}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                    cashBookTypeFilter === 'payment'
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'bg-white text-rose-700 hover:bg-rose-50 border border-slate-200'
+                  }`}
+                >
+                  Payments (-)
+                </button>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-xl shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setCashBookViewMode('responsive')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    cashBookViewMode === 'responsive'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookViewMode('table')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    cashBookViewMode === 'table'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Table
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Chronological Unified Cash Book List / Table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-bold px-1">
+              <span>Transactions: <strong className="text-slate-900">{filteredCashBookEntries.length}</strong></span>
+              <span className="text-[11px] text-slate-400">Chronological with Running Balance</span>
+            </div>
+
+            {/* Opening Balance Card (Always shown if openingBalance > 0 and no strict search filter) */}
+            {openingBalance > 0 && (!cashBookSearch || cashBookSearch.toLowerCase().includes('open')) && (
+              <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0">
+                    B/F
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-black text-xs text-indigo-950 block truncate">
+                      Opening Balance in Hand / Bank (Brought Forward)
+                    </span>
+                    <span className="text-[10px] text-indigo-700 font-medium">Initial Fund Setup</span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-black text-emerald-700 block">+₹{openingBalance.toLocaleString('en-IN')}</span>
+                  <span className="text-[10px] font-bold text-indigo-900">Bal: ₹{openingBalance.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            )}
+
+            {filteredCashBookEntries.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 italic bg-slate-50 rounded-2xl border border-slate-200">
+                Cash book entry a la awm lo emaw i zawnna mil a awm lo e.
+              </div>
+            ) : cashBookViewMode === 'responsive' ? (
+              /* Mobile & Small Screen Optimized Card Layout */
+              <div className="space-y-2">
+                {filteredCashBookEntries.map((item) => (
+                  <div
+                    key={`${item.type}-${item.id}`}
+                    className="p-3 bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 shadow-2xs space-y-2 transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10.5px] font-mono text-slate-500 font-bold">
+                          {formatDateDDMMYYYY(item.date)}
+                        </span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-black uppercase ${
+                          item.type === 'receipt'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {item.type === 'receipt' ? 'Receipt (+)' : 'Payment (-)'}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-100 px-1.5 py-0.2 rounded">
+                          {item.refNo}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-xs sm:text-sm font-black ${
+                          item.type === 'receipt' ? 'text-emerald-700' : 'text-rose-600'
+                        }`}>
+                          {item.type === 'receipt' ? `+₹${item.receiptAmount.toLocaleString('en-IN')}` : `-₹${item.paymentAmount.toLocaleString('en-IN')}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      <div className="min-w-0 pr-2">
+                        <p className="text-xs font-bold text-slate-800 truncate">{item.particulars}</p>
+                        <p className="text-[10px] text-purple-700 font-medium truncate">{item.head}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[9.5px] text-slate-400 font-bold block">Running Balance:</span>
+                        <span className="text-xs font-black text-indigo-950">
+                          ₹{item.runningBalance.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Traditional Full Ledger Table (Scrollable on small screens) */
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase border-b border-slate-200">
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-slate-400 italic">
-                        Cash book entry a la awm lo.
-                      </td>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Type</th>
+                      <th className="p-2.5">Voucher / Ref</th>
+                      <th className="p-2.5">Particulars / Narration</th>
+                      <th className="p-2.5 text-right">Receipt (₹)</th>
+                      <th className="p-2.5 text-right">Payment (₹)</th>
+                      <th className="p-2.5 text-right">Balance (₹)</th>
                     </tr>
-                  ) : (
-                    cashBookEntries.map((item) => (
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredCashBookEntries.map((item) => (
                       <tr key={`${item.type}-${item.id}`} className="hover:bg-slate-50 transition">
                         <td className="p-2.5 font-mono text-[10.5px] text-slate-600 whitespace-nowrap">
                           {formatDateDDMMYYYY(item.date)}
@@ -1737,11 +1873,11 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           ₹{item.runningBalance.toLocaleString('en-IN')}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2150,39 +2286,40 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
         </div>
       )}
 
-      {/* SUB-TAB 5: DATE-WISE STATEMENT PRINT (Requirement 3) */}
+      {/* SUB-TAB 4: DATE-WISE STATEMENT & AUDIT REPORT */}
       {subTab === 'statement' && (
-        <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-4 animate-fadeIn">
+        <div className="bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xs space-y-4 animate-fadeIn">
+          {/* Action Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 print:hidden">
             <div>
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                 <Printer className="w-4 h-4 text-emerald-600" /> Date-Wise Expenditure & Audit Statement
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Official statement print chhuahna leh audit theih tura buatsaih (Date filter mil zelin).
+              <p className="text-[11px] text-slate-500 font-medium">
+                Official statement buatsaihna, print chhuahna, leh audit theih tura fel taka remkhawm.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={handlePrintExpenseStatement}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 title="Print or Preview Statement"
               >
-                <Printer className="w-3.5 h-3.5" /> Print Statement Now
+                <Printer className="w-3.5 h-3.5" /> Print Statement
               </button>
               <button
                 type="button"
                 onClick={handleDownloadExpenseStatementPDF}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 title="Download Statement as PDF"
               >
-                <Download className="w-3.5 h-3.5" /> PDF Download
+                <Download className="w-3.5 h-3.5" /> PDF
               </button>
               <button
                 type="button"
                 onClick={handleExportExpenseCSV}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
                 title="Export Vouchers to CSV / Excel"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> CSV
@@ -2190,24 +2327,116 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
               <button
                 type="button"
                 onClick={() => setSubTab('vouchers')}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
               >
                 Back
               </button>
             </div>
           </div>
 
+          {/* Report Date & Category Filter Controls (print:hidden) */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 print:hidden">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Hun (Period):
+                </span>
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+                  {(['all', 'today', 'this_month', 'last_month', 'this_year', 'custom'] as const).map(preset => {
+                    const labels: Record<string, string> = {
+                      all: 'A Zavai',
+                      today: 'Vawiin',
+                      this_month: 'Kumin Thla',
+                      last_month: 'Thla Hmasa',
+                      this_year: 'Kumin (Year)',
+                      custom: 'Custom'
+                    };
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleDatePresetChange(preset)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                          dateFilterPreset === preset
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        {labels[preset]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Head Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <Tag className="w-3.5 h-3.5 text-purple-600" /> Head:
+                </span>
+                <select
+                  value={selectedHeadFilter}
+                  onChange={(e) => setSelectedHeadFilter(e.target.value)}
+                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="all">Heads Zawng Zawng ({expenseHeads.length})</option>
+                  {expenseHeads.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Custom Date Pickers */}
+            {(dateFilterPreset === 'custom' || fromDateFilter || toDateFilter) && (
+              <div className="pt-2 border-t border-slate-200 flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-[11px] font-bold text-slate-600">Select Range:</span>
+                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
+                  <span className="text-[10px] text-slate-400 font-bold">From:</span>
+                  <input
+                    type="date"
+                    value={fromDateFilter}
+                    onChange={(e) => {
+                      setFromDateFilter(e.target.value);
+                      setDateFilterPreset('custom');
+                    }}
+                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg">
+                  <span className="text-[10px] text-slate-400 font-bold">To:</span>
+                  <input
+                    type="date"
+                    value={toDateFilter}
+                    onChange={(e) => {
+                      setToDateFilter(e.target.value);
+                      setDateFilterPreset('custom');
+                    }}
+                    className="text-[11px] font-bold text-slate-700 outline-none cursor-pointer"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDatePresetChange('all')}
+                  className="text-[11px] text-rose-600 font-bold hover:underline cursor-pointer ml-auto"
+                >
+                  Reset Date
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Official Printable Statement Sheet */}
-          <div className="p-4 sm:p-6 bg-slate-50/60 border border-slate-200 rounded-2xl space-y-4 print:border-none print:bg-white print:p-0">
+          <div className="p-3.5 sm:p-6 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4 print:border-none print:bg-white print:p-0">
             {/* Header */}
             <div className="text-center space-y-1 pb-3 border-b border-slate-200">
-              <h2 className="text-base font-black uppercase text-slate-900 tracking-tight">
+              <h2 className="text-base sm:text-lg font-black uppercase text-slate-900 tracking-tight">
                 {campaign.title}
               </h2>
               {campaign.orgName && (
-                <p className="text-xs font-bold text-indigo-900">{campaign.orgName}</p>
+                <p className="text-xs sm:text-sm font-black text-indigo-900">{campaign.orgName}</p>
               )}
-              <p className="text-xs font-bold text-slate-600">
+              <p className="text-xs font-black text-slate-700 uppercase tracking-wide">
                 Pawisa Hman Chhuahna Statement (Expenditure & Audit Statement)
               </p>
               <p className="text-[10.5px] text-slate-500 font-medium">
@@ -2216,94 +2445,145 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 ) : (
                   <>Period: <strong>All Time Statement</strong></>
                 )}
-                {' • '}Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {' · '}Head: <strong>{selectedHeadFilter === 'all' ? 'All Expenditure Heads' : selectedHeadFilter}</strong>
+                {' · '}Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
               </p>
             </div>
 
-            {/* Summary Balance Table */}
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+            {/* Summary Balance Strip (4 items) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-center">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
                 <span className="text-[9px] font-bold text-slate-500 uppercase block">Opening Bal (B/F)</span>
-                <span className="text-xs font-black text-slate-800">₹{openingBalance.toLocaleString('en-IN')}</span>
+                <span className="text-xs sm:text-sm font-black text-slate-800">₹{openingBalance.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-[9px] font-bold text-slate-500 uppercase block">Total Collections</span>
-                <span className="text-xs font-black text-emerald-700">₹{totalCollections.toLocaleString('en-IN')}</span>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[9px] font-bold text-emerald-600 uppercase block">Total Collections</span>
+                <span className="text-xs sm:text-sm font-black text-emerald-700">₹{totalCollections.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-[9px] font-bold text-slate-500 uppercase block">Period Expenses</span>
-                <span className="text-xs font-black text-rose-600">₹{filteredTotalExpenses.toLocaleString('en-IN')}</span>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[9px] font-bold text-rose-600 uppercase block">Period Expenses</span>
+                <span className="text-xs sm:text-sm font-black text-rose-600">₹{filteredTotalExpenses.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="text-[9px] font-bold text-slate-500 uppercase block">Closing Balance</span>
-                <span className="text-xs font-black text-indigo-950">₹{netBalance.toLocaleString('en-IN')}</span>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[9px] font-bold text-indigo-900 uppercase block">Closing Balance</span>
+                <span className="text-xs sm:text-sm font-black text-indigo-950">₹{netBalance.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
-            {/* Detailed Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
-                <thead className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="p-2">Sl.</th>
-                    <th className="p-2">Voucher No</th>
-                    <th className="p-2">Date</th>
-                    <th className="p-2">Head</th>
-                    <th className="p-2">Particulars / Narration</th>
-                    <th className="p-2">Paid To</th>
-                    <th className="p-2">Mode</th>
-                    <th className="p-2 text-right">Amount (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {filteredExpenses.length === 0 ? (
+            {/* Head-Wise Category Summary Table */}
+            <div className="space-y-1.5 pt-1">
+              <h4 className="text-[10.5px] font-black uppercase text-slate-600 tracking-wider">
+                1. Category Summary (Head-Wise Breakdown)
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase border-b border-slate-200">
                     <tr>
-                      <td colSpan={8} className="p-4 text-center text-slate-400 italic">
-                        No expenses found for this date period.
-                      </td>
+                      <th className="p-2">Sl.</th>
+                      <th className="p-2">Head / Category</th>
+                      <th className="p-2 text-center">Vouchers</th>
+                      <th className="p-2 text-right">Amount (₹)</th>
+                      <th className="p-2 text-right">Share (%)</th>
                     </tr>
-                  ) : (
-                    filteredExpenses.map((exp, idx) => (
-                      <tr key={exp.id} className="hover:bg-slate-50">
-                        <td className="p-2 text-slate-400 font-mono text-[10px]">{idx + 1}</td>
-                        <td className="p-2 font-mono font-bold text-[10.5px] text-slate-700">{exp.voucherNo}</td>
-                        <td className="p-2 font-mono text-[10.5px] text-slate-500">{formatDateDDMMYYYY(exp.spentDate)}</td>
-                        <td className="p-2 font-bold text-purple-900">{exp.head}</td>
-                        <td className="p-2 font-medium text-slate-800">{exp.purpose}</td>
-                        <td className="p-2 text-slate-600">{exp.paidTo}</td>
-                        <td className="p-2 text-slate-600">{exp.paymentMode}</td>
-                        <td className="p-2 text-right font-black text-rose-600">
-                          ₹{exp.amount.toLocaleString('en-IN')}
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {headLedgerSummary.filter(h => h.total > 0).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-3 text-center text-slate-400 italic text-[11px]">
+                          Category expense a la awm lo.
                         </td>
                       </tr>
-                    ))
-                  )}
-                  {/* Total Row */}
-                  <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300">
-                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
-                      Total Expenditure for Period:
-                    </td>
-                    <td className="p-2.5 text-right text-rose-700 text-xs">
-                      ₹{filteredTotalExpenses.toLocaleString('en-IN')}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    ) : (
+                      headLedgerSummary.filter(h => h.total > 0).map((h, i) => (
+                        <tr key={h.head} className="hover:bg-slate-50">
+                          <td className="p-2 text-slate-400 font-mono text-[10px]">{i + 1}</td>
+                          <td className="p-2 font-bold text-slate-800">{h.head}</td>
+                          <td className="p-2 text-center text-slate-600">{h.count}</td>
+                          <td className="p-2 text-right font-black text-rose-600">₹{h.total.toLocaleString('en-IN')}</td>
+                          <td className="p-2 text-right text-slate-500 font-bold">{h.percentage}%</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Signature Area */}
-            <div className="pt-10 flex justify-between text-center text-xs text-slate-600 font-bold">
-              <div className="w-40 border-t border-slate-400 pt-1">
-                Prepared by<br />
-                <span className="text-[10px] font-normal text-slate-400">(Treasurer / Fin. Secy)</span>
+            {/* Detailed Itemized Schedule */}
+            <div className="space-y-1.5 pt-1">
+              <h4 className="text-[10.5px] font-black uppercase text-slate-600 tracking-wider">
+                2. Itemized Expenditure Schedule (Voucher List)
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-black text-[10px] uppercase border-b border-slate-200">
+                    <tr>
+                      <th className="p-2">Sl.</th>
+                      <th className="p-2">Voucher No</th>
+                      <th className="p-2">Date</th>
+                      <th className="p-2">Head</th>
+                      <th className="p-2">Particulars / Narration</th>
+                      <th className="p-2">Paid To</th>
+                      <th className="p-2">Mode</th>
+                      <th className="p-2 text-right">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredExpenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-4 text-center text-slate-400 italic">
+                          No expenses recorded for this period.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredExpenses.map((exp, idx) => (
+                        <tr key={exp.id} className="hover:bg-slate-50">
+                          <td className="p-2 text-slate-400 font-mono text-[10px]">{idx + 1}</td>
+                          <td className="p-2 font-mono font-bold text-[10.5px] text-slate-700 whitespace-nowrap">{exp.voucherNo}</td>
+                          <td className="p-2 font-mono text-[10.5px] text-slate-500 whitespace-nowrap">{formatDateDDMMYYYY(exp.spentDate)}</td>
+                          <td className="p-2 font-bold text-purple-900 whitespace-nowrap">{exp.head}</td>
+                          <td className="p-2 font-medium text-slate-800">{exp.purpose}</td>
+                          <td className="p-2 text-slate-600 whitespace-nowrap">{exp.paidTo}</td>
+                          <td className="p-2 text-slate-600 whitespace-nowrap">{exp.paymentMode}</td>
+                          <td className="p-2 text-right font-black text-rose-600 whitespace-nowrap">
+                            ₹{exp.amount.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                    {/* Total Row */}
+                    <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300">
+                      <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
+                        Total Expenditure for Period:
+                      </td>
+                      <td className="p-2.5 text-right text-rose-700 text-xs sm:text-sm font-black whitespace-nowrap">
+                        ₹{filteredTotalExpenses.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <div className="w-40 border-t border-slate-400 pt-1">
-                Checked by<br />
-                <span className="text-[10px] font-normal text-slate-400">(Auditor / Accountant)</span>
+            </div>
+
+            {/* Official Signature Area */}
+            <div className="pt-8 sm:pt-10 grid grid-cols-3 text-center text-xs text-slate-700 font-bold gap-4">
+              <div>
+                <div className="border-t border-slate-400 pt-1.5 mx-auto max-w-[140px]">
+                  Prepared by<br />
+                  <span className="text-[10px] font-medium text-slate-500">(Treasurer / Fin. Secy)</span>
+                </div>
               </div>
-              <div className="w-40 border-t border-slate-400 pt-1">
-                Approved by<br />
-                <span className="text-[10px] font-normal text-slate-400">(President / Chairman)</span>
+              <div>
+                <div className="border-t border-slate-400 pt-1.5 mx-auto max-w-[140px]">
+                  Checked by<br />
+                  <span className="text-[10px] font-medium text-slate-500">(Auditor / Accountant)</span>
+                </div>
+              </div>
+              <div>
+                <div className="border-t border-slate-400 pt-1.5 mx-auto max-w-[140px]">
+                  Approved by<br />
+                  <span className="text-[10px] font-medium text-slate-500">(President / Leader)</span>
+                </div>
               </div>
             </div>
           </div>

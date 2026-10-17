@@ -36,7 +36,8 @@ import {
   Plus,
   Receipt,
   Maximize2,
-  Minimize2
+  Minimize2,
+  BookOpen
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
@@ -1257,107 +1258,129 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-4 sm:px-6 gap-1.5 sm:gap-2 pt-2 overflow-x-auto shrink-0 no-scrollbar">
-          <button
-            type="button"
-            id="tab-btn-quick-entry"
-            onClick={() => setActiveTab('quick_entry')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'quick_entry'
-                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>Quick Entry (Digit 4)</span>
-          </button>
-
-          <button
-            type="button"
-            id="tab-btn-register-member"
-            onClick={() => setActiveTab('register_member')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'register_member'
-                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Add Member / Family</span>
-          </button>
-
-          <button
-            type="button"
-            id="tab-btn-print-reports"
-            onClick={() => setActiveTab('print_reports')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'print_reports'
-                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Statement Print (4 Formats)</span>
-          </button>
-
-          <button
-            type="button"
-            id="tab-btn-members-list"
-            onClick={() => setActiveTab('members_list')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'members_list'
-                ? 'border-indigo-600 text-indigo-700 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Member Roll ({filteredTableMembers.length})</span>
-          </button>
-
-          <button
-            type="button"
-            id="tab-btn-expenses"
-            onClick={() => setActiveTab('expenses')}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 text-xs font-black border-b-2 transition cursor-pointer shrink-0 ${
-              activeTab === 'expenses'
-                ? 'border-rose-600 text-rose-700 bg-white rounded-t-xl shadow-xs'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Receipt className="w-3.5 h-3.5 text-rose-600" />
-            <span>Pawisa Hman Chhuahna (Expenses)</span>
-          </button>
-
-          <div className="ml-auto flex items-center py-1.5 shrink-0 pl-2 gap-1.5">
+        {/* Tab Navigation - Ultra-Clean Single Row for Mobile & Desktop */}
+        <div className="p-2 sm:p-3 bg-slate-50/95 border-b border-slate-200 shrink-0 space-y-2">
+          <div className="bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 flex items-center gap-1 sm:gap-1.5 shadow-2xs">
+            {/* Tab 1: Quick Entry (Digit 4) */}
             <button
               type="button"
-              id="btn-open-quick-paste"
-              onClick={() => {
-                setExcelImportInitialMode('paste');
-                setIsExcelImportOpen(true);
-              }}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
-              title="Paste member list directly from WhatsApp or Notes"
+              id="tab-btn-quick-entry"
+              onClick={() => setActiveTab('quick_entry')}
+              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'quick_entry'
+                  ? 'bg-white text-indigo-950 shadow-sm border border-indigo-200 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
             >
-              <FileText className="w-3.5 h-3.5 text-indigo-200" />
-              <span>Quick Paste</span>
+              <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Quick Entry</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Digit 4</span>
             </button>
 
+            {/* Tab 2: Add Member / Family */}
             <button
               type="button"
-              id="btn-open-excel-import"
-              onClick={() => {
-                setExcelImportInitialMode('file');
-                setIsExcelImportOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
-              title="Upload Excel or CSV sheet to import members in bulk"
+              id="tab-btn-register-member"
+              onClick={() => setActiveTab('register_member')}
+              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'register_member'
+                  ? 'bg-white text-emerald-950 shadow-sm border border-emerald-200 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
-              <span>Import Excel / CSV</span>
+              <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">+ Member</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Family</span>
+            </button>
+
+            {/* Tab 3: Statement Print (4 Formats) */}
+            <button
+              type="button"
+              id="tab-btn-print-reports"
+              onClick={() => setActiveTab('print_reports')}
+              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'print_reports'
+                  ? 'bg-white text-blue-950 shadow-sm border border-blue-200 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Statement</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Print (4)</span>
+            </button>
+
+            {/* Tab 4: Member Roll */}
+            <button
+              type="button"
+              id="tab-btn-members-list"
+              onClick={() => setActiveTab('members_list')}
+              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'members_list'
+                  ? 'bg-white text-purple-950 shadow-sm border border-purple-200 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Roll</span>
+              <span className="text-[8.5px] sm:text-[9.5px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 mt-0.5 whitespace-nowrap">
+                {filteredTableMembers.length}
+              </span>
+            </button>
+
+            {/* Tab 5: Pawisa Hman (Expenses) */}
+            <button
+              type="button"
+              id="tab-btn-expenses"
+              onClick={() => setActiveTab('expenses')}
+              className={`flex-1 min-w-0 shrink-0 flex flex-col items-center justify-center px-1 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'expenses'
+                  ? 'bg-white text-rose-950 shadow-md border-2 border-rose-500 font-black ring-2 ring-rose-200'
+                  : 'bg-white/80 text-rose-700 border border-rose-300 hover:bg-white font-bold'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight text-rose-700 whitespace-nowrap truncate max-w-full">Pawisa Hman</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-rose-500 font-semibold whitespace-nowrap truncate max-w-full">Expenses</span>
             </button>
           </div>
+
+          {/* Member utilities: Only show Paste & Excel when in Member-related tabs */}
+          {(activeTab === 'quick_entry' || activeTab === 'members_list') && (
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {activeTab === 'quick_entry' ? 'Quick Entry & Search' : 'Member Roll (Data)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  id="btn-open-quick-paste"
+                  onClick={() => {
+                    setExcelImportInitialMode('paste');
+                    setIsExcelImportOpen(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg shadow-2xs transition cursor-pointer active:scale-95"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Paste</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-open-excel-import"
+                  onClick={() => {
+                    setExcelImportInitialMode('file');
+                    setIsExcelImportOpen(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg shadow-2xs transition cursor-pointer active:scale-95"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SCROLLABLE MAIN CONTENT BODY */}
