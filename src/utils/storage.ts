@@ -917,6 +917,8 @@ export const clearDeletedTransactionId = (txId: string): void => {
 export const PERMANENTLY_PURGED_TX_IDS = new Set([
   'rpay-test-123456',
   'test-123',
+  'rpay-cash-142611',
+  'rpay-cash-120863',
   'rpay-cash-520699',
   'rpay-cash-168598',
   'rpay-cash-742024',
@@ -1045,7 +1047,13 @@ export const getStoredTransactions = (): Transaction[] => {
         for (const t of parsed) {
           if (!t || !t.id) continue;
           const cleanId = String(t.id).toLowerCase().trim();
-          if (deletedIds.has(cleanId) || PERMANENTLY_PURGED_TX_IDS.has(cleanId) || seen.has(cleanId)) continue;
+          if (
+            deletedIds.has(cleanId) || 
+            PERMANENTLY_PURGED_TX_IDS.has(cleanId) || 
+            cleanId.includes('142611') || 
+            cleanId.includes('120863') ||
+            seen.has(cleanId)
+          ) continue;
           seen.add(cleanId);
           result.push(t);
         }
