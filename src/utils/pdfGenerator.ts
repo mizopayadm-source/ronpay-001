@@ -82,10 +82,16 @@ async function paginateCanvasToPDF(
   // Sort protected blocks by vertical top position
   protectedBlocks.sort((a, b) => a.top - b.top);
 
-  // Check if there is a <thead> so we can cleanly repeat column headers on subsequent table pages
+  // Check if there is a primary data table with a <thead> so we can cleanly repeat column headers on subsequent table pages
+  const allTables = Array.from(renderTarget.querySelectorAll('table'));
+  const mainTableEl = allTables.reduce(
+    (prev, curr) => (curr.offsetHeight > (prev?.offsetHeight || 0) ? curr : prev),
+    null as HTMLTableElement | null
+  );
+
   let theadCanvas: HTMLCanvasElement | null = null;
   let theadHeight = 0;
-  const theadEl = renderTarget.querySelector('thead');
+  const theadEl = mainTableEl ? mainTableEl.querySelector('thead') : renderTarget.querySelector('thead');
   if (theadEl) {
     const thRect = theadEl.getBoundingClientRect();
     const thTop = (thRect.top - bodyRect.top) * scale;
@@ -107,9 +113,8 @@ async function paginateCanvasToPDF(
   }
 
   // Find table vertical limits to know where tabular rows end
-  const tableEl = renderTarget.querySelector('table');
-  const tableBottomCanvas = tableEl
-    ? (tableEl.getBoundingClientRect().bottom - bodyRect.top) * scale
+  const tableBottomCanvas = mainTableEl
+    ? (mainTableEl.getBoundingClientRect().bottom - bodyRect.top) * scale
     : 0;
 
   // Calculate safe page break slices
@@ -370,12 +375,16 @@ export async function exportHTMLToPDF(
   try {
     if (onProgress) onProgress('Document buatsaih mek a ni...');
 
+    const isExplicitLandscapeInitial = htmlContent.toLowerCase().includes('landscape');
+    const initialIframeWidth = isExplicitLandscapeInitial ? 1123 : 794;
+    const initialIframeHeight = isExplicitLandscapeInitial ? 794 : 1123;
+
     iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.top = '-10000px';
     iframe.style.left = '-10000px';
-    iframe.style.width = '794px'; // Exact A4 width at 96 DPI
-    iframe.style.height = '1123px';
+    iframe.style.width = `${initialIframeWidth}px`;
+    iframe.style.height = `${initialIframeHeight}px`;
     iframe.style.border = '0';
     iframe.style.opacity = '0';
     iframe.style.pointerEvents = 'none';
@@ -402,7 +411,7 @@ export async function exportHTMLToPDF(
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
       background: #ffffff; 
       color: #0f172a; 
-      width: 794px; 
+      width: ${initialIframeWidth}px; 
     }
   </style>
 </head>
@@ -416,8 +425,41 @@ export async function exportHTMLToPDF(
     iframeDoc.write(fullHtml);
     iframeDoc.close();
 
-    // Allow iframe fonts and layout to settle
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Inject anti-collision CSS to prevent html2canvas letter-spacing and line overlapping bugs
+    const fixStyle = iframeDoc.createElement('style');
+    fixStyle.id = 'ronpay-pdf-anti-overlap';
+    fixStyle.textContent = `
+      * {
+        letter-spacing: 0px !important;
+        word-spacing: normal !important;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+      .header-banner, .header-banner * {
+        letter-spacing: 0px !important;
+        word-spacing: normal !important;
+      }
+      h1, h2, h3, h4, h5, h6, .org-title {
+        letter-spacing: 0px !important;
+        line-height: 1.35 !important;
+      }
+      .header-banner td, .header-banner th {
+        vertical-align: middle !important;
+      }
+      .header-banner div, .header-banner span, .header-banner p {
+        letter-spacing: 0px !important;
+        line-height: 1.4 !important;
+      }
+    `;
+    iframeDoc.head.appendChild(fixStyle);
+
+    // Wait for fonts and styles to fully resolve
+    if ((iframeDoc as any).fonts?.ready) {
+      try {
+        await (iframeDoc as any).fonts.ready;
+      } catch {}
+    }
+    await new Promise((resolve) => setTimeout(resolve, 350));
 
     if (onProgress) onProgress('Snapshot siam mek a ni...');
 
@@ -429,9 +471,13 @@ export async function exportHTMLToPDF(
     const isExplicitLandscape = fullHtml.toLowerCase().includes('landscape');
 
     // Measure table and natural content width so headers and table align with 100% precision
-    const tableEl = iframeDoc.querySelector('table');
-    const tableWidth = tableEl ? Math.ceil(tableEl.getBoundingClientRect().width || tableEl.scrollWidth) : 0;
-    const bodyScrollWidth = Math.ceil(iframeDoc.body.scrollWidth || 794);
+    const allTables = Array.from(iframeDoc.querySelectorAll('table'));
+    const mainTableEl = allTables.reduce(
+      (prev, curr) => (curr.offsetHeight > (prev?.offsetHeight || 0) ? curr : prev),
+      null as HTMLTableElement | null
+    );
+    const tableWidth = mainTableEl ? Math.ceil(mainTableEl.getBoundingClientRect().width || mainTableEl.scrollWidth) : 0;
+    const bodyScrollWidth = Math.ceil(iframeDoc.body.scrollWidth || initialIframeWidth);
     
     // Choose base width: 1123 for landscape, 794 for portrait
     const defaultWidth = isExplicitLandscape ? 1123 : 794;
@@ -442,10 +488,10 @@ export async function exportHTMLToPDF(
     renderTarget.style.width = `${effectiveWidth}px`;
     renderTarget.style.minWidth = `${effectiveWidth}px`;
 
-    // Enforce 100% width on all header cards, summary bars, target bars, sheet wrappers, tables, and footers
-    // to guarantee they are 100% flush and aligned on both left and right edges!
+    // Enforce 100% width on top-level block cards and containers
+    // (excluding thead/tbody/tfoot so table geometry remains completely undistorted)
     const alignElements = iframeDoc.querySelectorAll<HTMLElement>(
-      '.statement-sheet, .header-banner, .summary-bar, .target-bar, table, thead, tbody, tfoot, .sign-grid, .footer'
+      '.statement-sheet, .header-banner, .summary-bar, .target-bar, .summary-grid, .summary-strip, .ledger-table, .sign-grid, .footer, .footer-note'
     );
     alignElements.forEach((el) => {
       el.style.width = '100%';
@@ -458,7 +504,7 @@ export async function exportHTMLToPDF(
     let canvas: HTMLCanvasElement;
     try {
       canvas = await html2canvas(renderTarget, {
-        scale: 1.5,
+        scale: 2.0,
         useCORS: true,
         allowTaint: false,
         logging: false,

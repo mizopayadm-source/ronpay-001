@@ -689,11 +689,14 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
           font-size: 17px !important;
         }
 
+        #ronpay-printable-preview-root,
+        #ronpay-printable-preview-root * {
+          letter-spacing: 0px !important;
+        }
         #ronpay-printable-preview-root .header-banner,
         #ronpay-printable-preview-root .summary-bar,
         #ronpay-printable-preview-root .target-bar,
-        #ronpay-printable-preview-root .statement-sheet,
-        #ronpay-printable-preview-root table {
+        #ronpay-printable-preview-root .statement-sheet {
           width: 100% !important;
           box-sizing: border-box !important;
           margin-left: 0 !important;

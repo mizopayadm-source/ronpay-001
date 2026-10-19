@@ -1599,7 +1599,7 @@ export const generateTransactionsPDFHtml = (
     .header-content-stack {
       display: flex;
       flex-direction: column;
-      gap: 2.5px;
+      gap: 4px;
       min-width: 0;
       flex: 1;
     }
@@ -1607,10 +1607,10 @@ export const generateTransactionsPDFHtml = (
       font-size: 21px;
       font-weight: 900;
       color: #ffffff;
-      letter-spacing: 0.3px;
       margin: 0;
       text-transform: uppercase;
-      line-height: 1.2;
+      line-height: 1.35;
+      letter-spacing: 0;
     }
     .location-text {
       font-size: 13px;
@@ -1620,16 +1620,16 @@ export const generateTransactionsPDFHtml = (
       align-items: center;
       gap: 4px;
       margin: 0;
-      line-height: 1.25;
+      line-height: 1.35;
     }
     .doc-badge-title {
       font-size: 12px;
       font-weight: 800;
       color: #38bdf8;
-      letter-spacing: 0.3px;
       text-transform: uppercase;
       margin: 0;
-      line-height: 1.25;
+      line-height: 1.35;
+      letter-spacing: 0;
     }
     .period-text {
       font-size: 11px;
@@ -1639,7 +1639,7 @@ export const generateTransactionsPDFHtml = (
       align-items: center;
       gap: 4px;
       margin: 0;
-      line-height: 1.25;
+      line-height: 1.35;
     }
 
     /* Right Chart Container */
@@ -3969,15 +3969,16 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
             background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
             border: 1.5px solid #312e81;
             border-radius: 14px;
-            padding: 14px 18px;
+            padding: 12px 16px;
             color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
             margin-bottom: 12px;
             page-break-inside: avoid;
             break-inside: avoid;
+            box-sizing: border-box;
+          }
+          .header-banner * {
+            box-sizing: border-box;
+            letter-spacing: 0px !important;
           }
           .header-left {
             display: flex;
@@ -4084,29 +4085,39 @@ export const generateCashBookPrintHtml = (options: CashBookPrintOptions): string
       </head>
       <body>
         <div class="sheet">
-          <!-- Header Banner -->
+          <!-- Header Banner (Table structured for 100% stable PDF & Canvas snapshot) -->
           <div class="header-banner">
-            <div class="header-left">
-              ${logoDisplay 
-                ? `<img src="${logoDisplay}" class="header-avatar" alt="Logo" />`
-                : `<div class="header-avatar-fallback">📖</div>`
-              }
-              <div style="min-width: 0;">
-                <h1 style="margin: 0; font-size: 19px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px;">${orgDisplay}</h1>
-                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 2px;">📍 ${locationDisplay}</div>
-                <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-top: 3px;">
-                  📖 CASH BOOK & LEDGER (SUM VAWNNA LEHKHABU)
-                </div>
-                <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">
-                  Bawm: <b>${campaign.title}</b> • Period: <b>${dateRangeText}</b>
-                </div>
-              </div>
-            </div>
-            <div style="text-align: right; font-size: 9.5px; color: #94a3b8; flex-shrink: 0; border-left: 1px dashed rgba(255,255,255,0.2); padding-left: 14px;">
-              <div>RonPay Cash Desk</div>
-              <div style="color: #ffffff; font-weight: bold; margin-top: 2px;">Date: ${todayStr}</div>
-              <div style="color: #34d399; font-weight: 800; margin-top: 4px;">OFFICIAL LEDGER</div>
-            </div>
+            <table style="width: 100%; border-collapse: collapse; border: none; margin: 0; color: #ffffff; table-layout: fixed;">
+              <tr>
+                <td style="width: 64px; vertical-align: middle; padding: 0 12px 0 0;">
+                  ${logoDisplay 
+                    ? `<img src="${logoDisplay}" style="width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 2px solid #f59e0b; display: block;" alt="Logo" />`
+                    : `<div style="width: 56px; height: 56px; border-radius: 12px; background: #1e293b; border: 2px solid #f59e0b; display: flex; align-items: center; justify-content: center; font-size: 24px;">📖</div>`
+                  }
+                </td>
+                <td style="vertical-align: middle; padding: 0 12px 0 0;">
+                  <h1 style="margin: 0 0 4px 0; font-size: 18px; font-weight: 900; text-transform: uppercase; color: #ffffff; line-height: 1.35; letter-spacing: 0;">
+                    ${orgDisplay}
+                  </h1>
+                  <div style="font-size: 11px; font-weight: 700; color: #fbbf24; line-height: 1.4; margin-bottom: 4px;">
+                    <span style="display: inline-block; margin-right: 4px;">📍</span>${locationDisplay}
+                  </div>
+                  <div style="font-size: 10.5px; font-weight: 800; color: #38bdf8; text-transform: uppercase; line-height: 1.4; margin-bottom: 4px;">
+                    📖 CASH BOOK &amp; LEDGER (SUM VAWNNA LEHKHABU)
+                  </div>
+                  <div style="font-size: 10px; color: #cbd5e1; line-height: 1.4;">
+                    Bawm: <b style="color: #ffffff;">${campaign.title}</b> &nbsp;•&nbsp; Period: <b style="color: #ffffff;">${dateRangeText}</b>
+                  </div>
+                </td>
+                <td style="width: 165px; text-align: right; vertical-align: middle; font-size: 9.5px; color: #94a3b8; border-left: 1px dashed rgba(255,255,255,0.25); padding-left: 14px;">
+                  <div style="color: #e2e8f0; font-weight: 700; line-height: 1.4; margin-bottom: 3px;">RonPay Cash Desk</div>
+                  <div style="color: #ffffff; font-weight: bold; line-height: 1.4; margin-bottom: 4px;">Date: ${todayStr}</div>
+                  <div style="color: #34d399; font-weight: 800; font-size: 9.5px; background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.4); padding: 2px 8px; border-radius: 4px; display: inline-block; line-height: 1.3;">
+                    <span style="display: inline-block; margin-right: 3px;">✓</span>OFFICIAL LEDGER
+                  </div>
+                </td>
+              </tr>
+            </table>
           </div>
 
           <!-- 4-Box Summary KPI Bar -->
@@ -4393,42 +4404,46 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
     const rowBg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
 
     rowsHtml += `
-      <tr style="background: ${rowBg}; border-bottom: 1px solid #cbd5e1;">
-        <!-- DR / RECEIPTS (LEFT HALF) -->
-        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #475569; text-align: center; border-right: 1px solid #e2e8f0; white-space: nowrap;">
-          ${dr ? dr.date : ''}
+      <tr style="background: ${rowBg}; border-bottom: 1px solid #e2e8f0; min-height: 38px;">
+        <!-- DR / RECEIPTS (LEFT HALF 50%) -->
+        <td style="padding: 8px 5px; font-family: monospace; font-size: 10px; font-weight: 600; color: #334155; text-align: center; border-right: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap;">
+          ${dr ? dr.date : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 7px; font-size: 10px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.35;">
+        <td style="padding: 8px 8px; font-size: 10.5px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.4; vertical-align: middle;">
           ${dr ? `
             <div style="font-weight: 700; color: #1e3a8a;">${dr.particulars}</div>
-            <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
-              ${dr.head ? `<span style="font-size: 8.5px; color: #4f46e5; font-weight: 600;">🏷️ ${dr.head}</span>` : ''}
-              ${dr.subCount ? `<span style="font-size: 8px; color: #047857; font-weight: 700; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.5px 4px; border-radius: 3px;">👥 ${dr.subCount} collections</span>` : ''}
+            <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+              ${dr.head ? `<span style="font-size: 8.5px; color: #4338ca; font-weight: 700; background: #eef2ff; border: 1px solid #c7d2fe; padding: 0.5px 5px; border-radius: 3px;">🏷️ ${dr.head}</span>` : ''}
+              ${dr.subCount ? `<span style="font-size: 8.5px; color: #047857; font-weight: 700; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.5px 5px; border-radius: 3px;">👥 ${dr.subCount} collections</span>` : ''}
             </div>
-          ` : ''}
+          ` : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; white-space: nowrap;">
-          ${dr ? dr.refNo : ''}
+        <td style="padding: 8px 4px; font-family: monospace; font-size: 9.5px; font-weight: 600; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; vertical-align: middle; white-space: nowrap;">
+          ${dr ? dr.refNo : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 7px; font-family: monospace; font-weight: 800; font-size: 10.5px; color: #047857; text-align: right; border-right: 2.5px solid #0f172a; white-space: nowrap; background: ${dr ? (dr.refNo === 'B/F' ? '#eff6ff' : '#f0fdf4') : 'transparent'};">
-          ${dr ? `₹${dr.amount.toLocaleString('en-IN')}` : ''}
+        <td style="padding: 8px 8px; font-family: monospace; font-weight: 800; font-size: 11px; color: #047857; text-align: right; border-right: 3px solid #0f172a; white-space: nowrap; vertical-align: middle; background: ${dr ? (dr.refNo === 'B/F' ? '#eff6ff' : '#f0fdf4') : 'transparent'};">
+          ${dr ? `₹${dr.amount.toLocaleString('en-IN')}` : '<span style="color: #cbd5e1;">—</span>'}
         </td>
 
-        <!-- CR / PAYMENTS (RIGHT HALF) -->
-        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #475569; text-align: center; border-right: 1px solid #e2e8f0; white-space: nowrap;">
-          ${cr ? cr.date : ''}
+        <!-- CR / PAYMENTS (RIGHT HALF 50%) -->
+        <td style="padding: 8px 5px; font-family: monospace; font-size: 10px; font-weight: 600; color: #334155; text-align: center; border-right: 1px solid #e2e8f0; vertical-align: middle; white-space: nowrap;">
+          ${cr ? cr.date : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 7px; font-size: 10px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.35;">
+        <td style="padding: 8px 8px; font-size: 10.5px; color: #0f172a; border-right: 1px solid #e2e8f0; line-height: 1.4; vertical-align: middle;">
           ${cr ? `
             <div style="font-weight: 700; color: #9f1239;">${cr.particulars}</div>
-            ${cr.head ? `<span style="font-size: 8.5px; color: #e11d48; font-weight: 600;">🏷️ ${cr.head}</span>` : ''}
-          ` : ''}
+            ${cr.head ? `
+              <div style="margin-top: 2px;">
+                <span style="font-size: 8.5px; color: #be123c; font-weight: 700; background: #fff1f2; border: 1px solid #fecdd3; padding: 0.5px 5px; border-radius: 3px;">🏷️ ${cr.head}</span>
+              </div>
+            ` : ''}
+          ` : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 5px; font-family: monospace; font-size: 9.5px; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; white-space: nowrap;">
-          ${cr ? cr.refNo : ''}
+        <td style="padding: 8px 4px; font-family: monospace; font-size: 9.5px; font-weight: 600; color: #64748b; text-align: center; border-right: 1px solid #cbd5e1; vertical-align: middle; white-space: nowrap;">
+          ${cr ? cr.refNo : '<span style="color: #cbd5e1;">—</span>'}
         </td>
-        <td style="padding: 6px 7px; font-family: monospace; font-weight: 800; font-size: 10.5px; color: #be123c; text-align: right; white-space: nowrap; background: ${cr ? (cr.refNo === 'C/D' ? '#f5f3ff' : '#fff1f2') : 'transparent'};">
-          ${cr ? `₹${cr.amount.toLocaleString('en-IN')}` : ''}
+        <td style="padding: 8px 8px; font-family: monospace; font-weight: 800; font-size: 11px; color: #be123c; text-align: right; white-space: nowrap; vertical-align: middle; background: ${cr ? (cr.refNo === 'C/D' ? '#f5f3ff' : '#fff1f2') : 'transparent'};">
+          ${cr ? `₹${cr.amount.toLocaleString('en-IN')}` : '<span style="color: #cbd5e1;">—</span>'}
         </td>
       </tr>
     `;
@@ -4444,7 +4459,7 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
         <style>
           @page {
             size: A4 landscape;
-            margin: 7mm;
+            margin: 6mm;
           }
           * { box-sizing: border-box; }
           body {
@@ -4452,8 +4467,9 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             color: #0f172a;
             background: #ffffff;
             margin: 0;
-            padding: 12px;
-            font-size: 10px;
+            padding: 10px;
+            font-size: 10.5px;
+            line-height: 1.4;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
@@ -4465,25 +4481,22 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
           .header-banner {
             border: 2px solid #0f172a;
             border-radius: 8px;
-            padding: 10px 14px;
-            background: #f8fafc;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 10px;
+            padding: 12px 16px;
+            background: #ffffff;
+            margin-bottom: 12px;
             page-break-inside: avoid;
             break-inside: avoid;
+            box-sizing: border-box;
           }
-          .header-title-box {
-            text-align: center;
-            flex: 1;
+          .header-banner * {
+            box-sizing: border-box;
+            letter-spacing: 0px !important;
           }
           .ledger-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 9.5px;
-            border: 2px solid #0f172a;
+            font-size: 10px;
+            border: 2.5px solid #0f172a;
             page-break-inside: auto;
           }
           .ledger-table thead {
@@ -4508,7 +4521,7 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             background: #ffffff;
             border: 1.5px solid #cbd5e1;
             border-radius: 6px;
-            padding: 7px 10px;
+            padding: 8px 10px;
             text-align: center;
           }
           .sign-grid {
@@ -4525,7 +4538,7 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             padding-top: 5px;
           }
           .footer-note {
-            margin-top: 16px;
+            margin-top: 14px;
             border-top: 1px solid #cbd5e1;
             padding-top: 6px;
             font-size: 8.5px;
@@ -4552,39 +4565,47 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
       </head>
       <body>
         <div class="sheet">
-          <!-- Traditional Ledger Header -->
+          <!-- Traditional Ledger Header (Table structured for 100% stable PDF & Canvas snapshot) -->
           <div class="header-banner">
-            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-              ${logoDisplay 
-                ? `<img src="${logoDisplay}" style="width: 50px; height: 50px; border-radius: 8px; object-fit: cover; border: 1.5px solid #0f172a;" alt="Logo" />` 
-                : `<div style="width: 50px; height: 50px; border-radius: 8px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 20px;">📖</div>`
-              }
-              <div>
-                <h1 style="margin: 0; font-size: 15px; font-weight: 900; text-transform: uppercase; color: #0f172a; letter-spacing: 0.3px;">
-                  ${orgDisplay}
-                </h1>
-                <div style="font-size: 10px; font-weight: 700; color: #475569;">📍 ${locationDisplay}</div>
-                <div style="font-size: 9px; color: #64748b;">RonPay Financial Accounting System</div>
-              </div>
-            </div>
-
-            <div class="header-title-box">
-              <div style="display: inline-block; background: #0f172a; color: #ffffff; padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">
-                MANUAL CASH BOOK & LEDGER REGISTER
-              </div>
-              <div style="font-size: 11.5px; font-weight: 800; color: #1e3a8a; margin-top: 3px;">
-                Bawm / Campaign: <u>${campaign.title}</u>
-              </div>
-              <div style="font-size: 9.5px; font-weight: 700; color: #475569; margin-top: 1px;">
-                Hun Bi (Period): <b>${dateRangeText}</b>
-              </div>
-            </div>
-
-            <div style="text-align: right; font-size: 9px; color: #475569; flex-shrink: 0; border-left: 1.5px dashed #cbd5e1; padding-left: 12px;">
-              <div>Register: <b>Two-Column Cash Book</b></div>
-              <div style="margin-top: 2px;">Print Date: <b>${todayStr}</b></div>
-              <div style="color: #047857; font-weight: 900; margin-top: 3px; font-size: 9.5px;">OFFICIAL AUDIT REGISTER</div>
-            </div>
+            <table style="width: 100%; border-collapse: collapse; border: none; margin: 0; table-layout: fixed;">
+              <tr>
+                <td style="width: 58px; vertical-align: middle; padding: 0 10px 0 0;">
+                  ${logoDisplay 
+                    ? `<img src="${logoDisplay}" style="width: 52px; height: 52px; border-radius: 8px; object-fit: cover; border: 1.5px solid #0f172a; display: block;" alt="Logo" />` 
+                    : `<div style="width: 52px; height: 52px; border-radius: 8px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 22px;">📖</div>`
+                  }
+                </td>
+                <td style="width: 32%; vertical-align: middle; padding: 0 10px 0 0;">
+                  <div style="font-size: 15px; font-weight: 900; text-transform: uppercase; color: #0f172a; line-height: 1.35; margin-bottom: 4px; word-break: break-word;">
+                    ${orgDisplay}
+                  </div>
+                  <div style="font-size: 10.5px; font-weight: 700; color: #475569; line-height: 1.4; margin-bottom: 3px;">
+                    <span style="display: inline-block; margin-right: 4px;">📍</span>${locationDisplay}
+                  </div>
+                  <div style="font-size: 9px; color: #64748b; line-height: 1.3;">RonPay Financial Accounting System</div>
+                </td>
+                <td style="width: 44%; text-align: center; vertical-align: middle; padding: 0 12px;">
+                  <div style="margin-bottom: 5px;">
+                    <div style="display: inline-block; background: #0f172a; color: #ffffff; padding: 5px 14px; border-radius: 4px; font-size: 11px; font-weight: 900; text-transform: uppercase; line-height: 1.3;">
+                      MANUAL CASH BOOK &amp; LEDGER REGISTER
+                    </div>
+                  </div>
+                  <div style="font-size: 12px; font-weight: 800; color: #1e3a8a; line-height: 1.4; margin-bottom: 3px;">
+                    Bawm / Campaign: <b>${campaign.title}</b>
+                  </div>
+                  <div style="font-size: 10px; font-weight: 700; color: #334155; line-height: 1.4;">
+                    Hun Bi (Period): <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 3px; color: #0f172a; font-weight: 800;">${dateRangeText}</span>
+                  </div>
+                </td>
+                <td style="width: 175px; text-align: right; vertical-align: middle; font-size: 9px; color: #475569; border-left: 1.5px dashed #cbd5e1; padding-left: 12px;">
+                  <div style="line-height: 1.4; margin-bottom: 3px;">Register: <b style="color: #0f172a;">Two-Column Ledger</b></div>
+                  <div style="line-height: 1.4; margin-bottom: 4px;">Print Date: <b style="color: #0f172a;">${todayStr}</b></div>
+                  <div style="color: #047857; font-weight: 800; font-size: 9.5px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 4px; display: inline-block; line-height: 1.3;">
+                    <span style="display: inline-block; margin-right: 3px;">✓</span>OFFICIAL AUDIT REGISTER
+                  </div>
+                </td>
+              </tr>
+            </table>
           </div>
 
           <!-- The Two-Column Traditional Manual Ledger Table -->
@@ -4592,26 +4613,26 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             <thead>
               <!-- Top Row: Dr. vs Cr. Labels -->
               <tr style="background: #0f172a; color: #ffffff;">
-                <th colspan="4" style="padding: 7px 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; text-align: center; border-right: 2.5px solid #0f172a; background: #064e3b; color: #ffffff;">
+                <th colspan="4" style="width: 50%; padding: 8px 8px; font-size: 11px; font-weight: 900; text-align: center; border-right: 3px solid #0f172a; background: #064e3b; color: #ffffff;">
                   Dr. &nbsp;&nbsp; (RECEIPTS / DEBIT / SUM LUT)
                 </th>
-                <th colspan="4" style="padding: 7px 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; text-align: center; background: #881337; color: #ffffff;">
+                <th colspan="4" style="width: 50%; padding: 8px 8px; font-size: 11px; font-weight: 900; text-align: center; background: #881337; color: #ffffff;">
                   Cr. &nbsp;&nbsp; (PAYMENTS / CREDIT / SUM CHHUAK)
                 </th>
               </tr>
-              <!-- Column Sub-headers -->
-              <tr style="background: #1e293b; color: #f8fafc; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.3px;">
-                <!-- Debit Columns -->
-                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
-                <th style="padding: 6px 6px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
-                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Ref / Rec No</th>
-                <th style="width: 90px; padding: 6px 6px; border-right: 2.5px solid #0f172a; text-align: right; background: #064e3b;">Amount (₹)</th>
+              <!-- Column Sub-headers (Strictly 50% left and 50% right) -->
+              <tr style="background: #1e293b; color: #f8fafc; font-size: 9px; text-transform: uppercase;">
+                <!-- Debit Columns (Total: 50%) -->
+                <th style="width: 9%; padding: 7px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
+                <th style="width: 25%; padding: 7px 7px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
+                <th style="width: 6.5%; padding: 7px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Ref / No</th>
+                <th style="width: 9.5%; padding: 7px 6px; border-right: 3px solid #0f172a; text-align: right; background: #064e3b; color: #ffffff;">Amount (₹)</th>
 
-                <!-- Credit Columns -->
-                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
-                <th style="padding: 6px 6px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
-                <th style="width: 72px; padding: 6px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Voucher No</th>
-                <th style="width: 90px; padding: 6px 6px; text-align: right; background: #881337;">Amount (₹)</th>
+                <!-- Credit Columns (Total: 50%) -->
+                <th style="width: 9%; padding: 7px 4px; border-right: 1px solid #334155; text-align: center;">Date</th>
+                <th style="width: 25%; padding: 7px 7px; border-right: 1px solid #334155; text-align: left;">Particulars (Narration)</th>
+                <th style="width: 6.5%; padding: 7px 4px; border-right: 1px solid #cbd5e1; text-align: center;">Voucher</th>
+                <th style="width: 9.5%; padding: 7px 6px; text-align: right; background: #881337; color: #ffffff;">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
@@ -4620,14 +4641,14 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             <tfoot>
               <!-- Double-lined Grand Total Balancing Row -->
               <tr style="background: #0f172a; color: #ffffff; font-weight: 900; border-top: 2px solid #000000; border-bottom: 3.5px double #000000;">
-                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155; letter-spacing: 0.3px;">
-                  Grand Total Receipts & Opening (Dr):
+                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155;">
+                  Grand Total Receipts &amp; Opening (Dr):
                 </td>
-                <td style="padding: 8px 7px; text-align: right; font-family: monospace; font-size: 11.5px; color: #4ade80; border-right: 2.5px solid #ffffff; background: #064e3b; text-decoration: underline; text-underline-offset: 3px;">
+                <td style="padding: 8px 7px; text-align: right; font-family: monospace; font-size: 11.5px; color: #4ade80; border-right: 3px solid #ffffff; background: #064e3b; text-decoration: underline; text-underline-offset: 3px;">
                   ₹${grandDrTotal.toLocaleString('en-IN')}
                 </td>
-                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155; letter-spacing: 0.3px;">
-                  Grand Total Payments & Closing (Cr):
+                <td colspan="3" style="padding: 8px 6px; text-align: right; font-size: 10px; text-transform: uppercase; border-right: 1px solid #334155;">
+                  Grand Total Payments &amp; Closing (Cr):
                 </td>
                 <td style="padding: 8px 7px; text-align: right; font-family: monospace; font-size: 11.5px; color: #fda4af; background: #881337; text-decoration: underline; text-underline-offset: 3px;">
                   ₹${grandCrTotal.toLocaleString('en-IN')}
@@ -4851,15 +4872,16 @@ export const generateExpenditureStatementPrintHtml = (options: ExpenditureStatem
             background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
             border: 1.5px solid #312e81;
             border-radius: 14px;
-            padding: 14px 18px;
+            padding: 12px 16px;
             color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
             margin-bottom: 12px;
             page-break-inside: avoid;
             break-inside: avoid;
+            box-sizing: border-box;
+          }
+          .header-banner * {
+            box-sizing: border-box;
+            letter-spacing: 0px !important;
           }
           .header-left {
             display: flex;
@@ -4954,29 +4976,35 @@ export const generateExpenditureStatementPrintHtml = (options: ExpenditureStatem
       </head>
       <body>
         <div class="sheet">
-          <!-- Header Banner -->
+          <!-- Header Banner (Table structured for 100% stable PDF & Canvas snapshot) -->
           <div class="header-banner">
-            <div class="header-left">
-              ${logoDisplay 
-                ? `<img src="${logoDisplay}" class="header-avatar" alt="Logo" />`
-                : `<div class="header-avatar-fallback">🧾</div>`
-              }
-              <div style="min-width: 0;">
-                <h1 style="margin: 0; font-size: 19px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px;">${orgDisplay}</h1>
-                <div style="font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 2px;">📍 ${locationDisplay}</div>
-                <div style="font-size: 11px; font-weight: 800; color: #f43f5e; text-transform: uppercase; margin-top: 3px;">
-                  🧾 EXPENDITURE & AUDIT STATEMENT (PAWISA HMAN CHHUAHNA)
-                </div>
-                <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">
-                  Bawm: <b>${campaign.title}</b> • Period: <b>${dateRangeText}</b> ${selectedHead !== 'All Heads' ? `• Head: <b>${selectedHead}</b>` : ''}
-                </div>
-              </div>
-            </div>
-            <div style="text-align: right; font-size: 9.5px; color: #94a3b8; flex-shrink: 0; border-left: 1px dashed rgba(255,255,255,0.2); padding-left: 14px;">
-              <div>RonPay Expense Desk</div>
-              <div style="color: #ffffff; font-weight: bold; margin-top: 2px;">Date: ${todayStr}</div>
-              <div style="color: #fb7185; font-weight: 800; margin-top: 4px;">AUDITED RECORD</div>
-            </div>
+            <table style="width: 100%; border-collapse: collapse; border: none; margin: 0; color: #ffffff; table-layout: fixed;">
+              <tr>
+                <td style="width: 64px; vertical-align: middle; padding: 0 12px 0 0;">
+                  ${logoDisplay 
+                    ? `<img src="${logoDisplay}" class="header-avatar" style="width: 56px; height: 56px; border-radius: 12px; object-fit: cover; border: 2px solid #f59e0b; display: block;" alt="Logo" />`
+                    : `<div class="header-avatar-fallback" style="width: 56px; height: 56px; border-radius: 12px; background: #1e293b; border: 2px solid #f59e0b; display: flex; align-items: center; justify-content: center; font-size: 24px;">🧾</div>`
+                  }
+                </td>
+                <td style="vertical-align: middle; padding: 0 12px 0 0;">
+                  <h1 style="margin: 0 0 4px 0; font-size: 19px; font-weight: 900; text-transform: uppercase; color: #ffffff; line-height: 1.35; letter-spacing: 0;">${orgDisplay}</h1>
+                  <div style="font-size: 11px; font-weight: 700; color: #fbbf24; line-height: 1.4; margin-bottom: 4px;">
+                    <span style="display: inline-block; margin-right: 4px;">📍</span>${locationDisplay}
+                  </div>
+                  <div style="font-size: 11px; font-weight: 800; color: #f43f5e; text-transform: uppercase; line-height: 1.4; margin-bottom: 4px;">
+                    🧾 EXPENDITURE & AUDIT STATEMENT (PAWISA HMAN CHHUAHNA)
+                  </div>
+                  <div style="font-size: 10px; color: #cbd5e1; line-height: 1.4;">
+                    Bawm: <b>${campaign.title}</b> • Period: <b>${dateRangeText}</b> ${selectedHead !== 'All Heads' ? `• Head: <b>${selectedHead}</b>` : ''}
+                  </div>
+                </td>
+                <td style="width: 165px; text-align: right; vertical-align: middle; font-size: 9.5px; color: #94a3b8; border-left: 1px dashed rgba(255,255,255,0.2); padding-left: 14px;">
+                  <div style="color: #e2e8f0; font-weight: 700; line-height: 1.4; margin-bottom: 3px;">RonPay Expense Desk</div>
+                  <div style="color: #ffffff; font-weight: bold; line-height: 1.4; margin-bottom: 4px;">Date: ${todayStr}</div>
+                  <div style="color: #fb7185; font-weight: 800; font-size: 9.5px; line-height: 1.3;">AUDITED RECORD</div>
+                </td>
+              </tr>
+            </table>
           </div>
 
           <!-- Summary Strip -->

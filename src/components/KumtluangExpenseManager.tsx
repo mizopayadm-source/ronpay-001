@@ -86,6 +86,19 @@ import {
   getTransactionHead 
 } from '../utils/export';
 
+export interface CashBookItem {
+  id: string;
+  date: string;
+  type: 'receipt' | 'payment';
+  refNo: string;
+  head: string;
+  particulars: string;
+  receiptAmount: number;
+  paymentAmount: number;
+  runningBalance: number;
+  rawObject: any;
+}
+
 interface KumtluangExpenseManagerProps {
   campaign: Campaign;
   creatorProfile?: CreatorProfile | null;
@@ -228,15 +241,24 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   // Cash Book search, filter & view mode
   const [cashBookSearch, setCashBookSearch] = useState<string>('');
   const [cashBookTypeFilter, setCashBookTypeFilter] = useState<'all' | 'receipt' | 'payment'>('all');
-  const [cashBookDateFilter, setCashBookDateFilter] = useState<'all' | 'this_month' | 'today'>('all');
+  const [cashBookDateFilter, setCashBookDateFilter] = useState<'all' | 'this_month' | 'last_month' | 'today' | 'custom'>('all');
+  const [cashBookFromDate, setCashBookFromDate] = useState<string>('');
+  const [cashBookToDate, setCashBookToDate] = useState<string>('');
   const [cashBookViewMode, setCashBookViewMode] = useState<'responsive' | 'table' | 'ledger'>('responsive');
 
   // Cash Book Receipts Head-wise Aggregation & Subsidiary Ledger states
   const [ledgerReceiptsMode, setLedgerReceiptsMode] = useState<'head_wise' | 'detailed'>('head_wise');
   const [expandedReceiptHeads, setExpandedReceiptHeads] = useState<Record<string, boolean>>({});
   const [showPrintLedgerModal, setShowPrintLedgerModal] = useState<boolean>(false);
+  const [printDatePreset, setPrintDatePreset] = useState<'all' | 'this_month' | 'last_month' | 'this_year' | 'custom'>('all');
+  const [printFromDate, setPrintFromDate] = useState<string>('');
+  const [printToDate, setPrintToDate] = useState<string>('');
   const [printLedgerReceiptMode, setPrintLedgerReceiptMode] = useState<'head_wise' | 'detailed'>('head_wise');
   const [printIncludeSubsidiary, setPrintIncludeSubsidiary] = useState<boolean>(true);
+  const [printRegisterStyle, setPrintRegisterStyle] = useState<'manual_two_column' | 'single_chronological'>('manual_two_column');
+  const [printTreasurerName, setPrintTreasurerName] = useState<string>(() => creatorProfile?.name || 'Treasurer / Fin. Secretary');
+  const [printAuditorName, setPrintAuditorName] = useState<string>('Internal Auditor / Accountant');
+  const [printChairmanName, setPrintChairmanName] = useState<string>('Chairman / President');
 
   // Notification Toast for user action
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -513,19 +535,6 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
   // Cash Book Unified Chronological Entries (Receipts + Expenses with Running Balance)
   const cashBookEntries = useMemo(() => {
-    type CashBookItem = {
-      id: string;
-      date: string;
-      type: 'receipt' | 'payment';
-      refNo: string;
-      head: string;
-      particulars: string;
-      receiptAmount: number;
-      paymentAmount: number;
-      runningBalance: number;
-      rawObject: any;
-    };
-
     const items: Array<Omit<CashBookItem, 'runningBalance'>> = [];
 
     // 1. Add Collections / Receipts
@@ -613,19 +622,203 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     })).sort((a, b) => b.total - a.total);
   }, [expenseHeads, expenseList, totalExpenses]);
 
-  // Filtered Cash Book Entries for quick search, type filtering & responsive rendering
+  // Dynamic Period & B/F (Balance Brought Forward) Engine
+  const getDynamicPeriodLedgerData = (customFrom?: string, customTo?: string) => {
+    const fromStr = (customFrom || '').trim();
+    const toStr = (customTo || '').trim();
+
+    // 1. Calculate B/F (Balance Brought Forward) prior to fromStr
+    let calculatedBF = openingBalance;
+    let priorReceiptsSum = 0;
+    let priorPaymentsSum = 0;
+
+    if (fromStr) {
+      transactions
+        .filter(t => t && isTransactionForCampaign(t, campaign) && isConfirmedTransaction(t))
+        .forEach(t => {
+          const d = t.timestamp ? t.timestamp.slice(0, 10) : '';
+          if (d && d < fromStr) {
+            priorReceiptsSum += Number(t.amount) || 0;
+          }
+        });
+
+      expenseList.forEach(exp => {
+        const d = exp.spentDate || (exp.createdAt ? exp.createdAt.slice(0, 10) : '');
+        if (d && d < fromStr) {
+          priorPaymentsSum += Number(exp.amount) || 0;
+        }
+      });
+
+      calculatedBF = openingBalance + priorReceiptsSum - priorPaymentsSum;
+    }
+
+    // 2. Filter transactions and expenses strictly within [fromStr, toStr]
+    const inRangeRawTransactions = transactions.filter(t => {
+      if (!t || !isTransactionForCampaign(t, campaign) || !isConfirmedTransaction(t)) return false;
+      const d = t.timestamp ? t.timestamp.slice(0, 10) : '';
+      if (fromStr && d && d < fromStr) return false;
+      if (toStr && d && d > toStr) return false;
+      return true;
+    });
+
+    const inRangeRawExpenses = expenseList.filter(exp => {
+      const d = exp.spentDate || (exp.createdAt ? exp.createdAt.slice(0, 10) : '');
+      if (fromStr && d && d < fromStr) return false;
+      if (toStr && d && d > toStr) return false;
+      return true;
+    });
+
+    // 3. Build in-range Cash Book items with chronological running balances starting from calculatedBF
+    const periodItems: Array<Omit<CashBookItem, 'runningBalance'>> = [];
+
+    inRangeRawTransactions.forEach(t => {
+      const txDate = t.timestamp ? t.timestamp.slice(0, 10) : '';
+      periodItems.push({
+        id: t.id,
+        date: txDate,
+        type: 'receipt',
+        refNo: t.id,
+        head: getTransactionHead(t, campaign),
+        particulars: `${t.donorName || 'Anonymous Donor'}${t.donorVeng ? ` (${t.donorVeng})` : ''}${(t as any).note ? ` - ${(t as any).note}` : ''}`,
+        receiptAmount: Number(t.amount) || 0,
+        paymentAmount: 0,
+        rawObject: t
+      });
+    });
+
+    inRangeRawExpenses.forEach(exp => {
+      const expDate = exp.spentDate || (exp.createdAt ? exp.createdAt.slice(0, 10) : '');
+      periodItems.push({
+        id: exp.id,
+        date: expDate,
+        type: 'payment',
+        refNo: exp.voucherNo || exp.id,
+        head: exp.head || 'Expense',
+        particulars: `${exp.purpose} (Paid to: ${exp.paidTo})`,
+        receiptAmount: 0,
+        paymentAmount: Number(exp.amount) || 0,
+        rawObject: exp
+      });
+    });
+
+    periodItems.sort((a, b) => {
+      const timeA = new Date(a.date || 0).getTime();
+      const timeB = new Date(b.date || 0).getTime();
+      if (timeA !== timeB) return timeA - timeB;
+      return a.type === 'receipt' ? -1 : 1;
+    });
+
+    let running = calculatedBF;
+    const computedPeriodEntries: CashBookItem[] = [];
+    for (const it of periodItems) {
+      if (it.type === 'receipt') {
+        running += it.receiptAmount;
+      } else {
+        running -= it.paymentAmount;
+      }
+      computedPeriodEntries.push({
+        ...it,
+        runningBalance: running
+      });
+    }
+
+    const totalPeriodReceipts = inRangeRawTransactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+    const totalPeriodPayments = inRangeRawExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+    const calculatedClosingBalance = calculatedBF + totalPeriodReceipts - totalPeriodPayments;
+
+    // Head summary for expenses in this period
+    const periodHeadMap = new Map<string, { count: number; total: number }>();
+    expenseHeads.forEach(h => periodHeadMap.set(h, { count: 0, total: 0 }));
+    inRangeRawExpenses.forEach(e => {
+      const h = e.head || 'Thil Dang / Miscellaneous';
+      const existing = periodHeadMap.get(h) || { count: 0, total: 0 };
+      existing.count += 1;
+      existing.total += Number(e.amount) || 0;
+      periodHeadMap.set(h, existing);
+    });
+
+    const periodHeadSummary = Array.from(periodHeadMap.entries()).map(([head, data]) => ({
+      head,
+      count: data.count,
+      total: data.total,
+      percentage: totalPeriodPayments > 0 ? ((data.total / totalPeriodPayments) * 100).toFixed(1) : '0.0'
+    })).sort((a, b) => b.total - a.total);
+
+    let periodText = 'All Time Statement';
+    if (fromStr && toStr) {
+      periodText = `${formatDateDDMMYYYY(fromStr)} to ${formatDateDDMMYYYY(toStr)}`;
+    } else if (fromStr) {
+      periodText = `From ${formatDateDDMMYYYY(fromStr)} onwards`;
+    } else if (toStr) {
+      periodText = `Up to ${formatDateDDMMYYYY(toStr)}`;
+    }
+
+    return {
+      openingBF: calculatedBF,
+      priorReceiptsSum,
+      priorPaymentsSum,
+      periodReceipts: totalPeriodReceipts,
+      receiptCount: inRangeRawTransactions.length,
+      periodPayments: totalPeriodPayments,
+      paymentCount: inRangeRawExpenses.length,
+      closingCD: calculatedClosingBalance,
+      periodEntries: computedPeriodEntries,
+      periodHeadSummary,
+      periodText,
+      totalDr: calculatedBF + totalPeriodReceipts,
+      totalCr: totalPeriodPayments + calculatedClosingBalance
+    };
+  };
+
+  // On-screen effective date ranges based on cashBookDateFilter
+  const onScreenEffectiveFromDate = useMemo(() => {
+    if (cashBookDateFilter === 'today') {
+      return new Date().toISOString().split('T')[0];
+    } else if (cashBookDateFilter === 'this_month') {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    } else if (cashBookDateFilter === 'last_month') {
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`;
+    } else if (cashBookDateFilter === 'custom') {
+      return cashBookFromDate || '';
+    }
+    return '';
+  }, [cashBookDateFilter, cashBookFromDate]);
+
+  const onScreenEffectiveToDate = useMemo(() => {
+    if (cashBookDateFilter === 'today') {
+      return new Date().toISOString().split('T')[0];
+    } else if (cashBookDateFilter === 'this_month') {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      return `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (cashBookDateFilter === 'last_month') {
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const y = prev.getFullYear();
+      const m = prev.getMonth();
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      return `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (cashBookDateFilter === 'custom') {
+      return cashBookToDate || '';
+    }
+    return '';
+  }, [cashBookDateFilter, cashBookToDate]);
+
+  // On-screen period data with dynamic B/F automatically adapting
+  const onScreenPeriodData = useMemo(() => {
+    return getDynamicPeriodLedgerData(onScreenEffectiveFromDate, onScreenEffectiveToDate);
+  }, [onScreenEffectiveFromDate, onScreenEffectiveToDate, transactions, expenseList, campaign, openingBalance]);
+
+  // Filtered Cash Book Entries for quick search & type filtering
   const filteredCashBookEntries = useMemo(() => {
-    return cashBookEntries.filter(item => {
+    return onScreenPeriodData.periodEntries.filter(item => {
       if (cashBookTypeFilter !== 'all' && item.type !== cashBookTypeFilter) {
         return false;
-      }
-      if (cashBookDateFilter === 'today') {
-        const todayStr = new Date().toISOString().split('T')[0];
-        if (item.date !== todayStr) return false;
-      } else if (cashBookDateFilter === 'this_month') {
-        const now = new Date();
-        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        if (!item.date.startsWith(ym)) return false;
       }
       if (cashBookSearch) {
         const q = cashBookSearch.toLowerCase().trim();
@@ -639,7 +832,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
       }
       return true;
     });
-  }, [cashBookEntries, cashBookSearch, cashBookTypeFilter, cashBookDateFilter]);
+  }, [onScreenPeriodData.periodEntries, cashBookSearch, cashBookTypeFilter]);
 
   // Head-wise Aggregated Receipts for Clean Ledger & Subsidiary Drill-down
   const aggregatedReceiptGroups = useMemo(() => {
@@ -707,62 +900,129 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     setExpandedReceiptHeads({});
   };
 
-  // Direct Print & PDF Export handlers
-  const handlePrintManualLedger = (
-    modeOrEvent?: 'head_wise' | 'detailed' | React.SyntheticEvent,
-    includeSub?: boolean
-  ) => {
-    const actualMode: 'head_wise' | 'detailed' = 
-      (typeof modeOrEvent === 'string' && (modeOrEvent === 'head_wise' || modeOrEvent === 'detailed'))
-        ? modeOrEvent
-        : ledgerReceiptsMode;
-    const actualIncludeSub = typeof includeSub === 'boolean' ? includeSub : printIncludeSubsidiary;
-
-    let dateRangeText = 'All Time Statement';
-    if (cashBookDateFilter === 'today') {
-      dateRangeText = `Today (${formatDateDDMMYYYY(new Date())})`;
-    } else if (cashBookDateFilter === 'this_month') {
+  // Open the interactive Print Cash Book & Ledger dialog with Date selection
+  const handleOpenPrintLedgerDialog = (style: 'manual_two_column' | 'single_chronological' = 'manual_two_column') => {
+    setPrintRegisterStyle(style);
+    
+    // Sync current on-screen date selection to dialog default
+    if (cashBookDateFilter === 'this_month') {
+      setPrintDatePreset('this_month');
       const now = new Date();
-      dateRangeText = `${now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`;
-    } else if (fromDateFilter || toDateFilter) {
-      dateRangeText = `${fromDateFilter ? formatDateDDMMYYYY(fromDateFilter) : 'Start'} to ${toDateFilter ? formatDateDDMMYYYY(toDateFilter) : 'Till Date'}`;
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+      setPrintFromDate(`${y}-${m}-01`);
+      setPrintToDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+    } else if (cashBookDateFilter === 'last_month') {
+      setPrintDatePreset('last_month');
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const y = prev.getFullYear();
+      const m = String(prev.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(y, prev.getMonth() + 1, 0).getDate();
+      setPrintFromDate(`${y}-${m}-01`);
+      setPrintToDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+    } else if (cashBookDateFilter === 'today') {
+      setPrintDatePreset('custom');
+      const todayStr = new Date().toISOString().split('T')[0];
+      setPrintFromDate(todayStr);
+      setPrintToDate(todayStr);
+    } else if (cashBookDateFilter === 'custom') {
+      setPrintDatePreset('custom');
+      setPrintFromDate(cashBookFromDate);
+      setPrintToDate(cashBookToDate);
+    } else {
+      setPrintDatePreset('all');
+      setPrintFromDate('');
+      setPrintToDate('');
     }
 
-    exportManualStyleLedgerPrint({
-      campaign,
-      creatorProfile,
-      openingBalance,
-      totalCollections,
-      totalExpenses,
-      netBalance,
-      headLedgerSummary,
-      cashBookEntries: filteredCashBookEntries,
-      dateRangeText,
-      treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary',
-      auditorName: 'Internal Auditor / Accountant',
-      chairmanName: 'Chairman / President',
-      receiptGroupingMode: actualMode,
-      includeSubsidiarySchedule: actualIncludeSub
-    });
+    setShowPrintLedgerModal(true);
+  };
+
+  // Handle Preset selection inside the Print Dialog
+  const handleApplyPrintDatePreset = (preset: 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom') => {
+    setPrintDatePreset(preset);
+    const now = new Date();
+    if (preset === 'all') {
+      setPrintFromDate('');
+      setPrintToDate('');
+    } else if (preset === 'this_month') {
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+      setPrintFromDate(`${y}-${m}-01`);
+      setPrintToDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+    } else if (preset === 'last_month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const y = prev.getFullYear();
+      const m = String(prev.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(y, prev.getMonth() + 1, 0).getDate();
+      setPrintFromDate(`${y}-${m}-01`);
+      setPrintToDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+    } else if (preset === 'this_year') {
+      const y = now.getFullYear();
+      setPrintFromDate(`${y}-01-01`);
+      setPrintToDate(`${y}-12-31`);
+    }
+  };
+
+  // Live computed period data for the Print Dialog preview
+  const printModalPreviewData = useMemo(() => {
+    return getDynamicPeriodLedgerData(printFromDate, printToDate);
+  }, [printFromDate, printToDate, transactions, expenseList, campaign, openingBalance]);
+
+  // Execute actual Print / PDF Export using the chosen date range and dynamically adjusted B/F
+  const handleExecutePrint = () => {
+    const data = printModalPreviewData;
+
+    if (printRegisterStyle === 'manual_two_column') {
+      exportManualStyleLedgerPrint({
+        campaign,
+        creatorProfile,
+        openingBalance: data.openingBF,
+        totalCollections: data.periodReceipts,
+        totalExpenses: data.periodPayments,
+        netBalance: data.closingCD,
+        headLedgerSummary: data.periodHeadSummary,
+        cashBookEntries: data.periodEntries,
+        dateRangeText: data.periodText,
+        treasurerName: printTreasurerName || creatorProfile?.name || 'Treasurer / Fin. Secretary',
+        auditorName: printAuditorName || 'Internal Auditor / Accountant',
+        chairmanName: printChairmanName || 'Chairman / President',
+        receiptGroupingMode: printLedgerReceiptMode,
+        includeSubsidiarySchedule: printIncludeSubsidiary
+      });
+    } else {
+      exportCashBookPrint({
+        campaign,
+        creatorProfile,
+        openingBalance: data.openingBF,
+        totalCollections: data.periodReceipts,
+        totalExpenses: data.periodPayments,
+        netBalance: data.closingCD,
+        headLedgerSummary: data.periodHeadSummary,
+        cashBookEntries: data.periodEntries,
+        dateRangeText: data.periodText,
+        treasurerName: printTreasurerName || creatorProfile?.name || 'Treasurer / Fin. Secretary',
+        auditorName: printAuditorName || 'Internal Auditor / Accountant',
+        chairmanName: printChairmanName || 'Chairman / President'
+      });
+    }
+
+    setShowPrintLedgerModal(false);
+  };
+
+  const handlePrintManualLedger = () => {
+    handleOpenPrintLedgerDialog('manual_two_column');
   };
 
   const handlePrintCashBook = () => {
-    exportCashBookPrint({
-      campaign,
-      creatorProfile,
-      openingBalance,
-      totalCollections,
-      totalExpenses,
-      netBalance,
-      headLedgerSummary,
-      cashBookEntries,
-      dateRangeText: 'All Time Statement',
-      treasurerName: creatorProfile?.name || 'Treasurer / Fin. Secretary'
-    });
+    handleOpenPrintLedgerDialog('single_chronological');
   };
 
   const handleDownloadCashBookPDF = () => {
-    handlePrintCashBook();
+    handleOpenPrintLedgerDialog('manual_two_column');
   };
 
   const handlePrintExpenseStatement = () => {
@@ -1727,19 +1987,19 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
             <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
               <span className="text-[9.5px] font-bold text-slate-500 block uppercase">1. Opening Balance (B/F)</span>
-              <span className="text-xs sm:text-sm font-black text-slate-800">₹{openingBalance.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800">₹{onScreenPeriodData.openingBF.toLocaleString('en-IN')}</span>
             </div>
             <div className="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200/80">
               <span className="text-[9.5px] font-bold text-emerald-700 block uppercase">2. Total Receipts (+)</span>
-              <span className="text-xs sm:text-sm font-black text-emerald-700">₹{totalCollections.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-700">₹{onScreenPeriodData.periodReceipts.toLocaleString('en-IN')}</span>
             </div>
             <div className="bg-rose-50/60 p-2.5 rounded-xl border border-rose-200/80">
               <span className="text-[9.5px] font-bold text-rose-700 block uppercase">3. Total Payments (-)</span>
-              <span className="text-xs sm:text-sm font-black text-rose-700">₹{totalExpenses.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-rose-700">₹{onScreenPeriodData.periodPayments.toLocaleString('en-IN')}</span>
             </div>
             <div className="bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-200/80">
               <span className="text-[9.5px] font-bold text-indigo-900 block uppercase">4. Closing Cash Balance (=)</span>
-              <span className="text-xs sm:text-sm font-black text-indigo-950">₹{netBalance.toLocaleString('en-IN')}</span>
+              <span className="text-xs sm:text-sm font-black text-indigo-950">₹{onScreenPeriodData.closingCD.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
@@ -1864,6 +2124,17 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 </button>
                 <button
                   type="button"
+                  onClick={() => setCashBookDateFilter('last_month')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                    cashBookDateFilter === 'last_month'
+                      ? 'bg-indigo-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  Thla Hmasa
+                </button>
+                <button
+                  type="button"
                   onClick={() => setCashBookDateFilter('today')}
                   className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 ${
                     cashBookDateFilter === 'today'
@@ -1872,6 +2143,17 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                   }`}
                 >
                   Vawiin (Today)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCashBookDateFilter('custom')}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                    cashBookDateFilter === 'custom'
+                      ? 'bg-indigo-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  <Calendar className="w-3 h-3" /> Custom
                 </button>
               </div>
 
@@ -1913,6 +2195,42 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 </button>
               </div>
             </div>
+
+            {/* Custom Date Range Picker inputs when 'custom' is active */}
+            {cashBookDateFilter === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 animate-fadeIn bg-indigo-50/40 p-2 rounded-xl">
+                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Date Thlan Bik:
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <input
+                    type="date"
+                    value={cashBookFromDate}
+                    onChange={(e) => setCashBookFromDate(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 shadow-2xs"
+                    title="From Date (Atanga)"
+                  />
+                  <span className="text-slate-400 text-xs font-bold">to</span>
+                  <input
+                    type="date"
+                    value={cashBookToDate}
+                    onChange={(e) => setCashBookToDate(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-800 font-mono outline-none focus:border-indigo-500 shadow-2xs"
+                    title="To Date (Thlenga)"
+                  />
+                  {(cashBookFromDate || cashBookToDate) && (
+                    <button
+                      type="button"
+                      onClick={() => { setCashBookFromDate(''); setCashBookToDate(''); }}
+                      className="text-xs text-slate-500 hover:text-slate-800 font-bold px-2 py-1 bg-white border border-slate-200 rounded-lg cursor-pointer transition"
+                      title="Clear custom dates"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Chronological Unified Cash Book List / Table */}
@@ -1922,8 +2240,8 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
               <span className="text-[11px] text-slate-400">Chronological with Running Balance</span>
             </div>
 
-            {/* Opening Balance Card (Always shown if openingBalance > 0 and no strict search filter) */}
-            {openingBalance > 0 && (!cashBookSearch || cashBookSearch.toLowerCase().includes('open')) && (
+            {/* Opening Balance Card (Always shown if openingBF > 0 or custom period statement) */}
+            {(onScreenPeriodData.openingBF > 0 || onScreenPeriodData.periodText !== 'All Time Statement') && (!cashBookSearch || cashBookSearch.toLowerCase().includes('open')) && (
               <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0">
@@ -1933,12 +2251,14 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                     <span className="font-black text-xs text-indigo-950 block truncate">
                       Opening Balance in Hand / Bank (Brought Forward)
                     </span>
-                    <span className="text-[10px] text-indigo-700 font-medium">Initial Fund Setup</span>
+                    <span className="text-[10px] text-indigo-700 font-medium">
+                      {onScreenEffectiveFromDate ? `${formatDateDDMMYYYY(onScreenEffectiveFromDate)} hma lama balance` : 'Initial Fund Setup'}
+                    </span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <span className="text-xs font-black text-emerald-700 block">+₹{openingBalance.toLocaleString('en-IN')}</span>
-                  <span className="text-[10px] font-bold text-indigo-900">Bal: ₹{openingBalance.toLocaleString('en-IN')}</span>
+                  <span className="text-xs font-black text-emerald-700 block">+₹{onScreenPeriodData.openingBF.toLocaleString('en-IN')}</span>
+                  <span className="text-[10px] font-bold text-indigo-900">Bal: ₹{onScreenPeriodData.openingBF.toLocaleString('en-IN')}</span>
                 </div>
               </div>
             )}
@@ -2080,12 +2400,12 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 <div className="overflow-x-auto rounded-2xl border-2 border-slate-900 bg-white shadow-xs">
                   {(() => {
                     const receiptSide = [
-                      ...(openingBalance > 0 ? [{
-                        date: 'Start',
-                        particulars: 'To Opening Balance (B/F) - Cash in Hand',
+                      ...(onScreenPeriodData.openingBF > 0 || onScreenPeriodData.periodText !== 'All Time Statement' ? [{
+                        date: onScreenEffectiveFromDate ? formatDateDDMMYYYY(onScreenEffectiveFromDate) : 'Start',
+                        particulars: 'To Opening Balance (B/F) - Cash in Hand / Bank',
                         refNo: 'B/F',
                         head: 'Opening Balance',
-                        amount: openingBalance
+                        amount: onScreenPeriodData.openingBF
                       }] : []),
                       ...filteredCashBookEntries
                         .filter(e => e.type === 'receipt')
@@ -2111,17 +2431,17 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                           amount: e.paymentAmount
                         })),
                       {
-                        date: 'Closing',
-                        particulars: 'By Closing Balance (C/D) - Cash in Hand',
+                        date: onScreenEffectiveToDate ? formatDateDDMMYYYY(onScreenEffectiveToDate) : 'Closing',
+                        particulars: 'By Closing Balance (C/D) - Cash in Hand / Bank',
                         refNo: 'C/D',
                         head: 'Closing Cash',
-                        amount: netBalance
+                        amount: onScreenPeriodData.closingCD
                       }
                     ];
 
                     const maxRows = Math.max(receiptSide.length, paymentSide.length);
-                    const grandDr = openingBalance + totalCollections;
-                    const grandCr = totalExpenses + netBalance;
+                    const grandDr = onScreenPeriodData.totalDr;
+                    const grandCr = onScreenPeriodData.totalCr;
 
                     return (
                       <table className="w-full text-left border-collapse text-xs min-w-[720px]">
@@ -3643,6 +3963,376 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Paih Fai Vek Rawh</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. PRINT CASH BOOK & LEDGER OPTIONS & DATE RANGE MODAL */}
+      {showPrintLedgerModal && (
+        <div 
+          className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+          onClick={() => setShowPrintLedgerModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-amber-300">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-white flex items-center gap-2">
+                    Print Cash Book &amp; Ledger
+                    <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase">A4 Format</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    Print duh hun bi (Date Range) thlang la, B/F pawh amahin a lo insiam rem nghal ang.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrintLedgerModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
+                title="Kharkhna"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4.5 text-xs">
+              {/* 1. Date Range Presets & Inputs */}
+              <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-slate-900 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                    <Calendar className="w-4 h-4 text-indigo-600" /> 1. Hun Bi (Date Range) Thlanna
+                  </span>
+                  {(printFromDate || printToDate) && (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPrintDatePreset('all')}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                    >
+                      Reset to All Time
+                    </button>
+                  )}
+                </div>
+
+                {/* Preset Pills */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPrintDatePreset('all')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs ${
+                      printDatePreset === 'all'
+                        ? 'bg-indigo-900 text-white shadow-2xs font-black'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    A Zavai (All Time)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPrintDatePreset('this_month')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs ${
+                      printDatePreset === 'this_month'
+                        ? 'bg-indigo-900 text-white shadow-2xs font-black'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Kumin Thla (This Month)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPrintDatePreset('last_month')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs ${
+                      printDatePreset === 'last_month'
+                        ? 'bg-indigo-900 text-white shadow-2xs font-black'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Thla Hmasa (Last Month)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPrintDatePreset('this_year')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs ${
+                      printDatePreset === 'this_year'
+                        ? 'bg-indigo-900 text-white shadow-2xs font-black'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Kumin (This Year)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintDatePreset('custom')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs ${
+                      printDatePreset === 'custom'
+                        ? 'bg-indigo-900 text-white shadow-2xs font-black'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Custom Date...
+                  </button>
+                </div>
+
+                {/* From & To Custom Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">
+                      Date Atanga (From Date):
+                    </label>
+                    <input
+                      type="date"
+                      value={printFromDate}
+                      onChange={(e) => {
+                        setPrintFromDate(e.target.value);
+                        setPrintDatePreset('custom');
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">
+                      Date Thlenga (To Date):
+                    </label>
+                    <input
+                      type="date"
+                      value={printToDate}
+                      onChange={(e) => {
+                        setPrintToDate(e.target.value);
+                        setPrintDatePreset('custom');
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-mono outline-none focus:border-indigo-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Dynamic B/F & Balancing Live Preview */}
+              <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-950 p-4 rounded-2xl text-white space-y-3 border border-indigo-900">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black uppercase text-amber-300 tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Dynamic B/F &amp; Live Balancing Preview
+                  </span>
+                  <span className="text-[10px] text-slate-300 font-bold bg-white/10 px-2 py-0.5 rounded-md">
+                    Period: {printModalPreviewData.periodText}
+                  </span>
+                </div>
+
+                {/* 4-Pillar Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-xl border border-white/15">
+                    <span className="text-[9px] font-bold text-indigo-200 block uppercase">1. Opening Balance (B/F)</span>
+                    <span className="text-sm sm:text-base font-black text-amber-300 block mt-0.5">
+                      ₹{printModalPreviewData.openingBF.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[9px] text-slate-300 block mt-0.5">
+                      {printFromDate ? `${formatDateDDMMYYYY(printFromDate)} hma lam B/F` : 'Initial Balance'}
+                    </span>
+                  </div>
+
+                  <div className="bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-500/30">
+                    <span className="text-[9px] font-bold text-emerald-300 block uppercase">2. Sum Lut (+)</span>
+                    <span className="text-sm sm:text-base font-black text-emerald-400 block mt-0.5">
+                      ₹{printModalPreviewData.periodReceipts.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[9px] text-emerald-300/80 block mt-0.5">
+                      {printModalPreviewData.receiptCount} receipts/thawh
+                    </span>
+                  </div>
+
+                  <div className="bg-rose-950/40 p-2.5 rounded-xl border border-rose-500/30">
+                    <span className="text-[9px] font-bold text-rose-300 block uppercase">3. Sum Chhuak (-)</span>
+                    <span className="text-sm sm:text-base font-black text-rose-400 block mt-0.5">
+                      ₹{printModalPreviewData.periodPayments.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[9px] text-rose-300/80 block mt-0.5">
+                      {printModalPreviewData.paymentCount} vouchers
+                    </span>
+                  </div>
+
+                  <div className="bg-indigo-900/60 p-2.5 rounded-xl border border-indigo-400/30">
+                    <span className="text-[9px] font-bold text-indigo-200 block uppercase">4. Closing Balance (C/D)</span>
+                    <span className="text-sm sm:text-base font-black text-white block mt-0.5">
+                      ₹{printModalPreviewData.closingCD.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[9px] text-indigo-300 block mt-0.5">
+                      Bawm/Bank balance
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mathematical Ledger Equality Proof */}
+                <div className="flex items-center justify-between text-[11px] bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-slate-200">
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    Double-Entry Balance a inmil thlap
+                  </span>
+                  <span className="font-mono text-[10.5px] text-slate-300">
+                    Dr: ₹{printModalPreviewData.totalDr.toLocaleString('en-IN')} = Cr: ₹{printModalPreviewData.totalCr.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. Register Format & Mode Choices */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Format Style */}
+                <div className="space-y-1.5 border border-slate-200 p-3 rounded-2xl bg-white">
+                  <span className="font-black text-slate-800 text-[11px] uppercase block">
+                    📖 Register Layout Format:
+                  </span>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                      <input
+                        type="radio"
+                        name="printRegisterStyle"
+                        checked={printRegisterStyle === 'manual_two_column'}
+                        onChange={() => setPrintRegisterStyle('manual_two_column')}
+                        className="text-indigo-600"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block text-xs">Two-Column Traditional Ledger</span>
+                        <span className="text-[10px] text-slate-500">Dr. (Receipts) leh Cr. (Payments) column hnih phah</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                      <input
+                        type="radio"
+                        name="printRegisterStyle"
+                        checked={printRegisterStyle === 'single_chronological'}
+                        onChange={() => setPrintRegisterStyle('single_chronological')}
+                        className="text-indigo-600"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block text-xs">Single Column Cash Book</span>
+                        <span className="text-[10px] text-slate-500">A indawt te tea Running Balance tarlanna</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Receipt Aggregation Mode */}
+                <div className="space-y-1.5 border border-slate-200 p-3 rounded-2xl bg-white">
+                  <span className="font-black text-slate-800 text-[11px] uppercase block">
+                    🏷️ Receipts (Debit) Tarlan Dan:
+                  </span>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                      <input
+                        type="radio"
+                        name="printLedgerReceiptMode"
+                        checked={printLedgerReceiptMode === 'head_wise'}
+                        onChange={() => setPrintLedgerReceiptMode('head_wise')}
+                        className="text-indigo-600"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block text-xs">Summary Ledger (Head-wise)</span>
+                        <span className="text-[10px] text-slate-500">Category &amp; thla bila belhkhawm (Paper friendly)</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                      <input
+                        type="radio"
+                        name="printLedgerReceiptMode"
+                        checked={printLedgerReceiptMode === 'detailed'}
+                        onChange={() => setPrintLedgerReceiptMode('detailed')}
+                        className="text-indigo-600"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block text-xs">Detailed Ledger (Member-wise)</span>
+                        <span className="text-[10px] text-slate-500">Thawhtu mimal tin hming ziah chhuah vekna</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Subsidiary Schedule Checkbox (When head_wise) */}
+              {printLedgerReceiptMode === 'head_wise' && (
+                <label className="flex items-center gap-2.5 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={printIncludeSubsidiary}
+                    onChange={(e) => setPrintIncludeSubsidiary(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded"
+                  />
+                  <div>
+                    <span className="font-black text-emerald-950 block text-xs">
+                      Member Subsidiary Schedule Appendix (Phek danga zep tel)
+                    </span>
+                    <span className="text-[10.5px] text-emerald-800">
+                      Category belhkhawm piah lamah member mimal thawh dan sub-register phek hrangah zep tel rawh.
+                    </span>
+                  </div>
+                </label>
+              )}
+
+              {/* 5. Signatories Customization (Optional) */}
+              <div className="space-y-1.5 border border-slate-200 p-3 rounded-2xl bg-slate-50">
+                <span className="font-black text-slate-700 text-[11px] uppercase block">
+                  ✍️ Signatory Hmingte (Print-a lang tur):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Treasurer / Fin. Secy:</label>
+                    <input
+                      type="text"
+                      value={printTreasurerName}
+                      onChange={(e) => setPrintTreasurerName(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Internal Auditor:</label>
+                    <input
+                      type="text"
+                      value={printAuditorName}
+                      onChange={(e) => setPrintAuditorName(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">President / Chairman:</label>
+                    <input
+                      type="text"
+                      value={printChairmanName}
+                      onChange={(e) => setPrintChairmanName(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer / Action Buttons */}
+            <div className="p-4 sm:p-5 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowPrintLedgerModal(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition cursor-pointer"
+              >
+                Thulh Leh Rawh
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExecutePrint}
+                  className="px-5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs rounded-xl shadow-md transition active:scale-95 cursor-pointer flex items-center gap-2 border border-indigo-950"
+                >
+                  <Printer className="w-4 h-4 text-amber-300" />
+                  <span>Print / A4 Preview &amp; PDF</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
