@@ -3494,10 +3494,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 <input
                   type="text"
                   required
+                  disabled={isExpired}
                   value={donorName}
                   onChange={(e) => setDonorName(e.target.value)}
                   placeholder="e.g. C. Lalhmangaiha / Vanlalruati"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
             )
@@ -3511,6 +3512,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <input
                 type="text"
                 value={remark}
+                disabled={isExpired}
                 onChange={(e) => setRemark(e.target.value)}
                 placeholder={
                   (category === 'ralna' || campaign?.category === 'ralna')
@@ -3521,7 +3523,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     ? 'Thuchah'
                     : 'Thuchah / Remark (Optional)...'
                 }
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 transition disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           )}
@@ -3766,6 +3768,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   type="number"
                   min={1}
                   required
+                  disabled={isExpired}
                   placeholder="0"
                   value={standardAmount === '' ? '' : standardAmount}
                   onChange={(e) => {
@@ -3778,7 +3781,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       setStandardAmount(isNaN(num) ? '' : num);
                     }
                   }}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 pl-8 pr-3 font-black text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2.5 pl-8 pr-3 font-black text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
 

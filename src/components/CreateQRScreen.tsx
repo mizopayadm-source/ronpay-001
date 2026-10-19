@@ -3869,6 +3869,7 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
             </div>
             <input
               type="datetime-local"
+              min={new Date().toISOString().substring(0, 16)}
               value={validityDate ? validityDate.substring(0, 16) : ''}
               onChange={(e) => setValidityDate(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 text-[10.5px] focus:outline-none focus:border-indigo-600"

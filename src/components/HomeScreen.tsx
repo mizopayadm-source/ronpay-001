@@ -1096,7 +1096,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         {language === 'mizo' ? 'Pekna' : 'Contribute'} <ChevronRight className="w-3 h-3" />
                       </button>
                       <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
-                        {formatDateDDMMYYYY(camp.createdAt)}
+                        {camp.validityDate ? formatDateDDMMYYYY(camp.validityDate) : formatDateDDMMYYYY(camp.createdAt)}
                       </p>
                     </div>
                   </div>

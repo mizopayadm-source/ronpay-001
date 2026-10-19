@@ -139,7 +139,10 @@ export const isCampaignExpired = (validityDate?: string, status?: string): boole
     }
     
     if (isNaN(d.getTime())) return false;
-    // Compare end of day or exact timestamp
+    
+    // Set to end of the day (23:59:59.999) to ensure validity covers the whole day
+    d.setHours(23, 59, 59, 999);
+    
     const deadline = d.getTime();
     const now = Date.now();
     return now > deadline;
