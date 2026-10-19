@@ -396,7 +396,50 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {/* Admin Sync Diagnostic banner is removed from Home for Guest User / clean view */}
+      {/* Admin Sync Diagnostic - Strictly hidden from Guest Users */}
+      {!isSyncBannerDismissed && !isGuestUser && isAuthorizedAdmin && onOpenSyncDiagnostic && (
+        <div 
+          onClick={onOpenSyncDiagnostic}
+          className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/30 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600/50 border border-indigo-400/30 text-amber-300 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+              <Activity className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs text-white">Admin Sync Diagnostic</span>
+                <span className="text-[8.5px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full">
+                  Live
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 truncate">
+                Cross-device consistency & database health monitor
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 pl-2">
+            <div className="px-3 py-1.5 bg-indigo-600 group-hover:bg-indigo-500 text-white text-[11px] font-black rounded-xl shadow-2xs transition flex items-center gap-1.5">
+              <span>Enfiah Rawh</span>
+              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+            <button
+              type="button"
+              title="Dah bo / Dismiss (Hide from Home)"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSyncBannerDismissed(true);
+                try {
+                  localStorage.setItem('ronpay_hide_sync_diagnostic_banner', 'true');
+                } catch {}
+              }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
 
 

@@ -1315,6 +1315,14 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const handleProcessPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('DEBUG: handleProcessPayment', { 
+        isExpired, 
+        isPendingApproval, 
+        isRejected, 
+        status: activeCampRef?.status, 
+        validity: activeCampRef?.validityDate,
+        now: new Date().toISOString()
+    });
     if (isPendingApproval) {
       alert('⚠️ He Bawm / QR Code hi Admin-in a la approve loh avangin sum thawh theih a la ni rih lo. Admin approve a nih veleh a active nghal ang.');
       return;

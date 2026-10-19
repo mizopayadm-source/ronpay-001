@@ -129,7 +129,15 @@ export const isCampaignExpired = (validityDate?: string, status?: string): boole
   if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected' || status === 'pending_renewal') return true;
   if (!validityDate) return false;
   try {
-    const d = new Date(validityDate);
+    let d = new Date(validityDate);
+    // Robust parsing for DD/MM/YYYY if ISO fails
+    if (isNaN(d.getTime()) && validityDate.includes('/')) {
+        const parts = validityDate.split('/');
+        if (parts.length === 3) {
+            d = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+    }
+    
     if (isNaN(d.getTime())) return false;
     // Compare end of day or exact timestamp
     const deadline = d.getTime();
