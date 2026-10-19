@@ -42,11 +42,12 @@ import {
   KeyRound,
   ShieldAlert,
   Eye,
-  EyeOff
+  EyeOff,
+  RotateCw
 } from 'lucide-react';
-import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode } from '../types';
+import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode, CampaignRenewalRequest } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
-import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired } from '../utils/date';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, isCampaignInactiveOrExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
 import { 
   getMembers, 
@@ -56,7 +57,8 @@ import {
   getStoredCreatorProfile,
   isCampaignCreator,
   saveCampaign,
-  getStoredCampaigns
+  getStoredCampaigns,
+  recordAuditLog
 } from '../utils/storage';
 
 import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
@@ -65,6 +67,7 @@ import { invokePhonePePayPage, checkPhonePePaymentStatus } from '../utils/phonep
 import { getPhonePeMercuryUrl, checkDirectPhonePeStatus } from '../utils/phonepeDirect';
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
+import { CampaignRenewalModal } from './CampaignRenewalModal';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -518,9 +521,42 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   });
 
   const config = BAWM_CONFIG[category];
-  const isExpired = isCampaignExpired(campaign?.validityDate, campaign?.status);
-  const isPendingApproval = campaign?.status === 'pending_approval';
-  const isRejected = campaign?.status === 'rejected';
+  const activeCampRef = currentCampaign || campaign;
+  const isExpired = isCampaignInactiveOrExpired(activeCampRef);
+  const isPendingApproval = activeCampRef?.status === 'pending_approval' || activeCampRef?.status === 'pending_renewal';
+  const isRejected = activeCampRef?.status === 'rejected';
+  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState<boolean>(false);
+
+  const canRequestRenewal = useMemo(() => {
+    if (!activeCampRef) return false;
+    return Boolean(
+      isOwner || 
+      creatorProfile?.isAdmin || 
+      creatorProfile?.role === 'SUPER_ADMIN' || 
+      creatorProfile?.role === 'ADMIN' ||
+      (creatorProfile?.phone && (creatorProfile.phone === activeCampRef.createdBy || creatorProfile.phone === activeCampRef.contactPhone))
+    );
+  }, [activeCampRef, isOwner, creatorProfile]);
+
+  const handleRenewalSubmit = (camp: Campaign, renewalData: CampaignRenewalRequest) => {
+    const updated: Campaign = {
+      ...camp,
+      renewalRequest: renewalData,
+      status: 'pending_renewal',
+      approvalRemarks: `Renewal requested (+${renewalData.requestedDays || ''} days): ${renewalData.reason || ''}`,
+      updatedAt: new Date().toISOString()
+    };
+    setCurrentCampaign(updated);
+    if (onUpdateCampaign) {
+      onUpdateCampaign(updated);
+    }
+    recordAuditLog(
+      'QR Renewal Requested',
+      `Creator ${renewalData.requestedBy} requested renewal for '${camp.title}' (${camp.id}). Reason: ${renewalData.reason}`,
+      'campaign',
+      camp.id
+    );
+  };
 
   // Derive human-readable period label
   const periodLabel = periodType === 'monthly'
@@ -2174,15 +2210,44 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
       {/* 2. Main Donation Checkout Form */}
       <form onSubmit={handleProcessPayment} className="space-y-4">
-        {/* Expired QR Notice Banner */}
+        {/* Expired / Inactive QR Notice Banner */}
         {isExpired && (
-          <div className="bg-rose-50 border-2 border-rose-500 p-3.5 rounded-2xl text-rose-950 space-y-1.5 shadow-xs">
-            <div className="flex items-center gap-2 text-xs font-black uppercase text-rose-700">
-              <AlertCircle className="w-4 h-4 shrink-0" /> Pek theih hun a tawp tawh (Expired QR)
+          <div className="bg-rose-50 border-2 border-rose-500 p-4 rounded-2xl text-rose-950 space-y-2.5 shadow-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 text-xs font-black uppercase text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>Pek theih a ni tawh lo (Expired / Inactive QR)</span>
+              </div>
+              {activeCampRef?.renewalRequest?.status === 'pending' && (
+                <span className="text-[9.5px] font-black uppercase bg-amber-500/20 text-amber-900 border border-amber-400 px-2 py-0.5 rounded-full">
+                  Renewal Dilna Nghah Mek
+                </span>
+              )}
             </div>
-            <p className="text-[11px] font-medium text-rose-900 leading-relaxed">
-              He QR Code validity hi {campaign?.validityDate ? formatDateDDMMYYYY(campaign.validityDate) : 'a hun a liam tawh'} khan a tawp tawh avangin sum luh tir theih a ni tawh lo. Creator-in validity a extend a nih loh chuan sum pek theih a ni lo.
+            <p className="text-[11.5px] font-medium text-rose-900 leading-relaxed">
+              He QR Code / Bawm hi a hun a liam tawh (validity: <b>{activeCampRef?.validityDate ? formatDateDDMMYYYY(activeCampRef.validityDate) : 'a hun a liam tawh'}</b>) emaw tihtawp a nih avangin sum pek theih a ni tawh lo.
+              {activeCampRef?.renewalRequest?.status === 'pending' ? (
+                <span className="block mt-1.5 font-bold text-amber-900 bg-amber-100/80 p-2 rounded-xl border border-amber-300">
+                  ⏳ A siamtu (Creator)-in validity pawhsei a dil tawh a, Admin approval a nghak mek e. Admin-in an approve veleh a active leh nghal ang.
+                </span>
+              ) : (
+                <span className="block mt-1">
+                  A siamtu (Creator)-in validity a renew / extend a, Admin-in a lo approve hma chuan sum chhunluh theih a ni lo.
+                </span>
+              )}
             </p>
+            {canRequestRenewal && activeCampRef?.renewalRequest?.status !== 'pending' && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsRenewalModalOpen(true)}
+                  className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Renew / Validity Extend Dil Rawh</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -4115,6 +4180,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           setIsUPICheckoutOpen(false);
           onPaymentSuccess(transaction);
         }}
+      />
+
+      {/* Campaign Renewal Request Modal for Creators */}
+      <CampaignRenewalModal
+        isOpen={isRenewalModalOpen}
+        onClose={() => setIsRenewalModalOpen(false)}
+        campaign={activeCampRef || campaign || null}
+        creatorProfile={creatorProfile}
+        onSubmitRenewal={handleRenewalSubmit}
       />
 
       {/* Creator & Officer: Change Officer Passcode PIN Modal */}

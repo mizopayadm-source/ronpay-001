@@ -126,15 +126,40 @@ export const formatTimeOnlyIST = (dateInput?: string | Date | number | null): st
 };
 
 export const isCampaignExpired = (validityDate?: string, status?: string): boolean => {
-  if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected') return true;
+  if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected' || status === 'pending_renewal') return true;
   if (!validityDate) return false;
   try {
-    const deadline = new Date(validityDate).getTime();
-    const now = new Date().getTime();
+    const d = new Date(validityDate);
+    if (isNaN(d.getTime())) return false;
+    // Compare end of day or exact timestamp
+    const deadline = d.getTime();
+    const now = Date.now();
     return now > deadline;
   } catch {
     return false;
   }
+};
+
+/**
+ * Authoritative check if a campaign is Inactive or Expired.
+ * Returns true if the campaign is expired, pending approval, rejected, cancelled, archived, pending renewal, voided, or past validity.
+ */
+export const isCampaignInactiveOrExpired = (campaign?: { status?: string; validityDate?: string; isVoided?: boolean } | null): boolean => {
+  if (!campaign) return true;
+  if (campaign.isVoided) return true;
+  const status = campaign.status;
+  if (
+    status === 'expired' ||
+    status === 'cancelled' ||
+    status === 'archived' ||
+    status === 'rejected' ||
+    status === 'pending_approval' ||
+    status === 'pending_renewal' ||
+    status === 'completed'
+  ) {
+    return true;
+  }
+  return isCampaignExpired(campaign.validityDate, status);
 };
 
 /**

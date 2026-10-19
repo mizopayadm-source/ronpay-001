@@ -54,7 +54,7 @@ import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
 
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
-import { formatDateDDMMYYYY, getCreatorExpiryStatus } from '../utils/date';
+import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
 import { subscribeToTable, fetchTableData } from '../services/SupabaseSync';
@@ -234,6 +234,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [showAllQRs, setShowAllQRs] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
+  // Check if current session is a Guest User (non-logged-in explorer or guest role)
+  const isGuestUser = useMemo(() => {
+    if (!creatorProfile) return true;
+    if (!creatorProfile.phone || creatorProfile.phone.trim() === '') return true;
+    if (creatorProfile.role === 'GUEST') return true;
+    if (creatorProfile.name === 'Khualmi (Guest User)' || (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))) return true;
+    return false;
+  }, [creatorProfile]);
+
+  // Check if current user is an authenticated and authorized Administrator
+  const isAuthorizedAdmin = useMemo(() => {
+    if (isGuestUser) return false;
+    const role = creatorProfile?.role;
+    const isAdminRole = role === 'SUPER_ADMIN' || role === 'ADMIN';
+    const isAdminFlag = creatorProfile?.isAdmin === true || creatorProfile?.phone === '9862000001';
+    return Boolean(isAdminRole || isAdminFlag);
+  }, [isGuestUser, creatorProfile]);
+
+  // Check if a campaign is active (not expired, voided, completed, cancelled, or archived)
+  const isCampaignActive = (c: Campaign): boolean => {
+    if (!c) return false;
+    if (c.isVoided) return false;
+    if (c.status === 'expired' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'rejected' || c.status === 'pending_approval') {
+      return false;
+    }
+    if (isCampaignExpired(c.validityDate, c.status)) {
+      return false;
+    }
+    return c.status === 'active' || !c.status;
+  };
+
   // All existing QRs sorted newest first
   const allSortedQRs = useMemo(() => {
     return [...safeCampaigns].sort((a, b) => {
@@ -243,9 +274,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     });
   }, [safeCampaigns]);
 
+  // Active QRs sorted newest first
+  const activeSortedQRs = useMemo(() => {
+    return allSortedQRs.filter(isCampaignActive);
+  }, [allSortedQRs]);
+
   // Filtered QRs based on search keyword and category filter
   const filteredQRs = useMemo(() => {
-    let list = allSortedQRs;
+    let list = qrSearchQuery.trim() ? allSortedQRs : activeSortedQRs;
 
     if (qrCategoryFilter !== 'all') {
       list = list.filter(c => c.category === qrCategoryFilter);
@@ -267,20 +303,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
 
     return list;
-  }, [allSortedQRs, qrSearchQuery, qrCategoryFilter]);
+  }, [allSortedQRs, activeSortedQRs, qrSearchQuery, qrCategoryFilter]);
 
-  // Displayed QRs (Show 10 by default, ensure featured campaigns like BMP Shillong are included, expand when searching, filtering, or showAllQRs toggled)
+  // Displayed QRs (Strictly Active Latest 5 on first page; expands on search, category filter, or showAllQRs toggle)
   const displayedQRs = useMemo(() => {
     if (qrSearchQuery.trim() || qrCategoryFilter !== 'all' || showAllQRs) {
       return filteredQRs;
     }
-    const defaultSlice = filteredQRs.slice(0, 10);
-    const bmpCamp = filteredQRs.find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp shillong')));
-    if (bmpCamp && !defaultSlice.some(c => c.id === bmpCamp.id)) {
-      defaultSlice.push(bmpCamp);
-    }
-    return defaultSlice;
-  }, [filteredQRs, qrSearchQuery, qrCategoryFilter, showAllQRs]);
+    // Strictly latest 5 active QRs on the initial view
+    return activeSortedQRs.slice(0, 5);
+  }, [filteredQRs, activeSortedQRs, qrSearchQuery, qrCategoryFilter, showAllQRs]);
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
@@ -364,49 +396,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         )}
       </div>
 
-      {!isSyncBannerDismissed && Boolean(creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN' || creatorProfile?.isAdmin === true || creatorProfile?.phone === '9862000001' || (typeof window !== 'undefined' && ['SUPER_ADMIN', 'ADMIN'].includes(localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role') || ''))) && onOpenSyncDiagnostic && (
-        <div 
-          onClick={onOpenSyncDiagnostic}
-          className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-2.5 px-3.5 rounded-2xl border border-indigo-500/30 text-white flex items-center justify-between shadow-xs cursor-pointer hover:border-indigo-400 transition group active:scale-[0.99]"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600/50 border border-indigo-400/30 text-amber-300 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform shrink-0">
-              <Activity className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xs text-white">Admin Sync Diagnostic</span>
-                <span className="text-[8.5px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full">
-                  Live
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-300 truncate">
-                Cross-device consistency & database health monitor
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0 pl-2">
-            <div className="px-3 py-1.5 bg-indigo-600 group-hover:bg-indigo-500 text-white text-[11px] font-black rounded-xl shadow-2xs transition flex items-center gap-1.5">
-              <span>Enfiah Rawh</span>
-              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-            <button
-              type="button"
-              title="Dah bo / Dismiss (Hide from Home)"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsSyncBannerDismissed(true);
-                try {
-                  localStorage.setItem('ronpay_hide_sync_diagnostic_banner', 'true');
-                } catch {}
-              }}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Admin Sync Diagnostic banner is removed from Home for Guest User / clean view */}
 
 
 
@@ -838,7 +828,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {language === 'mizo' ? 'Recent Created QRs & Zawnna' : 'Recent Created QRs & Search'}
             </h3>
             <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-mono">
-              {campaigns.length}
+              {!qrSearchQuery.trim() && qrCategoryFilter === 'all' && !showAllQRs
+                ? `${displayedQRs.length} of ${activeSortedQRs.length} Active`
+                : `${displayedQRs.length} QRs`}
             </span>
           </div>
           <button 
@@ -1201,7 +1193,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         {/* View All / Collapse toggle button when not actively searching */}
-        {campaigns.length > 5 && !qrSearchQuery.trim() && qrCategoryFilter === 'all' && (
+        {activeSortedQRs.length > 5 && !qrSearchQuery.trim() && qrCategoryFilter === 'all' && (
           <div className="pt-1 text-center">
             <button
               type="button"
@@ -1212,15 +1204,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {showAllQRs ? (
                 <>
                   <ChevronUp className="w-3.5 h-3.5" />
-                  <span>{language === 'mizo' ? 'Tlemte chauh entir rawh (Top 5)' : 'Show Less (Top 5)'}</span>
+                  <span>{language === 'mizo' ? 'Tlemte chauh entir rawh (Latest 5 Active)' : 'Show Less (Latest 5 Active)'}</span>
                 </>
               ) : (
                 <>
                   <ChevronDown className="w-3.5 h-3.5" />
                   <span>
                     {language === 'mizo'
-                      ? `QR awm tawh zawng zawng entir rawh (${campaigns.length} awm)`
-                      : `View All Existing QRs (${campaigns.length} available)`}
+                      ? `QR awm tawh zawng zawng entir rawh (${activeSortedQRs.length} Active QRs)`
+                      : `View All Existing QRs (${activeSortedQRs.length} Active QRs)`}
                   </span>
                 </>
               )}

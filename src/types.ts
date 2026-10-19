@@ -32,6 +32,19 @@ export interface BawmInfo {
 
 export type FeeOptionMode = 'ADD_ON' | 'DEDUCT' | 'DONOR_CHOICE';
 
+export interface CampaignRenewalRequest {
+  requestedAt: string;
+  requestedBy?: string;
+  requestedPhone?: string;
+  requestedDays?: number;
+  requestedValidityDate: string;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewRemarks?: string;
+}
+
 export interface Campaign {
   id: string;
   category: BawmCategory;
@@ -122,6 +135,7 @@ export interface Campaign {
   lastEditedBy?: string;
   lastEditReason?: string;
   customExpenseHeads?: string[];
+  renewalRequest?: CampaignRenewalRequest;
 }
 
 export interface ExpenseRecord {

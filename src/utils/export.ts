@@ -1554,43 +1554,45 @@ export const generateTransactionsPDFHtml = (
       box-sizing: border-box;
       background: linear-gradient(135deg, #090e1a 0%, #111827 50%, #1e1b4b 100%);
       border: 1.5px solid #312e81;
-      border-radius: 18px;
-      padding: 16px 20px;
+      border-radius: 14px;
+      padding: 12px 16px;
       margin-left: 0;
       margin-right: 0;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
+      margin-bottom: 14px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.15);
       page-break-after: avoid;
       break-after: avoid;
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    .header-banner * {
+      box-sizing: border-box;
+      letter-spacing: 0px !important;
+      word-spacing: normal !important;
+    }
     .header-left-wrap {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       min-width: 0;
       flex: 1;
     }
     .header-avatar {
-      width: 84px;
-      height: 84px;
-      border-radius: 16px;
+      width: 72px;
+      height: 72px;
+      border-radius: 14px;
       object-fit: cover;
-      border: 2.5px solid #f59e0b;
+      border: 2px solid #f59e0b;
       box-shadow: 0 4px 10px rgba(0,0,0,0.4);
       flex-shrink: 0;
+      display: block;
     }
     .header-avatar-fallback {
-      width: 84px;
-      height: 84px;
-      border-radius: 16px;
+      width: 72px;
+      height: 72px;
+      border-radius: 14px;
       background-color: #1e293b;
-      border: 2.5px solid #f59e0b;
+      border: 2px solid #f59e0b;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1604,16 +1606,16 @@ export const generateTransactionsPDFHtml = (
       flex: 1;
     }
     .org-title {
-      font-size: 21px;
+      font-size: 20px;
       font-weight: 900;
       color: #ffffff;
       margin: 0;
       text-transform: uppercase;
       line-height: 1.35;
-      letter-spacing: 0;
+      letter-spacing: 0px !important;
     }
     .location-text {
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 700;
       color: #fbbf24;
       display: flex;
@@ -1621,15 +1623,16 @@ export const generateTransactionsPDFHtml = (
       gap: 4px;
       margin: 0;
       line-height: 1.35;
+      letter-spacing: 0px !important;
     }
     .doc-badge-title {
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 800;
       color: #38bdf8;
       text-transform: uppercase;
       margin: 0;
       line-height: 1.35;
-      letter-spacing: 0;
+      letter-spacing: 0px !important;
     }
     .period-text {
       font-size: 11px;
@@ -1640,6 +1643,7 @@ export const generateTransactionsPDFHtml = (
       gap: 4px;
       margin: 0;
       line-height: 1.35;
+      letter-spacing: 0px !important;
     }
 
     /* Right Chart Container */
@@ -1844,17 +1848,33 @@ export const generateTransactionsPDFHtml = (
         </head>
         <body>
           <div class="statement-sheet">
+            <!-- Header Banner (Table structured for 100% stable PDF & Canvas snapshot) -->
             <div class="header-banner">
-              <div class="header-left-wrap">
-                ${avatarHtml}
-                <div class="header-content-stack">
-                  <h1 class="org-title">${orgDisplay}</h1>
-                  <div class="location-text">📍 ${locationDisplay}</div>
-                  <div class="doc-badge-title">Reports & Financial Statements</div>
-                  <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
-                </div>
-              </div>
-              ${monthlyChartHtml}
+              <table style="width: 100%; border-collapse: collapse; border: none; margin: 0; color: #ffffff; table-layout: fixed;">
+                <tr>
+                  <td style="width: 76px; vertical-align: middle; padding: 0 12px 0 0;">
+                    ${avatarHtml}
+                  </td>
+                  <td style="vertical-align: middle; padding: 0 10px 0 0;">
+                    <div style="font-size: 19px; font-weight: 900; color: #ffffff; text-transform: uppercase; line-height: 1.35; margin: 0 0 4px 0; letter-spacing: 0px;">
+                      ${orgDisplay}
+                    </div>
+                    <div style="font-size: 12px; font-weight: 700; color: #fbbf24; line-height: 1.35; margin: 0 0 3px 0; letter-spacing: 0px;">
+                      📍 ${locationDisplay}
+                    </div>
+                    <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; line-height: 1.35; margin: 0 0 3px 0; letter-spacing: 0px;">
+                      Reports &amp; Financial Statements
+                    </div>
+                    <div style="font-size: 10.5px; font-weight: 600; color: #cbd5e1; line-height: 1.35; letter-spacing: 0px;">
+                      Trxn Date: <strong style="color: #ffffff;">${dateRangeText}</strong>
+                    </div>
+                  </td>
+                  ${monthlyChartHtml ? `
+                  <td style="width: 235px; vertical-align: middle; text-align: right; padding: 0;">
+                    ${monthlyChartHtml}
+                  </td>` : ''}
+                </tr>
+              </table>
             </div>
 
             ${collectionSummaryBarHtml}
@@ -1936,17 +1956,33 @@ export const generateTransactionsPDFHtml = (
       </head>
       <body>
         <div class="statement-sheet">
+          <!-- Header Banner (Table structured for 100% stable PDF & Canvas snapshot) -->
           <div class="header-banner">
-            <div class="header-left-wrap">
-              ${avatarHtml}
-              <div class="header-content-stack">
-                <h1 class="org-title">${orgDisplay}</h1>
-                <div class="location-text">📍 ${locationDisplay}</div>
-                <div class="doc-badge-title">Reports & Financial Statements</div>
-                <div class="period-text">Trxn Date: <b>${dateRangeText}</b></div>
-              </div>
-            </div>
-            ${monthlyChartHtml}
+            <table style="width: 100%; border-collapse: collapse; border: none; margin: 0; color: #ffffff; table-layout: fixed;">
+              <tr>
+                <td style="width: 76px; vertical-align: middle; padding: 0 12px 0 0;">
+                  ${avatarHtml}
+                </td>
+                <td style="vertical-align: middle; padding: 0 10px 0 0;">
+                  <div style="font-size: 19px; font-weight: 900; color: #ffffff; text-transform: uppercase; line-height: 1.35; margin: 0 0 4px 0; letter-spacing: 0px;">
+                    ${orgDisplay}
+                  </div>
+                  <div style="font-size: 12px; font-weight: 700; color: #fbbf24; line-height: 1.35; margin: 0 0 3px 0; letter-spacing: 0px;">
+                    📍 ${locationDisplay}
+                  </div>
+                  <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; line-height: 1.35; margin: 0 0 3px 0; letter-spacing: 0px;">
+                    Reports &amp; Financial Statements
+                  </div>
+                  <div style="font-size: 10.5px; font-weight: 600; color: #cbd5e1; line-height: 1.35; letter-spacing: 0px;">
+                    Trxn Date: <strong style="color: #ffffff;">${dateRangeText}</strong>
+                  </div>
+                </td>
+                ${monthlyChartHtml ? `
+                <td style="width: 235px; vertical-align: middle; text-align: right; padding: 0;">
+                  ${monthlyChartHtml}
+                </td>` : ''}
+              </tr>
+            </table>
           </div>
 
           ${collectionSummaryBarHtml}

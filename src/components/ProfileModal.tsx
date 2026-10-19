@@ -611,7 +611,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {onOpenSyncDiagnostic && (creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || creatorProfile.isAdmin === true || creatorProfile.phone === '9862000001' || (typeof window !== 'undefined' && ['SUPER_ADMIN', 'ADMIN'].includes(localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role') || ''))) && (
+        {onOpenSyncDiagnostic && !(!creatorProfile?.phone || creatorProfile?.role === 'GUEST' || creatorProfile?.name?.includes('Guest')) && (creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || creatorProfile.isAdmin === true || creatorProfile.phone === '9862000001') && (
           <button
             id="profile-sync-diagnostic-btn"
             onClick={() => {

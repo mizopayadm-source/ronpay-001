@@ -433,15 +433,20 @@ export async function exportHTMLToPDF(
         letter-spacing: 0px !important;
         word-spacing: normal !important;
         -webkit-font-smoothing: antialiased;
-        text-rendering: geometricPrecision;
+        text-rendering: auto !important;
+        font-feature-settings: normal !important;
+        font-variant-ligatures: none !important;
       }
       .header-banner, .header-banner * {
         letter-spacing: 0px !important;
         word-spacing: normal !important;
+        box-sizing: border-box !important;
       }
       h1, h2, h3, h4, h5, h6, .org-title {
         letter-spacing: 0px !important;
-        line-height: 1.35 !important;
+        line-height: 1.4 !important;
+        margin-top: 0 !important;
+        margin-bottom: 4px !important;
       }
       .header-banner td, .header-banner th {
         vertical-align: middle !important;
