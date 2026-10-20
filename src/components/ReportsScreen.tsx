@@ -71,6 +71,8 @@ import { getEffectiveCategory } from '../utils/translations';
 import { 
   getMembers, 
   isCampaignCreator, 
+  isActualCampaignOwner,
+  isUserPaidTransaction,
   isConfirmedTransaction, 
   isTransactionForCampaign, 
   deleteMultipleTransactions, 
@@ -110,6 +112,8 @@ interface ReportsScreenProps {
   onOpenImagePreview?: (url: string, title?: string, subtitle?: string, location?: string) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses') => void;
   onRefreshCloud?: () => Promise<void> | void;
+  userPaidIds?: string[];
+  onOpenSulhnu?: () => void;
 }
 
 const MONTH_NAMES_LIST = [
@@ -164,6 +168,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onOpenImagePreview,
   onOpenMemberRoll,
   onRefreshCloud,
+  userPaidIds = [],
+  onOpenSulhnu,
 }) => {
 
   // Default to 'all' so every donation across all categories is visible immediately
@@ -245,18 +251,21 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   const isAdmin = userRole === 'ADMIN' || creatorProfile?.isAdmin === true || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'ADMIN'));
   const isModerator = userRole === 'MODERATOR' || creatorProfile?.role === 'MODERATOR';
   const isStaffFullAccess = isSuperAdmin || isAdmin;
+  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.name === 'Khualmi (Guest User)';
 
   // Check if current user is an authenticated QR creator or privileged staff (Admin/Moderator)
   const isCreator = Boolean(
-    isStaffFullAccess || 
-    isModerator || 
-    (creatorProfile?.isApproved && creatorProfile?.phone)
+    !isGuest && (
+      isStaffFullAccess || 
+      isModerator || 
+      (creatorProfile?.isApproved && creatorProfile?.phone)
+    )
   );
 
   // Filter campaigns strictly by authority / ownership:
   // - Admin & Super Admin: All campaigns
   // - Moderator: Campaigns in their authorized categories or created by them
-  // - Creator: STRICTLY campaigns created by this creator only
+  // - Creator: STRICTLY campaigns created by this creator only ("a ma bawm hnuai a mi chiah")
   const creatorCampaigns = useMemo(() => {
     if (!isCreator) return [];
 
@@ -275,7 +284,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       );
       if (allowedCategories.size > 0 && !allowedCategories.has('all')) {
         return campaigns.filter(c => 
-          allowedCategories.has((c.category || '').toLowerCase()) || isCampaignCreator(c, creatorProfile)
+          allowedCategories.has((c.category || '').toLowerCase()) || isActualCampaignOwner(c, creatorProfile)
         );
       }
       return campaigns.filter(c => {
@@ -284,8 +293,8 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       });
     }
 
-    // 3. Regular Creator: STRICT USER-ISOLATION (Own created campaigns only)
-    return campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+    // 3. Regular Creator: STRICT USER-ISOLATION ("a ma bawm hnuai a mi chiah" - Own created campaigns only)
+    return campaigns.filter(c => isActualCampaignOwner(c, creatorProfile));
   }, [campaigns, isCreator, isStaffFullAccess, isModerator, creatorProfile]);
 
   const creatorCampaignIds = useMemo(() => {
@@ -305,19 +314,22 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
-    if (isStaffFullAccess) return effectiveTransactions;
-    if (!isCreator) return effectiveTransactions;
-
     return effectiveTransactions.filter(t => {
-      // 1. Creator Security Barrier: 
-      //    - Staff/Admin: Full system access (all valid transactions)
-      //    - Creator: STRICT USER-ISOLATION (Own created campaigns transactions only)
-      const matchesOwnership = isStaffFullAccess || 
-        (isCreator && (creatorCampaignIds.has(t.campaignId) || creatorCampaigns.some(c => isTransactionForCampaign(t, c))));
-
-      if (!matchesOwnership) {
-        return false;
+      // 1. User Security & Privacy Barrier:
+      //    - Guest User: STRICT DONOR PRIVACY ("ama tih chin chiah" - own payments only)
+      if (!isCreator) {
+        const isPaidByMe = isUserPaidTransaction(t, userPaidIds, creatorProfile);
+        if (!isPaidByMe) return false;
+      } else if (!isStaffFullAccess) {
+        // - Regular Creator & Moderator: Can ONLY see transactions belonging to their authorized/owned campaigns
+        const matchesOwnership = creatorCampaignIds.has(t.campaignId) || 
+          creatorCampaigns.some(c => isTransactionForCampaign(t, c)) || 
+          isUserPaidTransaction(t, userPaidIds, creatorProfile);
+        if (!matchesOwnership) {
+          return false;
+        }
       }
+      // - Super Admin / Admin: full access
 
       // 2. Category filter
       if (selectedFilter !== 'all') {
@@ -358,7 +370,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [effectiveTransactions, isCreator, creatorCampaignIds, isStaffFullAccess, selectedFilter, creatorCampaigns, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
+  }, [effectiveTransactions, isCreator, isStaffFullAccess, userPaidIds, creatorProfile, creatorCampaignIds, creatorCampaigns, selectedFilter, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {
@@ -1182,17 +1194,27 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
               Transaction Report leh Financial Statement reng reng hi QR Creator-in ama campaign create chin chiah a hmuin a download thei ang. Admin/Super Admin leh Moderator te erawh chuan an thuneihna chin zelah an view thei ang.
             </p>
             <p className="text-[11px] text-amber-300 font-medium">
-              Report en turin i Creator account-ah login rawh le.
+              Khualmi (Guest User) tan: I thawh tawhte leh receipt en turin 'Pekna Sulhnu' hmet la, Creator account neite tan login tur a ni e.
             </p>
           </div>
 
-          <div className="pt-2 flex items-center justify-center">
-            <button
-              onClick={onOpenLogin}
-              className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
-            >
-              Creator Login / Verify
-            </button>
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            {onOpenLogin && (
+              <button
+                onClick={onOpenLogin}
+                className="bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+              >
+                Creator Login / Verify
+              </button>
+            )}
+            {onOpenSulhnu && (
+              <button
+                onClick={onOpenSulhnu}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-md transition cursor-pointer"
+              >
+                Pekna Sulhnu Enna
+              </button>
+            )}
           </div>
         </div>
       ) : creatorCampaigns.length === 0 ? (
@@ -1260,7 +1282,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-3.5 shadow-xs text-xs">
             {/* Quick Link to Kumtluang Expenses Manager */}
-            {onOpenMemberRoll && (selectedFilter === 'kumtluang' || isKumtluang || creatorCampaigns.some(c => c.category === 'kumtluang')) && (
+            {onOpenMemberRoll && (creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN' || creatorProfile?.role === 'MODERATOR' || creatorCampaigns.length > 0) && (selectedFilter === 'kumtluang' || isKumtluang || creatorCampaigns.some(c => c.category === 'kumtluang')) && (
               <div className="bg-orange-50/90 border border-orange-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -2300,7 +2322,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {onOpenMemberRoll && (
+                  {onOpenMemberRoll && (creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN' || creatorProfile?.role === 'MODERATOR' || creatorCampaigns.length > 0) && (
                     <button
                       onClick={() => onOpenMemberRoll('members_list')}
                       className="text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"

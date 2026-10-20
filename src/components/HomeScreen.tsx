@@ -21,6 +21,8 @@ import {
   CreditCard,
   Search,
   Lock,
+  LogIn,
+  UserCheck,
   Sparkles,
   Layers,
   MapPin,
@@ -259,7 +261,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (c.status === 'expired' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'rejected' || c.status === 'pending_approval') {
       return false;
     }
-    if (isCampaignExpired(c.validityDate, c.status)) {
+    if (isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt)) {
       return false;
     }
     return c.status === 'active' || !c.status;
@@ -356,45 +358,60 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* Smart Login & Active User Strip */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {creatorProfile?.avatarUrl ? (
-            <img
-              src={creatorProfile.avatarUrl}
-              alt={creatorProfile.name}
-              className="w-9 h-9 rounded-xl object-cover ring-2 ring-amber-400 shrink-0"
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-xl bg-indigo-600/90 text-white flex items-center justify-center font-black text-sm shrink-0 border border-indigo-400/40">
-              {creatorProfile?.name ? creatorProfile.name.charAt(0).toUpperCase() : 'U'}
+      {onOpenLogin && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shadow-xs shrink-0 ${
+              creatorProfile.isApproved && creatorProfile.phone
+                ? 'bg-emerald-600/80 border border-emerald-400/40 text-emerald-100'
+                : 'bg-indigo-600/80 border border-indigo-400/40 text-amber-300'
+            }`}>
+              {creatorProfile.isApproved && creatorProfile.phone ? (
+                <UserCheck className="w-4 h-4 text-emerald-200" />
+              ) : (
+                <Lock className="w-4 h-4 text-amber-300" />
+              )}
             </div>
-          )}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-black text-white truncate">
-                {creatorProfile?.name || 'RonPay User'}
-              </span>
-              <span className="text-[8.5px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full uppercase shrink-0">
-                {creatorProfile?.isAdmin ? 'ADMIN' : creatorProfile?.isApproved ? 'CREATOR' : 'MEMBER'}
-              </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-black text-xs text-white truncate">
+                  {creatorProfile.isApproved && creatorProfile.phone
+                    ? creatorProfile.name
+                    : (language === 'mizo' ? 'Creator & Member Login' : 'Creator & Member Login')}
+                </span>
+                <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded-full border ${
+                  creatorProfile.isApproved && creatorProfile.phone
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                }`}>
+                  {creatorProfile.isApproved && creatorProfile.phone
+                    ? (creatorProfile.role || 'CREATOR')
+                    : 'GUEST'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-300 truncate">
+                {creatorProfile.isApproved && creatorProfile.phone
+                  ? `${creatorProfile.orgName || 'RonPay Registered'} • ${creatorProfile.phone}`
+                  : (language === 'mizo' ? 'Luhna leh Account inthlakna (Phone & MPIN)' : 'Login & Switch Account (Phone & MPIN)')}
+              </p>
             </div>
-            <p className="text-[10px] text-indigo-200/80 truncate">
-              {creatorProfile?.orgName || 'Mizoram Community'} • {creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : 'Demo Session'}
-            </p>
           </div>
-        </div>
 
-        {onOpenLogin && (
           <button
             type="button"
+            id="home-open-login-btn"
             onClick={onOpenLogin}
-            className="bg-white/10 hover:bg-white/20 text-amber-300 hover:text-amber-200 border border-amber-400/30 px-2.5 py-1.5 rounded-xl text-[10.5px] font-black transition cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 whitespace-nowrap shadow-2xs"
+            className={`shrink-0 px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+              creatorProfile.isApproved && creatorProfile.phone
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
+            }`}
           >
-            <span>Switch / Login</span>
-            <ArrowRight className="w-3 h-3" />
+            <LogIn className="w-3.5 h-3.5" />
+            <span>{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Admin Sync Diagnostic - Strictly hidden from Guest Users */}
       {!isSyncBannerDismissed && !isGuestUser && isAuthorizedAdmin && onOpenSyncDiagnostic && (
@@ -768,6 +785,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <Search className="w-2.5 h-2.5 shrink-0" /> Browse Heads
               </span>
               {onOpenMemberRoll && (
+                creatorProfile?.isAdmin || 
+                creatorProfile?.role === 'SUPER_ADMIN' || 
+                creatorProfile?.role === 'ADMIN' || 
+                creatorProfile?.role === 'MODERATOR' ||
+                campaigns.some(c => c.category === 'kumtluang' && isCampaignCreator(c, creatorProfile))
+              ) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -985,14 +1008,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           ) : (
             displayedQRs.map(camp => {
-            const isOwner = isCampaignCreator(camp, creatorProfile);
-            const canManage = Boolean(
-              isOwner || 
+            const isGuest = Boolean(
+              isGuestUser || 
+              !creatorProfile || 
+              !creatorProfile.phone || 
+              creatorProfile.phone.trim() === '' || 
+              creatorProfile.role === 'GUEST' || 
+              creatorProfile.name === 'Khualmi (Guest User)' || 
+              (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))
+            );
+            const isStaff = !isGuest && Boolean(
               creatorProfile?.isAdmin || 
               creatorProfile?.role === 'SUPER_ADMIN' || 
               creatorProfile?.role === 'ADMIN' || 
-              canManageCampaignExpenses(camp, creatorProfile)
+              creatorProfile?.role === 'MODERATOR'
             );
+            const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
+            const canManage = Boolean(isStaff || isOwner);
+            const isExpired = isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt);
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const hasTarget = typeof camp.targetAmount === 'number' && camp.targetAmount > 0;
@@ -1095,9 +1128,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       >
                         {language === 'mizo' ? 'Pekna' : 'Contribute'} <ChevronRight className="w-3 h-3" />
                       </button>
-                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
-                        {camp.validityDate ? formatDateDDMMYYYY(camp.validityDate) : formatDateDDMMYYYY(camp.createdAt)}
-                      </p>
+                      {isExpired ? (
+                        <span className="text-[8.5px] font-extrabold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded-md mt-0.5 inline-block">
+                          Expired
+                        </span>
+                      ) : (
+                        <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
+                          {camp.validityDate ? formatDateDDMMYYYY(camp.validityDate) : formatDateDDMMYYYY(camp.createdAt)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -432,6 +432,12 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
             </div>
 
             {selectedCategory === 'kumtluang' && onOpenMemberRoll && (
+              creatorProfile?.isAdmin || 
+              creatorProfile?.role === 'SUPER_ADMIN' || 
+              creatorProfile?.role === 'ADMIN' || 
+              creatorProfile?.role === 'MODERATOR' ||
+              campaigns.some(c => c.category === 'kumtluang' && isCampaignCreator(c, creatorProfile))
+            ) && (
               <button
                 type="button"
                 onClick={() => onOpenMemberRoll('members_list')}
@@ -645,14 +651,29 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
           </div>
         ) : (
           filteredCampaigns.map((camp) => {
-            const expired = isCampaignExpired(camp.validityDate, camp.status);
+            const expired = isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt);
             const translatedTitle = translateCampaignTitle(camp, language) || translateDynamicText(camp.title, language, camp);
             const translatedCause = translateCampaignCause(camp, language) || translateDynamicText(camp.cause, language, camp);
             const campConfig = BAWM_CONFIG[camp.category] || BAWM_CONFIG.others;
             const isCampRalna = camp.category === 'ralna';
 
+            const isGuest = Boolean(
+              !creatorProfile || 
+              !creatorProfile.phone || 
+              creatorProfile.phone.trim() === '' || 
+              creatorProfile.role === 'GUEST' || 
+              creatorProfile.name === 'Khualmi (Guest User)' || 
+              (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))
+            );
+            const isStaff = !isGuest && Boolean(
+              creatorProfile?.isAdmin || 
+              creatorProfile?.role === 'SUPER_ADMIN' || 
+              creatorProfile?.role === 'ADMIN' || 
+              creatorProfile?.role === 'MODERATOR'
+            );
             // Check if active user is the creator of this specific campaign (Ama Create chauh)
-            const isOwner = isCampaignCreator(camp, creatorProfile);
+            const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
+            const canManage = Boolean(isStaff || isOwner);
 
             // Campaign Transactions & Progress calculation (Private to creator)
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
@@ -850,7 +871,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
-                    {camp.category === 'kumtluang' && (isOwner || creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') && onOpenMemberRoll && (
+                    {camp.category === 'kumtluang' && (isOwner || isStaff) && onOpenMemberRoll && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -863,7 +884,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         <Users className="w-3 h-3" /> Roll
                       </button>
                     )}
-                    {(isOwner || creatorProfile?.isAdmin) && (
+                    {(isOwner || isStaff) && (
                       <button
                         type="button"
                         onClick={(e) => {

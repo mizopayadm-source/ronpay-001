@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ScreenId,
   BawmCategory,
@@ -220,6 +220,7 @@ export default function App() {
   const [generatedQRCampaign, setGeneratedQRCampaign] = useState<Campaign | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [loginModalInitialMethod, setLoginModalInitialMethod] = useState<'credentials' | 'biometric' | 'google' | 'demo'>('credentials');
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
@@ -518,7 +519,7 @@ export default function App() {
       } else if (msg.topic === 'user_paid') {
         setUserPaidIds(getStoredUserPaidTxIds());
       } else if (msg.topic === 'auth') {
-        invalidateCacheOnAuthOrBoot(msg.action === 'auth_login' ? 'auth_login' : 'auth_logout');
+        invalidateCacheOnAuthOrBoot(msg.action === 'auth_login' ? 'auth_login' : 'auth_logout', false);
         reloadLocalData();
       } else {
         reloadLocalData();
@@ -1494,12 +1495,14 @@ export default function App() {
   };
 
   // Filter transactions for Sulhnu History
-  const userVisibleTransactions = getUserOrCreatorVisibleTransactions(
-    transactions,
-    campaigns,
-    creatorProfile,
-    userPaidIds
-  );
+  const userVisibleTransactions = useMemo(() => {
+    return getUserOrCreatorVisibleTransactions(
+      transactions,
+      campaigns,
+      creatorProfile,
+      userPaidIds
+    );
+  }, [transactions, campaigns, creatorProfile, userPaidIds]);
 
   // When in Marketing & Information Landing Page View:
   if (appView === 'website') {
@@ -1571,7 +1574,14 @@ export default function App() {
             onToggleLanguage={setLanguage}
             onOpenHistory={handleOpenHistory}
             onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
-            onOpenLogin={() => setIsLoginModalOpen(true)}
+            onOpenLogin={() => {
+              setLoginModalInitialMethod('credentials');
+              setIsLoginModalOpen(true);
+            }}
+            onOpenSecretDevLogin={() => {
+              setLoginModalInitialMethod('demo');
+              setIsLoginModalOpen(true);
+            }}
             creatorProfile={creatorProfile}
             onSwitchToWebsite={handleSwitchToWebsite}
           />
@@ -1611,7 +1621,10 @@ export default function App() {
               onPreviewImage={handlePreviewImage}
               language={language}
               onOpenAIHriatpui={() => setIsAIHriatpuiOpen(true)}
-              onOpenLogin={() => setIsLoginModalOpen(true)}
+              onOpenLogin={() => {
+                setLoginModalInitialMethod('credentials');
+                setIsLoginModalOpen(true);
+              }}
               onOpenWebsite={handleSwitchToWebsite}
             />
           )}
@@ -1638,6 +1651,7 @@ export default function App() {
             <CheckoutScreen
               category={selectedCategory || selectedCampaign?.category || 'others'}
               campaign={selectedCampaign || campaigns[0] || getStoredCampaigns()[0]}
+              creatorProfile={creatorProfile}
               pricingConfig={pricingConfig}
               onUpdateCampaign={handleUpdateCampaign}
               onBack={() => {
@@ -1768,9 +1782,11 @@ export default function App() {
               transactions={transactions}
               campaigns={campaigns}
               creatorProfile={creatorProfile}
+              userPaidIds={userPaidIds}
               onBack={() => handleNavigate('home')}
               onOpenLogin={() => handleNavigate('creator_reg')}
               onOpenCreateQR={() => handleNavigate('create_qr')}
+              onOpenSulhnu={() => setIsHistoryOpen(true)}
               onUpdateCampaign={handleUpdateCampaign}
               onUpdateTransaction={handleUpdateTransaction}
               onDeleteTransaction={handleDeleteTransaction}
@@ -1947,6 +1963,7 @@ export default function App() {
           onLogout={handleLogout}
           onLoginClick={() => {
             setIsProfileOpen(false);
+            setLoginModalInitialMethod('credentials');
             setIsLoginModalOpen(true);
           }}
           onOpenAdmin={() => {
@@ -1965,7 +1982,7 @@ export default function App() {
         <ErrorBoundary name="PeknaSulhnuModal">
           <PeknaSulhnuModal
             isOpen={isHistoryOpen}
-            transactions={transactions}
+            transactions={userVisibleTransactions}
             campaigns={campaigns}
             creatorProfile={creatorProfile}
             userPaidIds={userPaidIds}
@@ -2274,12 +2291,9 @@ export default function App() {
           currentProfile={creatorProfile}
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
+          initialMethod={loginModalInitialMethod}
           onLoginSuccess={(newProfile) => {
             setCreatorProfile(newProfile);
-            if (newProfile.isAdmin || newProfile.role === 'SUPER_ADMIN' || newProfile.role === 'ADMIN') {
-              saveAdminAuthState(newProfile.role || 'SUPER_ADMIN', newProfile);
-            }
-            saveStoredCreatorProfile(newProfile);
             setIsLoginModalOpen(false);
           }}
         />

@@ -21,10 +21,19 @@ import {
   ChevronRight,
   ShieldAlert,
   User,
-  LogIn
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { CreatorProfile, UserRole } from '../types';
-import { saveStoredCreatorProfile, getStoredStaffAccounts, getStoredCreatorsList, recordAuditLog, saveAdminAuthState, loginCreator } from '../utils/storage';
+import { 
+  saveStoredCreatorProfile, 
+  getStoredStaffAccounts, 
+  getStoredCreatorsList, 
+  recordAuditLog, 
+  saveAdminAuthState, 
+  loginCreator,
+  logoutCreator 
+} from '../utils/storage';
 
 export interface SmartLoginModalProps {
   isOpen: boolean;
@@ -34,6 +43,7 @@ export interface SmartLoginModalProps {
   onOpenAdmin?: () => void;
   biometricEnabled?: boolean;
   onToggleBiometric?: () => void;
+  initialMethod?: 'credentials' | 'biometric' | 'google' | 'demo';
 }
 
 export const DEMO_ACCOUNTS: {
@@ -157,6 +167,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   onLoginSuccess,
   onOpenAdmin,
   biometricEnabled = true,
+  initialMethod = 'credentials',
 }) => {
   const [activeMethod, setActiveMethod] = useState<'credentials' | 'demo' | 'google' | 'biometric'>('credentials');
   const [userInput, setUserInput] = useState<string>('');
@@ -170,7 +181,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   const [googleCustomPhone, setGoogleCustomPhone] = useState<string>('');
   const [googleIsNewUser, setGoogleIsNewUser] = useState<boolean>(false);
 
-  // 5-click secret dev toggle
+  // 5-click secret unlock for Admin / Developer Tester Hub
   const [testerSecretClicks, setTesterSecretClicks] = useState<number>(0);
   const [isTesterUnlocked, setIsTesterUnlocked] = useState<boolean>(() => {
     try {
@@ -188,6 +199,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
   const [isOtpSent, setIsOtpSent] = useState<boolean>(false);
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
 
+  // 5-clicks trigger on the header to unlock Admin / Dev Hub
   const handleHeaderSecretClick = () => {
     if (testerClickTimerRef.current) clearTimeout(testerClickTimerRef.current);
     const newCount = testerSecretClicks + 1;
@@ -198,7 +210,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       } catch {}
       setTesterSecretClicks(0);
       setActiveMethod('demo');
-      setTesterNotice('Internal Console Unlocked: Developer & Tester Hub is now accessible.');
+      setSuccessNotice('👑 Admin & Developer Hub Unlocked: Switch accounts freely.');
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         try { navigator.vibrate([40, 50, 60]); } catch {}
       }
@@ -218,7 +230,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     if (activeMethod === 'demo') {
       setActiveMethod('credentials');
     }
-    setTesterNotice('Tester (Dev) Console chu thuhruk fel a ni ta.');
+    setSuccessNotice('Tester / Admin Console chu thuhruk fel a ni ta.');
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate([30, 40]); } catch {}
     }
@@ -232,7 +244,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
     }
     setIsOtpSent(true);
     setOtpCodeInput('123456');
-    setTesterNotice('Test SMS OTP: 123456 thawn fel a ni e.');
+    setSuccessNotice('Test SMS OTP: 123456 thawn fel a ni e (Auto-filled).');
     triggerHaptic();
   };
 
@@ -244,25 +256,91 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       setPasswordInput('');
       setOtpCodeInput('');
       setIsOtpSent(false);
+      setIsLoading(false);
+
+      const isAlreadyUnlocked = sessionStorage.getItem('ronpay_tester_unlocked') === 'true';
+      if (initialMethod === 'demo' && isAlreadyUnlocked) {
+        setIsTesterUnlocked(true);
+        setActiveMethod('demo');
+      } else {
+        setIsTesterUnlocked(false);
+        setActiveMethod('credentials');
+      }
+
       if (currentProfile?.phone && currentProfile.phone !== '9436001234' && currentProfile.phone !== '9862000001') {
         setUserInput(currentProfile.phone);
       } else {
         setUserInput('');
       }
     }
-  }, [isOpen, currentProfile]);
+  }, [isOpen, currentProfile, initialMethod]);
 
   if (!isOpen) return null;
 
   const triggerHaptic = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       try {
-        navigator.vibrate([30, 40, 50]);
+        navigator.vibrate([20, 30]);
       } catch {}
     }
   };
 
-  // 1. Unified User ID / Phone / Email & Password Login
+  // 1. Instantaneous One-Click Account Switch in Unlocked Admin/Tester Hub (0ms)
+  const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
+    setErrorMessage('');
+    triggerHaptic();
+
+    const isSuperOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
+    const profile: CreatorProfile = {
+      name: demo.name,
+      orgName: demo.orgName,
+      designation: demo.designation,
+      phone: demo.phone,
+      role: demo.role,
+      isAdmin: isSuperOrAdmin,
+      isPhoneVerified: true,
+      isApproved: true,
+      avatarUrl: demo.avatarUrl,
+      password: demo.mpin,
+      pin: demo.mpin,
+      approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+      createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 15,
+      registeredAt: new Date().toISOString()
+    };
+
+    if (isSuperOrAdmin) {
+      saveAdminAuthState(demo.role, profile);
+      recordAuditLog(`${demo.role} Login`, `${demo.name} switched account via Unlocked Hub.`, 'system');
+    } else {
+      loginCreator(profile);
+    }
+
+    onLoginSuccess(profile);
+    onClose();
+  };
+
+  // 2. Switch to Anonymous Guest User
+  const handleSwitchToGuest = () => {
+    triggerHaptic();
+    const guest = logoutCreator();
+    onLoginSuccess(guest);
+    onClose();
+  };
+
+  // 3. Switch to custom registered creator (from device memory)
+  const handleSelectCustomCreator = (creator: CreatorProfile) => {
+    triggerHaptic();
+    const isSuperOrAdmin = creator.isAdmin || creator.role === 'SUPER_ADMIN' || creator.role === 'ADMIN';
+    if (isSuperOrAdmin) {
+      saveAdminAuthState(creator.role || 'ADMIN', creator);
+    } else {
+      loginCreator(creator);
+    }
+    onLoginSuccess(creator);
+    onClose();
+  };
+
+  // 4. Unified Phone / User ID & Password / OTP Login (Immediate 0ms evaluation)
   const handleCredentialsLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -288,248 +366,207 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
       return;
     }
 
-    setIsLoading(true);
     triggerHaptic();
 
-    // Fast and snappy authentication
-    setTimeout(() => {
-      // 1. Check Master Super Admin credentials
-      if (
-        (cleanUser === 'superadmin' || cleanUser === 'admin' || cleanPhone === '9862000001' || cleanPhone === '9436001234' || cleanUser === 'admin@ronpay.com' || cleanUser === 'ronpay.adm@gmail.com' || cleanUser.includes('ronpay.adm') || cleanPhone === '9862000000') &&
-        (isOtpValid || pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
-      ) {
+    // 1. Check Master Super Admin credentials
+    if (
+      (cleanUser === 'superadmin' || cleanUser === 'admin' || cleanPhone === '9862000001' || cleanPhone === '9436001234' || cleanUser === 'admin@ronpay.com' || cleanUser === 'ronpay.adm@gmail.com' || cleanUser.includes('ronpay.adm') || cleanPhone === '9862000000') &&
+      (isOtpValid || pwd === 'ronpay2026' || pwd === 'admin' || pwd === 'ronpay@admin2026' || pwd === '1234')
+    ) {
+      const profile: CreatorProfile = {
+        name: 'Super Admin (Master)',
+        orgName: 'RonPay Master Headquarters',
+        designation: 'Chief System Architect',
+        phone: cleanPhone || '9862000001',
+        role: 'SUPER_ADMIN',
+        isAdmin: true,
+        isPhoneVerified: true,
+        isApproved: true,
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        password: pwd,
+        pin: '1234',
+        approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
+        createdQRsCount: 15,
+        registeredAt: new Date().toISOString()
+      };
+
+      saveAdminAuthState('SUPER_ADMIN', profile);
+      recordAuditLog('Super Admin Login', 'Super Admin authenticated via Unified Login Modal.', 'system');
+      onLoginSuccess(profile);
+      onClose();
+      return;
+    }
+
+    // 2. Check Staff Accounts (SUPER_ADMIN, ADMIN, MODERATOR)
+    const staffList = getStoredStaffAccounts();
+    const matchedStaff = staffList.find(
+      st => (st.name.toLowerCase() === cleanUser || st.email?.toLowerCase() === cleanUser || (st.phone && st.phone.replace(/\D/g, '') === cleanPhone) || st.phone === rawUser) && st.isActive
+    );
+
+    if (matchedStaff) {
+      const isStaffMatch = isOtpValid || (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234' || pwd === matchedStaff.phone || pwd === matchedStaff.mpin || pwd === matchedStaff.password);
+      if (isStaffMatch) {
+        const isSuperOrAdmin = matchedStaff.role === 'SUPER_ADMIN' || matchedStaff.role === 'ADMIN';
         const profile: CreatorProfile = {
-          name: 'Super Admin (Master)',
-          orgName: 'RonPay Master Headquarters',
-          designation: 'Chief System Architect',
-          phone: cleanPhone || '9862000001',
-          role: 'SUPER_ADMIN',
-          isAdmin: true,
+          name: matchedStaff.name,
+          orgName: matchedStaff.role === 'MODERATOR' ? 'Creator Verification Desk' : 'RonPay Operations & Finance Desk',
+          designation: matchedStaff.designation || matchedStaff.role,
+          phone: matchedStaff.phone,
+          role: matchedStaff.role,
+          isAdmin: isSuperOrAdmin,
           isPhoneVerified: true,
           isApproved: true,
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          avatarUrl: matchedStaff.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
           password: pwd,
-          pin: '1234',
+          pin: matchedStaff.mpin || '1234',
           approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-          createdQRsCount: 15,
-          registeredAt: new Date().toISOString()
+          registeredAt: matchedStaff.createdAt || new Date().toISOString()
         };
 
-        saveAdminAuthState('SUPER_ADMIN', profile);
-        recordAuditLog('Super Admin Login', 'Super Admin authenticated via Unified Login Modal.', 'system');
-        saveStoredCreatorProfile(profile);
-        setIsLoading(false);
+        if (isSuperOrAdmin) {
+          saveAdminAuthState(matchedStaff.role, profile);
+        } else {
+          loginCreator(profile);
+        }
+        recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
         onLoginSuccess(profile);
         onClose();
         return;
+      } else {
+        setErrorMessage('Staff Password / MPIN a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+        return;
       }
+    }
 
-      // 2. Check Staff Accounts (SUPER_ADMIN, ADMIN, MODERATOR)
-      const staffList = getStoredStaffAccounts();
-      const matchedStaff = staffList.find(
-        st => (st.name.toLowerCase() === cleanUser || st.email?.toLowerCase() === cleanUser || (st.phone && st.phone.replace(/\D/g, '') === cleanPhone) || st.phone === rawUser) && st.isActive
-      );
+    // 3. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
+    const allCreators = getStoredCreatorsList ? getStoredCreatorsList() : [];
+    const matchedCreator = allCreators.find(
+      c => (c.phone && c.phone.replace(/\D/g, '') === cleanPhone) || (c.name && c.name.toLowerCase() === cleanUser)
+    );
 
-      if (matchedStaff) {
-        const isStaffMatch = isOtpValid || (pwd === 'ronpay2026' || pwd === 'admin' || pwd === '1234' || pwd === matchedStaff.phone || pwd === matchedStaff.mpin || pwd === matchedStaff.password);
-        if (isStaffMatch) {
-          const isSuperOrAdmin = matchedStaff.role === 'SUPER_ADMIN' || matchedStaff.role === 'ADMIN';
-          const profile: CreatorProfile = {
-            name: matchedStaff.name,
-            orgName: matchedStaff.role === 'MODERATOR' ? 'Creator Verification Desk' : 'RonPay Operations & Finance Desk',
-            designation: matchedStaff.designation || matchedStaff.role,
-            phone: matchedStaff.phone,
-            role: matchedStaff.role,
-            isAdmin: isSuperOrAdmin,
-            isPhoneVerified: true,
-            isApproved: true,
-            avatarUrl: matchedStaff.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-            password: pwd,
-            pin: matchedStaff.mpin || '1234',
-            approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-            registeredAt: matchedStaff.createdAt || new Date().toISOString()
-          };
-
-          if (isSuperOrAdmin) {
-            saveAdminAuthState(matchedStaff.role, profile);
-          } else {
-            loginCreator(profile);
-          }
-          recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" logged in via Unified Login.`, 'system');
-          saveStoredCreatorProfile(profile);
-          setIsLoading(false);
-          onLoginSuccess(profile);
-          onClose();
-          return;
-        } else {
-          setIsLoading(false);
-          setErrorMessage('Staff Password / MPIN a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
-          return;
-        }
-      }
-
-      // 3. Check Registered Creators (Church Treasurers, NGO Secretaries, Community Creators)
-      const allCreators = getStoredCreatorsList ? getStoredCreatorsList() : [];
-      const matchedCreator = allCreators.find(
-        c => (c.phone && c.phone.replace(/\D/g, '') === cleanPhone) || (c.name && c.name.toLowerCase() === cleanUser)
-      );
-
-      if (matchedCreator) {
-        const isCreatorMatch = isOtpValid || (pwd === '1234' || pwd === 'ronpay2026' || pwd === matchedCreator.password || pwd === matchedCreator.pin || (matchedCreator.phone && pwd === matchedCreator.phone.slice(-4)));
-        if (isCreatorMatch) {
-          const profile: CreatorProfile = {
-            ...matchedCreator,
-            role: matchedCreator.role || 'CREATOR',
-            isPhoneVerified: true,
-            password: isOtp ? (matchedCreator.password || '1234') : pwd,
-            pin: isOtp ? (matchedCreator.pin || '1234') : pwd,
-          };
-
-          loginCreator(profile);
-          saveStoredCreatorProfile(profile);
-          setIsLoading(false);
-          onLoginSuccess(profile);
-          onClose();
-          return;
-        } else {
-          setIsLoading(false);
-          setErrorMessage('Creator Password / Security PIN chhut a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
-          return;
-        }
-      }
-
-      // 4. Default Community Member / Citizen Login (if phone or username matches standard length)
-      if (cleanPhone.length >= 10 || cleanUser.length >= 3) {
-        const isMemberRole: UserRole = 'MEMBER';
+    if (matchedCreator) {
+      const isCreatorMatch = isOtpValid || (pwd === '1234' || pwd === 'ronpay2026' || pwd === matchedCreator.password || pwd === matchedCreator.pin || (matchedCreator.phone && pwd === matchedCreator.phone.slice(-4)));
+      if (isCreatorMatch) {
         const profile: CreatorProfile = {
-          name: currentProfile?.name && currentProfile.name !== 'RonPay User' ? currentProfile.name : `RonPay User (${rawUser})`,
-          orgName: currentProfile?.orgName || 'Mizoram Community Member',
-          designation: 'Verified Member',
-          phone: cleanPhone || '8794009999',
-          role: isMemberRole,
-          isAdmin: false,
+          ...matchedCreator,
+          role: matchedCreator.role || 'CREATOR',
           isPhoneVerified: true,
-          isApproved: true,
-          pin: pwd,
-          password: pwd,
-          approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang'],
-          registeredAt: new Date().toISOString()
+          password: isOtp ? (matchedCreator.password || '1234') : pwd,
+          pin: isOtp ? (matchedCreator.pin || '1234') : pwd,
         };
 
         loginCreator(profile);
-        saveStoredCreatorProfile(profile);
-        setIsLoading(false);
         onLoginSuccess(profile);
         onClose();
         return;
+      } else {
+        setErrorMessage('Creator Password / Security PIN chhut a dik lo. Khawngaihin i PIN dik chhu lut rawh, emaw SMS OTP hmang rawh.');
+        return;
       }
+    }
 
-      setIsLoading(false);
-      setErrorMessage('User ID emaw Password / PIN a dik lo. Khawngaihin enfiah leh rawh.');
-    }, 60);
+    // 4. Default Community Member / Citizen Login (if phone or username matches standard length)
+    if (cleanPhone.length >= 10 || cleanUser.length >= 3) {
+      const isMemberRole: UserRole = 'MEMBER';
+      const profile: CreatorProfile = {
+        name: currentProfile?.name && currentProfile.name !== 'Khualmi (Guest User)' ? currentProfile.name : `RonPay User (${rawUser})`,
+        orgName: currentProfile?.orgName || 'Mizoram Community Member',
+        designation: 'Verified Member',
+        phone: cleanPhone || '8794009999',
+        role: isMemberRole,
+        isAdmin: false,
+        isPhoneVerified: true,
+        isApproved: true,
+        pin: pwd,
+        password: pwd,
+        approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang'],
+        registeredAt: new Date().toISOString()
+      };
+
+      loginCreator(profile);
+      onLoginSuccess(profile);
+      onClose();
+      return;
+    }
+
+    setErrorMessage('User ID emaw Password / PIN a dik lo. Khawngaihin enfiah leh rawh.');
   };
 
-  // 2. One-click Demo / Tester Login (Instantaneous & Zero Delay)
-  const handleSelectDemoAccount = (demo: typeof DEMO_ACCOUNTS[0]) => {
-    setErrorMessage('');
+  // 5. Google 1-Tap Login / Registration (Fast & Instantaneous)
+  const handleGoogleLogin = () => {
+    const trimmedEmail = googleCustomEmail.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Khawngaihin Google Email account chhu lut rawh.');
+      return;
+    }
+
     triggerHaptic();
 
-    const isSuperOrAdmin = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
+    const isSuperAdminEmail = Boolean(
+      trimmedEmail.toLowerCase() === 'ronpay.adm@gmail.com' ||
+      trimmedEmail.toLowerCase().includes('ronpay.adm') ||
+      trimmedEmail.toLowerCase() === 'admin@ronpay.com'
+    );
+
+    const displayName = googleCustomName.trim() || (isSuperAdminEmail ? 'Super Admin (Master)' : (googleIsNewUser ? 'RonPay Member' : (currentProfile?.name || trimmedEmail.split('@')[0])));
+    const displayPhone = googleCustomPhone.replace(/\D/g, '') || (isSuperAdminEmail ? '9862000001' : (currentProfile?.phone || ''));
+
     const profile: CreatorProfile = {
-      name: demo.name,
-      orgName: demo.orgName,
-      designation: demo.designation,
-      phone: demo.phone,
-      role: demo.role,
-      isAdmin: isSuperOrAdmin,
+      name: displayName,
+      orgName: isSuperAdminEmail ? 'RonPay Master Headquarters' : (googleIsNewUser ? 'RonPay Community' : (currentProfile?.orgName || 'RonPay Community Member')),
+      designation: isSuperAdminEmail ? 'Chief System Architect' : 'Verified Member (Google)',
+      phone: displayPhone,
+      role: isSuperAdminEmail ? 'SUPER_ADMIN' : 'MEMBER',
+      isAdmin: isSuperAdminEmail,
       isPhoneVerified: true,
       isApproved: true,
-      avatarUrl: demo.avatarUrl,
-      password: demo.mpin,
-      pin: demo.mpin,
+      avatarUrl: isSuperAdminEmail 
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+        : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName || 'RonPay')}`,
+      password: '',
+      pin: '1234',
       approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-      createdQRsCount: demo.id === 'demo-treasurer' ? 5 : 15,
       registeredAt: new Date().toISOString()
     };
 
-    if (isSuperOrAdmin) {
-      saveAdminAuthState(demo.role, profile);
-      recordAuditLog(`${demo.role} Login`, `${demo.name} authenticated via Tester Hub.`, 'system');
+    if (isSuperAdminEmail) {
+      saveAdminAuthState('SUPER_ADMIN', profile);
+      recordAuditLog('Super Admin Login', `Super Admin (${trimmedEmail}) logged in via Google.`, 'system');
     } else {
       loginCreator(profile);
     }
 
-    saveStoredCreatorProfile(profile);
-    setIsLoading(false);
     onLoginSuccess(profile);
     onClose();
   };
 
-  // 3. Google 1-Tap Login / Registration (Fast & Direct)
-  const handleGoogleLogin = () => {
-    const trimmedEmail = googleCustomEmail.trim();
-    if (!trimmedEmail) {
-      setErrorMessage('Khawngaihin Google Email account type rawh.');
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage('');
+  // 6. Biometric Instant Unlock
+  const handleBiometricUnlock = () => {
     triggerHaptic();
-
-    setTimeout(() => {
-      const isSuperAdminEmail = Boolean(
-        trimmedEmail.toLowerCase() === 'ronpay.adm@gmail.com' ||
-        trimmedEmail.toLowerCase().includes('ronpay.adm') ||
-        trimmedEmail.toLowerCase() === 'admin@ronpay.com'
-      );
-
-      const displayName = googleCustomName.trim() || (isSuperAdminEmail ? 'Super Admin (Master)' : (googleIsNewUser ? 'RonPay Member' : (currentProfile?.name || trimmedEmail.split('@')[0])));
-      const displayPhone = googleCustomPhone.replace(/\D/g, '') || (isSuperAdminEmail ? '9862000001' : (currentProfile?.phone || ''));
-
-      const profile: CreatorProfile = {
-        name: displayName,
-        orgName: isSuperAdminEmail ? 'RonPay Master Headquarters' : (googleIsNewUser ? 'RonPay Community' : (currentProfile?.orgName || 'RonPay Community Member')),
-        designation: isSuperAdminEmail ? 'Chief System Architect' : 'Verified Member (Google)',
-        phone: displayPhone,
-        role: isSuperAdminEmail ? 'SUPER_ADMIN' : 'MEMBER',
-        isAdmin: isSuperAdminEmail,
-        isPhoneVerified: true,
-        isApproved: true,
-        avatarUrl: isSuperAdminEmail 
-          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
-          : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(displayName || 'RonPay')}`,
-        password: '',
-        pin: '1234',
-        approvedCategories: ['ralna', 'khawlsak', 'rikrum', 'kumtluang', 'others'],
-        registeredAt: new Date().toISOString()
-      };
-
-      if (isSuperAdminEmail) {
-        saveAdminAuthState('SUPER_ADMIN', profile);
-        recordAuditLog('Super Admin Login', `Super Admin (${trimmedEmail}) logged in via Google.`, 'system');
-      } else {
-        loginCreator(profile);
-      }
-
-      saveStoredCreatorProfile(profile);
-      setIsLoading(false);
-      onLoginSuccess(profile);
-      onClose();
-    }, 60);
+    const target = currentProfile && currentProfile.phone ? currentProfile : DEMO_ACCOUNTS[3];
+    if (target.isAdmin) {
+      saveAdminAuthState(target.role || 'SUPER_ADMIN', target);
+    } else {
+      loginCreator(target);
+    }
+    onLoginSuccess(target);
+    onClose();
   };
 
-  // 4. Biometric Quick Unlock (Fast)
-  const handleBiometricUnlock = () => {
-    setIsLoading(true);
-    setErrorMessage('');
-    triggerHaptic();
+  // Check custom creators on device
+  const allStoredCreators = getStoredCreatorsList ? getStoredCreatorsList() : [];
+  const demoPhoneSet = new Set(DEMO_ACCOUNTS.map(d => d.phone.replace(/\D/g, '')));
+  const customCreators = allStoredCreators.filter(c => c.phone && !demoPhoneSet.has(c.phone.replace(/\D/g, '')) && c.isApproved);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      onLoginSuccess(currentProfile);
-      onClose();
-    }, 60);
+  const isCurrentActive = (phoneToCheck?: string, roleToCheck?: string) => {
+    if (!currentProfile) return false;
+    if (phoneToCheck && currentProfile.phone && phoneToCheck.replace(/\D/g, '') === currentProfile.phone.replace(/\D/g, '')) {
+      return true;
+    }
+    if (roleToCheck && currentProfile.role === roleToCheck && currentProfile.isAdmin) {
+      return true;
+    }
+    return false;
   };
 
   return (
@@ -541,14 +578,14 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[94vh] flex flex-col text-slate-900 animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Gradient Header (Secret 5-Click Trigger) */}
+        {/* Top Header - Protected with Secret 5-Clicks easter egg for Admin/Tester Mode */}
         <div 
           onClick={handleHeaderSecretClick}
-          className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-900/60 shrink-0 cursor-pointer select-none group"
-          title="RonPay Security Login (Protected)"
+          className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-900/60 shrink-0 select-none cursor-pointer group"
+          title="RonPay Security Login"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/90 text-white flex items-center justify-center shadow-md border border-indigo-400/40 group-active:scale-95 transition shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600/90 text-white flex items-center justify-center shadow-md border border-indigo-400/40 shrink-0 group-active:scale-95 transition">
               <Lock className="w-5 h-5 text-indigo-100" />
             </div>
             <div className="min-w-0">
@@ -566,9 +603,9 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                       e.stopPropagation();
                       handleLockAndHide();
                     }}
-                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[9.5px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition cursor-pointer"
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition cursor-pointer"
                   >
-                    <Lock className="w-2.5 h-2.5" /> INTERNAL - HIDE
+                    <Lock className="w-2.5 h-2.5" /> HIDE / LOCK
                   </button>
                 )}
               </div>
@@ -590,19 +627,19 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
           </button>
         </div>
 
-        {/* Method Switcher Tabs */}
+        {/* Method Switcher Tabs - Clean public view, with Dev Hub only shown when 5-clicks unlocked */}
         <div className="flex border-b border-slate-200 bg-slate-50/90 p-1.5 gap-1 shrink-0 text-xs font-bold text-slate-600">
           <button
             type="button"
             onClick={() => { setActiveMethod('credentials'); setErrorMessage(''); }}
             className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeMethod === 'credentials'
-                ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Phone & OTP</span>
+            <span>Phone & MPIN</span>
           </button>
 
           <button
@@ -610,12 +647,12 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             onClick={() => { setActiveMethod('biometric'); setErrorMessage(''); }}
             className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeMethod === 'biometric'
-                ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <Fingerprint className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Biometric / MPIN</span>
+            <span>Biometric</span>
           </button>
 
           <button
@@ -623,7 +660,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             onClick={() => { setActiveMethod('google'); setErrorMessage(''); }}
             className={`flex-1 py-2 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeMethod === 'google'
-                ? 'bg-white text-indigo-900 shadow-xs border border-slate-200 font-black'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-200 font-black'
                 : 'hover:text-slate-900 hover:bg-white/60'
             }`}
           >
@@ -631,7 +668,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             <span>Google</span>
           </button>
 
-          {/* HIDDEN FROM GUEST USERS: Unlocked only by 5 clicks */}
+          {/* HIDDEN FROM PUBLIC: Unlocked ONLY via 5 clicks on the header */}
           {isTesterUnlocked && (
             <button
               type="button"
@@ -659,28 +696,11 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
-          {/* Tester Notice Banner (Unlocked or Hidden) */}
-          {testerNotice && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-2 text-xs font-black text-emerald-900 animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{testerNotice}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTesterNotice('')}
-                className="text-emerald-700 hover:text-emerald-900 p-0.5 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3.5">
           {/* Success Banner */}
           {successNotice && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2.5 text-xs font-black text-emerald-900 animate-fadeIn">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2.5 text-xs font-black text-emerald-900 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{successNotice}</span>
             </div>
           )}
@@ -693,7 +713,7 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             </div>
           )}
 
-          {/* TAB 1: PHONE & OTP / MPIN (Clean Guest View) */}
+          {/* TAB 1: PHONE & MPIN / OTP (Standard Public Login) */}
           {activeMethod === 'credentials' && (
             <form onSubmit={handleCredentialsLogin} className="space-y-3.5 animate-fadeIn">
               <div>
@@ -764,14 +784,16 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                     </button>
                   </div>
                   <div className="flex items-center justify-between mt-1.5 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => setPasswordInput('1234')}
-                      className="text-slate-500 hover:text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <span>Default MPIN: <strong className="text-indigo-600">1234</strong></span>
-                      <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1 rounded border border-indigo-200">Fill 1234</span>
-                    </button>
+                    {isTesterUnlocked ? (
+                      <button
+                        type="button"
+                        onClick={() => setPasswordInput('1234')}
+                        className="text-slate-500 hover:text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Default MPIN: <strong className="text-indigo-600">1234</strong></span>
+                        <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1 rounded border border-indigo-200">Fill 1234</span>
+                      </button>
+                    ) : <span />}
                     <button
                       type="button"
                       onClick={() => {
@@ -824,101 +846,33 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-3 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-3 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
               >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Verifying Credentials...
-                  </>
-                ) : (
-                  <>
-                    <KeyRound className="w-4 h-4" /> {phoneSubMode === 'mpin' ? 'Sign In with Phone & MPIN' : 'Sign In with OTP'}
-                  </>
-                )}
+                <KeyRound className="w-4 h-4" />
+                <span>{phoneSubMode === 'mpin' ? 'Sign In with Phone & MPIN' : 'Sign In with OTP'}</span>
               </button>
             </form>
           )}
 
-          {/* TAB 4: DEVELOPER & TESTER HUB (INTERNAL MODE UNLOCKED) */}
-          {activeMethod === 'demo' && (
-            <div className="space-y-3 animate-fadeIn">
-              {/* Internal mode yellow card */}
-              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-black text-xs text-amber-950 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-600" /> Developer & Tester Hub (Internal Mode Unlocked)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleLockAndHide}
-                    className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
-                  >
-                    <Lock className="w-3 h-3" /> Lock & Hide
-                  </button>
-                </div>
-                <p className="text-[10.5px] text-amber-900/80 leading-relaxed font-medium">
-                  Internal testing atan chauhva hawn a ni e. Super Admin & Admin chu Master Passcode hmanga ven a la ni reng e.
+          {/* TAB 2: BIOMETRIC UNLOCK */}
+          {activeMethod === 'biometric' && (
+            <div className="space-y-4 text-center py-4 animate-fadeIn">
+              <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
+                <Fingerprint className="w-9 h-9" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900">Biometric Quick Unlock</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                  Device Touch ID / Face ID emaw Android Fingerprint hmangin login nghal rawh le.
                 </p>
               </div>
-
-              {/* Tester Accounts List */}
-              <div className="space-y-2">
-                {DEMO_ACCOUNTS.map((demo) => {
-                  const isMasterLocked = demo.role === 'SUPER_ADMIN' || demo.role === 'ADMIN';
-                  return (
-                    <div
-                      key={demo.id}
-                      className="p-3 rounded-2xl border border-slate-200/90 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 transition flex items-center justify-between gap-3 shadow-2xs"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={demo.avatarUrl}
-                          alt={demo.name}
-                          className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black text-slate-900 truncate">
-                              {demo.name}
-                            </span>
-                            <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full border ${demo.badgeColor}`}>
-                              {demo.roleBadge}
-                            </span>
-                          </div>
-                          <p className="text-[10.5px] text-slate-500 font-medium truncate mt-0.5">
-                            {demo.orgName} • {demo.phone}
-                          </p>
-                          <p className="text-[9.5px] text-slate-400 truncate mt-0.5">
-                            {demo.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSelectDemoAccount(demo)}
-                        disabled={isLoading}
-                        className={`shrink-0 px-3 py-1.5 rounded-xl font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 disabled:opacity-50 ${
-                          isMasterLocked
-                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                        }`}
-                      >
-                        {isMasterLocked ? (
-                          <>
-                            <Lock className="w-3 h-3" /> Unlock
-                          </>
-                        ) : (
-                          <>
-                            <LogIn className="w-3 h-3" /> Login
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={handleBiometricUnlock}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              >
+                <Fingerprint className="w-4 h-4" /> Scan Fingerprint / Face ID
+              </button>
             </div>
           )}
 
@@ -1014,79 +968,216 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                disabled={isLoading}
-                className="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-black py-2.5 sm:py-3 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center gap-2.5 cursor-pointer active:scale-98 disabled:opacity-50"
+                className="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-black py-2.5 sm:py-3 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center gap-2.5 cursor-pointer active:scale-98"
               >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" /> Connecting to Google...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                    </svg>
-                    <span>{googleIsNewUser ? 'Register with Google' : 'Continue with Google'}</span>
-                  </>
-                )}
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>{googleIsNewUser ? 'Register with Google' : 'Continue with Google'}</span>
               </button>
             </div>
           )}
 
-          {/* TAB 4: BIOMETRIC UNLOCK */}
-          {activeMethod === 'biometric' && (
-            <div className="space-y-4 text-center py-4 animate-fadeIn">
-              <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
-                <Fingerprint className="w-9 h-9 animate-pulse" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900">Biometric Quick Unlock</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                  Device Touch ID / Face ID emaw Android Fingerprint hmangin login rawh le.
+          {/* TAB 4: DEVELOPER & ADMIN TESTER HUB (STRICTLY HIDDEN, UNLOCKED ONLY VIA 5 CLICKS ON HEADER) */}
+          {activeMethod === 'demo' && isTesterUnlocked && (
+            <div className="space-y-3 animate-fadeIn">
+              {/* Internal mode yellow card */}
+              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3 text-xs text-amber-950 space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-xs text-amber-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-600" /> Developer & Admin Hub (Unlocked via 5-Clicks)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleLockAndHide}
+                    className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <Lock className="w-3 h-3" /> Lock & Hide
+                  </button>
+                </div>
+                <p className="text-[10.5px] text-amber-900/80 leading-relaxed font-medium">
+                  Internal testing & admin access atan chauh hawn a ni. Mipui hmuh laka venhim a ni e.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleBiometricUnlock}
-                disabled={isLoading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-2xl text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Scanning Biometrics...
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint className="w-4 h-4" /> Scan Fingerprint / Face ID
-                  </>
-                )}
-              </button>
-            </div>
-          )}
 
-          {/* Biometric Quick Unlock Strip */}
-          {biometricEnabled && activeMethod !== 'biometric' && (
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between bg-slate-50 p-2.5 rounded-2xl">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-indigo-100 text-indigo-700 rounded-lg flex items-center justify-center">
-                  <Fingerprint className="w-4 h-4" />
+              {/* Active Account Banner */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50 via-slate-50 to-purple-50 border border-indigo-200/80 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative">
+                    {currentProfile?.avatarUrl ? (
+                      <img 
+                        src={currentProfile.avatarUrl} 
+                        alt={currentProfile.name} 
+                        className="w-10 h-10 rounded-xl object-cover ring-2 ring-indigo-500 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                        {currentProfile?.name ? currentProfile.name.charAt(0).toUpperCase() : 'U'}
+                      </div>
+                    )}
+                    <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-black text-slate-900 truncate">
+                        {currentProfile?.name || 'Khualmi (Guest User)'}
+                      </span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded border border-emerald-300">
+                        ACTIVE NOW
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-600 truncate font-medium">
+                      {currentProfile?.orgName || 'Mizoram Community'} {currentProfile?.phone ? `• ${currentProfile.phone}` : ''}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-bold text-slate-800">Biometric Unlock</div>
-                  <div className="text-[9px] text-slate-500">Fingerprint / Face ID</div>
-                </div>
+
+                {currentProfile?.phone && (
+                  <button
+                    type="button"
+                    onClick={handleSwitchToGuest}
+                    className="px-2.5 py-1.5 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 font-black text-[10.5px] transition cursor-pointer flex items-center gap-1 shrink-0 shadow-2xs"
+                    title="Log out to guest view"
+                  >
+                    <LogOut className="w-3 h-3" /> Logout
+                  </button>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={handleBiometricUnlock}
-                disabled={isLoading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] px-3 py-1.5 rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs disabled:opacity-50"
-              >
-                Scan Now
-              </button>
+
+              {/* Title & Instruction */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5 text-amber-600" />
+                  1-Tap Instant Account Switch
+                </span>
+                <span className="text-[10px] text-indigo-600 font-bold">
+                  Zero Delay • 0ms
+                </span>
+              </div>
+
+              {/* Tester Accounts List */}
+              <div className="space-y-2">
+                {DEMO_ACCOUNTS.map((demo) => {
+                  const isActive = isCurrentActive(demo.phone, demo.role);
+                  return (
+                    <div
+                      key={demo.id}
+                      onClick={() => !isActive && handleSelectDemoAccount(demo)}
+                      className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 cursor-pointer ${
+                        isActive
+                          ? 'border-emerald-500 bg-emerald-50/40 ring-1 ring-emerald-500/50'
+                          : 'border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 active:scale-[0.99] shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={demo.avatarUrl}
+                          alt={demo.name}
+                          className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {demo.name}
+                            </span>
+                            <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-full border ${demo.badgeColor}`}>
+                              {demo.roleBadge}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-600 font-medium truncate mt-0.5">
+                            {demo.orgName} • {demo.phone}
+                          </p>
+                          <p className="text-[9.5px] text-slate-400 truncate mt-0.5">
+                            {demo.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isActive ? (
+                        <div className="shrink-0 flex items-center gap-1 text-emerald-700 font-black text-[11px] bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-300">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" /> Active
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectDemoAccount(demo);
+                          }}
+                          className="shrink-0 px-3 py-1.5 rounded-xl font-black text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white transition cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
+                        >
+                          <span>Lut Rawh</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Custom device registered creators */}
+                {customCreators.map((creator) => {
+                  const isActive = isCurrentActive(creator.phone, creator.role);
+                  return (
+                    <div
+                      key={creator.phone}
+                      onClick={() => !isActive && handleSelectCustomCreator(creator)}
+                      className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 cursor-pointer ${
+                        isActive
+                          ? 'border-emerald-500 bg-emerald-50/40 ring-1 ring-emerald-500/50'
+                          : 'border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 active:scale-[0.99] shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {creator.avatarUrl ? (
+                          <img
+                            src={creator.avatarUrl}
+                            alt={creator.name}
+                            className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            {creator.name?.charAt(0) || 'C'}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {creator.name}
+                            </span>
+                            <span className="text-[8.5px] font-black px-1.5 py-0.2 rounded-full border bg-purple-100 text-purple-800 border-purple-300">
+                              REGISTERED CREATOR
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-600 font-medium truncate mt-0.5">
+                            {creator.orgName || 'Mizoram Organization'} • {creator.phone}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isActive ? (
+                        <div className="shrink-0 flex items-center gap-1 text-emerald-700 font-black text-[11px] bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-300">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" /> Active
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectCustomCreator(creator);
+                          }}
+                          className="shrink-0 px-3 py-1.5 rounded-xl font-black text-[11px] bg-purple-600 hover:bg-purple-700 text-white transition cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
+                        >
+                          <span>Lut Rawh</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -1105,13 +1196,12 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
             </button>
             {activeMethod === 'credentials' && (
               <button
-                type="button"
+                type="submit"
                 onClick={handleCredentialsLogin}
-                disabled={isLoading}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black px-4 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black px-4 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer active:scale-95"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>{isLoading ? 'Signing In...' : 'Sign In'}</span>
+                <span>Sign In</span>
               </button>
             )}
           </div>

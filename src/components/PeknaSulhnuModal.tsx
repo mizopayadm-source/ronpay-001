@@ -30,6 +30,9 @@ import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '.
 import { printHtmlSafely } from '../utils/export';
 import { 
   isCampaignCreator, 
+  isActualCampaignOwner,
+  isUserPaidTransaction,
+  isUserOrCreatorTransaction,
   getStoredCampaigns, 
   getStoredTransactions,
   getStoredUserPaidTxIds,
@@ -79,7 +82,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onRefreshData,
   onOpenLogin,
 }) => {
-  const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
+  const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const isGuestUser = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
+  const isSuperAdminUser = !isGuestUser && isSuperAdminOrAdminProfile(creatorProfile);
   // Default to 'all' for Admin/Super Admin, 'sent' for regular users so ordinary donors only see their own records
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>(() => {
     return isSuperAdminUser ? 'all' : 'sent';
@@ -159,39 +164,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     const combined = supabaseTxns.length > 0
       ? supabaseTxns
       : (Array.isArray(transactions) ? transactions.filter(Boolean) : []);
-    const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
-    
-    // Identify owned campaigns first for creator check
-    const ownedIds = new Set<string>();
-    const ownedTitles = new Set<string>();
-    if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
-      const campList = Array.isArray(campaigns) ? campaigns : [];
-      campList.forEach(c => {
-        if (c && isCampaignCreator(c, creatorProfile)) {
-          if (c.id) ownedIds.add(c.id);
-          if (c.title) ownedTitles.add(String(c.title).toLowerCase().trim());
-        }
-      });
-    }
-    const isSuperAdmin = isSuperAdminOrAdminProfile(creatorProfile);
-    const isCreator = Boolean(
-      isSuperAdmin || 
-      creatorProfile?.isApproved || 
-      ownedIds.size > 0
-    );
 
     const valid = combined.filter(t => {
       if (!t || !t.id) return false;
-
-      // If NOT a creator/admin, ordinary user should ONLY see their own paid/sent transactions!
-      if (!isCreator) {
-        const txPhone = t.donorPhone ? String(t.donorPhone).replace(/\D/g, '').slice(-10) : '';
-        const isDonorPhone = Boolean(profilePhone && txPhone && profilePhone === txPhone);
-        const isPaidOnDevice = safeUserPaidIds.includes(t.id);
-        return isDonorPhone || isPaidOnDevice;
+      if (isGuestUser) {
+        return isUserPaidTransaction(t, safeUserPaidIds, creatorProfile);
       }
-
-      return true;
+      return isUserOrCreatorTransaction(t, safeCampaigns, creatorProfile, safeUserPaidIds);
     });
 
     // CRITICAL: Sort by latest activity (updatedAt -> createdAt -> timestamp) so newly entered transactions ALWAYS appear right at the top
@@ -202,15 +181,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     });
 
     return valid;
-  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, campaigns, userPaidIds, safeUserPaidIds]);
+  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds]);
 
-  // Identify campaigns owned by active profile
+  // Identify campaigns owned by active profile ("Ama Siam chauh" for creator, or all for Super Admin)
   const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {
     const ids = new Set<string>();
     const titles = new Set<string>();
     if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
       safeCampaigns.forEach(c => {
-        if (c && isCampaignCreator(c, creatorProfile)) {
+        const owns = isSuperAdminUser ? true : isActualCampaignOwner(c, creatorProfile);
+        if (c && owns) {
           if (c.id) ids.add(c.id);
           if (c.title) {
             titles.add(String(c.title).toLowerCase().trim());
@@ -219,12 +199,11 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       });
     }
     return { ownedCampaignIds: ids, ownedCampaignTitles: titles };
-  }, [safeCampaigns, creatorProfile]);
-
+  }, [safeCampaigns, creatorProfile, isSuperAdminUser]);
 
   const isCreatorAccount = Boolean(
     isSuperAdminUser || 
-    creatorProfile?.isApproved || 
+    (creatorProfile?.isApproved && creatorProfile?.phone && ownedCampaignIds.size > 0) ||
     ownedCampaignIds.size > 0
   );
 

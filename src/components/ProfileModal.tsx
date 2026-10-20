@@ -43,7 +43,7 @@ interface ProfileModalProps {
   onOpenHistory?: () => void;
   onOpenPhonePePortal?: () => void;
   onLogout?: () => void;
-  onLoginClick?: () => void;
+  onLoginClick?: (method?: 'switch' | 'credentials') => void;
   onOpenAdmin?: () => void;
   onOpenSyncDiagnostic?: () => void;
   biometricEnabled?: boolean;
@@ -667,11 +667,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               <button
                 onClick={() => {
                   onClose();
-                  onLoginClick();
+                  onLoginClick('credentials');
                 }}
                 className="w-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition cursor-pointer shadow-2xs"
               >
-                <Sparkles className="w-4 h-4 text-indigo-600" /> Switch Account / Test User Dang
+                <Sparkles className="w-4 h-4 text-indigo-600" /> Switch Account / Account Dang
               </button>
             )}
 
@@ -692,7 +692,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <button
               onClick={() => {
                 onClose();
-                onLoginClick();
+                onLoginClick('credentials');
               }}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition shadow-md cursor-pointer active:scale-[0.99]"
             >

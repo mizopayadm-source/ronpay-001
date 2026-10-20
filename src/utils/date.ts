@@ -125,9 +125,17 @@ export const formatTimeOnlyIST = (dateInput?: string | Date | number | null): st
   }
 };
 
-export const isCampaignExpired = (validityDate?: string, status?: string): boolean => {
+export const isCampaignExpired = (validityDate?: string, status?: string, category?: string, createdAt?: string): boolean => {
   if (status === 'expired' || status === 'cancelled' || status === 'archived' || status === 'rejected' || status === 'pending_renewal') return true;
-  if (!validityDate) return false;
+  if (!validityDate) {
+    if (category === 'ralna' && createdAt) {
+      const createdTime = new Date(createdAt).getTime();
+      if (!isNaN(createdTime) && (Date.now() - createdTime) > (3 * 24 * 60 * 60 * 1000)) {
+        return true;
+      }
+    }
+    return false;
+  }
   try {
     let d = new Date(validityDate);
     // Robust parsing for DD/MM/YYYY if ISO fails
@@ -155,7 +163,7 @@ export const isCampaignExpired = (validityDate?: string, status?: string): boole
  * Authoritative check if a campaign is Inactive or Expired.
  * Returns true if the campaign is expired, pending approval, rejected, cancelled, archived, pending renewal, voided, or past validity.
  */
-export const isCampaignInactiveOrExpired = (campaign?: { status?: string; validityDate?: string; isVoided?: boolean } | null): boolean => {
+export const isCampaignInactiveOrExpired = (campaign?: { category?: string; status?: string; validityDate?: string; createdAt?: string; isVoided?: boolean } | null): boolean => {
   if (!campaign) return true;
   if (campaign.isVoided) return true;
   const status = campaign.status;
@@ -170,7 +178,7 @@ export const isCampaignInactiveOrExpired = (campaign?: { status?: string; validi
   ) {
     return true;
   }
-  return isCampaignExpired(campaign.validityDate, status);
+  return isCampaignExpired(campaign.validityDate, status, campaign.category, campaign.createdAt);
 };
 
 /**

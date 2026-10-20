@@ -193,12 +193,17 @@ export const isStoredAdminAuthorized = (): boolean => {
  * Android WebViews, PWAs, and Desktop Web browsers without relying on fragile sessionStorage.
  */
 export const isSuperAdminOrAdminProfile = (creatorProfile?: CreatorProfile | null): boolean => {
-  if (creatorProfile?.isAdmin === true) return true;
-  if (creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') return true;
+  if (!creatorProfile) return false;
+  // Guest users are strictly donors/viewers and are NEVER admins
+  const cName = (creatorProfile.name || '').trim().toLowerCase();
+  if (creatorProfile.role === 'GUEST' || !creatorProfile.phone || cName === 'khualmi (guest user)' || cName === 'guest user' || cName === 'khualmi') {
+    return false;
+  }
+  if (creatorProfile.isAdmin === true) return true;
+  if (creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') return true;
   if (typeof window !== 'undefined') {
     const role = localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role');
-    if (role === 'SUPER_ADMIN' || role === 'ADMIN') return true;
-    if (isStoredAdminAuthorized()) return true;
+    if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && isStoredAdminAuthorized()) return true;
   }
   return false;
 };
@@ -1180,19 +1185,18 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
-        const isAuthorizedAdminSession = isStoredAdminAuthorized() || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role') === 'ADMIN'));
-        if (isAuthorizedAdminSession) {
-          parsed.isAdmin = true;
-          if (!parsed.role || parsed.role === 'GUEST' || parsed.role === 'MEMBER') {
-            parsed.role = (localStorage.getItem('ronpay_admin_role') as any) || 'SUPER_ADMIN';
+        const isGuestProfile = parsed.role === 'GUEST' || !parsed.phone || parsed.name === 'Khualmi (Guest User)' || (typeof parsed.name === 'string' && (parsed.name.toLowerCase().includes('guest') || parsed.name.toLowerCase().includes('khualmi')));
+        if (!isGuestProfile) {
+          const isAuthorizedAdminSession = isStoredAdminAuthorized() || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role') === 'ADMIN'));
+          if (isAuthorizedAdminSession) {
+            parsed.isAdmin = true;
+            if (!parsed.role || parsed.role === 'MEMBER') {
+              parsed.role = (localStorage.getItem('ronpay_admin_role') as any) || 'SUPER_ADMIN';
+            }
           }
-        } else if (parsed.isAdmin && (parsed.name === 'Smart Cabs Admin' || parsed.name === 'New RonPay User' || (parsed.name === 'RonPay Member' && !parsed.phone) || parsed.phone === '9436001234')) {
+        } else {
           parsed.isAdmin = false;
-          parsed.role = 'MEMBER';
-          saveStoredCreatorProfile(parsed);
-          try {
-            sessionStorage.removeItem('ronpay_admin_auth');
-          } catch {}
+          parsed.role = 'GUEST';
         }
         return parsed;
       }
@@ -1208,7 +1212,7 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
 export const logoutCreator = (): CreatorProfile => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
-    sessionStorage.removeItem('ronpay_admin_auth');
+    clearAdminAuthState();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ronpay-creator-updated', { detail: GUEST_CREATOR_PROFILE }));
       window.dispatchEvent(new CustomEvent('ronpay_creator_profile_updated', { detail: GUEST_CREATOR_PROFILE }));
@@ -1604,30 +1608,22 @@ export const isUserPaidTransaction = (
  * User-isolation: Target goals, progress, edit/delete privileges & reports are strictly private
  * and exclusively accessible to the individual creator who created the campaign.
  */
-export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
+export const isActualCampaignOwner = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
   if (!creatorProfile || !camp) return false;
-  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') return true;
-  if (!creatorProfile.phone && !creatorProfile.name) return false;
+  // Guest users are strictly viewers and never own/manage campaigns
+  if (creatorProfile.role === 'GUEST' || !creatorProfile.phone || creatorProfile.name === 'Khualmi (Guest User)') {
+    return false;
+  }
 
   const creatorPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
   const creatorRawPhone = (creatorProfile.phone || '').trim();
-  const creatorName = (creatorProfile.name || '').trim().toLowerCase();
-  const cleanCreatorName = creatorName.replace(/\s*\([^)]*\)/g, '').trim();
 
   const campCreatedBy = (camp.createdBy || '').trim();
   const campCreatedByDigits = campCreatedBy.replace(/\D/g, '').slice(-10);
-  const campCreatedByLower = campCreatedBy.toLowerCase();
 
   const campCreatorPhone = ((camp as any).creatorPhone || (camp as any).contactPhone || '').trim().replace(/\D/g, '').slice(-10);
-  const campCreatorName = ((camp as any).creatorName || (camp as any).contactPerson || '').trim().toLowerCase();
 
-  // Alias match for demo YMA creators
-  if ((creatorPhone === '9862300000' || creatorPhone === '9862311223') && 
-      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
-    return true;
-  }
-
-  // 1. Strict Phone Match (last 10 digits or exact string)
+  // Strict Phone Match (last 10 digits or exact string) - "Ama Siam chauh"
   if (creatorPhone && creatorPhone.length >= 8) {
     if (campCreatedByDigits && campCreatedByDigits.length >= 8 && campCreatedByDigits === creatorPhone) {
       return true;
@@ -1651,31 +1647,12 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
     }
   }
 
-  // 2. Creator Name Match (exact normalized name, non-generic)
-  const genericNames = [
-    'user', 'guest', 'ronpay user', 'ronpay', 'donor', 'citizen', 
-    'community donor', 'community citizen', 'valued donor', 'anonymous', ''
-  ];
-  const isGeneric = genericNames.includes(cleanCreatorName) || cleanCreatorName.length < 3;
-
-  if (!isGeneric) {
-    if (campCreatedByLower && (campCreatedByLower === creatorName || campCreatedByLower === cleanCreatorName)) {
+  // Name match if distinctly set and not a generic username
+  if (creatorProfile.name && camp.createdBy) {
+    const cName = creatorProfile.name.trim().toLowerCase();
+    const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi (guest user)'].includes(cName);
+    if (!isGeneric && cName.length >= 4 && cName === camp.createdBy.trim().toLowerCase()) {
       return true;
-    }
-    if (campCreatorName && (campCreatorName === creatorName || campCreatorName === cleanCreatorName)) {
-      return true;
-    }
-  }
-
-  // 3. Organization Name Match (if specific and non-generic)
-  if (creatorProfile.orgName && camp.orgName) {
-    const cOrg = creatorProfile.orgName.trim().toLowerCase();
-    const campOrg = camp.orgName.trim().toLowerCase();
-    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community'];
-    if (!genericOrgs.includes(cOrg) && cOrg.length >= 4 && campOrg.length >= 4) {
-      if (cOrg === campOrg) {
-        return true;
-      }
     }
   }
 
@@ -1683,15 +1660,34 @@ export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfil
 };
 
 /**
+ * Checks if the currently active user/creator is the verified owner/creator of a given campaign,
+ * or an authorized staff member (Admin/Super Admin/Moderator) with management privileges.
+ */
+export const isCampaignCreator = (camp: Campaign, creatorProfile?: CreatorProfile | null): boolean => {
+  if (!creatorProfile || !camp) return false;
+  // Guest users are strictly viewers and never own/manage campaigns
+  if (creatorProfile.role === 'GUEST' || !creatorProfile.phone || creatorProfile.name === 'Khualmi (Guest User)') {
+    return false;
+  }
+  // Authorized Staff
+  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || creatorProfile.role === 'MODERATOR') {
+    return true;
+  }
+
+  return isActualCampaignOwner(camp, creatorProfile);
+};
+
+/**
  * Determines whether a transaction is visible to the currently active user or creator in Sulhnu (History).
  * User / Creator isolation rules:
- * 1. Super Admin: Can view all transactions across the entire platform.
- * 2. Creator: Can view:
- *    - All incoming transactions donated to Campaigns created/managed by this Creator (Bawm Thawhlawm Dawnte).
- *    - Personal transactions paid by this Creator as a donor (Ka Thawhpekte / Pekna).
- *    - Foreign campaigns created by other users where this creator was not the donor are strictly excluded.
- * 3. General Member / Donor / Citizen:
- *    - Sees all transactions made by their phone number, name, or recorded in their local device session.
+ * 1. Super Admin & Admin: Platform-wide access to monitor all transactions.
+ * 2. Moderator: Moderation desk scope (assigned categories or created campaigns).
+ * 3. Creator: STRICT USER-ISOLATION ("a ma bawm hnuai a mi chiah"):
+ *    - All incoming transactions donated to Campaigns created by this Creator.
+ *    - Personal transactions paid by this Creator as a donor ("ama tih chin").
+ *    - Other creators' campaigns are strictly excluded.
+ * 4. Guest User: STRICT DONOR PRIVACY ("ama tih chin chiah"):
+ *    - Only transactions paid by this guest (phone match or paid on this device session).
  */
 export const isUserOrCreatorTransaction = (
   tx: Transaction,
@@ -1701,47 +1697,68 @@ export const isUserOrCreatorTransaction = (
 ): boolean => {
   if (!tx) return false;
 
-  // 1. Super Admin has unrestricted access
+  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
+  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
+  const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi (guest user)', 'khualmi', ''].includes(cleanCreatorName);
+  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanCreatorName === 'khualmi' || cleanCreatorName === 'khualmi (guest user)' || cleanCreatorName === 'guest user';
+
+  // 1. Guest user: STRICT DONOR PRIVACY ("ama tih chin chiah")
+  // Only transactions paid by this guest on this device session or phone number!
+  if (isGuest) {
+    return isUserPaidTransaction(tx, userPaidIds, creatorProfile);
+  }
+
+  // 2. Super Admin & Admin have unrestricted access
   if (isSuperAdminOrAdminProfile(creatorProfile)) return true;
 
-  // 2. Local device session payments
+  // 3. Local device session payments (Guest or any user who paid on this device - "ama tih chin chiah")
   if (Array.isArray(userPaidIds) && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
     return true;
   }
 
-  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
-  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
-  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
-  const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', ''].includes(cleanCreatorName);
+  // 4. Moderator: can view transactions in their assigned categories or created by them
+  if (creatorProfile?.role === 'MODERATOR') {
+    const allowedCategories = new Set<string>(
+      (creatorProfile?.approvedCategories || (creatorProfile as any)?.allowedCategories || []).map((cat: string) => String(cat).toLowerCase())
+    );
+    const txCamp = (campaigns || []).find(c => c && (c.id === tx.campaignId || (tx.campaignTitle && c.title === tx.campaignTitle)));
+    const txCategory = tx.category || (txCamp ? txCamp.category : '');
+    if (allowedCategories.size === 0 || allowedCategories.has('all') || (txCategory && allowedCategories.has(txCategory.toLowerCase()))) {
+      return true;
+    }
+    if (txCamp && isActualCampaignOwner(txCamp, creatorProfile)) {
+      return true;
+    }
+  }
 
   const txCampaignTitle = String(tx.campaignTitle || '').toLowerCase().trim();
 
-  // 3. Campaign ownership: Check if tx belongs to a campaign created by the active profile
-  if (creatorProfile && (creatorPhoneDigits.length >= 8 || (!isGenericUser && cleanCreatorName.length >= 3))) {
+  // 5. Creator: "a ma bawm hnuai a mi chiah" (STRICTLY their own campaigns)
+  if (creatorPhoneDigits.length >= 8 || (!isGenericUser && cleanCreatorName.length >= 3)) {
     const parentCamp = (campaigns || []).find(c => 
       c && (
         c.id === tx.campaignId || 
         (txCampaignTitle && c.title && String(c.title).toLowerCase().trim() === txCampaignTitle)
       )
     );
-    if (parentCamp && isCampaignCreator(parentCamp, creatorProfile)) {
+    if (parentCamp && isActualCampaignOwner(parentCamp, creatorProfile)) {
       return true;
     }
 
-    // Direct check across all campaigns owned by creator
     const isOwned = (campaigns || []).some(c => 
       c && (
         c.id === tx.campaignId || 
         (txCampaignTitle && c.title && String(c.title).toLowerCase().trim() === txCampaignTitle)
       ) &&
-      isCampaignCreator(c, creatorProfile)
+      isActualCampaignOwner(c, creatorProfile)
     );
     if (isOwned) {
       return true;
     }
   }
 
-  // 4. Donor Phone Match (Last 10 digits)
+  // 6. Personal payments made by this creator as donor to other campaigns ("ama tih chin chiah")
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
     const txDigits = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
     if (txDigits.length >= 8 && creatorPhoneDigits === txDigits) {
@@ -1749,11 +1766,10 @@ export const isUserOrCreatorTransaction = (
     }
   }
 
-  // 5. Distinctive Donor Name Match (non-generic names)
+  // 7. Distinctive Donor Name Match (non-generic names)
   if (!isGenericUser && cleanCreatorName.length >= 3 && tx.donorName && !tx.isAnonymous) {
     const dName = String(tx.donorName).trim().toLowerCase();
     if (dName === cleanCreatorName || dName.includes(cleanCreatorName) || cleanCreatorName.includes(dName)) {
-      // If phone exists for both, ensure no mismatch
       if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
         const txDigits = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
         if (txDigits.length >= 8 && creatorPhoneDigits !== txDigits) {
@@ -1764,7 +1780,7 @@ export const isUserOrCreatorTransaction = (
     }
   }
 
-  // 6. Direct Creator/Collector tag match on transaction (if available)
+  // 8. Direct Creator/Collector tag match on transaction (if available)
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8) {
     const txCreatorDigits = String((tx as any).creatorPhone || (tx as any).collectorPhone || (tx as any).createdBy || '').replace(/\D/g, '').slice(-10);
     if (txCreatorDigits && txCreatorDigits.length >= 8 && txCreatorDigits === creatorPhoneDigits) {
@@ -1786,7 +1802,7 @@ export const getUserOrCreatorVisibleTransactions = (
 ): Transaction[] => {
   if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
 
-  // Super Admin gets all transactions
+  // Super Admin & Admin get all transactions
   if (isSuperAdminOrAdminProfile(creatorProfile)) {
     return transactions.filter(Boolean);
   }
@@ -1797,19 +1813,6 @@ export const getUserOrCreatorVisibleTransactions = (
   const matched = transactions.filter(tx => 
     tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds)
   );
-
-  // If user is a brand-new guest explorer (no phone, no specific profile name, no session payment), provide standard demo transactions for receipt exploration
-  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
-  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
-  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
-  const isGeneric = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', ''].includes(cleanCreatorName);
-  
-  const hasSpecificAccount = Boolean((creatorPhoneDigits && creatorPhoneDigits.length >= 8) || (!isGeneric && cleanCreatorName.length >= 3));
-
-  if (matched.length === 0 && !hasSpecificAccount && safeUserPaidIds.length === 0) {
-    // For guest users or fresh mobile app installs, show the full platform transactions so the screen is never blank
-    return transactions;
-  }
 
   return matched;
 };

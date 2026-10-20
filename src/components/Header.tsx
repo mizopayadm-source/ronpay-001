@@ -40,6 +40,7 @@ interface HeaderProps {
   onOpenHistory: () => void;
   onOpenAIHriatpui?: () => void;
   onOpenLogin?: () => void;
+  onOpenSecretDevLogin?: () => void;
   creatorProfile?: CreatorProfile;
   onSwitchToWebsite?: () => void;
 }
@@ -157,6 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   onOpenAIHriatpui,
   onOpenLogin,
+  onOpenSecretDevLogin,
   creatorProfile,
   onSwitchToWebsite,
 }) => {
@@ -412,19 +414,16 @@ export const Header: React.FC<HeaderProps> = ({
     }
     secretLogoTapRef.current += 1;
     if (secretLogoTapRef.current >= 5) {
-      const isAlreadyUnlocked = typeof window !== 'undefined' && localStorage.getItem('ronpay_dev_mode_unlocked') === 'true';
-      const next = !isAlreadyUnlocked;
       if (typeof window !== 'undefined') {
-        if (next) {
-          localStorage.setItem('ronpay_dev_mode_unlocked', 'true');
-        } else {
-          localStorage.removeItem('ronpay_dev_mode_unlocked');
-        }
+        sessionStorage.setItem('ronpay_tester_unlocked', 'true');
+        localStorage.setItem('ronpay_dev_mode_unlocked', 'true');
       }
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         try { navigator.vibrate([40, 60, 40, 60, 100]); } catch {}
       }
-      if (onOpenLogin) {
+      if (onOpenSecretDevLogin) {
+        onOpenSecretDevLogin();
+      } else if (onOpenLogin) {
         onOpenLogin();
       }
       secretLogoTapRef.current = 0;
@@ -563,35 +562,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Smart Login & Account Switcher Button */}
-            {onOpenLogin && (
-              <button
-                type="button"
-                id="header-smart-login-btn"
-                onClick={onOpenLogin}
-                title={creatorProfile?.isApproved && creatorProfile?.name && creatorProfile.name !== 'Khualmi (Guest User)' 
-                  ? `${creatorProfile.name} (${creatorProfile.designation || 'Creator'})` 
-                  : 'Citizen & Member Login'}
-                className="h-7 sm:h-8 px-1.5 sm:px-2 bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 text-slate-200 hover:text-white rounded-lg flex items-center justify-center gap-1 text-[10px] font-black transition cursor-pointer active:scale-95 shrink-0 shadow-xs"
-              >
-                {creatorProfile?.avatarUrl && creatorProfile?.isApproved ? (
-                  <img 
-                    src={creatorProfile.avatarUrl} 
-                    alt={creatorProfile.name} 
-                    className="w-4 h-4 rounded-full object-cover ring-1 ring-amber-400"
-                  />
-                ) : (
-                  <User className="w-3.5 h-3.5 text-amber-400" />
-                )}
-                <span className="hidden sm:inline truncate max-w-[70px]">
-                  {creatorProfile?.isApproved && creatorProfile?.name && creatorProfile.name !== 'Khualmi (Guest User)' 
-                    ? creatorProfile.name.split(' ')[0] 
-                    : 'Login'}
-                </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              </button>
-            )}
-
             {/* QR Scanner Action Button */}
             <button
               type="button"
@@ -602,6 +572,35 @@ export const Header: React.FC<HeaderProps> = ({
               <QrCode className="w-3.5 h-3.5" />
               <span className="tracking-tight font-black hidden sm:inline">SCAN</span>
             </button>
+
+            {/* Smart Login & Account Switcher Button */}
+            {onOpenLogin && (
+              <button
+                type="button"
+                id="header-smart-login-btn"
+                onClick={onOpenLogin}
+                title={creatorProfile?.isApproved && creatorProfile.phone ? `Active: ${creatorProfile.name} (Click to switch)` : "Creator & Member Login"}
+                className={`w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 shrink-0 ${
+                  creatorProfile?.isApproved && creatorProfile.phone
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/60 shadow-emerald-900/30'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 shadow-indigo-900/30'
+                }`}
+              >
+                {creatorProfile?.isApproved && creatorProfile.phone ? (
+                  <>
+                    <User className="w-3.5 h-3.5 text-emerald-200" />
+                    <span className="tracking-tight font-black hidden sm:inline truncate max-w-[85px]">
+                      {creatorProfile.name ? creatorProfile.name.split(' ')[0] : 'Account'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5 text-amber-300" />
+                    <span className="tracking-tight font-black hidden sm:inline">Login</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 

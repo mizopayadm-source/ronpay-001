@@ -320,7 +320,9 @@ export function canManageCampaignExpenses(
   if (role === 'SUPER_ADMIN' || role === 'ADMIN' || creatorProfile?.isAdmin === true) {
     return true;
   }
-  if (!creatorProfile) return false;
+  if (!creatorProfile || creatorProfile.role === 'GUEST' || !creatorProfile.phone || creatorProfile.name === 'Khualmi (Guest User)') {
+    return false;
+  }
 
   // Check Officer Passcode / PIN if campaign has authorized officers
   if (officerPin) {
@@ -342,31 +344,6 @@ export function canManageCampaignExpenses(
     if (campCreatedByDigits && campCreatedByDigits === userPhone) return true;
     if (campCreatorPhone && campCreatorPhone === userPhone) return true;
     if (camp.createdBy && camp.createdBy === (creatorProfile.phone || '').trim()) return true;
-  }
-
-  const userName = (creatorProfile.name || '').trim().toLowerCase();
-  const cleanUserName = userName.replace(/\s*\([^)]*\)/g, '').trim();
-  const genericNames = ['user', 'guest', 'ronpay user', 'ronpay', 'donor', 'citizen', 'valued donor', 'anonymous', ''];
-  if (cleanUserName && cleanUserName.length >= 3 && !genericNames.includes(cleanUserName)) {
-    const campCreatedBy = (camp.createdBy || '').trim().toLowerCase();
-    const campCreatorName = ((camp as any).creatorName || (camp as any).contactPerson || '').trim().toLowerCase();
-    if (campCreatedBy && (campCreatedBy === userName || campCreatedBy === cleanUserName)) return true;
-    if (campCreatorName && (campCreatorName === userName || campCreatorName === cleanUserName)) return true;
-  }
-
-  if (creatorProfile.orgName && (camp.orgName || camp.title)) {
-    const pOrg = creatorProfile.orgName.trim().toLowerCase();
-    const cOrg = (camp.orgName || camp.title).trim().toLowerCase();
-    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community', 'creator', 'user'];
-    if (!genericOrgs.includes(pOrg) && pOrg.length >= 4 && (pOrg === cOrg || cOrg.includes(pOrg) || pOrg.includes(cOrg))) {
-      return true;
-    }
-  }
-
-  // Alias match for standard demo accounts
-  if ((userPhone === '9862300000' || userPhone === '9862311223') && 
-      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
-    return true;
   }
 
   return false;

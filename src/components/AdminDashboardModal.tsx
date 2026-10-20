@@ -540,8 +540,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingCreators = activeCreatorsList.filter(c => !c.isApproved);
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
-  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && !isCampaignExpired(c.validityDate, c.status));
-  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status)));
+  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && !isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt));
+  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
 
   // Quick 1-Click Approve for pending creator applications
@@ -1030,8 +1030,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && (c.status === 'expired' || c.status === 'rejected' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'pending_approval' || isCampaignExpired(c.validityDate, c.status))) return false;
-    if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status))) return false;
+    if (campaignFilter === 'active' && (c.status === 'expired' || c.status === 'rejected' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'pending_approval' || isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt))) return false;
+    if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
     if (searchQuery.trim()) {
@@ -1533,7 +1533,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3.5">
                       {filteredCampaigns.map(camp => {
                         const isPending = camp.status === 'pending_approval';
-                        const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status));
+                        const isExpired = camp.status === 'expired' || (!isPending && camp.status !== 'rejected' && isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt));
                         const isActive = camp.status === 'active' && !isExpired;
                         const isRejected = camp.status === 'rejected';
                         const catInfo = BAWM_CONFIG[camp.category];

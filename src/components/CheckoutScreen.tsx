@@ -45,7 +45,7 @@ import {
   EyeOff,
   RotateCw
 } from 'lucide-react';
-import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode, CampaignRenewalRequest } from '../types';
+import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode, CampaignRenewalRequest, CreatorProfile } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, isCampaignInactiveOrExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
@@ -56,6 +56,7 @@ import {
   recordUserPaidTxId,
   getStoredCreatorProfile,
   isCampaignCreator,
+  isActualCampaignOwner,
   saveCampaign,
   getStoredCampaigns,
   recordAuditLog
@@ -72,6 +73,7 @@ import { CampaignRenewalModal } from './CampaignRenewalModal';
 interface CheckoutScreenProps {
   category: BawmCategory;
   campaign?: Campaign;
+  creatorProfile?: CreatorProfile;
   pricingConfig?: SystemPricingConfig;
   onBack: () => void;
   onPaymentSuccess: (transaction: Transaction) => void;
@@ -91,6 +93,7 @@ interface CheckoutScreenProps {
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   category,
   campaign,
+  creatorProfile: propCreatorProfile,
   pricingConfig = DEFAULT_PRICING_CONFIG,
   onBack,
   onPaymentSuccess,
@@ -140,10 +143,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
 
   // Creator Ownership Verification for preset governance
-  const creatorProfile = useMemo(() => getStoredCreatorProfile(), []);
+  const localProfile = useMemo(() => getStoredCreatorProfile(), []);
+  const creatorProfile = propCreatorProfile || localProfile;
+  const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const isGuestUser = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
   const isOwner = useMemo(() => {
-    return Boolean(activeCampaign && isCampaignCreator(activeCampaign, creatorProfile));
-  }, [activeCampaign, creatorProfile]);
+    return Boolean(activeCampaign && !isGuestUser && isActualCampaignOwner(activeCampaign, creatorProfile));
+  }, [activeCampaign, creatorProfile, isGuestUser]);
 
   // PhonePe PG New Tab Live State Synchronization
   const [activePendingTxn, setActivePendingTxn] = useState<Transaction | null>(null);
@@ -869,17 +875,30 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   };
 
   // Check if current user has clearance for Group & General entry
+  // Strict Rule: Guest users can NEVER enter directly without Creator permit (Leader/Treasurer in authorized officers list) or Officer PIN!
   const isOfficerAuthorized = useMemo(() => {
-    // 1. If Creator has deliberately opened public deposits, allow direct entry
-    if (activeCampaign?.allowPublicGroupDeposits) return true;
-
-    // 2. Creator of this campaign or Platform Admin has direct officer clearance by default
-    const isMasterOrOwner = isOwner || Boolean(creatorProfile?.isAdmin) || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN';
+    // 1. Creator of this campaign or Platform Admin has direct officer clearance by default
+    const isMasterOrOwner = !isGuestUser && (
+      isOwner || 
+      creatorProfile?.isAdmin === true || 
+      creatorProfile?.role === 'SUPER_ADMIN' || 
+      creatorProfile?.role === 'ADMIN'
+    );
     if (isMasterOrOwner) return true;
 
-    // 3. Strict Protection: Officer PIN is required to unlock Group & General for other users
+    // 2. Creator in Permit a pek te (e.g. Leader, Treasurer, Collector listed in campaign's authorizedOfficers)
+    if (!isGuestUser && creatorProfile?.phone && Array.isArray((activeCampaign as any)?.authorizedOfficers)) {
+      const uPhone = creatorProfile.phone.replace(/\D/g, '').slice(-10);
+      const isPermittedOfficer = (activeCampaign as any).authorizedOfficers.some((o: any) => {
+        const oPhone = String(o?.phone || '').replace(/\D/g, '').slice(-10);
+        return oPhone && oPhone.length >= 8 && oPhone === uPhone;
+      });
+      if (isPermittedOfficer) return true;
+    }
+
+    // 3. Strict Protection: Officer PIN is required to unlock Group & General for other users & Guests
     return isOfficerUnlocked;
-  }, [activeCampaign?.allowPublicGroupDeposits, isOwner, creatorProfile, isOfficerUnlocked]);
+  }, [isGuestUser, isOwner, creatorProfile, activeCampaign, isOfficerUnlocked]);
 
   const canManagePresets = Boolean(isOwner || isOfficerAuthorized || isOfficerUnlocked || creatorProfile?.isAdmin);
 
@@ -1967,21 +1986,27 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           <div className="border-t border-slate-200 pt-2.5 space-y-1.5 text-[11px] text-slate-700 font-medium">
             <div className="flex justify-between">
               <span className="text-slate-500">Thihni & Darkar:</span>
-              <span className="font-bold text-slate-900">{campaign?.thihni ? formatDateTimeDDMMYYYY(campaign.thihni) : '16/08/2026, 10:30 PM'}</span>
+              <span className="font-bold text-slate-900">{campaign?.thihni ? formatDateTimeDDMMYYYY(campaign.thihni) : (campaign?.createdAt ? formatDateTimeDDMMYYYY(campaign.createdAt) : '—')}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Vui Hun:</span>
-              <span className="font-bold text-slate-900">{campaign?.vuiHun ? formatDateTimeDDMMYYYY(campaign.vuiHun) : '17/08/2026, 01:30 PM'}</span>
+              <span className="font-bold text-slate-900">{campaign?.vuiHun ? formatDateTimeDDMMYYYY(campaign.vuiHun) : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Vuitu:</span>
-              <span className="font-bold text-slate-900">{campaign?.vuitu || 'Rev. Dr. C. Lalramnghaka'}</span>
+              <span className="font-bold text-slate-900">{campaign?.vuitu || '—'}</span>
             </div>
             <div className={`flex justify-between p-2 rounded-xl font-bold text-[10.5px] border ${
               isExpired ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-red-50/80 text-red-700 border-red-200'
             }`}>
               <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-red-600" /> QR Code Active Until:</span>
-              <span className="text-slate-900 font-bold">{campaign?.validityDate ? formatDateDDMMYYYY(campaign.validityDate) : '19/08/2026'}</span>
+              <span className="text-slate-900 font-bold">
+                {campaign?.validityDate 
+                  ? formatDateDDMMYYYY(campaign.validityDate) 
+                  : campaign?.createdAt 
+                    ? formatDateDDMMYYYY(new Date(new Date(campaign.createdAt).getTime() + 3 * 24 * 3600 * 1000).toISOString())
+                    : 'Permanent'}
+              </span>
             </div>
           </div>
         </div>

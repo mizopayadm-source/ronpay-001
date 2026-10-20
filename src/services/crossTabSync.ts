@@ -292,9 +292,10 @@ export function setupWindowFocusSync(
  * so the user always renders fresh server data first upon sign-in, sign-out, or session boot.
  */
 export function invalidateCacheOnAuthOrBoot(
-  reason: 'auth_login' | 'auth_logout' | 'session_boot' = 'session_boot'
+  reason: 'auth_login' | 'auth_logout' | 'session_boot' = 'session_boot',
+  shouldBroadcast: boolean = false
 ): void {
-  // 1. Only reset cloud session guards on explicit auth logout to prevent excessive Firestore reads
+  // 1. Only reset cloud session guards on explicit auth logout
   if (reason === 'auth_logout') {
     resetCloudSessionGuards();
   }
@@ -306,8 +307,8 @@ export function invalidateCacheOnAuthOrBoot(
     }
   } catch {}
 
-  // 3. Broadcast across tabs so open windows cleanly align auth state
-  if (reason === 'auth_login' || reason === 'auth_logout') {
+  // 3. Only broadcast across tabs when explicitly instructed (prevents loop cascades)
+  if (shouldBroadcast && (reason === 'auth_login' || reason === 'auth_logout')) {
     broadcastStateChange('auth', { reason }, reason);
   }
 }
