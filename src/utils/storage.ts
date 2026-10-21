@@ -1802,6 +1802,15 @@ export const getUserOrCreatorVisibleTransactions = (
 ): Transaction[] => {
   if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
 
+  const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
+
+  // If Guest User, STRICTLY only return transactions paid by this guest on this device or phone!
+  if (isGuest) {
+    const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
+    return transactions.filter(tx => tx && isUserPaidTransaction(tx, safeUserPaidIds, creatorProfile));
+  }
+
   // Super Admin & Admin get all transactions
   if (isSuperAdminOrAdminProfile(creatorProfile)) {
     return transactions.filter(Boolean);
