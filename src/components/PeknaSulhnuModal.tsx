@@ -83,11 +83,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   onOpenLogin,
 }) => {
   const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-  const isGuestUser = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
-  const isSuperAdminUser = !isGuestUser && isSuperAdminOrAdminProfile(creatorProfile);
-  // Default to 'all' for Admin/Super Admin, 'sent' for regular users so ordinary donors only see their own records
+  const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
+  const isModeratorUser = creatorProfile?.role === 'MODERATOR';
+  const isGuestUser = !isSuperAdminUser && !isModeratorUser && (!creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user');
+  
+  // Super Admin / Admin / Moderator & Creators see 'all' by default, pure Guests see their own 'sent'
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>(() => {
-    return isSuperAdminUser ? 'all' : 'sent';
+    return isGuestUser ? 'sent' : 'all';
   });
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'pending'>('all');
@@ -99,6 +101,17 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(() => getDeletedTransactionIds());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
+
+  // Automatically refresh local data and set appropriate direction filter when opened
+  useEffect(() => {
+    if (isOpen) {
+      if (isSuperAdminUser || isModeratorUser || !isGuestUser) {
+        setDirectionFilter('all');
+      } else {
+        setDirectionFilter('sent');
+      }
+    }
+  }, [isOpen, isSuperAdminUser, isModeratorUser, isGuestUser]);
 
   // Automatically refresh local data and pull latest cross-device sync whenever modal is opened
   useEffect(() => {
@@ -167,6 +180,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
     const valid = combined.filter(t => {
       if (!t || !t.id) return false;
+      if (isSuperAdminUser) return true;
       if (isGuestUser) {
         return isUserPaidTransaction(t, safeUserPaidIds, creatorProfile);
       }

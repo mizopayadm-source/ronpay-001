@@ -231,6 +231,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     return filterMembersForScope(campMembers);
   }, [allowedCampaigns.length, isPrivilegedUser, filterMembersForScope, allowedCampaignIds]);
 
+
+
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
 
@@ -315,6 +317,43 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [includeSignatures, setIncludeSignatures] = useState<boolean>(true);
   const [includeMonthlyChart, setIncludeMonthlyChart] = useState<boolean>(true);
   const [masterLedgerSortOrder, setMasterLedgerSortOrder] = useState<'name_asc' | 'id_asc' | 'section' | 'amount_desc' | 'name_desc'>('name_asc');
+
+  const checkGroupGeneralPermission = useCallback((): boolean => {
+    const activeCamp = allowedCampaigns.find(c => c.id === (printOrgScope !== 'all' ? printOrgScope : allowedCampaigns[0]?.id));
+    const userPhone = (creatorProfile?.phone || '').replace(/\D/g, '').slice(-10);
+    const isOwner = activeCamp ? isStrictCampaignOwner(activeCamp, creatorProfile) : false;
+    const isOfficer = activeCamp?.authorizedOfficers?.some(o => {
+      const op = (o.phone || '').replace(/\D/g, '').slice(-10);
+      return op && userPhone && op === userPhone;
+    });
+    return Boolean(isPrivilegedUser || isOwner || isOfficer);
+  }, [allowedCampaigns, printOrgScope, creatorProfile, isPrivilegedUser]);
+
+  const handleSelectPrintStyle = (val: string) => {
+    if (val === 'style1_group_master' || val === 'style1_general_master') {
+      if (!checkGroupGeneralPermission()) {
+        alert(language === 'mizo' 
+          ? 'Khualmi (Guest user) tan Group leh General menu hi hman phal a ni lo. Creator in Permit / Leader-ah a siam tel ngai e.' 
+          : 'Guest users are not allowed to access Group and General menus. Creator permission as Leader/Officer is required.');
+        return;
+      }
+    }
+    setPrintStyle(val as any);
+  };
+
+  const handleSelectScopeType = (scope: 'member' | 'group' | 'general') => {
+    if (scope === 'member') {
+      setPrintScopeType('member');
+      return;
+    }
+    if (!checkGroupGeneralPermission()) {
+      alert(language === 'mizo' 
+        ? 'Khualmi (Guest user) tan Group leh General tab / menu hi hman phal a ni lo. Creator in Permit / Leader-ah a siam tel ngai e.' 
+        : 'Guest users are not allowed to access Group and General menus. Creator permission as Leader/Officer is required.');
+      return;
+    }
+    setPrintScopeType(scope);
+  };
 
   // Search in directory
   const [dirSearch, setDirSearch] = useState<string>('');
@@ -2146,7 +2185,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   </label>
                   <select
                     value={printStyle}
-                    onChange={(e) => setPrintStyle(e.target.value as any)}
+                    onChange={(e) => handleSelectPrintStyle(e.target.value)}
                     className="w-full p-3 bg-white border-2 border-indigo-500 rounded-2xl text-xs font-black text-indigo-950 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="style1_master">
@@ -2186,7 +2225,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setPrintScopeType('member')}
+                          onClick={() => handleSelectScopeType('member')}
                           className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
                             printScopeType === 'member'
                               ? 'bg-blue-600 text-white shadow-xs'
@@ -2197,7 +2236,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPrintScopeType('group')}
+                          onClick={() => handleSelectScopeType('group')}
                           className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
                             printScopeType === 'group'
                               ? 'bg-indigo-600 text-white shadow-xs'
@@ -2208,7 +2247,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPrintScopeType('general')}
+                          onClick={() => handleSelectScopeType('general')}
                           className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition cursor-pointer ${
                             printScopeType === 'general'
                               ? 'bg-emerald-600 text-white shadow-xs'

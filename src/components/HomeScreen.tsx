@@ -269,12 +269,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // All existing QRs sorted newest first
   const allSortedQRs = useMemo(() => {
-    return [...safeCampaigns].sort((a, b) => {
+    return [...safeCampaigns].filter(c => {
+      const titleLower = (c.title || '').toLowerCase();
+      const orgLower = (c.orgName || '').toLowerCase();
+      const isDefaultDemo = titleLower.includes('bmp shillong') || titleLower.includes('bcm ebenezer') || orgLower.includes('bmp shillong') || orgLower.includes('bcm ebenezer') || c.id === 'cmp-1788107291420' || c.id === 'cmp-kumtluang-1';
+      if (isDefaultDemo) {
+        const isOwner = isCampaignCreator(c, creatorProfile);
+        const isAdmin = isAuthorizedAdmin;
+        return Boolean(isAdmin || isOwner);
+      }
+      return true;
+    }).sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
-  }, [safeCampaigns]);
+  }, [safeCampaigns, creatorProfile, isAuthorizedAdmin]);
 
   // Active QRs sorted newest first
   const activeSortedQRs = useMemo(() => {

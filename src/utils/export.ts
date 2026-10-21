@@ -4584,6 +4584,10 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             page-break-inside: avoid;
             break-inside: avoid;
           }
+          .forced-page-break, .page-break {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
           @media print {
             body {
               padding: 0 !important;
@@ -4593,8 +4597,14 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
             .header-banner {
               margin-top: 0 !important;
             }
-            .no-print, button, nav, .print-hidden {
+            .screen-page-divider, .no-print, button, nav, .print-hidden {
               display: none !important;
+            }
+            .forced-page-break, .page-break {
+              page-break-before: always !important;
+              break-before: page !important;
+              margin-top: 0 !important;
+              padding-top: 0 !important;
             }
           }
         </style>
@@ -4737,7 +4747,14 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
 
           <!-- SUBSIDIARY LEDGER: ITEMIZED HEAD RECEIPTS SCHEDULE (Member-wise Breakdown) -->
           ${includeSubsidiarySchedule && subsidiaryGroups.length > 0 && receiptGroupingMode === 'head_wise' ? `
-            <div style="page-break-before: always; margin-top: 26px;">
+            <!-- Visual screen divider for A4 preview (hidden during PDF and physical print) -->
+            <div class="screen-page-divider no-print" style="margin: 36px 0 24px 0; border-top: 2px dashed #94a3b8; position: relative; text-align: center;">
+              <span style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #f8fafc; padding: 1px 12px; font-size: 9.5px; font-weight: 800; color: #475569; letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid #cbd5e1; border-radius: 9999px; white-space: nowrap;">
+                ✂ Page Break • Page 2: Subsidiary Cash Ledger
+              </span>
+            </div>
+
+            <div class="forced-page-break page-break" data-page-break="before" style="page-break-before: always; break-before: page; margin-top: 20px;">
               <div style="border: 2px solid #064e3b; border-radius: 6px; padding: 10px 14px; background: #f0fdf4; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
                 <div>
                   <div style="font-size: 13px; font-weight: 900; color: #064e3b; text-transform: uppercase; letter-spacing: 0.5px;">

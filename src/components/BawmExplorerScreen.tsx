@@ -176,9 +176,35 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
 
   const hasActiveFilters = searchQuery.trim() !== '' || filterLocation !== 'all' || filterStatus !== 'all' || sortBy !== 'newest';
 
+  const isGuestUser = useMemo(() => {
+    if (!creatorProfile) return true;
+    if (!creatorProfile.phone || creatorProfile.phone.trim() === '') return true;
+    if (creatorProfile.role === 'GUEST') return true;
+    if (creatorProfile.name === 'Khualmi (Guest User)' || (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))) return true;
+    return false;
+  }, [creatorProfile]);
+
+  const isAuthorizedAdmin = useMemo(() => {
+    if (isGuestUser) return false;
+    const role = creatorProfile?.role;
+    const isAdminRole = role === 'SUPER_ADMIN' || role === 'ADMIN';
+    const isAdminFlag = creatorProfile?.isAdmin === true || creatorProfile?.phone === '9862000001';
+    return Boolean(isAdminRole || isAdminFlag);
+  }, [isGuestUser, creatorProfile]);
+
   // Filtered & Sorted campaigns
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter(c => {
+      // Hide BMP Shillong and BCM Ebenezer for public/guest unless admin or owner
+      const titleLower = (c.title || '').toLowerCase();
+      const orgLower = (c.orgName || '').toLowerCase();
+      const isDefaultDemo = titleLower.includes('bmp shillong') || titleLower.includes('bcm ebenezer') || orgLower.includes('bmp shillong') || orgLower.includes('bcm ebenezer') || c.id === 'cmp-1788107291420' || c.id === 'cmp-kumtluang-1';
+      if (isDefaultDemo) {
+        const isOwner = isCampaignCreator(c, creatorProfile);
+        const isAdmin = isAuthorizedAdmin;
+        if (!isAdmin && !isOwner) return false;
+      }
+
       // 1. Category filter
       if (selectedCategory !== 'all' && c.category !== selectedCategory) {
         return false;

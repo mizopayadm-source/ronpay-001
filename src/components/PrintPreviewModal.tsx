@@ -652,9 +652,18 @@ export const PrintPreviewModal: React.FC<PrintPreviewModalProps> = ({
             box-shadow: none !important;
             border: none !important;
           }
-          .no-print {
+          .no-print, .print-hidden, .screen-page-divider {
             display: none !important;
           }
+          .page-break, .page-break-before, .forced-page-break, [data-page-break="before"] {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+        }
+
+        .page-break, .page-break-before, .forced-page-break, [data-page-break="before"] {
+          page-break-before: always;
+          break-before: page;
         }
 
         /* Phone Flow View Mode Enhancements */

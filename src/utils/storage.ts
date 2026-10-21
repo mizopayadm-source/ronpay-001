@@ -193,17 +193,15 @@ export const isStoredAdminAuthorized = (): boolean => {
  * Android WebViews, PWAs, and Desktop Web browsers without relying on fragile sessionStorage.
  */
 export const isSuperAdminOrAdminProfile = (creatorProfile?: CreatorProfile | null): boolean => {
-  if (!creatorProfile) return false;
-  // Guest users are strictly donors/viewers and are NEVER admins
-  const cName = (creatorProfile.name || '').trim().toLowerCase();
-  if (creatorProfile.role === 'GUEST' || !creatorProfile.phone || cName === 'khualmi (guest user)' || cName === 'guest user' || cName === 'khualmi') {
-    return false;
-  }
-  if (creatorProfile.isAdmin === true) return true;
-  if (creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') return true;
+  // 1. Direct profile checks
+  if (creatorProfile?.isAdmin === true) return true;
+  if (creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') return true;
+
+  // 2. Active authorized admin session check
   if (typeof window !== 'undefined') {
+    const isAuth = isStoredAdminAuthorized();
     const role = localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role');
-    if ((role === 'SUPER_ADMIN' || role === 'ADMIN') && isStoredAdminAuthorized()) return true;
+    if (isAuth && (role === 'SUPER_ADMIN' || role === 'ADMIN')) return true;
   }
   return false;
 };
@@ -217,11 +215,19 @@ export const saveAdminAuthState = (role: string = 'SUPER_ADMIN', profile?: Creat
       sessionStorage.setItem('ronpay_admin_auth', 'true');
       sessionStorage.setItem(ADMIN_PASSWORD_VERIFIED_KEY, 'true');
       sessionStorage.setItem('ronpay_admin_role', role);
-      const targetProfile = profile || getStoredCreatorProfile();
-      if (targetProfile) {
-        saveStoredCreatorProfile({ ...targetProfile, isAdmin: true, role });
-      }
-      broadcastTabSync('admin_login', { role, profile: targetProfile });
+      const isSuperOrAdmin = role === 'SUPER_ADMIN' || role === 'ADMIN';
+      const fallbackName = role === 'SUPER_ADMIN' ? 'Super Admin (Master)' : role === 'ADMIN' ? 'Admin' : 'Moderator';
+      const fallbackPhone = role === 'SUPER_ADMIN' ? '9862000001' : '9862000002';
+      const current = profile || getStoredCreatorProfile();
+      const updatedProfile: CreatorProfile = {
+        ...current,
+        isAdmin: isSuperOrAdmin,
+        role: role as any,
+        name: current?.name && !current.name.toLowerCase().includes('guest') && !current.name.toLowerCase().includes('khualmi') ? current.name : fallbackName,
+        phone: current?.phone && current.phone !== '9999999999' ? current.phone : fallbackPhone,
+      };
+      saveStoredCreatorProfile(updatedProfile);
+      broadcastTabSync('admin_login', { role, profile: updatedProfile });
     }
   } catch (e) {}
 };
@@ -1185,16 +1191,26 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
           parsed.orgName = 'BCM Ebenezer';
           saveStoredCreatorProfile(parsed);
         }
-        const isGuestProfile = parsed.role === 'GUEST' || !parsed.phone || parsed.name === 'Khualmi (Guest User)' || (typeof parsed.name === 'string' && (parsed.name.toLowerCase().includes('guest') || parsed.name.toLowerCase().includes('khualmi')));
-        if (!isGuestProfile) {
-          const isAuthorizedAdminSession = isStoredAdminAuthorized() || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || localStorage.getItem('ronpay_admin_role') === 'ADMIN'));
-          if (isAuthorizedAdminSession) {
-            parsed.isAdmin = true;
-            if (!parsed.role || parsed.role === 'MEMBER') {
-              parsed.role = (localStorage.getItem('ronpay_admin_role') as any) || 'SUPER_ADMIN';
-            }
+        // 1. If an authorized admin/staff session is actively logged in on this device:
+        const isAuthorizedAdminSession = isStoredAdminAuthorized();
+        const storedAdminRole = typeof window !== 'undefined' 
+          ? (localStorage.getItem('ronpay_admin_role') || sessionStorage.getItem('ronpay_admin_role'))
+          : null;
+
+        if (isAuthorizedAdminSession && (storedAdminRole === 'SUPER_ADMIN' || storedAdminRole === 'ADMIN' || storedAdminRole === 'MODERATOR')) {
+          parsed.isAdmin = (storedAdminRole === 'SUPER_ADMIN' || storedAdminRole === 'ADMIN');
+          parsed.role = storedAdminRole as any;
+          if (!parsed.phone || parsed.phone === '9999999999' || !parsed.name || parsed.name === 'Khualmi (Guest User)') {
+            parsed.name = storedAdminRole === 'SUPER_ADMIN' ? 'Super Admin (Master)' : storedAdminRole === 'ADMIN' ? 'Admin' : 'Moderator';
+            parsed.phone = storedAdminRole === 'SUPER_ADMIN' ? '9862000001' : '9862000002';
           }
-        } else {
+          return parsed;
+        }
+
+        // 2. Otherwise, check if user is a normal Guest
+        const cleanName = (parsed.name || '').trim().toLowerCase();
+        const isGuestProfile = parsed.role === 'GUEST' || !parsed.phone || parsed.phone === '9999999999' || cleanName === 'khualmi' || cleanName === 'khualmi (guest user)' || cleanName === 'guest user';
+        if (isGuestProfile) {
           parsed.isAdmin = false;
           parsed.role = 'GUEST';
         }
@@ -1697,27 +1713,12 @@ export const isUserOrCreatorTransaction = (
 ): boolean => {
   if (!tx) return false;
 
-  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
-  const creatorNameRaw = (creatorProfile?.name || '').trim().toLowerCase();
-  const cleanCreatorName = creatorNameRaw.replace(/\s*\([^)]*\)/g, '').trim();
-  const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi (guest user)', 'khualmi', ''].includes(cleanCreatorName);
-  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanCreatorName === 'khualmi' || cleanCreatorName === 'khualmi (guest user)' || cleanCreatorName === 'guest user';
-
-  // 1. Guest user: STRICT DONOR PRIVACY ("ama tih chin chiah")
-  // Only transactions paid by this guest on this device session or phone number!
-  if (isGuest) {
-    return isUserPaidTransaction(tx, userPaidIds, creatorProfile);
-  }
-
-  // 2. Super Admin & Admin have unrestricted access
-  if (isSuperAdminOrAdminProfile(creatorProfile)) return true;
-
-  // 3. Local device session payments (Guest or any user who paid on this device - "ama tih chin chiah")
-  if (Array.isArray(userPaidIds) && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
+  // 1. Super Admin & Admin have unrestricted platform access to monitor all transactions (Rule 1)
+  if (isSuperAdminOrAdminProfile(creatorProfile)) {
     return true;
   }
 
-  // 4. Moderator: can view transactions in their assigned categories or created by them
+  // 2. Moderator: Moderation desk scope (assigned categories or created campaigns) (Rule 1)
   if (creatorProfile?.role === 'MODERATOR') {
     const allowedCategories = new Set<string>(
       (creatorProfile?.approvedCategories || (creatorProfile as any)?.allowedCategories || []).map((cat: string) => String(cat).toLowerCase())
@@ -1730,12 +1731,23 @@ export const isUserOrCreatorTransaction = (
     if (txCamp && isActualCampaignOwner(txCamp, creatorProfile)) {
       return true;
     }
+    return false;
   }
 
-  const txCampaignTitle = String(tx.campaignTitle || '').toLowerCase().trim();
+  // 3. Guest user: STRICT DONOR PRIVACY ("ama sulhnu chiah" - Rule 3)
+  const cleanCreatorName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanCreatorName === 'khualmi' || cleanCreatorName === 'khualmi (guest user)' || cleanCreatorName === 'guest user';
 
-  // 5. Creator: "a ma bawm hnuai a mi chiah" (STRICTLY their own campaigns)
+  if (isGuest) {
+    return isUserPaidTransaction(tx, userPaidIds, creatorProfile);
+  }
+
+  // 4. Creator: STRICT USER-ISOLATION ("ama bawm siam chhung a mi chiah" - Rule 2)
+  const creatorPhoneDigits = (creatorProfile?.phone || '').trim().replace(/\D/g, '').slice(-10);
+  const isGenericUser = ['ronpay user', 'guest user', 'user', 'valued donor', 'anonymous', 'donor', 'khualmi (guest user)', 'khualmi', ''].includes(cleanCreatorName);
+
   if (creatorPhoneDigits.length >= 8 || (!isGenericUser && cleanCreatorName.length >= 3)) {
+    const txCampaignTitle = String(tx.campaignTitle || '').toLowerCase().trim();
     const parentCamp = (campaigns || []).find(c => 
       c && (
         c.id === tx.campaignId || 
@@ -1758,7 +1770,7 @@ export const isUserOrCreatorTransaction = (
     }
   }
 
-  // 6. Personal payments made by this creator as donor to other campaigns ("ama tih chin chiah")
+  // 5. Personal payments made by this creator as donor to other campaigns ("ama tih chin" - Rule 2)
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8 && tx.donorPhone) {
     const txDigits = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
     if (txDigits.length >= 8 && creatorPhoneDigits === txDigits) {
@@ -1766,7 +1778,7 @@ export const isUserOrCreatorTransaction = (
     }
   }
 
-  // 7. Distinctive Donor Name Match (non-generic names)
+  // 6. Distinctive Donor Name Match (non-generic names)
   if (!isGenericUser && cleanCreatorName.length >= 3 && tx.donorName && !tx.isAnonymous) {
     const dName = String(tx.donorName).trim().toLowerCase();
     if (dName === cleanCreatorName || dName.includes(cleanCreatorName) || cleanCreatorName.includes(dName)) {
@@ -1780,12 +1792,17 @@ export const isUserOrCreatorTransaction = (
     }
   }
 
-  // 8. Direct Creator/Collector tag match on transaction (if available)
+  // 7. Direct Creator/Collector tag match on transaction (if available)
   if (creatorPhoneDigits && creatorPhoneDigits.length >= 8) {
     const txCreatorDigits = String((tx as any).creatorPhone || (tx as any).collectorPhone || (tx as any).createdBy || '').replace(/\D/g, '').slice(-10);
     if (txCreatorDigits && txCreatorDigits.length >= 8 && txCreatorDigits === creatorPhoneDigits) {
       return true;
     }
+  }
+
+  // 8. Local device session payments
+  if (Array.isArray(userPaidIds) && userPaidIds.length > 0 && userPaidIds.includes(tx.id)) {
+    return true;
   }
 
   return false;
@@ -1802,28 +1819,34 @@ export const getUserOrCreatorVisibleTransactions = (
 ): Transaction[] => {
   if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
 
-  const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
+  // 1. Super Admin & Admin get all transactions (Rule 1)
+  if (isSuperAdminOrAdminProfile(creatorProfile)) {
+    return transactions.filter(Boolean);
+  }
 
-  // If Guest User, STRICTLY only return transactions paid by this guest on this device or phone!
+  // 2. Moderator gets transactions within assigned categories or owned campaigns (Rule 1)
+  if (creatorProfile?.role === 'MODERATOR') {
+    const safeCampaigns = Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
+    const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
+    return transactions.filter(tx => tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds));
+  }
+
+  // 3. Guest User gets STRICTLY only transactions they personally paid ("ama sulhnu chiah" - Rule 3)
+  const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
+
   if (isGuest) {
     const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
     return transactions.filter(tx => tx && isUserPaidTransaction(tx, safeUserPaidIds, creatorProfile));
   }
 
-  // Super Admin & Admin get all transactions
-  if (isSuperAdminOrAdminProfile(creatorProfile)) {
-    return transactions.filter(Boolean);
-  }
-
+  // 4. Creator: STRICT USER-ISOLATION ("ama bawm siam chhung a mi chiah" - Rule 2)
   const safeCampaigns = Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
   const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
 
-  const matched = transactions.filter(tx => 
+  return transactions.filter(tx => 
     tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds)
   );
-
-  return matched;
 };
 
 // ==========================================

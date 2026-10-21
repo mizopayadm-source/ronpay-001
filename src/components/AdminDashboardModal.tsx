@@ -119,6 +119,7 @@ import {
   isStoredAdminAuthorized,
   saveAdminAuthState,
   clearAdminAuthState,
+  getStoredCreatorProfile,
   getStoredSectionPresets,
   saveStoredSectionPresets,
   DEFAULT_SECTION_PRESETS
@@ -460,6 +461,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         const targetRole: UserRole = currentProfile?.role === 'ADMIN' ? 'ADMIN' : 'SUPER_ADMIN';
         setCurrentRole(targetRole);
         saveAdminAuthState(targetRole, currentProfile);
+        if (onUpdateCreator) onUpdateCreator(getStoredCreatorProfile());
         recordAuditLog('Admin Biometric Login', 'Administrator authenticated via Biometrics.', 'system');
         setLogsList(getStoredAuditLogs());
       } else {
@@ -482,6 +484,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setIsAuthenticated(true);
       setLoginError('');
       saveAdminAuthState('SUPER_ADMIN', currentProfile);
+      if (onUpdateCreator) onUpdateCreator(getStoredCreatorProfile());
       recordAuditLog('Admin Password Verified', `Admin password verified for user ${currentProfile?.name || 'Guest'} (${currentProfile?.phone || 'Unknown'}).`, 'system');
       setLogsList(getStoredAuditLogs());
       return;
@@ -498,6 +501,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       setIsAuthenticated(true);
       setLoginError('');
       saveAdminAuthState(matchedStaff.role, currentProfile);
+      if (onUpdateCreator) onUpdateCreator(getStoredCreatorProfile());
       recordAuditLog(`${matchedStaff.role} Login`, `Staff member "${matchedStaff.name}" (${matchedStaff.role}) authenticated via Password.`, 'system');
       setLogsList(getStoredAuditLogs());
       return;

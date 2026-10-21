@@ -82,6 +82,36 @@ async function paginateCanvasToPDF(
   // Sort protected blocks by vertical top position
   protectedBlocks.sort((a, b) => a.top - b.top);
 
+  // Collect all explicit forced page break points (e.g. .forced-page-break, .page-break, page-break-before: always, break-before: page)
+  const forcedPageBreaks: number[] = [];
+  const breakElements = renderTarget.querySelectorAll<HTMLElement>(
+    '.page-break, .page-break-before, .forced-page-break, .html2pdf__page-break, [data-page-break], [style*="page-break-before"], [style*="break-before"]'
+  );
+  breakElements.forEach((el) => {
+    const inlineStyle = (el.getAttribute('style') || '').toLowerCase();
+    const hasClass = 
+      el.classList.contains('page-break') ||
+      el.classList.contains('page-break-before') ||
+      el.classList.contains('forced-page-break') ||
+      el.classList.contains('html2pdf__page-break') ||
+      el.getAttribute('data-page-break') === 'before';
+    const hasStyle = 
+      inlineStyle.includes('page-break-before: always') ||
+      inlineStyle.includes('page-break-before:always') ||
+      inlineStyle.includes('break-before: page') ||
+      inlineStyle.includes('break-before:page') ||
+      inlineStyle.includes('break-before: always');
+
+    if (hasClass || hasStyle) {
+      const rect = el.getBoundingClientRect();
+      const top = (rect.top - bodyRect.top) * scale;
+      if (top > 10) {
+        forcedPageBreaks.push(top);
+      }
+    }
+  });
+  forcedPageBreaks.sort((a, b) => a - b);
+
   // Check if there is a primary data table with a <thead> so we can cleanly repeat column headers on subsequent table pages
   const allTables = Array.from(renderTarget.querySelectorAll('table'));
   const mainTableEl = allTables.reduce(
@@ -140,7 +170,41 @@ async function paginateCanvasToPDF(
 
     const idealEnd = currentY + availableCanvasHeight;
 
+    // Check if an explicit forced page break exists in this page window
+    const nextForcedBreak = forcedPageBreaks.find(bp => bp > currentY + 15 && bp <= idealEnd);
+
+    if (nextForcedBreak !== undefined) {
+      // Cut cleanly right at the forced break to start a new page
+      const sliceH = nextForcedBreak - currentY;
+      if (sliceH > 0) {
+        slices.push({
+          sourceY: currentY,
+          sourceHeight: sliceH,
+          includeThead: shouldIncludeThead,
+        });
+      }
+      currentY = nextForcedBreak;
+      pageIndex++;
+      continue;
+    }
+
     if (idealEnd >= canvasHeight) {
+      // Check if there is any remaining forced page break before the very end of canvas
+      const remainingForcedBreak = forcedPageBreaks.find(bp => bp > currentY + 15 && bp < canvasHeight - 20);
+      if (remainingForcedBreak !== undefined) {
+        const sliceH = remainingForcedBreak - currentY;
+        if (sliceH > 0) {
+          slices.push({
+            sourceY: currentY,
+            sourceHeight: sliceH,
+            includeThead: shouldIncludeThead,
+          });
+        }
+        currentY = remainingForcedBreak;
+        pageIndex++;
+        continue;
+      }
+
       // Reached the document end
       const sliceH = canvasHeight - currentY;
       if (sliceH > 0) {
@@ -454,6 +518,9 @@ export async function exportHTMLToPDF(
       .header-banner div, .header-banner span, .header-banner p {
         letter-spacing: 0px !important;
         line-height: 1.4 !important;
+      }
+      .no-print, .print-hidden, .screen-page-divider, .screen-only {
+        display: none !important;
       }
     `;
     iframeDoc.head.appendChild(fixStyle);
