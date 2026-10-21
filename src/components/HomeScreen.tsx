@@ -212,7 +212,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   }, [campaigns]);
 
-  const activeQRsCount = isDataInitialized ? safeCampaigns.filter(c => c && c.status === 'active').length : 0;
+
 
   const renderBillIcon = (iconName: string) => {
     switch (iconName) {
@@ -267,33 +267,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return c.status === 'active' || !c.status;
   };
 
-  // All existing QRs sorted newest first
+  // All existing QRs sorted newest first (Mi tu pawhin Active QR chu an hmu thei vek tur a ni)
   const allSortedQRs = useMemo(() => {
-    return [...safeCampaigns].filter(c => {
-      const titleLower = (c.title || '').toLowerCase();
-      const orgLower = (c.orgName || '').toLowerCase();
-      const isDefaultDemo = titleLower.includes('bmp shillong') || titleLower.includes('bcm ebenezer') || orgLower.includes('bmp shillong') || orgLower.includes('bcm ebenezer') || c.id === 'cmp-1788107291420' || c.id === 'cmp-kumtluang-1';
-      if (isDefaultDemo) {
-        const isOwner = isCampaignCreator(c, creatorProfile);
-        const isAdmin = isAuthorizedAdmin;
-        return Boolean(isAdmin || isOwner);
-      }
-      return true;
-    }).sort((a, b) => {
+    return [...safeCampaigns].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
-  }, [safeCampaigns, creatorProfile, isAuthorizedAdmin]);
+  }, [safeCampaigns]);
 
   // Active QRs sorted newest first
   const activeSortedQRs = useMemo(() => {
     return allSortedQRs.filter(isCampaignActive);
   }, [allSortedQRs]);
 
-  // Filtered QRs based on search keyword and category filter
+  const activeQRsCount = useMemo(() => {
+    return isDataInitialized ? activeSortedQRs.length : 0;
+  }, [isDataInitialized, activeSortedQRs]);
+
+  // Filtered QRs based on search keyword and category filter (using activeSortedQRs)
   const filteredQRs = useMemo(() => {
-    let list = qrSearchQuery.trim() ? allSortedQRs : activeSortedQRs;
+    let list = activeSortedQRs;
 
     if (qrCategoryFilter !== 'all') {
       list = list.filter(c => c.category === qrCategoryFilter);
@@ -315,14 +309,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
 
     return list;
-  }, [allSortedQRs, activeSortedQRs, qrSearchQuery, qrCategoryFilter]);
+  }, [activeSortedQRs, qrSearchQuery, qrCategoryFilter]);
 
-  // Displayed QRs (Strictly Active Latest 5 on first page; expands on search, category filter, or showAllQRs toggle)
+  // Displayed QRs (Strictly Latest 5 on first page; expands on search, category filter, or showAllQRs toggle)
   const displayedQRs = useMemo(() => {
     if (qrSearchQuery.trim() || qrCategoryFilter !== 'all' || showAllQRs) {
       return filteredQRs;
     }
-    // Strictly latest 5 active QRs on the initial view
     return activeSortedQRs.slice(0, 5);
   }, [filteredQRs, activeSortedQRs, qrSearchQuery, qrCategoryFilter, showAllQRs]);
 
@@ -901,12 +894,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div className="flex items-center gap-1.5">
             <QrCode className="w-4 h-4 text-indigo-600" />
             <h3 className="text-[11px] sm:text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-              {language === 'mizo' ? 'Recent Created QRs & Zawnna' : 'Recent Created QRs & Search'}
+              {language === 'mizo' ? 'Active QRs & Zawnna' : 'Active QRs & Search'}
             </h3>
             <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-mono">
-              {!qrSearchQuery.trim() && qrCategoryFilter === 'all' && !showAllQRs
+              {qrCategoryFilter !== 'all' || qrSearchQuery.trim()
                 ? `${displayedQRs.length} of ${activeSortedQRs.length} Active`
-                : `${displayedQRs.length} QRs`}
+                : `${activeSortedQRs.length} Active QRs`}
             </span>
           </div>
           <button 
@@ -1023,9 +1016,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               !creatorProfile || 
               !creatorProfile.phone || 
               creatorProfile.phone.trim() === '' || 
+              creatorProfile.phone === '9999999999' ||
               creatorProfile.role === 'GUEST' || 
               creatorProfile.name === 'Khualmi (Guest User)' || 
-              (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))
+              (creatorProfile.name && (creatorProfile.name.toLowerCase().includes('guest') || creatorProfile.name.toLowerCase().includes('khualmi')))
             );
             const isStaff = !isGuest && Boolean(
               creatorProfile?.isAdmin || 
@@ -1034,7 +1028,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               creatorProfile?.role === 'MODERATOR'
             );
             const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
-            const canManage = Boolean(isStaff || isOwner);
+            const canManage = Boolean(!isGuest && (isStaff || isOwner));
             const isExpired = isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt);
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
@@ -1152,7 +1146,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </div>
 
                 {/* Visual Progress Bar Section (Creator & Admin Management Area) */}
-                {canManage && (
+                {/* Guest Users strictly do not see internal Txns Amt, Roll, Hmanral, or Transfer Txns */}
+                {!isGuest && canManage && (
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100/90 space-y-1.5 shadow-2xs">
                     {!hasTarget ? (
                       <div className="flex items-center justify-between text-[10px] gap-2 flex-wrap sm:flex-nowrap">
@@ -1243,7 +1238,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 title="Pawisa hman chhuahna (Expense desk) en rawh"
                               >
                                 <Receipt className="w-3 h-3 text-white" />
-                                <span>Hmanral</span>
+                               <span>Hmanral</span>
                               </button>
                             )}
                           </div>
@@ -1303,8 +1298,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <ChevronDown className="w-3.5 h-3.5" />
                   <span>
                     {language === 'mizo'
-                      ? `QR awm tawh zawng zawng entir rawh (${activeSortedQRs.length} Active QRs)`
-                      : `View All Existing QRs (${activeSortedQRs.length} Active QRs)`}
+                      ? `Active QRs zawng zawng entir rawh (${activeSortedQRs.length} Active QRs)`
+                      : `View All Active QRs (${activeSortedQRs.length} Active QRs)`}
                   </span>
                 </>
               )}

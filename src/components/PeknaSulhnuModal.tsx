@@ -172,15 +172,31 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
   }, [campaigns]);
 
-  // Defensive array checks - uses Supabase transactions exclusively when loaded
+  // Defensive array checks - uses Supabase transactions exclusively when loaded, with local storage fallback
   const safeTransactions = useMemo(() => {
     const combined = supabaseTxns.length > 0
       ? supabaseTxns
-      : (Array.isArray(transactions) ? transactions.filter(Boolean) : []);
+      : ((Array.isArray(transactions) && transactions.length > 0)
+          ? transactions
+          : getStoredTransactions());
 
     const valid = combined.filter(t => {
       if (!t || !t.id) return false;
       if (isSuperAdminUser) return true;
+      if (isModeratorUser) {
+        const allowedCategories = new Set<string>(
+          (creatorProfile?.approvedCategories || (creatorProfile as any)?.allowedCategories || []).map((cat: string) => String(cat).toLowerCase())
+        );
+        const txCamp = safeCampaigns.find(c => c && (c.id === t.campaignId || (t.campaignTitle && c.title === t.campaignTitle)));
+        const txCategory = t.category || (txCamp ? txCamp.category : '');
+        if (allowedCategories.size === 0 || allowedCategories.has('all') || (txCategory && allowedCategories.has(txCategory.toLowerCase()))) {
+          return true;
+        }
+        if (txCamp && isActualCampaignOwner(txCamp, creatorProfile)) {
+          return true;
+        }
+        return false;
+      }
       if (isGuestUser) {
         return isUserPaidTransaction(t, safeUserPaidIds, creatorProfile);
       }
@@ -195,7 +211,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     });
 
     return valid;
-  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds]);
+  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds, isSuperAdminUser, isModeratorUser, isGuestUser]);
 
   // Identify campaigns owned by active profile ("Ama Siam chauh" for creator, or all for Super Admin)
   const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {

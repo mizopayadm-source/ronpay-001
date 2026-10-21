@@ -687,9 +687,10 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
               !creatorProfile || 
               !creatorProfile.phone || 
               creatorProfile.phone.trim() === '' || 
+              creatorProfile.phone === '9999999999' ||
               creatorProfile.role === 'GUEST' || 
               creatorProfile.name === 'Khualmi (Guest User)' || 
-              (creatorProfile.name && creatorProfile.name.toLowerCase().includes('guest'))
+              (creatorProfile.name && (creatorProfile.name.toLowerCase().includes('guest') || creatorProfile.name.toLowerCase().includes('khualmi')))
             );
             const isStaff = !isGuest && Boolean(
               creatorProfile?.isAdmin || 
@@ -699,7 +700,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
             );
             // Check if active user is the creator of this specific campaign (Ama Create chauh)
             const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
-            const canManage = Boolean(isStaff || isOwner);
+            const canManage = Boolean(!isGuest && (isStaff || isOwner));
 
             // Campaign Transactions & Progress calculation (Private to creator)
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
@@ -829,7 +830,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                 </div>
 
                 {/* Visual Progress Bar Section (Creator Only - Private to campaign creator) */}
-                {isOwner && (
+                {!isGuest && isOwner && (
                   <div className="bg-slate-50/95 p-2.5 rounded-xl border border-indigo-100 space-y-1.5 shadow-2xs">
                     {!hasTarget ? (
                       <div className="flex items-center justify-between text-xs">
@@ -897,7 +898,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
-                    {camp.category === 'kumtluang' && (isOwner || isStaff) && onOpenMemberRoll && (
+                    {!isGuest && camp.category === 'kumtluang' && (isOwner || isStaff) && onOpenMemberRoll && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -910,7 +911,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         <Users className="w-3 h-3" /> Roll
                       </button>
                     )}
-                    {(isOwner || isStaff) && (
+                    {!isGuest && (isOwner || isStaff) && (
                       <button
                         type="button"
                         onClick={(e) => {

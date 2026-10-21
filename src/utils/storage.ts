@@ -1817,18 +1817,25 @@ export const getUserOrCreatorVisibleTransactions = (
   creatorProfile: CreatorProfile | null | undefined,
   userPaidIds: string[] = []
 ): Transaction[] => {
-  if (!transactions || !Array.isArray(transactions) || transactions.length === 0) return [];
+  const safeTransactions = (transactions && Array.isArray(transactions) && transactions.length > 0)
+    ? transactions
+    : getStoredTransactions();
 
   // 1. Super Admin & Admin get all transactions (Rule 1)
   if (isSuperAdminOrAdminProfile(creatorProfile)) {
-    return transactions.filter(Boolean);
+    return safeTransactions.filter(Boolean);
   }
 
+  if (!safeTransactions || safeTransactions.length === 0) return [];
+
+  const safeCampaigns = Array.isArray(campaigns) && campaigns.length > 0
+    ? campaigns
+    : getStoredCampaigns();
+  const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
+
   // 2. Moderator gets transactions within assigned categories or owned campaigns (Rule 1)
-  if (creatorProfile?.role === 'MODERATOR') {
-    const safeCampaigns = Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
-    const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
-    return transactions.filter(tx => tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds));
+  if (creatorProfile?.role === 'MODERATOR' || (typeof window !== 'undefined' && localStorage.getItem('ronpay_admin_role') === 'MODERATOR')) {
+    return safeTransactions.filter(tx => tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds));
   }
 
   // 3. Guest User gets STRICTLY only transactions they personally paid ("ama sulhnu chiah" - Rule 3)
@@ -1836,15 +1843,11 @@ export const getUserOrCreatorVisibleTransactions = (
   const isGuest = !creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user';
 
   if (isGuest) {
-    const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
-    return transactions.filter(tx => tx && isUserPaidTransaction(tx, safeUserPaidIds, creatorProfile));
+    return safeTransactions.filter(tx => tx && isUserPaidTransaction(tx, safeUserPaidIds, creatorProfile));
   }
 
-  // 4. Creator: STRICT USER-ISOLATION ("ama bawm siam chhung a mi chiah" - Rule 2)
-  const safeCampaigns = Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
-  const safeUserPaidIds = Array.isArray(userPaidIds) ? userPaidIds : [];
-
-  return transactions.filter(tx => 
+  // 4. Creator: STRICT USER-ISOLATION ("ama bawm siam chhung a mi a hmu thei ang" - Rule 2)
+  return safeTransactions.filter(tx => 
     tx && isUserOrCreatorTransaction(tx, safeCampaigns, creatorProfile, safeUserPaidIds)
   );
 };
