@@ -545,20 +545,29 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   }, [activeCampRef, isOwner, creatorProfile]);
 
   const handleRenewalSubmit = (camp: Campaign, renewalData: CampaignRenewalRequest) => {
+    const targetDate = renewalData.requestedValidityDate;
     const updated: Campaign = {
       ...camp,
-      renewalRequest: renewalData,
-      status: 'pending_renewal',
-      approvalRemarks: `Renewal requested (+${renewalData.requestedDays || ''} days): ${renewalData.reason || ''}`,
+      validityDate: targetDate,
+      expiry_date: targetDate,
+      valid_until: targetDate,
+      status: 'active',
+      isApproved: true,
+      renewalRequest: {
+        ...renewalData,
+        status: 'approved'
+      },
+      approvalRemarks: `Validity extended until ${formatDateDDMMYYYY(targetDate)}: ${renewalData.reason || ''}`,
       updatedAt: new Date().toISOString()
     };
     setCurrentCampaign(updated);
     if (onUpdateCampaign) {
       onUpdateCampaign(updated);
     }
+    saveCampaign(updated);
     recordAuditLog(
-      'QR Renewal Requested',
-      `Creator ${renewalData.requestedBy} requested renewal for '${camp.title}' (${camp.id}). Reason: ${renewalData.reason}`,
+      'QR Renewal & Validity Extended',
+      `Extended validity of '${camp.title}' (${camp.id}) to ${formatDateDDMMYYYY(targetDate)}. Reason: ${renewalData.reason}`,
       'campaign',
       camp.id
     );
@@ -2085,6 +2094,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 ) : null}
               </div>
             )}
+            {/* Campaign Validity / Expiration Date for Khawlsak */}
+            <div className="flex items-center justify-between bg-emerald-50 p-2 rounded-xl text-emerald-900 font-bold border border-emerald-200/60 text-xs">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{language === 'english' ? 'Campaign Validity / Expiry:' : 'Bawm Validity / Hun Tawp:'}</span>
+              </span>
+              <span className="font-black text-emerald-700">
+                {(campaign?.validityDate || campaign?.expiry_date || campaign?.valid_until || (campaign as any)?.validity_date || (campaign as any)?.metadata?.validityDate || (campaign as any)?.metadata?.expiry_date || (campaign as any)?.metadata?.valid_until)
+                  ? formatDateDDMMYYYY(campaign?.validityDate || campaign?.expiry_date || campaign?.valid_until || (campaign as any)?.validity_date || (campaign as any)?.metadata?.validityDate || (campaign as any)?.metadata?.expiry_date || (campaign as any)?.metadata?.valid_until)
+                  : (language === 'english' ? 'Indefinite / Active' : 'Hun tiamchin awm lo')}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -2116,7 +2137,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-[9px] bg-rose-600 text-white font-black px-2 py-0.5 rounded-full uppercase animate-pulse">
-                  {language === 'english' ? 'URGENT EMERGENCY' : 'TIHMAWHTHIR EMERGENCY'}
+                  RIKRUM BAWM
                 </span>
               </div>
               <h3 className="font-black text-slate-900 text-sm truncate mt-0.5">

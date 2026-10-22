@@ -55,10 +55,15 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
   const handleBiometricSuccess = () => {
     setIsBiometricOpen(false);
     if (pendingAction === 'approve') {
+      const effValidity = campaign.renewalRequest?.requestedValidityDate || campaign.validityDate || campaign.expiry_date || campaign.valid_until;
       onApprove({
         ...campaign,
         isApproved: true,
         status: 'active',
+        validityDate: effValidity || campaign.validityDate,
+        expiry_date: effValidity || campaign.expiry_date,
+        valid_until: effValidity || campaign.valid_until,
+        renewalRequest: campaign.renewalRequest ? { ...campaign.renewalRequest, status: 'approved' } : undefined,
         approvedBy: currentProfile?.name || 'Authorized Staff',
         approvedAt: new Date().toISOString()
       });

@@ -68,6 +68,8 @@ export interface Campaign {
   vuiHun?: string;
   vuitu?: string;
   validityDate?: string;
+  expiry_date?: string;
+  valid_until?: string;
   status?: 'active' | 'completed' | 'expired' | 'pending' | 'pending_approval' | 'rejected' | 'cancelled' | 'archived' | string;
   deletionReason?: string;
   cancelledAt?: string;

@@ -4660,10 +4660,10 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
               <!-- Top Row: Dr. vs Cr. Labels -->
               <tr style="background: #0f172a; color: #ffffff;">
                 <th colspan="4" style="width: 50%; padding: 8px 8px; font-size: 11px; font-weight: 900; text-align: center; border-right: 3px solid #0f172a; background: #064e3b; color: #ffffff;">
-                  Dr. &nbsp;&nbsp; (RECEIPTS / DEBIT / SUM LUT)
+                  Dr. &nbsp;&nbsp; (RECEIPTS  / SUM LUT)
                 </th>
                 <th colspan="4" style="width: 50%; padding: 8px 8px; font-size: 11px; font-weight: 900; text-align: center; background: #881337; color: #ffffff;">
-                  Cr. &nbsp;&nbsp; (PAYMENTS / CREDIT / SUM CHHUAK)
+                  Cr. &nbsp;&nbsp; (PAYMENTS / SUM CHHUAK)
                 </th>
               </tr>
               <!-- Column Sub-headers (Strictly 50% left and 50% right) -->

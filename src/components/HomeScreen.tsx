@@ -136,6 +136,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   useEffect(() => {
+    if (Array.isArray(campaigns) && campaigns.length > 0) {
+      setCampaigns(campaigns);
+    }
+  }, [campaigns]);
+
+  useEffect(() => {
+    if (Array.isArray(propTransactions) && propTransactions.length > 0) {
+      setTransactions(propTransactions);
+    }
+  }, [propTransactions]);
+
+  const refreshCampaignsFromDB = React.useCallback(async () => {
+    try {
+      const fresh = await fetchTableData<Campaign>('campaigns');
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        setCampaigns(fresh);
+        return;
+      }
+      const res = await fetch('/api/campaigns');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.campaigns) && data.campaigns.length > 0) {
+          setCampaigns(data.campaigns);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     const txChannel = subscribeToTable('transactions', async () => {
       const fresh = await fetchTableData<Transaction>('transactions');
       setTransactions(fresh);
@@ -146,11 +177,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       setCampaigns(fresh);
     });
 
+    const handleSync = () => {
+      refreshCampaignsFromDB();
+    };
+    window.addEventListener('ronpay_campaigns_updated', handleSync);
+    window.addEventListener('ronpay_trigger_sync', handleSync);
+    window.addEventListener('focus', handleSync);
+
     return () => {
       txChannel.unsubscribe();
       campChannel.unsubscribe();
+      window.removeEventListener('ronpay_campaigns_updated', handleSync);
+      window.removeEventListener('ronpay_trigger_sync', handleSync);
+      window.removeEventListener('focus', handleSync);
     };
-  }, []);
+  }, [refreshCampaignsFromDB]);
 
 
 
@@ -261,7 +302,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (c.status === 'expired' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'rejected' || c.status === 'pending_approval') {
       return false;
     }
-    if (isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt)) {
+    const effDate = c.validityDate || c.expiry_date || c.valid_until || (c as any).validity_date || (c as any).metadata?.validityDate || (c as any).metadata?.expiry_date || (c as any).metadata?.valid_until;
+    if (isCampaignExpired(effDate, c.status, c.category, c.createdAt)) {
       return false;
     }
     return c.status === 'active' || !c.status;
@@ -1029,7 +1071,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             );
             const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
             const canManage = Boolean(!isGuest && (isStaff || isOwner));
-            const isExpired = isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt);
+            const effectiveValidity = camp.validityDate || camp.expiry_date || camp.valid_until || (camp as any).validity_date || (camp as any).metadata?.validityDate || (camp as any).metadata?.expiry_date || (camp as any).metadata?.valid_until || (camp.category === 'ralna' && camp.createdAt ? new Date(new Date(camp.createdAt).getTime() + 3 * 24 * 3600 * 1000).toISOString() : undefined);
+            const isExpired = isCampaignExpired(effectiveValidity, camp.status, camp.category, camp.createdAt);
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
             const totalRaised = campTransactions.reduce((sum, t) => sum + t.amount, 0);
             const hasTarget = typeof camp.targetAmount === 'number' && camp.targetAmount > 0;
@@ -1137,8 +1180,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           Expired
                         </span>
                       ) : (
-                        <p className="text-[8.5px] text-slate-400 font-mono mt-0.5 pr-0.5">
-                          {camp.validityDate ? formatDateDDMMYYYY(camp.validityDate) : formatDateDDMMYYYY(camp.createdAt)}
+                        <p className="text-[8.5px] text-slate-500 font-medium mt-0.5 pr-0.5" title={effectiveValidity ? `Validity: ${formatDateDDMMYYYY(effectiveValidity)}` : (language === 'english' ? 'No Expiry' : 'Hun tiamchin awm lo')}>
+                          {effectiveValidity ? formatDateDDMMYYYY(effectiveValidity) : (language === 'english' ? 'No Expiry' : 'Hun tiamchin awm lo')}
                         </p>
                       )}
                     </div>

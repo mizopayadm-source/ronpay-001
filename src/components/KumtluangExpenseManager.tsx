@@ -2448,10 +2448,10 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
                         <thead>
                           <tr className="text-white">
                             <th colSpan={4} className="bg-emerald-900 p-2 text-center text-xs font-black tracking-wider border-r-2 border-slate-900 uppercase">
-                              Dr. &nbsp;&nbsp; (RECEIPTS / DEBIT / SUM LUT)
+                              Dr. &nbsp;&nbsp; (RECEIPTS  / SUM LUT)
                             </th>
                             <th colSpan={4} className="bg-rose-900 p-2 text-center text-xs font-black tracking-wider uppercase">
-                              Cr. &nbsp;&nbsp; (PAYMENTS / CREDIT / SUM CHHUAK)
+                              Cr. &nbsp;&nbsp; (PAYMENTS / SUM CHHUAK)
                             </th>
                           </tr>
                           <tr className="bg-slate-900 text-slate-100 text-[10px] uppercase tracking-wider font-bold">

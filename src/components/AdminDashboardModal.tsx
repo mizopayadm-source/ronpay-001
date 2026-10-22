@@ -120,6 +120,7 @@ import {
   saveAdminAuthState,
   clearAdminAuthState,
   getStoredCreatorProfile,
+  saveCampaign,
   getStoredSectionPresets,
   saveStoredSectionPresets,
   DEFAULT_SECTION_PRESETS
@@ -543,9 +544,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // Pending counts
   const pendingCreators = activeCreatorsList.filter(c => !c.isApproved);
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
-  const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval');
-  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && !isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt));
-  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt)));
+  const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval' || c.status === 'pending_renewal' || c.renewalRequest?.status === 'pending');
+  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && c.status !== 'pending_renewal' && !isCampaignExpired(c.validityDate || c.expiry_date || c.valid_until, c.status, c.category, c.createdAt));
+  const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || c.status === 'pending_renewal' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate || c.expiry_date || c.valid_until, c.status, c.category, c.createdAt)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
 
   // Quick 1-Click Approve for pending creator applications
@@ -849,13 +850,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Campaign moderation
   const handleApproveCampaignClick = (camp: Campaign) => {
+    const effValidity = camp.renewalRequest?.requestedValidityDate || camp.validityDate || camp.expiry_date || camp.valid_until;
     const updated: Campaign = {
       ...camp,
       status: 'active',
+      isApproved: true,
+      validityDate: effValidity || camp.validityDate,
+      expiry_date: effValidity || camp.expiry_date,
+      valid_until: effValidity || camp.valid_until,
+      renewalRequest: camp.renewalRequest ? { ...camp.renewalRequest, status: 'approved' } : undefined,
       approvedAt: new Date().toISOString(),
-      approvedBy: 'Admin'
+      approvedBy: 'Admin',
+      updatedAt: new Date().toISOString()
     };
     onApproveCampaign(updated);
+    saveCampaign(updated);
     recordAuditLog(
       'Campaign Approved & Activated',
       `Approved QR Campaign '${camp.title}' (${camp.id}) in category ${camp.category}. QR is now LIVE.`,
@@ -922,8 +931,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       finalStatus = 'active';
     }
 
+    const effVal = editingCampaign.validityDate || editingCampaign.expiry_date || editingCampaign.valid_until;
     const campaignToSave: Campaign = {
       ...editingCampaign,
+      validityDate: effVal || undefined,
+      expiry_date: effVal || undefined,
+      valid_until: effVal || undefined,
       orgCode: finalPrefix,
       sectionLabel: editingCampaign.category === 'kumtluang' ? (editingCampaign.sectionLabel?.trim() || 'Bial / Section') : editingCampaign.sectionLabel,
       definedSections: editingCampaign.category === 'kumtluang' ? (editingCampaign.definedSections || []) : editingCampaign.definedSections,
@@ -932,6 +945,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     };
 
     onUpdateCampaign(campaignToSave);
+    saveCampaign(campaignToSave);
     recordAuditLog(
       'Admin Edited Campaign Post',
       `Admin updated details of post/campaign '${campaignToSave.title}' (${campaignToSave.id}). Category: ${campaignToSave.category}, Prefix: ${finalPrefix}, Status: ${campaignToSave.status}.`,
@@ -1675,15 +1689,20 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   onClick={() => {
                                     const now = new Date();
                                     now.setDate(now.getDate() + 30);
+                                    const targetIso = now.toISOString();
                                     const updated: Campaign = {
                                       ...camp,
                                       status: 'active',
                                       isApproved: true,
-                                      validityDate: now.toISOString(),
+                                      validityDate: targetIso,
+                                      expiry_date: targetIso,
+                                      valid_until: targetIso,
+                                      renewalRequest: camp.renewalRequest ? { ...camp.renewalRequest, status: 'approved' } : undefined,
                                       approvalRemarks: 'Reactivated and approved by Admin (+30 Days)',
                                       updatedAt: new Date().toISOString()
                                     };
                                     if (onUpdateCampaign) onUpdateCampaign(updated);
+                                    saveCampaign(updated);
                                     recordAuditLog('Campaign Reactivated', `Admin reactivated expired campaign '${camp.title}' (${camp.id}) with +30 days validity.`, 'campaign', camp.id);
                                     setLogsList(getStoredAuditLogs());
                                     alert(`⚡ "${camp.title}" chu Admin-in a reactivate a, +30 days validity pek a ni e!`);

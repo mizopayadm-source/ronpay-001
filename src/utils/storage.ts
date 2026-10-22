@@ -681,8 +681,12 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
 
 export const saveCampaign = (camp: Campaign): void => {
   if (!camp || !camp.id) return;
+  const effectiveValidity = camp.validityDate || camp.expiry_date || camp.valid_until || (camp as any).validity_date || (camp as any).metadata?.validityDate || (camp as any).metadata?.expiry_date || (camp as any).metadata?.valid_until;
   const stamped: Campaign = {
     ...camp,
+    validityDate: effectiveValidity || camp.validityDate,
+    expiry_date: effectiveValidity || camp.expiry_date,
+    valid_until: effectiveValidity || camp.valid_until,
     updatedAt: new Date().toISOString()
   };
   const current = getStoredCampaigns();

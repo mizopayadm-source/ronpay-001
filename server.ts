@@ -4880,7 +4880,9 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
               cause: meta.cause ?? r.cause,
               causeMizo: meta.causeMizo ?? r.causeMizo,
               causeEn: meta.causeEn ?? r.causeEn,
-              validityDate: meta.validityDate ?? r.validityDate,
+              validityDate: meta.validityDate ?? meta.valid_until ?? meta.expiry_date ?? meta.validity_date ?? r.validityDate ?? r.valid_until ?? r.expiry_date ?? r.validity_date ?? r.expires_at,
+              expiry_date: meta.expiry_date ?? meta.valid_until ?? meta.validityDate ?? r.expiry_date ?? r.valid_until ?? r.validityDate,
+              valid_until: meta.valid_until ?? meta.validityDate ?? meta.expiry_date ?? r.valid_until ?? r.validityDate ?? r.expiry_date,
               gpsCoords: meta.gpsCoords ?? r.gpsCoords,
               kumtluangFeeBearer: meta.kumtluangFeeBearer ?? r.kumtluangFeeBearer,
               metadata: meta
@@ -4988,8 +4990,12 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
     if (!campaign || !campaign.id) {
       return res.status(400).json({ success: false, message: 'Invalid campaign payload' });
     }
+    const effectiveValidity = campaign.validityDate || campaign.expiry_date || campaign.valid_until || campaign.validity_date || campaign.metadata?.validityDate || campaign.metadata?.expiry_date || campaign.metadata?.valid_until;
     const stamped = {
       ...campaign,
+      validityDate: effectiveValidity || campaign.validityDate,
+      expiry_date: effectiveValidity || campaign.expiry_date,
+      valid_until: effectiveValidity || campaign.valid_until,
       updatedAt: new Date().toISOString()
     };
     const db = getDatabase();
@@ -5031,6 +5037,8 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
             causeMizo: stamped.causeMizo,
             causeEn: stamped.causeEn,
             validityDate: stamped.validityDate,
+            expiry_date: stamped.expiry_date || stamped.validityDate,
+            valid_until: stamped.valid_until || stamped.validityDate,
             gpsCoords: stamped.gpsCoords,
             kumtluangFeeBearer: stamped.kumtluangFeeBearer,
             officerPasscode: stamped.officerPasscode,
