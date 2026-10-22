@@ -4494,8 +4494,8 @@ export const generateManualStyleLedgerPrintHtml = (options: CashBookPrintOptions
         <title>Manual Cash Book & Ledger • ${orgDisplay}</title>
         <style>
           @page {
-            size: A4 landscape;
-            margin: 6mm;
+            size: A4 portrait;
+            margin: 5mm;
           }
           * { box-sizing: border-box; }
           body {
