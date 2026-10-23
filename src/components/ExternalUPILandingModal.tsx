@@ -362,7 +362,7 @@ export const ExternalUPILandingModal: React.FC<ExternalUPILandingModalProps> = (
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search Phone (e.g. 1460), Roll No (BCM-8622)..."
+                      placeholder="Phone number / Hming pum / 1234"
                       className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
                     />
                     {searchQuery && (

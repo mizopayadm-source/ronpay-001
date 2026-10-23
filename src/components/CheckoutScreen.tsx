@@ -2381,7 +2381,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-bold text-slate-600 block">
-                    Phone Number (10 digits) / Member ID / Hming zawng rawh:
+                    Phone number / Hming pum / 1234:
                   </label>
                   {selectedMember && (
                     <button
@@ -2403,7 +2403,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     type="text"
                     value={phoneSearchQuery}
                     onChange={(e) => handlePhoneSearch(e.target.value)}
-                    placeholder="e.g. 1460 / 9436141460 / Rammuanpuia / EBE-1460"
+                    placeholder="Phone number / Hming pum / 1234"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-8 pr-8 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-blue-600 transition"
                   />
                   {phoneSearchQuery && (

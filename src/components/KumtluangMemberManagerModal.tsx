@@ -2884,7 +2884,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       id="member-roll-filter-search-input"
                       value={dirSearch}
                       onChange={(e) => setDirSearch(e.target.value)}
-                      placeholder="Hming, ID, Phone, Section zawnna..."
+                      placeholder="Phone number / Hming pum / 1234"
                       className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     {dirSearch && (
