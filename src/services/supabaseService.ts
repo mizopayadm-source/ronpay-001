@@ -818,6 +818,8 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       vuitu: camp.vuitu,
       thihni: camp.thihni,
       vuiHun: camp.vuiHun,
+      section: camp.section,
+      kohhran: camp.kohhran,
       targetAmount: camp.targetAmount,
       targetPeriod: camp.targetPeriod,
       maxLimit: camp.maxLimit,

@@ -64,6 +64,8 @@ export interface Campaign {
   upiId: string;
   targetUpiId?: string;
   imageUrl?: string;
+  section?: string;
+  kohhran?: string;
   thihni?: string;
   vuiHun?: string;
   vuitu?: string;

@@ -1993,6 +1993,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           </div>
 
           <div className="border-t border-slate-200 pt-2.5 space-y-1.5 text-[11px] text-slate-700 font-medium">
+            {campaign?.section && campaign.section.trim() !== '' && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Section:</span>
+                <span className="font-bold text-slate-900">{campaign.section}</span>
+              </div>
+            )}
+            {campaign?.kohhran && campaign.kohhran.trim() !== '' && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Kohhran:</span>
+                <span className="font-bold text-slate-900">{campaign.kohhran}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-500">Thihni & Darkar:</span>
               <span className="font-bold text-slate-900">{campaign?.thihni ? formatDateTimeDDMMYYYY(campaign.thihni) : (campaign?.createdAt ? formatDateTimeDDMMYYYY(campaign.createdAt) : '—')}</span>

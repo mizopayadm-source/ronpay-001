@@ -301,6 +301,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const vuiHun = searchParams.get('vuiHun');
       const vuitu = searchParams.get('vuitu');
       const thihni = searchParams.get('thihni');
+      const section = searchParams.get('section');
+      const kohhran = searchParams.get('kohhran');
       const urgencyDeadline = searchParams.get('urgencyDeadline') || searchParams.get('deadline');
       const validityDate = searchParams.get('validityDate') || searchParams.get('validity');
       const img = searchParams.get('img') || searchParams.get('imageUrl');
@@ -326,6 +328,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         vuiHun: vuiHun ? decodeURIComponent(vuiHun) : undefined,
         vuitu: vuitu ? decodeURIComponent(vuitu) : undefined,
         thihni: thihni ? decodeURIComponent(thihni) : undefined,
+        section: section ? decodeURIComponent(section) : undefined,
+        kohhran: kohhran ? decodeURIComponent(kohhran) : undefined,
         urgencyDeadline: urgencyDeadline ? decodeURIComponent(urgencyDeadline) : undefined,
         imageUrl: img ? decodeURIComponent(img) : undefined,
         validityDate: validityDate ? decodeURIComponent(validityDate) : '2027-12-31',

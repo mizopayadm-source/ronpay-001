@@ -135,6 +135,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
       const vuiHun = getParamCI(searchParams, 'vuiHun');
       const vuitu = getParamCI(searchParams, 'vuitu');
       const thihni = getParamCI(searchParams, 'thihni');
+      const section = getParamCI(searchParams, 'section');
+      const kohhran = getParamCI(searchParams, 'kohhran');
       const urgencyDeadline = getParamCI(searchParams, 'urgencyDeadline', 'deadline');
       const validityDateParam = getParamCI(searchParams, 'validityDate', 'validity');
       const img = getParamCI(searchParams, 'img', 'imageUrl');
@@ -224,6 +226,8 @@ export function parseScannedPayload(rawText: string, campaigns: Campaign[]): Sca
           vuiHun: vuiHun ? decodeURIComponent(vuiHun) : undefined,
           vuitu: vuitu ? decodeURIComponent(vuitu) : undefined,
           thihni: thihni ? decodeURIComponent(thihni) : undefined,
+          section: section ? decodeURIComponent(section) : undefined,
+          kohhran: kohhran ? decodeURIComponent(kohhran) : undefined,
           urgencyDeadline: urgencyDeadline ? decodeURIComponent(urgencyDeadline) : undefined,
           imageUrl: img ? decodeURIComponent(img) : undefined,
           validityDate: validityDateParam ? decodeURIComponent(validityDateParam) : (sessionExpiresAt ? sessionExpiresAt.split('T')[0] : '2027-12-31'),

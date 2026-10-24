@@ -130,6 +130,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [ralnaMitthiHming, setRalnaMitthiHming] = useState<string>('');
   const [ralnaAge, setRalnaAge] = useState<string>('');
   const [ralnaVeng, setRalnaVeng] = useState<string>('');
+  const [ralnaSection, setRalnaSection] = useState<string>('');
+  const [ralnaKohhran, setRalnaKohhran] = useState<string>('');
   const [ralnaThihni, setRalnaThihni] = useState<string>(() => getTodayDateTimeLocal(6, 0, 0));
   const [ralnaVuiHun, setRalnaVuiHun] = useState<string>(() => getTodayDateTimeLocal(13, 0, 0));
   const [ralnaVuitu, setRalnaVuitu] = useState<string>('');
@@ -546,6 +548,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       // Specifics
       mitthiHming: selectedCategory === 'ralna' ? ralnaMitthiHming : undefined,
       age: selectedCategory === 'ralna' ? parseInt(ralnaAge) || 74 : undefined,
+      section: selectedCategory === 'ralna' ? (ralnaSection.trim() || undefined) : undefined,
+      kohhran: selectedCategory === 'ralna' ? (ralnaKohhran.trim() || undefined) : undefined,
       thihni: selectedCategory === 'ralna' ? ralnaThihni : undefined,
       vuiHun: selectedCategory === 'ralna' ? ralnaVuiHun : undefined,
       vuitu: selectedCategory === 'ralna' ? ralnaVuitu : undefined,
@@ -987,6 +991,33 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                   placeholder="e.g. Bungkawn, Aizawl"
                   className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:border-purple-600 text-xs"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Section <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={ralnaSection}
+                    onChange={(e) => setRalnaSection(e.target.value)}
+                    placeholder="e.g. Section B / Bethel"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:border-purple-600 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Kohhran <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={ralnaKohhran}
+                    onChange={(e) => setRalnaKohhran(e.target.value)}
+                    placeholder="e.g. BCM / Presbyterian / Salvation"
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2 font-bold text-slate-900 focus:outline-none focus:border-purple-600 text-xs"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -2699,6 +2730,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   // Specifics
   const [mitthiHming, setMitthiHming] = useState<string>(campaign.mitthiHming || '');
   const [age, setAge] = useState<string>(campaign.age?.toString() || '');
+  const [section, setSection] = useState<string>(campaign.section || '');
+  const [kohhran, setKohhran] = useState<string>(campaign.kohhran || '');
   const [vuitu, setVuitu] = useState<string>(campaign.vuitu || '');
   const [thihni, setThihni] = useState<string>(() => campaign.thihni || getTodayDateTimeLocal(6, 0, 0));
   const [vuiHun, setVuiHun] = useState<string>(() => campaign.vuiHun || getTodayDateTimeLocal(13, 0, 0));
@@ -2885,6 +2918,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       
       mitthiHming: campaign.category === 'ralna' ? mitthiHming.trim() : undefined,
       age: campaign.category === 'ralna' && age ? parseInt(age) : undefined,
+      section: campaign.category === 'ralna' ? (section.trim() || undefined) : campaign.section,
+      kohhran: campaign.category === 'ralna' ? (kohhran.trim() || undefined) : campaign.kohhran,
       vuitu: campaign.category === 'ralna' ? vuitu.trim() : undefined,
       thihni: campaign.category === 'ralna' ? thihni : undefined,
       vuiHun: campaign.category === 'ralna' ? vuiHun : undefined,
@@ -3066,6 +3101,33 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
                     className="w-full bg-white border border-purple-300 rounded-xl p-2 font-bold text-slate-900 focus:border-purple-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-purple-950 block mb-1">
+                    Section <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={section}
+                    onChange={(e) => setSection(e.target.value)}
+                    placeholder="e.g. Section B / Bethel"
+                    className="w-full bg-white border border-purple-300 rounded-xl p-2 font-bold text-slate-900 focus:border-purple-600 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-purple-950 block mb-1">
+                    Kohhran <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={kohhran}
+                    onChange={(e) => setKohhran(e.target.value)}
+                    placeholder="e.g. BCM / Presbyterian / Salvation"
+                    className="w-full bg-white border border-purple-300 rounded-xl p-2 font-bold text-slate-900 focus:border-purple-600 text-xs"
                   />
                 </div>
               </div>

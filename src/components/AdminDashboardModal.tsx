@@ -4227,6 +4227,28 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         />
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9.5px] font-extrabold text-rose-800 uppercase">Section (Optional)</label>
+                        <input
+                          type="text"
+                          value={editingCampaign.section || ''}
+                          onChange={(e) => setEditingCampaign({ ...editingCampaign, section: e.target.value })}
+                          className="w-full mt-1 p-2 bg-white border border-rose-200 rounded-xl text-xs font-medium text-slate-800"
+                          placeholder="e.g. Section B / Bethel"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9.5px] font-extrabold text-rose-800 uppercase">Kohhran (Optional)</label>
+                        <input
+                          type="text"
+                          value={editingCampaign.kohhran || ''}
+                          onChange={(e) => setEditingCampaign({ ...editingCampaign, kohhran: e.target.value })}
+                          className="w-full mt-1 p-2 bg-white border border-rose-200 rounded-xl text-xs font-medium text-slate-800"
+                          placeholder="e.g. BCM / Presbyterian / Salvation"
+                        />
+                      </div>
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
