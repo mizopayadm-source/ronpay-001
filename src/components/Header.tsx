@@ -322,6 +322,8 @@ export const Header: React.FC<HeaderProps> = ({
         localStorage.setItem('kut_app_gps_verified', 'true');
         setGpsErrorMsg('');
         localStorage.setItem('kut_app_user_location', resolved);
+        localStorage.setItem('kut_app_user_lat', String(lat));
+        localStorage.setItem('kut_app_user_lng', String(lng));
         window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: resolved, lat, lng } }));
         if (interactive) {
           setTimeout(() => setShowLocationModal(false), 800);
@@ -332,6 +334,9 @@ export const Header: React.FC<HeaderProps> = ({
         setIsGpsActive(true);
         localStorage.setItem('kut_app_gps_verified', 'true');
         localStorage.setItem('kut_app_user_location', fallback);
+        localStorage.setItem('kut_app_user_lat', String(lat));
+        localStorage.setItem('kut_app_user_lng', String(lng));
+        window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: fallback, lat, lng } }));
       } finally {
         setIsLocating(false);
       }
@@ -377,7 +382,14 @@ export const Header: React.FC<HeaderProps> = ({
     setIsGpsActive(false);
     localStorage.removeItem('kut_app_gps_verified');
     localStorage.setItem('kut_app_user_location', locName);
-    window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: locName } }));
+    const matched = MIZORAM_GEO_DATABASE.find(p => p.name === locName || locName.includes(p.name.split(',')[0]));
+    if (matched) {
+      localStorage.setItem('kut_app_user_lat', String(matched.lat));
+      localStorage.setItem('kut_app_user_lng', String(matched.lng));
+      window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: locName, lat: matched.lat, lng: matched.lng } }));
+    } else {
+      window.dispatchEvent(new CustomEvent('kut_app_location_updated', { detail: { location: locName } }));
+    }
     setShowLocationModal(false);
   };
 

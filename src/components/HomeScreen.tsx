@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   QrCode, 
   PlusCircle, 
@@ -47,13 +47,17 @@ import {
   Receipt,
   Database,
   Copy,
-  Check
+  Check,
+  Navigation,
+  RefreshCw,
+  Compass
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem, PublicPoolStats } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { CampaignTransferModal } from './CampaignTransferModal';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
+import { calculateHaversineKm, getCampaignCoordinates, formatDistance } from '../utils/geoUtils';
 
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
@@ -309,19 +313,149 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return c.status === 'active' || !c.status;
   };
 
-  // All existing QRs sorted newest first (Mi tu pawhin Active QR chu an hmu thei vek tur a ni)
-  const allSortedQRs = useMemo(() => {
-    return [...safeCampaigns].sort((a, b) => {
+  // GPS Location-Based Sorting States
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(() => {
+    try {
+      const savedLat = localStorage.getItem('kut_app_user_lat');
+      const savedLng = localStorage.getItem('kut_app_user_lng');
+      if (savedLat && savedLng) {
+        const lat = parseFloat(savedLat);
+        const lng = parseFloat(savedLng);
+        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+      }
+    } catch {}
+    return null;
+  });
+
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'detecting' | 'active' | 'denied' | 'unavailable'>(() => {
+    try {
+      if (localStorage.getItem('kut_app_gps_verified') === 'true' && localStorage.getItem('kut_app_user_lat')) {
+        return 'active';
+      }
+    } catch {}
+    return 'idle';
+  });
+
+  // Sort mode: 'gps' (closest first) vs 'newest' (recently created first)
+  const [sortMode, setSortMode] = useState<'gps' | 'newest'>('gps');
+
+  // Trigger browser/device GPS permission request and detection
+  const requestUserGPS = useCallback((interactive: boolean = false) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsStatus('unavailable');
+      return;
+    }
+
+    setGpsStatus('detecting');
+
+    const handleSuccess = (position: GeolocationPosition) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      setUserCoords({ lat, lng });
+      setGpsStatus('active');
+      setSortMode('gps');
+      try {
+        localStorage.setItem('kut_app_user_lat', String(lat));
+        localStorage.setItem('kut_app_user_lng', String(lng));
+        localStorage.setItem('kut_app_gps_verified', 'true');
+      } catch {}
+    };
+
+    const handleError = (err: GeolocationPositionError) => {
+      // If high accuracy failed, attempt fallback to low accuracy
+      if (err.code !== err.PERMISSION_DENIED) {
+        navigator.geolocation.getCurrentPosition(
+          handleSuccess,
+          (err2) => {
+            if (err2.code === err2.PERMISSION_DENIED) {
+              setGpsStatus('denied');
+            } else {
+              setGpsStatus('unavailable');
+            }
+          },
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+        );
+        return;
+      }
+      setGpsStatus('denied');
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      handleSuccess,
+      handleError,
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  }, []);
+
+  // Initialize or sync GPS location on mount
+  useEffect(() => {
+    if (!userCoords) {
+      requestUserGPS(false);
+    }
+
+    // Listen to location updates dispatched from Header
+    const handleLocationUpdated = (e: any) => {
+      if (e?.detail?.lat && e?.detail?.lng) {
+        setUserCoords({ lat: e.detail.lat, lng: e.detail.lng });
+        setGpsStatus('active');
+      }
+    };
+
+    window.addEventListener('kut_app_location_updated', handleLocationUpdated);
+    return () => {
+      window.removeEventListener('kut_app_location_updated', handleLocationUpdated);
+    };
+  }, [requestUserGPS, userCoords]);
+
+  // Memoized distance lookup (in km) from current user position to each campaign
+  const campaignDistances = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!userCoords) return map;
+
+    for (const c of safeCampaigns) {
+      const coords = getCampaignCoordinates(c);
+      if (coords) {
+        const distKm = calculateHaversineKm(userCoords.lat, userCoords.lng, coords.lat, coords.lng);
+        map.set(c.id, Math.round(distKm * 100) / 100);
+      }
+    }
+    return map;
+  }, [safeCampaigns, userCoords]);
+
+  // Active QRs sorted based on user choice:
+  // 1. If sortMode === 'gps' and GPS coordinates are available:
+  //    Sort by distance (closest to farthest, Nearest to Farthest).
+  // 2. Fallback (if user denies GPS, location unavailable, or sortMode === 'newest'):
+  //    Sort by newest/recently created Active QRs.
+  const activeSortedQRs = useMemo(() => {
+    const active = safeCampaigns.filter(isCampaignActive);
+    const isGpsActive = sortMode === 'gps' && userCoords !== null;
+
+    return [...active].sort((a, b) => {
+      if (isGpsActive) {
+        const distA = campaignDistances.get(a.id);
+        const distB = campaignDistances.get(b.id);
+
+        const hasDistA = typeof distA === 'number';
+        const hasDistB = typeof distB === 'number';
+
+        if (hasDistA && hasDistB) {
+          if (Math.abs(distA - distB) > 0.05) {
+            return distA - distB; // Closest first!
+          }
+        } else if (hasDistA && !hasDistB) {
+          return -1; // Has distance info comes first
+        } else if (!hasDistA && hasDistB) {
+          return 1;
+        }
+      }
+
+      // Default Fallback: newest created first
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
-  }, [safeCampaigns]);
-
-  // Active QRs sorted newest first
-  const activeSortedQRs = useMemo(() => {
-    return allSortedQRs.filter(isCampaignActive);
-  }, [allSortedQRs]);
+  }, [safeCampaigns, sortMode, userCoords, campaignDistances]);
 
   const activeQRsCount = useMemo(() => {
     return isDataInitialized ? activeSortedQRs.length : 0;
@@ -977,6 +1111,84 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           )}
         </div>
 
+        {/* GPS Location-Based Sorting Controls */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5 pb-0.5">
+          <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => {
+                if (!userCoords) {
+                  requestUserGPS(true);
+                } else {
+                  setSortMode('gps');
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                sortMode === 'gps' && userCoords
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+              }`}
+              title={language === 'mizo' ? 'I awmna GPS atanga hnai ber hmasak berin rem rawh' : 'Sort by nearest GPS distance'}
+            >
+              <Navigation className={`w-3 h-3 ${sortMode === 'gps' && userCoords ? 'text-white' : 'text-emerald-600'}`} />
+              <span>{language === 'mizo' ? 'Hnai Ber (GPS)' : 'Nearest (GPS)'}</span>
+              {gpsStatus === 'detecting' && (
+                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSortMode('newest')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                sortMode === 'newest' || !userCoords
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+              }`}
+              title={language === 'mizo' ? 'Siam thar ber hmasak berin rem rawh' : 'Sort by newest created'}
+            >
+              <History className="w-3 h-3" />
+              <span>{language === 'mizo' ? 'Thar Ber' : 'Newest'}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[9.5px]">
+            {sortMode === 'gps' && userCoords && (
+              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/70 flex items-center gap-1 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{language === 'mizo' ? 'Hnai ber a lang hmasa' : 'Nearest to Farthest'}</span>
+              </span>
+            )}
+            {gpsStatus === 'detecting' && (
+              <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/70 flex items-center gap-1">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin text-amber-600" />
+                <span>{language === 'mizo' ? 'GPS zawn mek...' : 'Detecting GPS...'}</span>
+              </span>
+            )}
+            {gpsStatus === 'denied' && (
+              <button
+                type="button"
+                onClick={() => requestUserGPS(true)}
+                className="text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200/70 flex items-center gap-1 cursor-pointer"
+                title={language === 'mizo' ? 'GPS phalsak nawn rawh' : 'Allow GPS permission'}
+              >
+                <span>⚠️ {language === 'mizo' ? 'GPS denied (Thar ber)' : 'GPS denied (Newest)'}</span>
+                <span className="underline ml-0.5 text-indigo-600 font-extrabold">{language === 'mizo' ? 'Allow' : 'Enable'}</span>
+              </button>
+            )}
+            {!userCoords && gpsStatus === 'idle' && (
+              <button
+                type="button"
+                onClick={() => requestUserGPS(true)}
+                className="text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-200/70 flex items-center gap-1 cursor-pointer"
+              >
+                <Navigation className="w-2.5 h-2.5 text-indigo-600" />
+                <span>{language === 'mizo' ? 'GPS Hnai Ber' : 'Enable GPS'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Quick Category Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[10px] scrollbar-none">
           {[
@@ -1071,6 +1283,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             );
             const isOwner = !isGuest && isCampaignCreator(camp, creatorProfile);
             const canManage = Boolean(!isGuest && (isStaff || isOwner));
+            const campDistance = campaignDistances.get(camp.id);
             const effectiveValidity = camp.validityDate || camp.expiry_date || camp.valid_until || (camp as any).validity_date || (camp as any).metadata?.validityDate || (camp as any).metadata?.expiry_date || (camp as any).metadata?.valid_until || (camp.category === 'ralna' && camp.createdAt ? new Date(new Date(camp.createdAt).getTime() + 3 * 24 * 3600 * 1000).toISOString() : undefined);
             const isExpired = isCampaignExpired(effectiveValidity, camp.status, camp.category, camp.createdAt);
             const campTransactions = transactions.filter(t => isTransactionForCampaign(t, camp) && isConfirmedTransaction(t));
@@ -1139,10 +1352,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
                         {translateDynamicText(camp.title, language)}
                       </p>
-                      <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
-                        <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
-                        <span className="truncate">{camp.location}</span>
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                          <span className="truncate">{camp.location || 'Mizoram'}</span>
+                        </p>
+                        {typeof campDistance === 'number' && (
+                          <span 
+                            className="inline-flex items-center gap-0.5 text-[8.5px] font-extrabold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded-md border border-emerald-200/90 shadow-2xs"
+                            title={language === 'mizo' ? `I awmna atanga hlat zawng: ${formatDistance(campDistance, language)}` : `Distance: ${formatDistance(campDistance, language)}`}
+                          >
+                            <Navigation className="w-2 h-2 text-emerald-600 shrink-0" />
+                            {formatDistance(campDistance, language)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
