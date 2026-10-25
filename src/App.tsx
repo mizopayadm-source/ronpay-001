@@ -1875,14 +1875,26 @@ export default function App() {
                 handleNavigate('home', { replace: true });
               }}
               onApprove={(approvedTx) => {
-                setTransactions(prev => prev.map(t => t.id === approvedTx.id ? approvedTx : t));
+                setTransactions(prev => {
+                  const exists = prev.some(t => t.id === approvedTx.id);
+                  return exists 
+                    ? prev.map(t => t.id === approvedTx.id ? approvedTx : t)
+                    : [approvedTx, ...prev];
+                });
                 setCompletedTransaction(approvedTx);
                 setCurrentScreen('success');
-                updateBrowserUrl('success', null, null, { replace: true });
+                updateBrowserUrl('success', null, null, { replace: true, txn: approvedTx });
               }}
               onReject={(rejectedTx) => {
-                setTransactions(prev => prev.map(t => t.id === rejectedTx.id ? rejectedTx : t));
+                setTransactions(prev => {
+                  const exists = prev.some(t => t.id === rejectedTx.id);
+                  return exists 
+                    ? prev.map(t => t.id === rejectedTx.id ? rejectedTx : t)
+                    : [rejectedTx, ...prev];
+                });
                 setCompletedTransaction(rejectedTx);
+                setFailureReason(rejectedTx.rejectionReason || 'Pawisa dawn fel a nih loh vangin he cash receipt hi hnawl a ni.');
+                setCurrentScreen('failed');
               }}
             />
           )}
