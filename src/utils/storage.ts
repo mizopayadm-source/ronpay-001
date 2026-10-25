@@ -2158,6 +2158,66 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-05T00:00:00.000Z'
   },
   {
+    id: 'EBE-4455',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Lalrosanga Sailo',
+    orgCode: 'EBE',
+    phoneLast4: '4455',
+    fullPhone: '9862114455',
+    section: 'Bial 1 (Vengchhak)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-06T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-7788',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Vanlalruati Pachuau',
+    orgCode: 'EBE',
+    phoneLast4: '7788',
+    fullPhone: '9436227788',
+    section: 'Bial 2 (Vengthlang)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-07T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-2233',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'C. Lalrinsanga',
+    orgCode: 'EBE',
+    phoneLast4: '2233',
+    fullPhone: '8794332233',
+    section: 'Bial 3 (Venglai)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-08T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-6677',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'H. Lalthansanga',
+    orgCode: 'EBE',
+    phoneLast4: '6677',
+    fullPhone: '9615446677',
+    section: 'Bial 4 (Field Veng)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-09T00:00:00.000Z'
+  },
+  {
+    id: 'EBE-9988',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Dr. Zoramthanga Fanai',
+    orgCode: 'EBE',
+    phoneLast4: '9988',
+    fullPhone: '7005559988',
+    section: 'General / Khawchhung',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-10T00:00:00.000Z'
+  },
+  {
     id: 'KTL-5510',
     campaignId: 'cmp-kumtluang-2',
     name: 'Vanlalhruaia Chhangte',
@@ -2662,17 +2722,21 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 
     // Merge default initial members with stored members (excluding deleted)
     const map = new Map<string, MemberRecord>();
-    for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id && !isExcluded(m.id, m.name)) {
-        map.set(m.id.toLowerCase().trim(), m);
-      }
-    }
+    // 1. First add stored members so user edits take absolute priority and are never overwritten by seed defaults
     for (const m of storedMembers) {
       if (m && m.id && !isExcluded(m.id, m.name)) {
         const k = m.id.toLowerCase().trim();
-        const existing = map.get(k);
-        const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || existing?.campaignId || '');
-        map.set(k, { ...(existing || {}), ...m, campaignId: resolvedCampaignId });
+        const resolvedCampaignId = m.campaignId === 'cmp-kumtluang-ymavt' ? 'cmp-1787829303143' : (m.campaignId || '');
+        map.set(k, { ...m, campaignId: resolvedCampaignId });
+      }
+    }
+    // 2. Then add initial default members ONLY if their ID is not already in storedMembers
+    for (const m of INITIAL_DEFAULT_MEMBERS) {
+      if (m && m.id && !isExcluded(m.id, m.name)) {
+        const k = m.id.toLowerCase().trim();
+        if (!map.has(k)) {
+          map.set(k, m);
+        }
       }
     }
 
@@ -2708,11 +2772,14 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
           }
         }
       }
-      if (hasRecovered && typeof localStorage !== 'undefined') {
+      if ((hasRecovered || storedMembers.length < map.size) && typeof localStorage !== 'undefined') {
         localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
       }
     } catch (recoverErr) {
       console.warn('Storage transaction self-healing check:', recoverErr);
+    }
+    if (storedMembers.length < map.size && typeof localStorage !== 'undefined') {
+      localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
     }
 
     const allMembers = Array.from(map.values()).filter(m => {

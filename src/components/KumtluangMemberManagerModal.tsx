@@ -759,6 +759,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const p4 = newPhone4.slice(-4);
     const generatedId = `${org}-${p4}`;
 
+    // Strict duplicate check: prevent exact duplicate entries (identical Member Name AND identical Member Roll number within the same campaign/church)
+    const allListForCheck = getMembers('all');
+    const targetOrg = org.toUpperCase();
+    const targetPhone4 = p4.trim();
+    const targetName = newHming.trim().toLowerCase();
+
+    const exactDuplicate = allListForCheck.find(m => {
+      const mId = (m.id || '').trim().toLowerCase();
+      const mOrg = (m.orgCode || '').trim().toLowerCase();
+      const mP4 = (m.phoneLast4 || '').trim();
+      const mName = (m.name || '').trim().toLowerCase();
+      
+      const isSameId = mId === generatedId.toLowerCase();
+      const isSameNameAndRoll = mName === targetName && mOrg === targetOrg.toLowerCase() && mP4 === targetPhone4;
+      return isSameId || isSameNameAndRoll;
+    });
+
+    if (exactDuplicate) {
+      alert(`Duplicate Error: Member "${exactDuplicate.name}" (${exactDuplicate.id}) with this exact Roll number and Name already exists in this campaign/church. Please use a unique Roll number.`);
+      return;
+    }
+
     // Convert draft dependents into MemberDependent objects with subIds
     const formattedDependents: MemberDependent[] = newDependents.map((dep, idx) => ({
       subId: `${generatedId}-${String(idx + 1).padStart(2, '0')}`,
@@ -867,6 +889,24 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     const org = editOrgCode.trim().toUpperCase() || editingMember.orgCode;
     const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
     const newId = `${org}-${p4}`;
+
+    const allListForEditCheck = getMembers('all');
+    const exactEditDuplicate = allListForEditCheck.find(m => {
+      if (m.id.toLowerCase().trim() === editingMember.id.toLowerCase().trim()) return false;
+      const mId = (m.id || '').trim().toLowerCase();
+      const mOrg = (m.orgCode || '').trim().toLowerCase();
+      const mP4 = (m.phoneLast4 || '').trim();
+      const mName = (m.name || '').trim().toLowerCase();
+      
+      const isSameId = mId === newId.toLowerCase();
+      const isSameNameAndRoll = mName === editName.trim().toLowerCase() && mOrg === org.toLowerCase() && mP4 === p4;
+      return isSameId || isSameNameAndRoll;
+    });
+
+    if (exactEditDuplicate) {
+      alert(`Duplicate Error: Another member "${exactEditDuplicate.name}" (${exactEditDuplicate.id}) with this exact Roll number and Name already exists.`);
+      return;
+    }
 
     // Re-index subIds if ID changed
     const updatedDeps: MemberDependent[] = editDependents.map((dep, idx) => ({
