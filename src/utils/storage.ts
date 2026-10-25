@@ -3609,15 +3609,27 @@ export const canApproveCashPayment = (
   if (!tx) return { allowed: false, reason: 'Transaction a awm lo.' };
   if (tx.paymentMethod !== 'cash') return { allowed: false, reason: 'Cash payment a ni lo.' };
   if (!creatorProfile) return { allowed: false, reason: 'Log in a ngai.' };
-  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') {
+  if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || isSuperAdminOrAdminProfile(creatorProfile)) {
+    return { allowed: true };
+  }
+  const roleLower = (creatorProfile.role || '').toLowerCase();
+  const desigLower = (creatorProfile.designation || '').toLowerCase();
+  if (roleLower.includes('treasurer') || desigLower.includes('treasurer') || roleLower.includes('accountant') || desigLower.includes('accountant')) {
     return { allowed: true };
   }
   const allCampaigns = campaigns || getStoredCampaigns();
   const camp = allCampaigns.find(c => c.id === tx.campaignId);
-  if (camp && isCampaignCreator(camp, creatorProfile)) {
-    return { allowed: true };
+  if (camp) {
+    if (isCampaignCreator(camp, creatorProfile)) {
+      return { allowed: true };
+    }
+    if (Array.isArray(camp.authorizedOfficers) && creatorProfile.phone) {
+      const uPhone = creatorProfile.phone.replace(/\D/g, '').slice(-10);
+      const isOfficer = camp.authorizedOfficers.some(o => (o.phone || '').replace(/\D/g, '').slice(-10) === uPhone);
+      if (isOfficer) return { allowed: true };
+    }
   }
-  return { allowed: false, reason: 'He bawm hi i siam a nih loh avangin cash approve theihna i nei lo.' };
+  return { allowed: false, reason: 'He bawm hi i siam a nih loh emaw Treasurer / Officer i nih loh avangin cash approve theihna i nei lo.' };
 };
 
 export const approveCashTransaction = (

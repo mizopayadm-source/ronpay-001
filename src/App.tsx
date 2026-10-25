@@ -1801,6 +1801,11 @@ export default function App() {
           {currentScreen === 'success' && (
             <SuccessScreen
               transaction={completedTransaction}
+              creatorProfile={creatorProfile}
+              onUpdateTransaction={(updatedTx) => {
+                setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+                setCompletedTransaction(updatedTx);
+              }}
               onGoHome={() => {
                 if (completedTransaction?.id) {
                   markReceiptAsConsumed(completedTransaction.id);
@@ -1895,6 +1900,10 @@ export default function App() {
                 setCompletedTransaction(rejectedTx);
                 setFailureReason(rejectedTx.rejectionReason || 'Pawisa dawn fel a nih loh vangin he cash receipt hi hnawl a ni.');
                 setCurrentScreen('failed');
+              }}
+              onUpdateTransaction={(updatedTx) => {
+                setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+                setCompletedTransaction(updatedTx);
               }}
             />
           )}

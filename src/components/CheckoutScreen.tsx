@@ -59,7 +59,8 @@ import {
   isActualCampaignOwner,
   saveCampaign,
   getStoredCampaigns,
-  recordAuditLog
+  recordAuditLog,
+  isSuperAdminOrAdminProfile
 } from '../utils/storage';
 
 import { ALL_MONTH_NAMES_FULL, getMonthIndex, getCurrentMonthName, getCurrentYearString, getCurrentQuarterString, getYearOptions } from '../utils/monthHelper';
@@ -1649,6 +1650,29 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         }
       }
 
+      // Check if logged-in user is Creator, Treasurer, Accountant, or Admin
+      const isClearanceOfficer = Boolean(
+        isOwner ||
+        creatorProfile?.isAdmin ||
+        creatorProfile?.role === 'SUPER_ADMIN' ||
+        creatorProfile?.role === 'ADMIN' ||
+        isSuperAdminOrAdminProfile(creatorProfile) ||
+        (creatorProfile?.role && (creatorProfile.role.toLowerCase().includes('treasurer') || creatorProfile.role.toLowerCase().includes('accountant'))) ||
+        (creatorProfile?.designation && (creatorProfile.designation.toLowerCase().includes('treasurer') || creatorProfile.designation.toLowerCase().includes('accountant'))) ||
+        (activeCampRef && isCampaignCreator(activeCampRef, creatorProfile)) ||
+        (activeCampRef && Array.isArray(activeCampRef.authorizedOfficers) && creatorProfile?.phone && activeCampRef.authorizedOfficers.some(o => {
+          const oPhone = (o.phone || '').replace(/\D/g, '').slice(-10);
+          const uPhone = (creatorProfile.phone || '').replace(/\D/g, '').slice(-10);
+          const oRole = (o.role || '').toLowerCase();
+          return oPhone && uPhone && oPhone === uPhone && (
+            oRole.includes('treasurer') || oRole.includes('accountant') || oRole.includes('admin') || oRole.includes('creator')
+          );
+        }))
+      );
+
+      // Creator emaw Treasurer in anmahni a Cash entry an neih erawh chuan anmahni entry chu approve kher ngai lovin a kal tlang thung ang
+      const isDirectPassThrough = isClearanceOfficer;
+
       // Cash payment
       const transaction: Transaction = {
         id: 'RPAY-CASH-' + Math.floor(100000 + Math.random() * 900000),
@@ -1668,9 +1692,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         platformFee: 0,
         totalAmount: subtotal,
         paymentMethod: 'cash',
-        status: 'pending_approval',
-        verifiedBy: undefined,
-        verifiedAt: undefined,
+        status: isDirectPassThrough ? 'completed' : 'pending_approval',
+        verifiedBy: isDirectPassThrough ? (creatorProfile?.name || 'Treasurer / Creator') : undefined,
+        verifiedAt: isDirectPassThrough ? new Date().toISOString() : undefined,
+        collectorName: isDirectPassThrough ? (creatorProfile?.name || 'Treasurer / Creator') : undefined,
+        collectorPhone: isDirectPassThrough ? creatorProfile?.phone : undefined,
         remark: remark.trim() || undefined,
         subCategory: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
@@ -1701,13 +1727,31 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         isSynced: false,
       };
 
+      if (isDirectPassThrough) {
+        saveTransaction(transaction);
+        recordUserPaidTxId(transaction.id);
+        recordAuditLog(
+          'Official Cash Entry Recorded',
+          `Direct cash entry of ₹${transaction.amount} recorded by ${creatorProfile?.name || 'Treasurer/Creator'} for ${transaction.campaignTitle}`,
+          'transaction',
+          transaction.id,
+          creatorProfile?.name || 'Treasurer/Creator'
+        );
+      }
+
       import('../services/supabaseService').then(({ insertSupabaseTransaction }) => {
         insertSupabaseTransaction(transaction).catch(() => {});
       }).catch(() => {});
 
       setTimeout(() => {
         setIsProcessing(false);
-        onCashPending(transaction);
+        if (isDirectPassThrough) {
+          // Creator / Treasurer cash entry passes through directly without pending approval
+          onPaymentSuccess(transaction);
+        } else {
+          // Guest User cash entry goes to pending approval view
+          onCashPending(transaction);
+        }
       }, 700);
     }
   };

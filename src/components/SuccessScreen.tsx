@@ -19,13 +19,22 @@ import {
   ExternalLink,
   QrCode,
   Bell,
-  Printer
+  Printer,
+  Edit3,
+  X
 } from 'lucide-react';
-import { Transaction } from '../types';
+import { Transaction, CreatorProfile } from '../types';
 import { printHtmlSafely, downloadFileUniversal } from '../utils/export';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '../utils/date';
 import { generateReceiptWebLink, generateReceiptQRDataUrl } from '../utils/qr';
-import { getStoredCampaigns } from '../utils/storage';
+import { 
+  getStoredCampaigns, 
+  saveTransaction, 
+  recordAuditLog, 
+  safeApiFetch, 
+  getStoredTransactions, 
+  isSuperAdminOrAdminProfile 
+} from '../utils/storage';
 import { 
   getCampaignCauseTitle, 
   getEffectiveCategory, 
@@ -37,6 +46,8 @@ interface SuccessScreenProps {
   transaction: Transaction | null;
   onGoHome: () => void;
   onExploreMore?: () => void;
+  creatorProfile?: CreatorProfile | null;
+  onUpdateTransaction?: (updatedTx: Transaction) => void;
 }
 
 // Global in-memory and session tracking to strictly prevent repeated chimes / alerts
@@ -68,12 +79,93 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
   transaction,
   onGoHome,
   onExploreMore,
+  creatorProfile,
+  onUpdateTransaction,
 }) => {
+  const [currentTx, setCurrentTx] = useState<Transaction | null>(transaction);
+
+  useEffect(() => {
+    setCurrentTx(transaction);
+  }, [transaction]);
+
   const [copied, setCopied] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
   const [receiptQrUrl, setReceiptQrUrl] = useState<string>('');
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [editForm, setEditForm] = useState({
+    donorName: '',
+    donorPhone: '',
+    donorVeng: '',
+    amount: '',
+    subCategory: '',
+    remark: ''
+  });
+
+  const isClearanceOfficer = useMemo(() => {
+    if (!creatorProfile) return false;
+    if (creatorProfile.isAdmin || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN' || isSuperAdminOrAdminProfile(creatorProfile)) return true;
+    const r = (creatorProfile.role || '').toLowerCase();
+    const d = (creatorProfile.designation || '').toLowerCase();
+    if (r.includes('treasurer') || d.includes('treasurer') || r.includes('accountant') || d.includes('accountant') || r.includes('creator')) return true;
+    return false;
+  }, [creatorProfile]);
+
+  const handleOpenEditModal = () => {
+    if (!currentTx) return;
+    setEditForm({
+      donorName: currentTx.donorName || '',
+      donorPhone: currentTx.donorPhone || '',
+      donorVeng: currentTx.donorVeng || '',
+      amount: String(currentTx.amount || currentTx.totalAmount || 0),
+      subCategory: currentTx.subCategory || '',
+      remark: currentTx.remark || ''
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!currentTx) return;
+    const numAmt = parseFloat(editForm.amount) || Number(currentTx.amount) || 0;
+    const nowIso = new Date().toISOString();
+    const updated: Transaction = {
+      ...currentTx,
+      donorName: editForm.donorName.trim() || currentTx.donorName,
+      donorPhone: editForm.donorPhone.trim() || undefined,
+      donorVeng: editForm.donorVeng.trim() || undefined,
+      amount: numAmt,
+      totalAmount: numAmt,
+      subCategory: editForm.subCategory.trim() || undefined,
+      remark: editForm.remark.trim() || undefined,
+      updatedAt: nowIso
+    };
+    saveTransaction(updated);
+    setCurrentTx(updated);
+    recordAuditLog(
+      'Cash Entry Edited',
+      `Cash transaction ${updated.id} details updated by ${creatorProfile?.name || 'Treasurer/Creator'}. Amount: ₹${numAmt}`,
+      'transaction',
+      updated.id,
+      creatorProfile?.name || 'Treasurer/Creator'
+    );
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: getStoredTransactions() }));
+        window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+      } catch {}
+    }
+    safeApiFetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    }).catch(() => {});
+    if (onUpdateTransaction) {
+      onUpdateTransaction(updated);
+    }
+    setIsEditModalOpen(false);
+  };
 
   // Intercept mobile hardware back button on receipt screen so it returns to home cleanly without looping
   useEffect(() => {
@@ -619,6 +711,20 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
         </button>
       </div>
 
+      {/* Creator / Treasurer Cash Edit Button: "An duh hun ah an edit thei bawk ang" */}
+      {currentTx?.paymentMethod === 'cash' && isClearanceOfficer && (
+        <div className="px-1">
+          <button
+            type="button"
+            onClick={handleOpenEditModal}
+            className="w-full py-2.5 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-2xl text-xs font-black shadow-2xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+            <span>Edit Cash Entry (Treasurer / Creator)</span>
+          </button>
+        </div>
+      )}
+
       {/* Primary Navigation Buttons */}
       <div className="pt-1 px-1 space-y-2">
         <button
@@ -642,6 +748,111 @@ export const SuccessScreen: React.FC<SuccessScreenProps> = ({
           </button>
         )}
       </div>
+
+      {/* Creator / Treasurer Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/70 backdrop-blur-xs animate-fadeIn text-left">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-3.5 shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-black text-sm text-slate-900">Cash Record Siamthatna</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Petu Hming (Donor Name)</label>
+                <input
+                  type="text"
+                  value={editForm.donorName}
+                  onChange={(e) => setEditForm({ ...editForm, donorName: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Cash Amount (₹)</label>
+                <input
+                  type="number"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={editForm.donorPhone}
+                    onChange={(e) => setEditForm({ ...editForm, donorPhone: e.target.value })}
+                    placeholder="Optional"
+                    className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Bial / Section</label>
+                  <input
+                    type="text"
+                    value={editForm.donorVeng}
+                    onChange={(e) => setEditForm({ ...editForm, donorVeng: e.target.value })}
+                    placeholder="Optional"
+                    className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Thawhlawm Head / Category</label>
+                <input
+                  type="text"
+                  value={editForm.subCategory}
+                  onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Remark / Voucher</label>
+                <input
+                  type="text"
+                  value={editForm.remark}
+                  onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" /> Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

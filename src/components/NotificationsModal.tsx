@@ -95,8 +95,27 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const userRole = useMemo(() => getUserRole(creatorProfile), [creatorProfile]);
   const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || !!creatorProfile?.isAdmin;
   const isModerator = userRole === 'MODERATOR';
-  const isCreator = userRole === 'CREATOR' || (!!creatorProfile?.isApproved && !isAdmin && !isModerator);
-  const isGeneralMember = !isAdmin && !isModerator && !isCreator;
+  const isTreasurerOrAccountant = useMemo(() => {
+    if (!creatorProfile) return false;
+    const r = (creatorProfile.role || '').toLowerCase();
+    const d = (creatorProfile.designation || '').toLowerCase();
+    return r.includes('treasurer') || d.includes('treasurer') || r.includes('accountant') || d.includes('accountant');
+  }, [creatorProfile]);
+  const isCreator = userRole === 'CREATOR' || (!!creatorProfile?.isApproved && !isAdmin && !isModerator) || isTreasurerOrAccountant;
+  const isGeneralMember = !isAdmin && !isModerator && !isCreator && !isTreasurerOrAccountant;
+
+  // Helper to reliably detect any pending cash status
+  const isPendingCashTx = (status?: string | null): boolean => {
+    if (!status) return false;
+    const s = status.toLowerCase().trim();
+    return s.includes('pending') || s === 'pending_approval' || s === 'pending_verification';
+  };
+
+  const isCompletedCashTx = (status?: string | null): boolean => {
+    if (!status) return false;
+    const s = status.toLowerCase().trim();
+    return s === 'completed' || s === 'success' || s === 'verified';
+  };
 
   // Stored read-states
   const [readStateMap, setReadStateMap] = useState<Record<string, boolean>>(() => {
@@ -242,8 +261,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     // A. CREATOR: "ama bawm chhung a mi poisa pek lo kal te"
     // -------------------------------------------------------------------------
     if (isCreator && creatorProfile) {
-      // Find all campaigns created by this creator
-      const myCampaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+      // Find all campaigns created by this creator or where user is an authorized officer
+      const myCampaigns = campaigns.filter(c => {
+        if (isCampaignCreator(c, creatorProfile)) return true;
+        if (isTreasurerOrAccountant) return true;
+        if (Array.isArray(c.authorizedOfficers) && creatorProfile?.phone) {
+          const uPhone = (creatorProfile.phone || '').replace(/\D/g, '').slice(-10);
+          return c.authorizedOfficers.some(o => (o.phone || '').replace(/\D/g, '').slice(-10) === uPhone);
+        }
+        return false;
+      });
       const myCampaignIds = new Set(myCampaigns.map(c => String(c.id).toLowerCase().trim()));
       const myCampaignTitles = new Set(myCampaigns.map(c => (c.title || '').toLowerCase().trim()));
 
@@ -257,23 +284,23 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           const isRead = readStateMap[`creator-tx-${tx.id}`] ?? false;
 
           if (tx.paymentMethod === 'cash') {
-            if (tx.status === 'pending_verification') {
+            if (isPendingCashTx(tx.status)) {
               list.push({
                 id: `creator-tx-${tx.id}`,
                 type: 'cash_approval',
                 categoryScope: 'personal',
-                title: `Cash Fiah Ngai: ₹${formatRupees(tx.amount)}`,
-                message: `"${tx.campaignTitle || 'I Bawm'}"-ah ${tx.donorName || 'Petu'} in ₹${formatRupees(tx.amount)} cash a thehlut a, pawisa i dawn fel tawh chuan lo pawm (Approve) rawh le. (Token: ${tx.id})`,
+                title: `🔔 Cash Approve Tur A Awm: ₹${formatRupees(tx.amount)}`,
+                message: `"${tx.campaignTitle || 'I Bawm'}"-ah ${tx.donorName || 'Petu'} cash pek ₹${formatRupees(tx.amount)} approve tur a awm e. Lo pawm (Approve) rawh le. (Token: ${tx.id})`,
                 timestamp: tx.timestamp,
                 read: isRead,
                 amount: tx.amount,
                 transactionId: tx.id,
                 campaignId: tx.campaignId,
                 transaction: tx,
-                tag: 'Cash Fiah Ngai',
-                canApproveCash: true // Creator's own campaign!
+                tag: 'Cash Approve Tur',
+                canApproveCash: true // Authorized approver!
               });
-            } else if (tx.status === 'completed') {
+            } else if (isCompletedCashTx(tx.status)) {
               list.push({
                 id: `creator-tx-${tx.id}`,
                 type: 'payment',
@@ -398,22 +425,22 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     // -------------------------------------------------------------------------
     if (isAdmin) {
       // 1. All pending cash transactions across the platform
-      const pendingCashTxs = transactions.filter(t => t.paymentMethod === 'cash' && t.status === 'pending_verification');
+      const pendingCashTxs = transactions.filter(t => t.paymentMethod === 'cash' && isPendingCashTx(t.status));
       pendingCashTxs.forEach(tx => {
         const isRead = readStateMap[`admin-cash-${tx.id}`] ?? false;
         list.push({
           id: `admin-cash-${tx.id}`,
           type: 'cash_approval',
           categoryScope: 'personal',
-          title: `Admin Cash Clearance: ₹${formatRupees(tx.amount)}`,
-          message: `"${tx.campaignTitle || tx.campaignId}"-ah ${tx.donorName || 'Petu'} cash thehluh ₹${formatRupees(tx.amount)} hi verification nghah mek a ni. Admin i nih angin he cash payment hi i approve / hnawl thei e. (Token: ${tx.id})`,
+          title: `🔔 Cash Approve Tur A Awm: ₹${formatRupees(tx.amount)}`,
+          message: `"${tx.campaignTitle || tx.campaignId}"-ah ${tx.donorName || 'Petu'} cash thehluh ₹${formatRupees(tx.amount)} approve tur a awm e. Admin i nih angin he cash payment hi i pawm (Approve) thei e. (Token: ${tx.id})`,
           timestamp: tx.timestamp,
           read: isRead,
           amount: tx.amount,
           transactionId: tx.id,
           campaignId: tx.campaignId,
           transaction: tx,
-          tag: 'Admin Cash Action',
+          tag: 'Cash Approve Tur',
           canApproveCash: true // Admin has global approval authority
         });
       });
@@ -465,23 +492,23 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       userTxs.forEach(tx => {
         const isRead = readStateMap[`user-tx-${tx.id}`] ?? false;
         if (tx.paymentMethod === 'cash') {
-          if (tx.status === 'pending_verification') {
+          if (isPendingCashTx(tx.status)) {
             list.push({
               id: `user-tx-${tx.id}`,
               type: 'personal',
               categoryScope: 'personal',
-              title: `Cash Fiah Mek: ₹${formatRupees(tx.amount)}`,
-              message: `"${tx.campaignTitle || 'RonPay Bawm'}"-ah ₹${formatRupees(tx.amount)} cash i thehlut a. Bawm Siamtu emaw Admin-in an lo enfiah a, official receipt an pe thuai ang che. (Token: ${tx.id})`,
+              title: `Pawisa pek enfiah mek a ni`,
+              message: `Pawisa pek enfiah mek a ni: "${tx.campaignTitle || 'RonPay Bawm'}"-ah ₹${formatRupees(tx.amount)} cash i thehlut a. Treasurer / Creator in an pawm hma chuan Pending a ni ang. (Token: ${tx.id})`,
               timestamp: tx.timestamp,
               read: isRead,
               amount: tx.amount,
               transactionId: tx.id,
               campaignId: tx.campaignId,
               transaction: tx,
-              tag: 'Cash Fiah Mek',
+              tag: 'Pending',
               canApproveCash: false // Member CANNOT approve!
             });
-          } else if (tx.status === 'completed') {
+          } else if (isCompletedCashTx(tx.status)) {
             list.push({
               id: `user-tx-${tx.id}`,
               type: 'payment',

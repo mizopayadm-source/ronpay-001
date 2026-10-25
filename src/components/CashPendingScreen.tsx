@@ -13,7 +13,8 @@ import {
   FileText,
   Lock,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Edit3
 } from 'lucide-react';
 import { Transaction, CreatorProfile, Campaign } from '../types';
 import { 
@@ -45,6 +46,7 @@ interface CashPendingScreenProps {
   campaigns?: Campaign[];
   onApprove?: (approvedTx: Transaction) => void;
   onReject?: (rejectedTx: Transaction) => void;
+  onUpdateTransaction?: (updatedTx: Transaction) => void;
 }
 
 /**
@@ -118,13 +120,32 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
   campaigns,
   onApprove,
   onReject,
+  onUpdateTransaction,
 }) => {
   const [approvalNote, setApprovalNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [overriddenTx, setOverriddenTx] = useState<Transaction | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [editForm, setEditForm] = useState<{
+    donorName: string;
+    donorPhone: string;
+    donorVeng: string;
+    amount: string;
+    subCategory: string;
+    remark: string;
+  }>({
+    donorName: '',
+    donorPhone: '',
+    donorVeng: '',
+    amount: '',
+    subCategory: '',
+    remark: ''
+  });
 
   // Authoritative resolution of effective transaction data
   const effectiveTx = useMemo<Transaction | null>(() => {
+    if (overriddenTx) return overriddenTx;
     if (transaction && (Number(transaction.amount) > 0 || Number(transaction.totalAmount) > 0 || transaction.donorName)) {
       return transaction;
     }
@@ -152,7 +173,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
     }
 
     return transaction;
-  }, [transaction]);
+  }, [transaction, overriddenTx]);
 
   // Resolve matching campaign
   const targetCampaign = useMemo<Campaign | null>(() => {
@@ -325,6 +346,74 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
     }
   }, [effectiveTx, isSubmitting, clearance, creatorProfile, onReject]);
 
+  const handleOpenEditModal = useCallback(() => {
+    if (!effectiveTx) return;
+    setEditForm({
+      donorName: effectiveTx.donorName || '',
+      donorPhone: effectiveTx.donorPhone || '',
+      donorVeng: effectiveTx.donorVeng || '',
+      amount: String(effectiveTx.amount || effectiveTx.totalAmount || 0),
+      subCategory: effectiveTx.subCategory || '',
+      remark: effectiveTx.remark || '',
+    });
+    setIsEditModalOpen(true);
+  }, [effectiveTx]);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!effectiveTx) return;
+    const numAmt = parseFloat(editForm.amount) || Number(effectiveTx.amount) || 0;
+    const nowIso = new Date().toISOString();
+    const editorName = creatorProfile?.name || clearance.roleLabel;
+
+    const updated: Transaction = {
+      ...effectiveTx,
+      donorName: editForm.donorName.trim() || effectiveTx.donorName,
+      donorPhone: editForm.donorPhone.trim() || undefined,
+      donorVeng: editForm.donorVeng.trim() || undefined,
+      amount: numAmt,
+      totalAmount: numAmt,
+      subCategory: editForm.subCategory.trim() || undefined,
+      remark: editForm.remark.trim() || undefined,
+      updatedAt: nowIso,
+    };
+
+    saveTransaction(updated);
+    setOverriddenTx(updated);
+
+    recordAuditLog(
+      'Cash Entry Edited',
+      `Cash transaction ${updated.id} details edited by ${editorName}. Amount: ₹${numAmt}, Donor: ${updated.donorName}`,
+      'transaction',
+      updated.id,
+      editorName
+    );
+
+    try {
+      localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(updated));
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: getStoredTransactions() }));
+      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+    }
+
+    safeApiFetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    }).catch(() => {});
+
+    if (onUpdateTransaction) {
+      onUpdateTransaction(updated);
+    }
+
+    setIsEditModalOpen(false);
+    setActionFeedback({
+      type: 'success',
+      message: 'Cash record siamthat (edit) fel a ni e!'
+    });
+  }, [effectiveTx, editForm, creatorProfile, clearance, onUpdateTransaction]);
+
   return (
     <div className="space-y-4 text-center pt-5 pb-6 animate-fadeIn max-w-md mx-auto px-2">
       {/* Top Status Icon */}
@@ -335,16 +424,16 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       {/* Screen Title & Subtitle */}
       <div className="space-y-1.5 px-2">
         <h2 className="text-lg font-black text-slate-900 leading-tight">
-          Cash Entry Submitted
+          {clearance.canClear ? 'Cash Clearance Review' : 'Pawisa pek enfiah mek a ni'}
         </h2>
         <p className="text-xs text-slate-500 font-medium leading-relaxed">
           {clearance.canClear ? (
             <>
-              Cash record a in-submit fel e. Treasurer, Accountant emaw Creator i nihna angin a hnuaiah hian i verify in i pawm (Approve) thei e.
+              Cash record a in-submit fel e. Treasurer, Accountant emaw Creator i nihna angin a hnuaiah hian i verify in i pawm (Approve) thei e. Duh hunah edit theih a ni bawk.
             </>
           ) : (
             <>
-              He Cash payment hi Treasurer / Accountant in an endik a, an pawm (Approve) hunah chauh Official Ledger leh Campaign Totals-ah a lut ang.
+              Pawisa pek enfiah mek a ni. Creator / Treasurer / Admin ten an lo endik a, an pawm (approve) hunah chauh official ledger leh receipt-ah a tlang ang.
             </>
           )}
         </p>
@@ -364,11 +453,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
 
       {/* Official Receipt Card */}
       <div className="bg-amber-50/90 border border-amber-200/90 p-4 rounded-2xl text-left space-y-3 text-xs shadow-xs">
-        {/* Status Row with prominent PENDING TREASURER APPROVAL badge */}
+        {/* Status Row with prominent status badge */}
         <div className="flex justify-between items-center border-b border-amber-200 pb-2.5">
-          <span className="text-slate-500 font-semibold text-[11px]">Clearance Status</span>
+          <span className="text-slate-500 font-semibold text-[11px]">Status</span>
           <span className="font-extrabold text-amber-900 bg-amber-200/90 px-2.5 py-1 rounded-md text-[10px] tracking-wide border border-amber-300 flex items-center gap-1.5 shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-amber-800" /> PENDING TREASURER APPROVAL
+            <Clock className="w-3.5 h-3.5 text-amber-800" /> {clearance.canClear ? 'PENDING TREASURER APPROVAL' : 'Pending'}
           </span>
         </div>
 
@@ -487,44 +576,56 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
             />
           </div>
 
-          {/* Approval & Rejection Buttons */}
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleApproveCashReceipt}
-              disabled={isSubmitting}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black py-2.5 px-3 rounded-xl transition text-xs shadow-xs cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Committing...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 stroke-[3]" /> Approve Cash Receipt
-                </>
-              )}
-            </button>
+          {/* Approval, Rejection & Edit Buttons */}
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleApproveCashReceipt}
+                disabled={isSubmitting}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black py-2.5 px-3 rounded-xl transition text-xs shadow-xs cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Committing...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 stroke-[3]" /> Approve Cash Receipt
+                  </>
+                )}
+              </button>
 
+              <button
+                type="button"
+                onClick={handleRejectCashReceipt}
+                disabled={isSubmitting}
+                className="px-3 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 font-bold py-2.5 rounded-xl border border-rose-200 transition text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" /> Reject
+              </button>
+            </div>
+
+            {/* Creator / Treasurer Edit Button: "An duh hun ah an edit thei bawk ang" */}
             <button
               type="button"
-              onClick={handleRejectCashReceipt}
+              onClick={handleOpenEditModal}
               disabled={isSubmitting}
-              className="px-3 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 font-bold py-2.5 rounded-xl border border-rose-200 transition text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              className="w-full bg-white hover:bg-slate-50 text-slate-700 font-bold py-2 px-3 rounded-xl border border-slate-200 transition text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
             >
-              <X className="w-3.5 h-3.5" /> Reject
+              <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Record (Siamtha Rawh)
             </button>
           </div>
         </div>
       ) : (
         /* Read-only advisory card for donors & public users */
-        <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-left space-y-1.5 shadow-2xs">
-          <div className="flex items-center gap-2 text-slate-700">
-            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span className="text-[11px] font-bold text-slate-800">Donor Information Notice</span>
+        <div className="bg-amber-50/70 border border-amber-200 p-3.5 rounded-2xl text-left space-y-1.5 shadow-2xs">
+          <div className="flex items-center gap-2 text-amber-800">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="text-[12px] font-bold text-amber-950">Pawisa pek enfiah mek a ni</span>
           </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            I cash pekna lehkha hi record a ni tawh a. Treasurer / Accountant clearance a zawh fel veleh official reports leh bawm account-ah a lang ang.
+          <p className="text-[11px] text-amber-800/90 leading-relaxed font-medium">
+            I cash thehluh hi pawm (approve) a nih hma chuan enfiah mek (Pending) a ni a. Treasurer / Creator in an pawm veleh a tlang nghal ang.
           </p>
         </div>
       )}
@@ -539,6 +640,111 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </button>
       </div>
+
+      {/* Creator / Treasurer Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/70 backdrop-blur-xs animate-fadeIn text-left">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-3.5 shadow-2xl border border-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-black text-sm text-slate-900">Cash Record Siamthatna</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Petu Hming (Donor Name)</label>
+                <input
+                  type="text"
+                  value={editForm.donorName}
+                  onChange={(e) => setEditForm({ ...editForm, donorName: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Cash Amount (₹)</label>
+                <input
+                  type="number"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={editForm.donorPhone}
+                    onChange={(e) => setEditForm({ ...editForm, donorPhone: e.target.value })}
+                    placeholder="Optional"
+                    className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Bial / Section</label>
+                  <input
+                    type="text"
+                    value={editForm.donorVeng}
+                    onChange={(e) => setEditForm({ ...editForm, donorVeng: e.target.value })}
+                    placeholder="Optional"
+                    className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Thawhlawm Head / Category</label>
+                <input
+                  type="text"
+                  value={editForm.subCategory}
+                  onChange={(e) => setEditForm({ ...editForm, subCategory: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Remark / Voucher</label>
+                <input
+                  type="text"
+                  value={editForm.remark}
+                  onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" /> Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
