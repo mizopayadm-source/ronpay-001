@@ -425,12 +425,35 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
 
-  // Fetch fresh members on demand when Kumtluang modal opens (debounced to avoid burning quota)
+  // Fetch fresh members on demand from Supabase & Server when Kumtluang modal opens
   useEffect(() => {
     if (isOpen) {
-      fetchMembersFromFirestore(undefined, false).catch(() => {});
+      import('../services/supabaseService').then(({ fetchSupabaseMembers }) => {
+        fetchSupabaseMembers('all').then(remoteMembers => {
+          if (Array.isArray(remoteMembers) && remoteMembers.length > 0) {
+            const currentLocal = getMembers('all');
+            const merged = [...currentLocal];
+            remoteMembers.forEach(rm => {
+              if (rm && rm.id) {
+                const idx = merged.findIndex(m => m.id.toLowerCase() === rm.id.toLowerCase());
+                if (idx >= 0) {
+                  merged[idx] = { ...merged[idx], ...rm };
+                } else {
+                  merged.unshift(rm);
+                }
+              }
+            });
+            saveMembers(merged, true);
+            if (selectedCampaignId) {
+              const refreshed = getScopedMembersForView(selectedCampaignId);
+              setMembers(refreshed);
+            }
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+      syncAllWithServer(true).catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
 
   // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
   useEffect(() => {
