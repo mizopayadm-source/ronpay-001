@@ -820,6 +820,8 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       vuiHun: camp.vuiHun,
       section: camp.section,
       kohhran: camp.kohhran,
+      allow_online_pg: camp.allow_online_pg,
+      allow_cash_payment: camp.allow_cash_payment,
       targetAmount: camp.targetAmount,
       targetPeriod: camp.targetPeriod,
       maxLimit: camp.maxLimit,

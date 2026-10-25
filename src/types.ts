@@ -90,6 +90,8 @@ export interface Campaign {
   trxnFeeBearer?: 'user_paid' | 'creator_paid' | string;
   kumtluangFeeBearer?: string;
   feeOptionRule?: FeeOptionMode;
+  allow_online_pg?: boolean;
+  allow_cash_payment?: boolean;
   sectionLabel?: string;
   definedSections?: string[];
   groupPresets?: string[];
@@ -182,6 +184,10 @@ export interface Transaction {
   subId?: string;
   donorType?: 'member' | 'group' | 'general' | string;
   groupName?: string;
+  section?: string;
+  collectorName?: string;
+  collectorPhone?: string;
+  notes?: string;
   isAnonymous?: boolean;
   isDependent?: boolean;
   isSynced?: boolean;

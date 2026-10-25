@@ -306,6 +306,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
       const urgencyDeadline = searchParams.get('urgencyDeadline') || searchParams.get('deadline');
       const validityDate = searchParams.get('validityDate') || searchParams.get('validity');
       const img = searchParams.get('img') || searchParams.get('imageUrl');
+      const rawAllowOnline = searchParams.get('allow_online_pg');
+      const rawAllowCash = searchParams.get('allow_cash_payment');
 
       const deducedCategory = (catParam as BawmCategory) || 
         (cleanId.startsWith('cmp-k') ? 'kumtluang' : 
@@ -330,6 +332,8 @@ export function getUrlRoute(campaignsList?: Campaign[], transactionsList?: Trans
         thihni: thihni ? decodeURIComponent(thihni) : undefined,
         section: section ? decodeURIComponent(section) : undefined,
         kohhran: kohhran ? decodeURIComponent(kohhran) : undefined,
+        allow_online_pg: rawAllowOnline !== null ? (rawAllowOnline === 'true' || rawAllowOnline === '1') : undefined,
+        allow_cash_payment: rawAllowCash !== null ? (rawAllowCash === 'true' || rawAllowCash === '1') : undefined,
         urgencyDeadline: urgencyDeadline ? decodeURIComponent(urgencyDeadline) : undefined,
         imageUrl: img ? decodeURIComponent(img) : undefined,
         validityDate: validityDate ? decodeURIComponent(validityDate) : '2027-12-31',

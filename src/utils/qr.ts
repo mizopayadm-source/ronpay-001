@@ -102,6 +102,8 @@ export const generateCampaignWebLink = (campaignOrId: string | Campaign, customD
   if (camp.kohhran) params.set('kohhran', camp.kohhran);
   if (camp.urgencyDeadline) params.set('urgencyDeadline', camp.urgencyDeadline);
   if (camp.validityDate) params.set('validityDate', camp.validityDate);
+  if (typeof camp.allow_online_pg === 'boolean') params.set('allow_online_pg', String(camp.allow_online_pg));
+  if (typeof camp.allow_cash_payment === 'boolean') params.set('allow_cash_payment', String(camp.allow_cash_payment));
   if (camp.imageUrl && camp.imageUrl.startsWith('http')) params.set('img', camp.imageUrl);
 
   return `${baseDomain}/?${params.toString()}`;

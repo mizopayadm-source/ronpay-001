@@ -138,7 +138,21 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
 
   const activeCampaign = currentCampaign || campaign;
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('phonepe');
+  const allowOnlinePG = activeCampaign?.allow_online_pg ?? true;
+  const allowCashPayment = activeCampaign?.allow_cash_payment ?? true;
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
+    if (!allowOnlinePG && allowCashPayment) return 'cash';
+    return 'phonepe';
+  });
+
+  useEffect(() => {
+    if (!allowOnlinePG && paymentMethod !== 'cash' && allowCashPayment) {
+      setPaymentMethod('cash');
+    } else if (!allowCashPayment && paymentMethod === 'cash' && allowOnlinePG) {
+      setPaymentMethod('phonepe');
+    }
+  }, [allowOnlinePG, allowCashPayment, paymentMethod]);
   const [isPhonePeCheckoutOpen, setIsPhonePeCheckoutOpen] = useState<boolean>(false);
   const [isUPICheckoutOpen, setIsUPICheckoutOpen] = useState<boolean>(false);
 
@@ -1654,9 +1668,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
         platformFee: 0,
         totalAmount: subtotal,
         paymentMethod: 'cash',
-        status: 'completed',
-        verifiedBy: creatorProfile?.name || (isOfficerAuthorized || isOwner ? 'Treasurer / Admin' : 'In-Person Cash Collection'),
-        verifiedAt: new Date().toISOString(),
+        status: 'pending_approval',
+        verifiedBy: undefined,
+        verifiedAt: undefined,
         remark: remark.trim() || undefined,
         subCategory: category === 'kumtluang' 
           ? (resolvedDonorType === 'group'
@@ -3874,67 +3888,77 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
           )}
         </div>
 
-        {/* Payment Method Selector */}
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-              Payment Mode
-            </h4>
-            <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-bold">
-              PhonePe TSP Verified
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* 1. PhonePe PG V2 */}
-            <button
-              type="button"
-              onClick={() => {
-                setPaymentMethod('phonepe');
-              }}
-              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
-                paymentMethod === 'phonepe'
-                  ? 'bg-purple-50/90 border-purple-600 shadow-xs text-purple-950 ring-2 ring-purple-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-              }`}
-            >
-              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
-                paymentMethod === 'phonepe' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+        {/* Payment Method Selector (Dynamically rendered based on Campaign Settings) */}
+        {(allowOnlinePG || allowCashPayment) && (
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                Payment Mode
+              </h4>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                paymentMethod === 'cash' 
+                  ? 'text-amber-800 bg-amber-50 border-amber-200' 
+                  : 'text-purple-700 bg-purple-50 border-purple-200'
               }`}>
-                <Smartphone className="w-4 h-4" />
-              </div>
-              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
-                PhonePe PG
-              </p>
-              <span className="text-[9px] text-purple-700 font-bold mt-0.5">
-                UAT Active
+                {paymentMethod === 'cash' ? '💵 Cash / Treasurer Receipt' : '⚡ PhonePe TSP Verified'}
               </span>
-            </button>
+            </div>
 
-            {/* 2. Cash Pekna */}
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('cash')}
-              className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
-                paymentMethod === 'cash'
-                  ? 'bg-amber-50/90 border-amber-600 shadow-xs text-amber-950 ring-2 ring-amber-500/20'
-                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-              }`}
-            >
-              <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
-                paymentMethod === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
-              }`}>
-                <Banknote className="w-4 h-4" />
-              </div>
-              <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
-                Cash Pekna
-              </p>
-              <span className="text-[9px] text-slate-500 font-medium mt-0.5">
-                Treasurer Slip
-              </span>
-            </button>
+            <div className={`grid gap-2.5 ${allowOnlinePG && allowCashPayment ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {/* 1. PhonePe PG V2 (Rendered only if allowOnlinePG is active) */}
+              {allowOnlinePG && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('phonepe');
+                  }}
+                  className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+                    paymentMethod === 'phonepe'
+                      ? 'bg-purple-50/90 border-purple-600 shadow-xs text-purple-950 ring-2 ring-purple-500/20'
+                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
+                    paymentMethod === 'phonepe' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
+                    PhonePe PG
+                  </p>
+                  <span className="text-[9px] text-purple-700 font-bold mt-0.5">
+                    Instant UPI & Cards
+                  </span>
+                </button>
+              )}
+
+              {/* 2. Cash Pekna (Rendered only if allowCashPayment is active) */}
+              {allowCashPayment && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`p-3 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center relative ${
+                    paymentMethod === 'cash'
+                      ? 'bg-amber-50/90 border-amber-600 shadow-xs text-amber-950 ring-2 ring-amber-500/20'
+                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg mb-1.5 transition-colors ${
+                    paymentMethod === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                  <p className="font-extrabold text-[11px] text-slate-900 leading-tight">
+                    Cash Pekna
+                  </p>
+                  <span className="text-[9px] text-slate-500 font-medium mt-0.5">
+                    Treasurer Approval
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Bill Summary Breakdown */}
         <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2.5 text-xs shadow-md">

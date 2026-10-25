@@ -44,14 +44,17 @@ import {
   Download,
   Save,
   Sliders,
-  Landmark
+  Landmark,
+  Wallet,
+  Smartphone,
+  Banknote
 } from 'lucide-react';
 import { BawmCategory, Campaign, CreatorProfile, SystemPricingConfig, Transaction, AnnouncementBanner, SectionQuickPreset } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG } from '../data/initialData';
 import { Language, translateTextViaApi, formatMizoTextToEnglish, translateCampaignTitle } from '../utils/translations';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, getCreatorExpiryStatus, getTodayDateTimeLocal } from '../utils/date';
-import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getStoredSectionPresets, saveStoredSectionPresets } from '../utils/storage';
+import { isPrefixCodeTaken, suggestAlternativePrefixes, derivePrefixFromText, migrateCampaignMembersPrefix, isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getStoredSectionPresets, saveStoredSectionPresets, saveTransaction } from '../utils/storage';
 import { downloadSampleExcelTemplate } from '../utils/excelMemberImporter';
 import { getUserRole } from '../utils/rbac';
 import { TrialWarningBanner } from './TrialWarningBanner';
@@ -77,6 +80,7 @@ interface CreateQRScreenProps {
   onOpenAdminDashboard?: () => void;
   onPreviewImage?: (url: string, title?: string) => void;
   language?: Language;
+  onUpdateTransaction?: (tx: Transaction) => void;
 }
 
 export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
@@ -95,6 +99,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   onSelectCampaign,
   onUpdateCreatorProfile,
   onOpenMemberRoll,
+  onUpdateTransaction,
 }) => {
   // Creator Profile Editing State
   const [isEditingCreatorProfile, setIsEditingCreatorProfile] = useState<boolean>(false);
@@ -125,6 +130,10 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   const [upiId, setUpiId] = useState<string>('');
   const [gpsCoords, setGpsCoords] = useState<string>('');
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+
+  // Payment Options Control (Active/Deactive toggles per campaign)
+  const [allowOnlinePG, setAllowOnlinePG] = useState<boolean>(true);
+  const [allowCashPayment, setAllowCashPayment] = useState<boolean>(true);
 
   // Ralna fields
   const [ralnaMitthiHming, setRalnaMitthiHming] = useState<string>('');
@@ -226,6 +235,44 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     if (manageFilter === 'all') return true;
     return c.category === manageFilter;
   });
+
+  // Pending Cash Approvals for Creator / Treasurer
+  const pendingCashApprovals = transactions.filter(t => 
+    t.paymentMethod === 'cash' && 
+    (t.status === 'pending_approval' || t.status === 'pending_verification' || t.status === 'pending') &&
+    (myCampaigns.some(c => c.id === t.campaignId) || isPrivilegedUser || t.campaignId === creatorProfile.phone)
+  );
+
+  const handleApproveCashTx = (tx: Transaction) => {
+    const approver = creatorProfile.name || 'Treasurer / Creator';
+    const approvedTx: Transaction = {
+      ...tx,
+      status: 'completed',
+      verifiedBy: approver,
+      verifiedAt: new Date().toISOString()
+    };
+    saveTransaction(approvedTx);
+    if (onUpdateTransaction) {
+      onUpdateTransaction(approvedTx);
+    }
+    alert(`✅ CASH RECEIPT APPROVED!\n\nReceipt #${tx.id} (₹${tx.amount.toLocaleString('en-IN')}) pawm fel a ni ta.\nOfficial Ledger leh Campaign Totals ah a lut nghal e.`);
+  };
+
+  const handleRejectCashTx = (tx: Transaction) => {
+    const reason = window.prompt('Reject chhan (Optional remark):', 'Treasurer / Creator Rejected');
+    if (reason === null) return;
+    const rejectedTx: Transaction = {
+      ...tx,
+      status: 'rejected',
+      rejectedAt: new Date().toISOString(),
+      rejectionReason: reason || 'Treasurer or Creator Rejected'
+    };
+    saveTransaction(rejectedTx);
+    if (onUpdateTransaction) {
+      onUpdateTransaction(rejectedTx);
+    }
+    alert(`❌ CASH RECEIPT REJECTED!\n\nReceipt #${tx.id} hi reject a ni.`);
+  };
 
   // Dynamic Pricing Calculation for Selected Category & Creator
   const currentFeeRule = pricingConfig?.categories?.[selectedCategory] || DEFAULT_PRICING_CONFIG.categories[selectedCategory];
@@ -544,6 +591,8 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       createdAt: new Date().toISOString(),
       createdBy: creatorProfile.phone || creatorProfile.name,
       orgCode: derivedPrefix,
+      allow_online_pg: allowOnlinePG,
+      allow_cash_payment: allowCashPayment,
 
       // Specifics
       mitthiHming: selectedCategory === 'ralna' ? ralnaMitthiHming : undefined,
@@ -2088,6 +2137,88 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
             </div>
           )}
 
+          {/* Payment Modes / Options Control (Per-Campaign Payment Toggles) */}
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/90 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-indigo-600" /> Payment Modes / Options Control
+                </h4>
+                <p className="text-[10.5px] text-slate-500 font-medium">
+                  He Bawm a petute'n an pek theih dan tur active/deactive thlang rawh
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+              {/* Online Payment Gateway (UPI / QR / PhonePe) */}
+              <div 
+                onClick={() => {
+                  if (allowOnlinePG && !allowCashPayment) {
+                    alert('A tlem berin payment option pakhat tal active a ngai e.');
+                    return;
+                  }
+                  setAllowOnlinePG(!allowOnlinePG);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                  allowOnlinePG 
+                    ? 'bg-purple-50/80 border-purple-300 ring-1 ring-purple-400/30' 
+                    : 'bg-white border-slate-200 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    allowOnlinePG ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Smartphone className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 leading-tight">Online Payment Gateway</p>
+                    <p className="text-[9.5px] text-slate-500 truncate">PhonePe PG • Instant UPI</p>
+                  </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                  allowOnlinePG ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                }`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                </div>
+              </div>
+
+              {/* Cash Payment (In-Person / Treasurer Slip) */}
+              <div 
+                onClick={() => {
+                  if (allowCashPayment && !allowOnlinePG) {
+                    alert('A tlem berin payment option pakhat tal active a ngai e.');
+                    return;
+                  }
+                  setAllowCashPayment(!allowCashPayment);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                  allowCashPayment 
+                    ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/30' 
+                    : 'bg-white border-slate-200 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    allowCashPayment ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Banknote className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 leading-tight">Cash Payment (In-Person)</p>
+                    <p className="text-[9.5px] text-slate-500 truncate">Treasurer Slip • Approval</p>
+                  </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                  allowCashPayment ? 'bg-amber-600 justify-end' : 'bg-slate-300 justify-start'
+                }`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 5. QR Creation Fee Notice / Admin Notification Box */}
           <div className="space-y-2">
             {/* Admin Announcement / Notification if active */}
@@ -2185,6 +2316,96 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
       {/* TAB 2: MY CREATED QRS (CREATOR DASHBOARD & EDIT) */}
       {activeTab === 'manage' && (
         <div className="space-y-4">
+          {/* Pending Cash Approvals Queue for Creator / Treasurer */}
+          {pendingCashApprovals.length > 0 && (
+            <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3.5 space-y-3 shadow-xs animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                        Pending Cash Approvals
+                      </h4>
+                      <span className="text-[9.5px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                        {pendingCashApprovals.length} PENDING
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-amber-800 font-medium">
+                      Treasurer / Creator approval nghak mek cash payment entries te
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-amber-800 font-bold block">Total Pending:</span>
+                  <span className="text-xs font-black text-amber-950">
+                    ₹{pendingCashApprovals.reduce((s, t) => s + t.amount, 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-amber-200/70 bg-white rounded-xl border border-amber-200 overflow-hidden shadow-2xs">
+                {pendingCashApprovals.map((tx) => {
+                  const targetCamp = campaigns.find(c => c.id === tx.campaignId);
+                  return (
+                    <div key={tx.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-amber-50/40 transition">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black text-slate-900">
+                            ₹{tx.amount.toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-[9.5px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                            Cash Handover
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono">
+                            #{tx.id}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-700">
+                          <span className="font-bold text-slate-900">{tx.donorName || 'Anonymous Donor'}</span>
+                          {tx.donorPhone && <span className="text-slate-500"> ({tx.donorPhone})</span>}
+                          {tx.section && <span className="text-indigo-600 font-bold"> • {tx.section}</span>}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">
+                          Bawm: <span className="font-bold text-slate-700">{targetCamp?.title || tx.campaignTitle || tx.campaignId}</span>
+                          {tx.createdAt && ` • ${formatDateTimeDDMMYYYY(tx.createdAt)}`}
+                        </p>
+                        {tx.collectorName && (
+                          <p className="text-[9.5px] text-slate-500">
+                            Collector / Staff: <span className="font-bold text-slate-700">{tx.collectorName}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectCashTx(tx)}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs border border-rose-200 transition cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveCashTx(tx)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Approve Cash Receipt
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[9.5px] text-amber-800 leading-tight">
+                ℹ️ <strong>Locker Guard:</strong> Cash receipt hi Treasurer / Creator-in a pawm (Approve) hnuah chauh official ledger leh total raised-ah a lut ang.
+              </p>
+            </div>
+          )}
+
           {/* Header & Filter */}
           <div className="flex items-center justify-between gap-2">
             <div>
@@ -2727,6 +2948,10 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [gpsCoords, setGpsCoords] = useState<string>(campaign.gpsCoords || '23.7271, 92.7176');
   const [imageUrl, setImageUrl] = useState<string | undefined>(campaign.imageUrl);
   
+  // Payment Options Control (Active/Deactive toggles per campaign)
+  const [allowOnlinePG, setAllowOnlinePG] = useState<boolean>(campaign.allow_online_pg ?? true);
+  const [allowCashPayment, setAllowCashPayment] = useState<boolean>(campaign.allow_cash_payment ?? true);
+  
   // Specifics
   const [mitthiHming, setMitthiHming] = useState<string>(campaign.mitthiHming || '');
   const [age, setAge] = useState<string>(campaign.age?.toString() || '');
@@ -2897,6 +3122,11 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       translateTextViaApi(trimmedCause, campaign.category, 'english').catch(() => {});
     }
 
+    if (!allowOnlinePG && !allowCashPayment) {
+      alert('A tlem berin payment mode pakhat tal (Online UPI emaw Cash Handover) i enable a ngai a ni.');
+      return;
+    }
+
     const updated: Campaign = {
       ...campaign,
       title: title.trim(),
@@ -2914,6 +3144,8 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       gpsCoords: gpsCoords.trim(),
       imageUrl: imageUrl || undefined,
       orgCode: finalPrefix,
+      allow_online_pg: allowOnlinePG,
+      allow_cash_payment: allowCashPayment,
       updatedAt: new Date().toISOString(),
       
       mitthiHming: campaign.category === 'ralna' ? mitthiHming.trim() : undefined,
@@ -3907,6 +4139,86 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 <option value="expired">Expired (Closed / A tawp tawh)</option>
                 <option value="pending_approval">Reactivate (Admin Approval Required)</option>
               </select>
+            </div>
+          </div>
+
+          {/* Payment Modes / Options Control (Per-Campaign Payment Toggles) */}
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+            <div>
+              <label className="text-[10.5px] font-black text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                <Wallet className="w-3.5 h-3.5 text-indigo-600" /> Payment Modes / Options Control
+              </label>
+              <p className="text-[10px] text-slate-500 font-medium">
+                He Bawm a petute'n an pek theih dan tur active/deactive thlang rawh
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+              {/* Online Payment Gateway (UPI / QR / PhonePe) */}
+              <div 
+                onClick={() => {
+                  if (allowOnlinePG && !allowCashPayment) {
+                    alert('A tlem berin payment option pakhat tal active a ngai e.');
+                    return;
+                  }
+                  setAllowOnlinePG(!allowOnlinePG);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                  allowOnlinePG 
+                    ? 'bg-purple-50/80 border-purple-300 ring-1 ring-purple-400/30' 
+                    : 'bg-white border-slate-200 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    allowOnlinePG ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Smartphone className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-slate-900 leading-tight">Online Payment Gateway</p>
+                    <p className="text-[9px] text-slate-500 truncate">PhonePe PG • Instant UPI</p>
+                  </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                  allowOnlinePG ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                }`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                </div>
+              </div>
+
+              {/* Cash Payment (In-Person / Treasurer Slip) */}
+              <div 
+                onClick={() => {
+                  if (allowCashPayment && !allowOnlinePG) {
+                    alert('A tlem berin payment option pakhat tal active a ngai e.');
+                    return;
+                  }
+                  setAllowCashPayment(!allowCashPayment);
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                  allowCashPayment 
+                    ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/30' 
+                    : 'bg-white border-slate-200 opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    allowCashPayment ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Banknote className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-slate-900 leading-tight">Cash Payment (In-Person)</p>
+                    <p className="text-[9px] text-slate-500 truncate">Treasurer Slip • Approval</p>
+                  </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                  allowCashPayment ? 'bg-amber-600 justify-end' : 'bg-slate-300 justify-start'
+                }`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                </div>
+              </div>
             </div>
           </div>
 

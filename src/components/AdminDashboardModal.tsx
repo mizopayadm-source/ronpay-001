@@ -77,7 +77,9 @@ import {
   AlignCenter,
   AlignRight,
   SlidersHorizontal,
-  Activity
+  Activity,
+  Banknote,
+  Wallet
 } from 'lucide-react';
 import { AdminSyncDiagnosticView } from './AdminSyncDiagnosticView';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
@@ -121,6 +123,7 @@ import {
   clearAdminAuthState,
   getStoredCreatorProfile,
   saveCampaign,
+  saveTransaction,
   getStoredSectionPresets,
   saveStoredSectionPresets,
   DEFAULT_SECTION_PRESETS
@@ -218,7 +221,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Creators sub-filter
@@ -1069,6 +1072,58 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const totalVolume = confirmedTransactions.reduce((acc, t) => acc + t.amount, 0);
   const totalPlatformFees = confirmedTransactions.reduce((acc, t) => acc + (t.platformFee || Math.round(t.amount * 0.01)), 0);
 
+  // Pending Cash Receipts for Treasurer / Admin Approval
+  const pendingCashTxs = transactions.filter(t => 
+    t.paymentMethod === 'cash' && 
+    (t.status === 'pending_approval' || t.status === 'pending_verification' || t.status === 'pending')
+  );
+  const pendingCashAmount = pendingCashTxs.reduce((sum, t) => sum + t.amount, 0);
+
+  const handleApproveCashReceipt = (tx: Transaction) => {
+    const approver = currentProfile?.name || 'Treasurer / Admin';
+    const approvedTx: Transaction = {
+      ...tx,
+      status: 'completed',
+      verifiedBy: approver,
+      verifiedAt: new Date().toISOString()
+    };
+    saveTransaction(approvedTx);
+    if (onUpdateTransaction) {
+      onUpdateTransaction(approvedTx);
+    }
+    recordAuditLog(
+      'Cash Receipt Approved',
+      `Approved cash slip #${tx.id} for ₹${tx.amount.toLocaleString('en-IN')} (Donor: ${tx.donorName || 'Anonymous'}, Bawm: ${tx.campaignTitle || tx.campaignId}) by ${approver}`,
+      'campaign',
+      tx.campaignId
+    );
+    setLogsList(getStoredAuditLogs());
+    alert(`✅ CASH RECEIPT APPROVED!\n\nReceipt #${tx.id} (₹${tx.amount.toLocaleString('en-IN')}) pawm fel a ni ta.\nOfficial Ledger leh Campaign Totals-ah a lut nghal e.`);
+  };
+
+  const handleRejectCashReceipt = (tx: Transaction) => {
+    const reason = window.prompt('Reject chhan (Optional remark):', 'Admin / Treasurer Rejected');
+    if (reason === null) return;
+    const rejectedTx: Transaction = {
+      ...tx,
+      status: 'rejected',
+      rejectedAt: new Date().toISOString(),
+      rejectionReason: reason || 'Admin or Treasurer Rejected'
+    };
+    saveTransaction(rejectedTx);
+    if (onUpdateTransaction) {
+      onUpdateTransaction(rejectedTx);
+    }
+    recordAuditLog(
+      'Cash Receipt Rejected',
+      `Rejected cash slip #${tx.id} for ₹${tx.amount.toLocaleString('en-IN')} (Donor: ${tx.donorName || 'Anonymous'})`,
+      'campaign',
+      tx.campaignId
+    );
+    setLogsList(getStoredAuditLogs());
+    alert(`❌ CASH RECEIPT REJECTED!\n\nReceipt #${tx.id} chu reject a ni.`);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -1369,6 +1424,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   icon: Layers,
                   badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
                   badgeColor: 'bg-amber-500 text-white',
+                  minRole: 'MODERATOR' as UserRole
+                },
+                { 
+                  id: 'cash_approvals' as const, 
+                  label: 'Cash Approvals', 
+                  icon: Banknote,
+                  badge: pendingCashTxs.length > 0 ? pendingCashTxs.length : undefined,
+                  badgeColor: 'bg-emerald-600 text-white animate-pulse',
                   minRole: 'MODERATOR' as UserRole
                 },
                 { 
@@ -1776,6 +1839,174 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ========================================================= */}
+              {/* TAB: PENDING CASH APPROVALS (Treasurer & Admin Approval)  */}
+              {/* ========================================================= */}
+              {activeTab === 'cash_approvals' && (
+                <div className="space-y-4">
+                  {/* Top Stats Banner */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center justify-between shadow-2xs">
+                      <div>
+                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Pending Cash Entries</p>
+                        <h4 className="text-xl font-black text-amber-950 mt-0.5">{pendingCashTxs.length} Receipts</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black">
+                        <Banknote className="w-5 h-5 text-slate-950" />
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between shadow-2xs">
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Pending Amount</p>
+                        <h4 className="text-xl font-black text-emerald-950 mt-0.5">₹{pendingCashAmount.toLocaleString('en-IN')}</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black">
+                        <Receipt className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl flex items-center justify-between shadow-2xs">
+                      <div>
+                        <p className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">Ledger Security</p>
+                        <h4 className="text-xs font-black text-indigo-950 mt-0.5">Approval Required</h4>
+                        <p className="text-[9.5px] text-indigo-700 font-medium">Excluded from Totals until approved</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search and Guidance */}
+                  <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                    <div className="space-y-0.5">
+                      <h4 className="font-black text-slate-900">Cash Payment Approval Queue</h4>
+                      <p className="text-[10.5px] text-slate-500 font-medium">
+                        Treasurer leh Admin ten Cash Slip an enfiah hnuah "Approve Cash Receipt" an hmet ang a, chumi hnuah chauh Official Ledger &amp; Campaign Totals ah a lut ang.
+                      </p>
+                    </div>
+                    <div className="relative min-w-[200px] w-full sm:w-auto">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search donor, slip ID, campaign..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cash Requests List */}
+                  {(() => {
+                    const filteredCash = pendingCashTxs.filter(tx => {
+                      if (!searchQuery.trim()) return true;
+                      const q = searchQuery.toLowerCase();
+                      return (
+                        (tx.donorName && tx.donorName.toLowerCase().includes(q)) ||
+                        (tx.id && tx.id.toLowerCase().includes(q)) ||
+                        (tx.campaignTitle && tx.campaignTitle.toLowerCase().includes(q)) ||
+                        (tx.campaignId && tx.campaignId.toLowerCase().includes(q)) ||
+                        (tx.collectorName && tx.collectorName.toLowerCase().includes(q))
+                      );
+                    });
+
+                    if (filteredCash.length === 0) {
+                      return (
+                        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 space-y-1">
+                          <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-400" />
+                          <p className="font-bold text-sm text-slate-700">Cash Approval Queue is Clear!</p>
+                          <p className="text-xs text-slate-500">Approvals nghak mek cash payment transaction a awm lo.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {filteredCash.map(tx => {
+                          const targetCamp = campaigns.find(c => c.id === tx.campaignId);
+                          return (
+                            <div
+                              key={tx.id}
+                              className="bg-white border-2 border-amber-200 rounded-2xl p-4 shadow-2xs space-y-3 hover:border-amber-300 transition"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                                <div className="space-y-1.5 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-base font-black text-slate-900">
+                                      ₹{tx.amount.toLocaleString('en-IN')}
+                                    </span>
+                                    <span className="text-[9.5px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
+                                      PENDING TREASURER APPROVAL
+                                    </span>
+                                    <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded">
+                                      Slip #{tx.id}
+                                    </span>
+                                  </div>
+
+                                  <div className="text-xs text-slate-700 space-y-0.5">
+                                    <p>
+                                      <strong>Donor:</strong> <span className="font-bold text-slate-900">{tx.donorName || 'Anonymous Payer'}</span>
+                                      {tx.donorPhone && <span className="text-slate-500"> ({tx.donorPhone})</span>}
+                                      {tx.section && <span className="text-indigo-600 font-bold"> • Section: {tx.section}</span>}
+                                    </p>
+                                    <p>
+                                      <strong>Bawm / Campaign:</strong> <span className="font-bold text-indigo-700">{targetCamp?.title || tx.campaignTitle || tx.campaignId}</span>
+                                      {targetCamp?.category && <span className="uppercase text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded ml-1 font-bold">{targetCamp.category}</span>}
+                                    </p>
+                                    {tx.collectorName && (
+                                      <p className="text-[11px] text-slate-600">
+                                        <strong>Collector / Handover Staff:</strong> {tx.collectorName} {tx.collectorPhone ? `(${tx.collectorPhone})` : ''}
+                                      </p>
+                                    )}
+                                    {tx.notes && (
+                                      <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                                        <strong>Remarks / Note:</strong> {tx.notes}
+                                      </p>
+                                    )}
+                                    <p className="text-[10.5px] text-slate-400">
+                                      Submitted: {formatDateDDMMYYYY(tx.createdAt)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
+                                  {onViewReceipt && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onViewReceipt(tx)}
+                                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-1 cursor-pointer"
+                                      title="View Cash Slip Details"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" /> View Slip
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectCashReceipt(tx)}
+                                    className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs border border-rose-200 transition cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveCashReceipt(tx)}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition shadow-md shadow-emerald-200 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  >
+                                    <Check className="w-4 h-4 text-white" /> Approve Cash Receipt
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -4868,6 +5099,98 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         </span>
                       </button>
                       <p className="text-[9px] text-slate-500 mt-0.5">He Bawm bik tan fee chawi tir loh (0%) a nih chuan ON rawh</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Modes / Options Control (Per-Campaign Payment Toggles) */}
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
+                        <Wallet className="w-3.5 h-3.5 text-indigo-600" /> Payment Modes / Options Control
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        He Bawm a petute'n an pek theih dan tur active/deactive thlang rawh
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                    {/* Online Payment Gateway (UPI / QR / PhonePe) */}
+                    <div 
+                      onClick={() => {
+                        const currentOnline = editingCampaign.allow_online_pg ?? true;
+                        const currentCash = editingCampaign.allow_cash_payment ?? true;
+                        if (currentOnline && !currentCash) {
+                          alert('A tlem berin payment option pakhat tal active a ngai e.');
+                          return;
+                        }
+                        setEditingCampaign({
+                          ...editingCampaign,
+                          allow_online_pg: !currentOnline
+                        });
+                      }}
+                      className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                        (editingCampaign.allow_online_pg ?? true)
+                          ? 'bg-purple-50/80 border-purple-300 ring-1 ring-purple-400/30' 
+                          : 'bg-white border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          (editingCampaign.allow_online_pg ?? true) ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          <Smartphone className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 leading-tight">Online Payment Gateway</p>
+                          <p className="text-[9.5px] text-slate-500 truncate">PhonePe PG • Instant UPI</p>
+                        </div>
+                      </div>
+                      <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                        (editingCampaign.allow_online_pg ?? true) ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                      }`}>
+                        <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                      </div>
+                    </div>
+
+                    {/* Cash Payment (In-Person / Treasurer Slip) */}
+                    <div 
+                      onClick={() => {
+                        const currentOnline = editingCampaign.allow_online_pg ?? true;
+                        const currentCash = editingCampaign.allow_cash_payment ?? true;
+                        if (currentCash && !currentOnline) {
+                          alert('A tlem berin payment option pakhat tal active a ngai e.');
+                          return;
+                        }
+                        setEditingCampaign({
+                          ...editingCampaign,
+                          allow_cash_payment: !currentCash
+                        });
+                      }}
+                      className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                        (editingCampaign.allow_cash_payment ?? true)
+                          ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/30' 
+                          : 'bg-white border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          (editingCampaign.allow_cash_payment ?? true) ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          <Banknote className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 leading-tight">Cash Payment (In-Person)</p>
+                          <p className="text-[9.5px] text-slate-500 truncate">Treasurer Slip • Approval</p>
+                        </div>
+                      </div>
+                      <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
+                        (editingCampaign.allow_cash_payment ?? true) ? 'bg-amber-600 justify-end' : 'bg-slate-300 justify-start'
+                      }`}>
+                        <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
+                      </div>
                     </div>
                   </div>
                 </div>

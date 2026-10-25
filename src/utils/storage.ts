@@ -879,6 +879,9 @@ export const deleteStoredCampaign = (
 export const isConfirmedTransaction = (tx?: Transaction | null): boolean => {
   if (!tx) return false;
   const status = (tx.status || '').toLowerCase().trim();
+  if (status.includes('pending') || status === 'failed' || status === 'rejected' || status === 'cancelled') {
+    return false;
+  }
   return status === 'completed' || 
          status === 'success' || 
          status === 'verified' || 

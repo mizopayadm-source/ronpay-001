@@ -1754,6 +1754,7 @@ export default function App() {
                 language={language}
                 onSelectCampaign={handleSelectCampaign}
                 onUpdateCreatorProfile={handleUpdateCreator}
+                onUpdateTransaction={handleUpdateTransaction}
               />
             )
           )}

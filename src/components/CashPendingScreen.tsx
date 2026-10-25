@@ -106,9 +106,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       </div>
 
       <div className="space-y-1">
-        <h2 className="text-lg font-black text-slate-900">Cash Entry Submitted!</h2>
+        <h2 className="text-lg font-black text-slate-900 leading-tight">
+          Cash Entry Submitted - Pending Treasurer/Accountant Approval
+        </h2>
         <p className="text-xs text-slate-500 px-4 font-medium leading-relaxed">
-          I cash pek luh hi Creator/Admin hian verification a la kalpui dawn a ni.
+          He Cash payment hi Treasurer / Accountant in a check a, a pawm (Approve) hunah chauh Official Ledger leh Campaign Totals-ah a lut ang.
         </p>
       </div>
 
@@ -116,7 +118,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         <div className="flex justify-between items-center border-b border-amber-200 pb-2">
           <span className="text-slate-500 font-medium">Status:</span>
           <span className="font-extrabold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded text-[10px] border border-amber-300 flex items-center gap-1">
-            <Clock className="w-3 h-3" /> PENDING VERIFICATION
+            <Clock className="w-3 h-3" /> PENDING TREASURER APPROVAL
           </span>
         </div>
 
@@ -162,6 +164,51 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           <span className="font-semibold text-slate-600">{receiptToken}</span>
         </div>
       </div>
+
+      {onApprove && effectiveTx && (
+        <div className="bg-emerald-50/90 border border-emerald-300 p-3.5 rounded-2xl mx-1 text-left space-y-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-700" />
+            <span className="text-xs font-black text-emerald-950">Treasurer / Admin Clearance</span>
+          </div>
+          <p className="text-[10.5px] text-emerald-800 leading-snug">
+            Treasurer / Accountant emaw Creator i nih chuan a hnuaiah hian he cash payment hi i pawm (Approve) nghal thei e.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                const approved = {
+                  ...effectiveTx,
+                  status: 'completed',
+                  verifiedBy: creatorProfile?.name || 'Treasurer / Admin',
+                  verifiedAt: new Date().toISOString()
+                };
+                onApprove(approved);
+              }}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 rounded-xl transition text-xs shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Check className="w-3.5 h-3.5" /> Approve Cash Receipt
+            </button>
+            {onReject && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rejected = {
+                    ...effectiveTx,
+                    status: 'rejected',
+                    rejectedAt: new Date().toISOString()
+                  };
+                  onReject(rejected);
+                }}
+                className="px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-2.5 rounded-xl border border-rose-200 transition text-xs cursor-pointer"
+              >
+                Reject
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="pt-2 px-1">
         <button
