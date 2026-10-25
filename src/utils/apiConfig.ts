@@ -53,15 +53,27 @@ export function resolveApiUrl(path: string): string {
 if (typeof window !== 'undefined') {
   try {
     const originalFetch = window.fetch;
-    window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    // Define a new fetch function that wraps the original
+    const ronPayFetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       let resolvedInput = input;
       if (typeof input === 'string') {
         if (input.startsWith('/api/') || input === '/ronpay_db.json' || input.startsWith('/ronpay_db.json')) {
           resolvedInput = resolveApiUrl(input);
         }
       }
-      return originalFetch.call(this, resolvedInput, init);
+      return originalFetch.call(window, resolvedInput, init);
     };
+    
+    // Attempt to overwrite, or fallback to defining on the prototype if necessary
+    try {
+      Object.defineProperty(window, 'fetch', {
+        value: ronPayFetch,
+        writable: true,
+        configurable: true
+      });
+    } catch {
+      window.fetch = ronPayFetch;
+    }
   } catch (err) {
     console.warn('[RonPay] Failed to install global fetch interceptor:', err);
   }
