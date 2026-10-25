@@ -4371,11 +4371,20 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Clean up purged test members
+  // Clean up purged test members and erroneous BCM- prefixed members
   const PURGED_MEMBERS = new Set(['bmpshl-9000', 'bmpshl-9001', 'bmpshl-1253']);
+  const PURGED_BCM_IDS = new Set<string>();
   if (Array.isArray(db.members)) {
     const beforeLen = db.members.length;
-    db.members = db.members.filter(m => !PURGED_MEMBERS.has(String(m.id || '').toLowerCase().trim()));
+    db.members = db.members.filter((m: any) => {
+      if (!m || !m.id) return false;
+      const cleanId = String(m.id || '').toLowerCase().trim();
+      if (cleanId.startsWith('bcm-') || (m.orgCode && m.orgCode.toUpperCase() === 'BCM')) {
+        PURGED_BCM_IDS.add(cleanId);
+        return false;
+      }
+      return !PURGED_MEMBERS.has(cleanId);
+    });
     if (db.members.length !== beforeLen) changed = true;
     db.members.forEach((m: any) => {
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
@@ -4387,7 +4396,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
   }
   if (!Array.isArray(db.deletedMemberIds)) db.deletedMemberIds = [];
-  for (const pid of PURGED_MEMBERS) {
+  for (const pid of [...PURGED_MEMBERS, ...PURGED_BCM_IDS]) {
     if (!db.deletedMemberIds.includes(pid)) {
       db.deletedMemberIds.push(pid);
       changed = true;

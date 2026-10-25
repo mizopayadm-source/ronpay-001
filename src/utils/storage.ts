@@ -2784,9 +2784,14 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
 
     const allMembers = Array.from(map.values()).filter(m => {
       if (!m || !m.id) return false;
+      const cleanId = String(m.id).toLowerCase().trim();
+      if (cleanId.startsWith('bcm-') || (m.orgCode && m.orgCode.toUpperCase() === 'BCM')) {
+        markMemberAsDeleted(m.id);
+        return false;
+      }
       const cleanName = String(m.name || (m as any).fullName || '').trim();
       if (cleanName.length <= 1) return false;
-      return !deletedMemIds.has(String(m.id).toLowerCase().trim());
+      return !deletedMemIds.has(cleanId);
     });
 
     // Enforce Shillong Unit for all BMP Shillong members
