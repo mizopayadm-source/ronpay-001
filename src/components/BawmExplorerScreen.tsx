@@ -35,7 +35,7 @@ import {
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName, getCampaignListTitle } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
 import { CampaignTransferModal } from './CampaignTransferModal';
 
@@ -678,7 +678,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
         ) : (
           filteredCampaigns.map((camp) => {
             const expired = isCampaignExpired(camp.validityDate, camp.status, camp.category, camp.createdAt);
-            const translatedTitle = translateCampaignTitle(camp, language) || translateDynamicText(camp.title, language, camp);
+            const translatedTitle = getCampaignListTitle(camp, language);
             const translatedCause = translateCampaignCause(camp, language) || translateDynamicText(camp.cause, language, camp);
             const campConfig = BAWM_CONFIG[camp.category] || BAWM_CONFIG.others;
             const isCampRalna = camp.category === 'ralna';

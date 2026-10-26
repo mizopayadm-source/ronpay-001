@@ -788,6 +788,74 @@ export function translateCampaignTitle(
 }
 
 /**
+ * Strip trailing "Ralna" or "Ralna Bawm" suffix to keep headings clean and avoid redundancy
+ * when the category badge already indicates it's a Ralna Bawm.
+ * e.g., "Lianpuii Ralna" -> "Lianpuii", "Pi Lalhmingliani Ralna" -> "Pi Lalhmingliani"
+ */
+export function stripRalnaSuffix(text?: string | null): string {
+  if (!text) return '';
+  return text.replace(/\s*(Ralna\s+Bawm|Ralna)$/i, '').trim();
+}
+
+/**
+ * Title helper for List / Card View (Home Screen & Bawm Explorer):
+ * Keeps the full category/suffix title intact (e.g., "Lianpuii Ralna" or "Pi Lalhmingliani Ralna")
+ * so users can easily identify the campaign type from the list.
+ */
+export function getCampaignListTitle(
+  campaign?: {
+    title?: string;
+    titleEn?: string;
+    titleMizo?: string;
+    mitthiHming?: string;
+    category?: string;
+    emergencyTitle?: string;
+    emergencyTitleEn?: string;
+    orgName?: string;
+  } | null,
+  lang?: string | Language
+): string {
+  if (!campaign) return '';
+  if (campaign.category === 'ralna') {
+    // Keep full category/suffix title intact (e.g., "Lianpuii Ralna" or "Pi Lalhmingliani Ralna")
+    const raw = (campaign.title || campaign.titleMizo || (campaign.mitthiHming ? `${campaign.mitthiHming} Ralna` : 'Ralna Bawm')).trim();
+    if (/\bRalna$/i.test(raw)) {
+      return raw;
+    }
+    return `${raw} Ralna`;
+  }
+  return translateCampaignTitle(campaign, lang) || translateDynamicText(campaign.title, lang, campaign);
+}
+
+/**
+ * Title helper for Campaign Detail View (Inside View / Checkout Screen):
+ * Once inside the specific campaign page, strips out the appended "Ralna" suffix
+ * from the main heading/title display (e.g., change "Lianpuii Ralna" to just "Lianpuii")
+ * to keep the UI clean and avoid redundancy, since the category badge already indicates it's a Ralna Bawm.
+ */
+export function getCampaignDetailTitle(
+  campaign?: {
+    title?: string;
+    titleEn?: string;
+    titleMizo?: string;
+    mitthiHming?: string;
+    category?: string;
+    emergencyTitle?: string;
+    emergencyTitleEn?: string;
+    orgName?: string;
+  } | null,
+  lang?: string | Language
+): string {
+  if (!campaign) return '';
+  if (campaign.category === 'ralna') {
+    const candidate = campaign.mitthiHming?.trim() || campaign.titleMizo?.trim() || campaign.title?.trim() || '';
+    const stripped = stripRalnaSuffix(candidate);
+    return stripped || candidate || 'Pi Lalhmingliani';
+  }
+  return translateCampaignTitle(campaign, lang) || translateDynamicText(campaign.title, lang, campaign);
+}
+
+/**
  * Resolves the primary cause / purpose of a campaign for donations, receipts, and history.
  * Strictly prioritizes the actual donation cause/title (e.g. "Lalrinpuii Ralna", "Kangmei Relief Support")
  * rather than creator organization names (e.g. "BCM Ebenezer").

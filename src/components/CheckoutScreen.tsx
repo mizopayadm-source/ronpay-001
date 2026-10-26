@@ -48,7 +48,7 @@ import {
 import { BawmCategory, Campaign, PaymentMethod, Transaction, SystemPricingConfig, MemberRecord, MemberDependent, FeeOptionMode, CampaignRenewalRequest, CreatorProfile } from '../types';
 import { BAWM_CONFIG, DEFAULT_PRICING_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, isCampaignExpired, isCampaignInactiveOrExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, useCampaignCauseTranslation, getCampaignCauseTitle, getCampaignDetailTitle, stripRalnaSuffix } from '../utils/translations';
 import { 
   getMembers, 
   addOrUpdateMember, 
@@ -2016,7 +2016,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               >
                 <img
                   src={campaign.imageUrl}
-                  alt={campaign.mitthiHming || campaign.title}
+                  alt={stripRalnaSuffix(campaign.mitthiHming || campaign.title) || 'Ralna'}
                   referrerPolicy="no-referrer"
                   className="w-16 h-16 rounded-2xl object-cover border-2 border-red-600 shadow-xs group-hover/img:scale-105 transition-transform"
                 />
@@ -2036,7 +2036,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </span>
               </div>
               <h3 className="font-extrabold text-slate-900 text-sm truncate mt-1">
-                {translateCampaignTitle(campaign, language) || campaign?.mitthiHming || campaign?.title || 'Pi Lalhmingliani'}
+                {getCampaignDetailTitle(campaign, language)}
               </h3>
               <p className="text-[10.5px] text-slate-600 font-semibold">
                 Kum: {campaign?.age || 74} • {campaign?.location || 'Bungkawn, Aizawl'}

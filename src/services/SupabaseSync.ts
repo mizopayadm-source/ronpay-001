@@ -1,6 +1,17 @@
 import { supabase } from '../lib/supabase';
-import { Transaction, Campaign, MemberRecord, KumtluangExpense, WalletTransaction } from '../types';
-import { getStoredExpenses, getStoredCampaigns, getStoredTransactions, DEFAULT_WALLET, getDeletedTransactionIds, PERMANENTLY_PURGED_TX_IDS } from '../utils/storage';
+import { Transaction, Campaign, MemberRecord, KumtluangExpense, WalletTransaction, CreatorProfile } from '../types';
+import { 
+  getStoredExpenses, 
+  getStoredCampaigns, 
+  getStoredTransactions, 
+  DEFAULT_WALLET, 
+  getDeletedTransactionIds, 
+  PERMANENTLY_PURGED_TX_IDS,
+  isSuperAdminOrAdminProfile,
+  isCampaignManagerOrOfficer,
+  getStoredCreatorProfile,
+  getStoredUserPaidTxIds
+} from '../utils/storage';
 
 // =========================================================================
 // Real-time Listener Integration
@@ -320,26 +331,117 @@ export const normalizeCampaign = (row: any): Campaign => {
 // =========================================================================
 // Authoritative Fetchers (Single Source of Truth)
 // =========================================================================
-export const fetchTableData = async <T>(table: string): Promise<T[]> => {
+export interface FetchDataFilterOptions {
+  userProfile?: CreatorProfile | null;
+  userPaidIds?: string[];
+  campaignId?: string;
+  forceAll?: boolean;
+}
+
+export const fetchTableData = async <T>(table: string, options?: FetchDataFilterOptions): Promise<T[]> => {
   try {
-    let query = supabase.from(table).select('*').range(0, 9999);
     if (table === 'transactions') {
-      query = query.neq('status', 'deleted');
+      const profile = options?.userProfile !== undefined ? options.userProfile : getStoredCreatorProfile();
+      const userPaid = options?.userPaidIds !== undefined ? options.userPaidIds : getStoredUserPaidTxIds();
+      const isAdmin = isSuperAdminOrAdminProfile(profile) || options?.forceAll;
+
+      // 1. Admin/Super Admin: Fetch all transactions
+      if (isAdmin) {
+        let query = supabase.from('transactions').select('*').neq('status', 'deleted').range(0, 9999);
+        if (options?.campaignId) {
+          query = query.eq('campaign_id', options.campaignId);
+        }
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          const valid = data.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+          return valid.map(normalizeTransaction) as unknown as T[];
+        }
+        return [] as unknown as T[];
+      }
+
+      // 2. Creator / Treasurer / Accountant / Moderator
+      const isStaffRole = profile && (
+        profile.role === 'CREATOR' ||
+        profile.role === 'TREASURER' ||
+        profile.role === 'ACCOUNTANT' ||
+        profile.role === 'MODERATOR'
+      );
+      const userPhone = (profile?.phone || '').replace(/\D/g, '').slice(-10);
+
+      const storedCamps = getStoredCampaigns() || [];
+      const managedCamps = storedCamps.filter(c => c && isCampaignManagerOrOfficer(c, profile));
+      const managedCampIds = managedCamps.map(c => c.id).filter(Boolean);
+
+      if ((isStaffRole || managedCampIds.length > 0) && userPhone.length >= 8) {
+        const rows: any[] = [];
+        const seenIds = new Set<string>();
+
+        // Query managed campaigns
+        if (options?.campaignId) {
+          if (managedCampIds.includes(options.campaignId) || profile?.role === 'TREASURER' || profile?.role === 'ACCOUNTANT') {
+            const { data } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('campaign_id', options.campaignId);
+            if (Array.isArray(data)) data.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
+          }
+        } else if (managedCampIds.length > 0) {
+          const { data } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('campaign_id', managedCampIds);
+          if (Array.isArray(data)) data.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
+        }
+
+        // Query personal donations made by this staff member as donor
+        if (userPhone.length >= 8) {
+          const { data: personalData } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('donor_phone', userPhone);
+          if (Array.isArray(personalData)) personalData.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
+        }
+
+        // Query device session payments
+        if (userPaid && userPaid.length > 0) {
+          const { data: sessionData } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('id', userPaid);
+          if (Array.isArray(sessionData)) sessionData.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
+        }
+
+        const valid = rows.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+        return valid.map(normalizeTransaction) as unknown as T[];
+      }
+
+      // 3. Guest / Regular User View:
+      // STRICT QUERY ENFORCEMENT: ONLY fetch personal transactions!
+      // Other donors' transactions are strictly never requested from Supabase.
+      const rows: any[] = [];
+      const seenIds = new Set<string>();
+
+      if (userPhone.length >= 8) {
+        const { data: phoneData } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('donor_phone', userPhone);
+        if (Array.isArray(phoneData)) {
+          phoneData.forEach(r => {
+            if (r?.id && !seenIds.has(r.id)) {
+              seenIds.add(r.id);
+              rows.push(r);
+            }
+          });
+        }
+      }
+
+      if (userPaid && userPaid.length > 0) {
+        const { data: sessionData } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('id', userPaid);
+        if (Array.isArray(sessionData)) {
+          sessionData.forEach(r => {
+            if (r?.id && !seenIds.has(r.id)) {
+              seenIds.add(r.id);
+              rows.push(r);
+            }
+          });
+        }
+      }
+
+      // If neither phone nor session IDs exist, return empty list immediately without querying
+      const valid = rows.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+      return valid.map(normalizeTransaction) as unknown as T[];
     }
+
+    // Default for campaigns, expenses, wallet_transactions
+    let query = supabase.from(table).select('*').range(0, 9999);
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
-      if (table === 'transactions') {
-        const validRows = data.filter((row: any) => {
-          if (!row || !row.id) return false;
-          const st = String(row.status || '').toLowerCase().trim();
-          if (st === 'deleted') {
-            return false;
-          }
-          return true;
-        });
-        const normalized = validRows.map(normalizeTransaction);
-        return normalized as unknown as T[];
-      }
       if (table === 'campaigns') {
         return data.map(normalizeCampaign) as unknown as T[];
       }
@@ -364,7 +466,7 @@ export const fetchTableData = async <T>(table: string): Promise<T[]> => {
     console.warn(`[SupabaseSync] Error fetching ${table}:`, err);
   }
 
-  // Graceful fallback to backend server state
+  // Graceful fallback to backend server state (which also enforces role-based filtering)
   try {
     const res = await fetch('/api/data/state');
     if (res.ok) {

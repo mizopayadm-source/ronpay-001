@@ -31,6 +31,7 @@ import { printHtmlSafely } from '../utils/export';
 import { 
   isCampaignCreator, 
   isActualCampaignOwner,
+  isCampaignManagerOrOfficer,
   isUserPaidTransaction,
   isUserOrCreatorTransaction,
   getStoredCampaigns, 
@@ -85,9 +86,27 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const cleanProfileName = (creatorProfile?.name || '').trim().toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
   const isSuperAdminUser = isSuperAdminOrAdminProfile(creatorProfile);
   const isModeratorUser = creatorProfile?.role === 'MODERATOR';
-  const isGuestUser = !isSuperAdminUser && !isModeratorUser && (!creatorProfile || creatorProfile?.role === 'GUEST' || !creatorProfile?.phone || creatorProfile?.phone === '9999999999' || cleanProfileName === 'khualmi' || cleanProfileName === 'khualmi (guest user)' || cleanProfileName === 'guest user');
+  const roleLower = String(creatorProfile?.role || '').toLowerCase();
+  const desigLower = String(creatorProfile?.designation || '').toLowerCase();
+  const isTreasurerRole = roleLower === 'treasurer' || desigLower.includes('treasurer');
+  const isAccountantRole = roleLower === 'accountant' || desigLower.includes('accountant');
+  const isCreatorRole = roleLower === 'creator';
+
+  // Memoized dependencies
+  const safeUserPaidIds = useMemo(() => {
+    return Array.isArray(userPaidIds) ? userPaidIds : [];
+  }, [userPaidIds]);
+
+  const safeCampaigns = useMemo(() => {
+    return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
+  }, [campaigns]);
+
+  // Check if profile manages any campaign as Creator, Treasurer, or Accountant
+  const managesAnyCampaign = safeCampaigns.some(c => c && isCampaignManagerOrOfficer(c, creatorProfile));
+  const isAuthorizedStaffOrManager = isSuperAdminUser || isModeratorUser || isTreasurerRole || isAccountantRole || isCreatorRole || managesAnyCampaign;
+  const isGuestUser = !isAuthorizedStaffOrManager;
   
-  // Super Admin / Admin / Moderator & Creators see 'all' by default, pure Guests see their own 'sent'
+  // Authorized Roles see 'all' by default, pure regular users/guests see their own 'sent'
   const [directionFilter, setDirectionFilter] = useState<'all' | 'received' | 'sent'>(() => {
     return isGuestUser ? 'sent' : 'all';
   });
@@ -105,33 +124,39 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   // Automatically refresh local data and set appropriate direction filter when opened
   useEffect(() => {
     if (isOpen) {
-      if (isSuperAdminUser || isModeratorUser || !isGuestUser) {
+      if (!isGuestUser) {
         setDirectionFilter('all');
       } else {
         setDirectionFilter('sent');
       }
     }
-  }, [isOpen, isSuperAdminUser, isModeratorUser, isGuestUser]);
+  }, [isOpen, isGuestUser]);
 
-  // Automatically refresh local data and pull latest cross-device sync whenever modal is opened
+  // Automatically refresh local data and pull latest cross-device sync with query-level role enforcement
   useEffect(() => {
     if (isOpen) {
       setDeletedTxIds(getDeletedTransactionIds());
       if (onRefreshData) {
         onRefreshData();
       }
-      fetchTableData('transactions').then((txs) => {
+      fetchTableData('transactions', {
+        userProfile: creatorProfile,
+        userPaidIds: safeUserPaidIds,
+      }).then((txs) => {
         if (Array.isArray(txs)) setSupabaseTxns(txs as Transaction[]);
         if (onRefreshData) onRefreshData();
       }).catch(() => {});
     }
-  }, [isOpen, onRefreshData]);
+  }, [isOpen, onRefreshData, creatorProfile, safeUserPaidIds]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     setDeletedTxIds(getDeletedTransactionIds());
     try {
-      const txs = await fetchTableData('transactions');
+      const txs = await fetchTableData('transactions', {
+        userProfile: creatorProfile,
+        userPaidIds: safeUserPaidIds,
+      });
       if (Array.isArray(txs)) setSupabaseTxns(txs as Transaction[]);
     } catch (e) {
       console.warn('PeknaSulhnu manual refresh error:', e);
@@ -152,7 +177,10 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     let isMounted = true;
     const load = async () => {
       try {
-        const data = await fetchTableData('transactions') as Transaction[];
+        const data = await fetchTableData('transactions', {
+          userProfile: creatorProfile,
+          userPaidIds: safeUserPaidIds,
+        }) as Transaction[];
         if (isMounted && Array.isArray(data)) setSupabaseTxns(data);
       } catch (e) {
         console.warn('PeknaSulhnuModal Supabase load error:', e);
@@ -161,16 +189,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     load();
     const unsub = subscribeToTable('transactions', load);
     return () => { isMounted = false; unsub.unsubscribe(); };
-  }, []);
-
-  // Memoized dependencies
-  const safeUserPaidIds = useMemo(() => {
-    return Array.isArray(userPaidIds) ? userPaidIds : [];
-  }, [userPaidIds]);
-
-  const safeCampaigns = useMemo(() => {
-    return Array.isArray(campaigns) ? campaigns.filter(Boolean) : [];
-  }, [campaigns]);
+  }, [creatorProfile, safeUserPaidIds]);
 
   // Defensive array checks - uses Supabase transactions exclusively when loaded, with local storage fallback
   const safeTransactions = useMemo(() => {
@@ -214,12 +233,13 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds, isSuperAdminUser, isModeratorUser, isGuestUser]);
 
   // Identify campaigns owned by active profile ("Ama Siam chauh" for creator, or all for Super Admin)
+  // Identify campaigns managed by active profile (Creator, Treasurer, Accountant, or Super Admin)
   const { ownedCampaignIds, ownedCampaignTitles } = useMemo(() => {
     const ids = new Set<string>();
     const titles = new Set<string>();
     if (creatorProfile && (creatorProfile.phone || creatorProfile.name)) {
       safeCampaigns.forEach(c => {
-        const owns = isSuperAdminUser ? true : isActualCampaignOwner(c, creatorProfile);
+        const owns = isSuperAdminUser ? true : isCampaignManagerOrOfficer(c, creatorProfile);
         if (c && owns) {
           if (c.id) ids.add(c.id);
           if (c.title) {
@@ -233,6 +253,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   const isCreatorAccount = Boolean(
     isSuperAdminUser || 
+    isTreasurerRole ||
+    isAccountantRole ||
     (creatorProfile?.isApproved && creatorProfile?.phone && ownedCampaignIds.size > 0) ||
     ownedCampaignIds.size > 0
   );
@@ -735,7 +757,15 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 truncate">Pekna Sulhnu</h3>
                 <span className="text-[9px] bg-indigo-100 text-indigo-800 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                  {isSuperAdminUser ? 'ADMIN CONSOLE' : isCreatorAccount ? 'CREATOR SULHNU' : 'KA SULHNU'}
+                  {isSuperAdminUser 
+                    ? 'ADMIN AUDIT CONSOLE' 
+                    : isTreasurerRole 
+                    ? 'TREASURER SULHNU' 
+                    : isAccountantRole 
+                    ? 'ACCOUNTANT SULHNU' 
+                    : isCreatorAccount 
+                    ? 'CREATOR SULHNU' 
+                    : 'MIMAL SULHNU (PERSONAL)'}
                 </span>
               </div>
               <p className="text-[10.5px] text-slate-500 font-medium truncate">
@@ -798,10 +828,20 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
               </button>
             )}
             <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 shrink-0">
-              {currentUserPhone ? 'SECURE & ISOLATED' : 'COMMUNITY LIVE FEED'}
+              {isGuestUser ? 'PERSONAL DONATIONS ONLY' : 'SECURE & ISOLATED'}
             </span>
           </div>
         </div>
+
+        {/* Guest / Regular User Confidentiality Notice */}
+        {isGuestUser && (
+          <div className="flex items-center gap-2 bg-emerald-50/90 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-xl mb-2 text-[10.5px] shrink-0">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="leading-tight">
+              <strong>Mimal Thawh Chauh:</strong> I donation leh thawh tawh sulhnute chauh hetah hian a lang. Mi dang thawhte chu privacy venhim nan hmuh theih a ni lo.
+            </span>
+          </div>
+        )}
 
         {/* Scope Switcher (A Vaiin / Ka Thawhte / Bawm Dawnte) */}
         {(receivedCount > 0 || isCreatorAccount) ? (

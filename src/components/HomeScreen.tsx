@@ -61,7 +61,7 @@ import { calculateHaversineKm, getCampaignCoordinates, formatDistance } from '..
 
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
-import { Language, TRANSLATIONS, translateDynamicText } from '../utils/translations';
+import { Language, TRANSLATIONS, translateDynamicText, getCampaignListTitle } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
 import { subscribeToTable, fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
@@ -1350,7 +1350,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     )}
                     <div className="min-w-0">
                       <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
-                        {translateDynamicText(camp.title, language)}
+                        {getCampaignListTitle(camp, language)}
                       </p>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                         <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">

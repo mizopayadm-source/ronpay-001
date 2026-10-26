@@ -4956,13 +4956,37 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
   return false;
 }
 
-// GET /api/data/state - Fetch current central database state
+// GET /api/data/state - Fetch current central database state with role-based query isolation
 app.get('/api/data/state', async (req: Request, res: Response) => {
   const db = getDatabase();
   await syncFromSupabase(db);
+  const caller = parseCallerInfo(req);
+
+  // Super Admin & Admin get complete state
+  if (caller.isAdmin) {
+    return res.json({
+      success: true,
+      data: db,
+      timestamp: db.lastUpdated
+    });
+  }
+
+  // Non-admin / Guest / Regular users: sanitize transactions and audit logs
+  const sanitizedTransactions = filterTransactionsByCaller(db.transactions || [], db.campaigns || [], caller);
+  const isStaff = ['CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR'].includes(caller.role);
+  const sanitizedAuditLogs = (isStaff && caller.phone)
+    ? (db.auditLogs || []).filter((log: any) => log.performedBy && log.performedBy.includes(caller.phone))
+    : [];
+
+  const sanitizedDb = {
+    ...db,
+    transactions: sanitizedTransactions,
+    auditLogs: sanitizedAuditLogs
+  };
+
   res.json({
     success: true,
-    data: db,
+    data: sanitizedDb,
     timestamp: db.lastUpdated
   });
 });
@@ -5308,21 +5332,169 @@ app.delete('/api/members/:id', (req: Request, res: Response) => {
   }
 });
 
-// Transactions API
+// Helper function to extract and sanitize caller identity and roles from request headers/query
+function parseCallerInfo(req: Request) {
+  const role = String(req.headers['x-user-role'] || req.query.role || '').toUpperCase().trim();
+  const phone = String(req.headers['x-user-phone'] || req.query.phone || '').replace(/\D/g, '').slice(-10);
+  const userId = String(req.headers['x-user-id'] || req.query.userId || '').trim();
+  const campaignId = String(req.headers['x-campaign-id'] || req.query.campaignId || '').trim();
+  const isAdmin = req.headers['x-is-admin'] === 'true' || req.query.isAdmin === 'true' || role === 'SUPER_ADMIN' || role === 'ADMIN';
+
+  let userPaidIds: string[] = [];
+  const rawPaid = String(req.headers['x-user-paid-ids'] || req.query.userPaidIds || '');
+  if (rawPaid) {
+    try {
+      const parsed = JSON.parse(rawPaid);
+      userPaidIds = Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+      userPaidIds = rawPaid.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  return { role, phone, userId, campaignId, isAdmin, userPaidIds };
+}
+
+// Server-level query filter to prevent unauthorized users from retrieving other donors' data
+function filterTransactionsByCaller(
+  allTransactions: any[],
+  allCampaigns: any[],
+  caller: ReturnType<typeof parseCallerInfo>
+): any[] {
+  const { role, phone, userId, campaignId, isAdmin, userPaidIds } = caller;
+
+  // 1. Super Admin & Admin: Platform-wide access
+  if (isAdmin) {
+    if (campaignId) {
+      return allTransactions.filter(t => t && t.campaignId === campaignId);
+    }
+    return allTransactions;
+  }
+
+  // 2. Authorized Roles ('CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR')
+  const isAuthorizedRole = ['CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR'].includes(role);
+  if (isAuthorizedRole && phone && phone.length >= 8) {
+    // Find all campaigns managed by this caller or where caller is an authorized officer
+    const managedCampaigns = (allCampaigns || []).filter(c => {
+      if (!c) return false;
+      const cCreatedBy = String(c.createdBy || '').replace(/\D/g, '').slice(-10);
+      const cCreatorPhone = String(c.creatorPhone || c.contactPhone || '').replace(/\D/g, '').slice(-10);
+      if (cCreatedBy && cCreatedBy === phone) return true;
+      if (cCreatorPhone && cCreatorPhone === phone) return true;
+      if (Array.isArray(c.authorizedOfficers)) {
+        return c.authorizedOfficers.some((o: any) => String(o?.phone || '').replace(/\D/g, '').slice(-10) === phone);
+      }
+      return false;
+    });
+
+    const managedCampIds = new Set(managedCampaigns.map(c => c.id).filter(Boolean));
+
+    return allTransactions.filter(tx => {
+      if (!tx) return false;
+
+      // Specific campaign requested
+      if (campaignId) {
+        if (tx.campaignId === campaignId) {
+          if (managedCampIds.has(tx.campaignId) || role === 'TREASURER' || role === 'ACCOUNTANT') {
+            return true;
+          }
+          const txPhone = String(tx.donorPhone || '').replace(/\D/g, '').slice(-10);
+          return (txPhone && txPhone === phone) || userPaidIds.includes(tx.id);
+        }
+        return false;
+      }
+
+      // If under a managed campaign
+      if (tx.campaignId && managedCampIds.has(tx.campaignId)) return true;
+
+      // Platform treasurer / accountant can see transactions of assigned or all active causes
+      if ((role === 'TREASURER' || role === 'ACCOUNTANT') && managedCampIds.size === 0) {
+        return true;
+      }
+
+      // Personal payment made by this caller
+      const txPhone = String(tx.donorPhone || '').replace(/\D/g, '').slice(-10);
+      if (txPhone && txPhone.length >= 8 && txPhone === phone) return true;
+
+      // User ID or Member ID match
+      if (userId && (tx.memberId === userId || tx.userId === userId || tx.subId === userId)) return true;
+
+      // Paid in active session
+      if (userPaidIds.includes(tx.id)) return true;
+
+      return false;
+    });
+  }
+
+  // 3. Guest / Regular User View:
+  // STRICT QUERY ENFORCEMENT: ONLY personal transactions (matched by phone, user ID, or session tokens)
+  // Hide all other donors' transaction records entirely from raw API responses!
+  return allTransactions.filter(tx => {
+    if (!tx) return false;
+    if (phone && phone.length >= 8 && tx.donorPhone) {
+      const txPhone = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
+      if (txPhone.length >= 8 && txPhone === phone) return true;
+    }
+    if (userId && (tx.memberId === userId || tx.userId === userId || tx.subId === userId)) return true;
+    if (userPaidIds.length > 0 && userPaidIds.includes(tx.id)) return true;
+    return false;
+  });
+}
+
+// Transactions API with Role-Based Query-Level Enforcement
 app.get('/api/transactions', (req: Request, res: Response) => {
   const db = getDatabase();
-  res.json({ success: true, transactions: db.transactions });
+  const caller = parseCallerInfo(req);
+  const filtered = filterTransactionsByCaller(db.transactions || [], db.campaigns || [], caller);
+  res.json({ success: true, count: filtered.length, transactions: filtered });
 });
 
-// Audit Logs API for reliable Super Admin Sulhnu synchronization
+// Audit Logs API with Role-Based Filtering
 app.get('/api/audit-logs', (req: Request, res: Response) => {
   const db = getDatabase();
-  const sorted = [...(db.auditLogs || [])].sort((a: any, b: any) => {
-    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    return timeB - timeA;
-  });
-  res.json({ success: true, count: sorted.length, data: sorted });
+  const caller = parseCallerInfo(req);
+  const allLogs = db.auditLogs || [];
+
+  // Super Admin & Admin: Platform-wide access
+  if (caller.isAdmin) {
+    const sorted = [...allLogs].sort((a: any, b: any) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+    return res.json({ success: true, count: sorted.length, data: sorted });
+  }
+
+  // Creator / Treasurer / Accountant: Access to logs for managed campaigns or actions performed by them
+  const isStaff = ['CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR'].includes(caller.role);
+  if (isStaff && caller.phone) {
+    const managedCampIds = new Set(
+      (db.campaigns || []).filter(c => {
+        if (!c) return false;
+        const cPhone = String(c.createdBy || c.creatorPhone || c.contactPhone || '').replace(/\D/g, '').slice(-10);
+        if (cPhone === caller.phone) return true;
+        if (Array.isArray(c.authorizedOfficers)) {
+          return c.authorizedOfficers.some((o: any) => String(o?.phone || '').replace(/\D/g, '').slice(-10) === caller.phone);
+        }
+        return false;
+      }).map(c => c.id)
+    );
+
+    const filtered = allLogs.filter((log: any) => {
+      if (log.targetType === 'campaign' && log.targetId && managedCampIds.has(log.targetId)) return true;
+      if (log.performedBy && log.performedBy.includes(caller.phone)) return true;
+      return false;
+    });
+
+    const sorted = filtered.sort((a: any, b: any) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+    return res.json({ success: true, count: sorted.length, data: sorted });
+  }
+
+  // Guests / Regular users: No access to sensitive audit logs
+  return res.json({ success: true, count: 0, data: [] });
 });
 
 app.post('/api/audit-logs', (req: Request, res: Response) => {
