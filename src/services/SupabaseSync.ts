@@ -53,6 +53,8 @@ export const mapTransactionToSupabase = (t: any) => {
   if (t.campaignNetReceived) metadata.campaignNetReceived = t.campaignNetReceived;
   if (t.verifiedAt) metadata.verifiedAt = t.verifiedAt;
   if (t.verifiedBy) metadata.verifiedBy = t.verifiedBy;
+  if (t.approved_by || t.approvedBy) metadata.approved_by = t.approved_by || t.approvedBy;
+  if (t.approvedAt) metadata.approvedAt = t.approvedAt;
   if (t.payerUPI) metadata.payerUPI = t.payerUPI;
   if (t.utrRef) metadata.utrRef = t.utrRef;
   if (t.subCategory) metadata.subCategory = t.subCategory;

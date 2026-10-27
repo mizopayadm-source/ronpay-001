@@ -223,6 +223,9 @@ export interface Transaction {
   billOperator?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  approved_by?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 export interface KumtluangExpense {

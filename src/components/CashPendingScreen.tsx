@@ -4,17 +4,17 @@ import {
   Check, 
   X, 
   ShieldCheck, 
-  Receipt, 
   ArrowLeft, 
   AlertCircle, 
   Building2, 
   User, 
   Calendar, 
-  FileText,
-  Lock,
-  Loader2,
-  CheckCircle2,
-  Edit3
+  Loader2, 
+  CheckCircle2, 
+  Edit3,
+  Receipt,
+  Share2,
+  Printer
 } from 'lucide-react';
 import { Transaction, CreatorProfile, Campaign } from '../types';
 import { 
@@ -28,6 +28,7 @@ import {
   isSuperAdminOrAdminProfile,
   safeApiFetch
 } from '../utils/storage';
+import { upsertTransaction } from '../services/SupabaseSync';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
 
 export type ClearanceRole = 'creator' | 'treasurer' | 'accountant' | 'admin' | 'donor';
@@ -50,9 +51,11 @@ interface CashPendingScreenProps {
 }
 
 /**
- * Evaluates whether the currently authenticated user has clearance rights
- * to approve/reject cash entries for the target campaign.
- * Allowed roles: 'admin', 'treasurer', 'accountant', 'creator'.
+ * Clean Role-Based Evaluation:
+ * Checks the logged-in user's role against the target campaign.
+ * ONLY grants clearance permissions (canClear: true) if the user role is
+ * 'creator', 'treasurer', 'accountant', or 'admin'.
+ * All other profiles (donors, guests, public users) receive canClear: false.
  */
 export function evaluateClearanceRole(
   profile?: CreatorProfile | null,
@@ -62,8 +65,13 @@ export function evaluateClearanceRole(
     return { role: 'donor', canClear: false, roleLabel: 'Donor / Public' };
   }
 
-  // 1. Platform Admin / Super Admin
-  if (profile.isAdmin || profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN' || isSuperAdminOrAdminProfile(profile)) {
+  // 1. Platform Super Admin or Administrator
+  if (
+    profile.isAdmin || 
+    profile.role === 'SUPER_ADMIN' || 
+    profile.role === 'ADMIN' || 
+    isSuperAdminOrAdminProfile(profile)
+  ) {
     return { role: 'admin', canClear: true, roleLabel: 'Platform Administrator' };
   }
 
@@ -85,7 +93,7 @@ export function evaluateClearanceRole(
     const userPhoneDigits = profile.phone.replace(/\D/g, '').slice(-10);
     const matchedOfficer = campaign.authorizedOfficers.find(o => {
       const oPhoneDigits = (o.phone || '').replace(/\D/g, '').slice(-10);
-      return oPhoneDigits && userPhoneDigits && oPhoneDigits === userPhoneDigits;
+      return Boolean(oPhoneDigits && userPhoneDigits && oPhoneDigits === userPhoneDigits);
     });
 
     if (matchedOfficer) {
@@ -110,6 +118,7 @@ export function evaluateClearanceRole(
     return { role: 'creator', canClear: true, roleLabel: 'Bawm Creator' };
   }
 
+  // All other users/donors: read-only
   return { role: 'donor', canClear: false, roleLabel: 'Donor' };
 }
 
@@ -223,6 +232,9 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       const approvedTransaction: Transaction = {
         ...effectiveTx,
         status: 'SUCCESS', // Explicit SUCCESS status
+        approved_by: approverName,
+        approvedBy: approverName,
+        approvedAt: nowIso,
         verifiedBy: approverName,
         verifiedAt: nowIso,
         collectorName: approverName,
@@ -235,7 +247,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       };
 
       // b) Commit approved transaction to Official Ledger & update Campaign Totals
-      // 1. Commit to persistent primary storage
+      // 1. Commit to persistent primary storage (ledger)
       saveTransaction(approvedTransaction);
 
       // 2. Track in user/creator Sulhnu history
@@ -269,14 +281,22 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         body: JSON.stringify(approvedTransaction)
       }).catch(() => {});
 
+      // 7. Supabase cloud sync
+      try {
+        upsertTransaction(approvedTransaction).catch(() => {});
+      } catch {}
+
       setActionFeedback({
         type: 'success',
         message: 'Cash payment approved successfully! Committed to Official Ledger.'
       });
 
-      // 7. Invoke parent approval callback to update view
+      // 8. Invoke parent approval callback to update view state
       if (onApprove) {
         onApprove(approvedTransaction);
+      }
+      if (onUpdateTransaction) {
+        onUpdateTransaction(approvedTransaction);
       }
     } catch (err: any) {
       console.error('[CashPendingScreen] Approval failed:', err);
@@ -286,7 +306,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       });
       setIsSubmitting(false);
     }
-  }, [effectiveTx, isSubmitting, clearance, creatorProfile, approvalNote, onApprove]);
+  }, [effectiveTx, isSubmitting, clearance, creatorProfile, approvalNote, onApprove, onUpdateTransaction]);
 
   /**
    * Fresh, explicit handler for 'Reject Cash Receipt':
@@ -331,10 +351,25 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: getStoredTransactions() }));
+        window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
       }
+
+      // Sync rejection to cloud
+      safeApiFetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rejectedTransaction)
+      }).catch(() => {});
+
+      try {
+        upsertTransaction(rejectedTransaction).catch(() => {});
+      } catch {}
 
       if (onReject) {
         onReject(rejectedTransaction);
+      }
+      if (onUpdateTransaction) {
+        onUpdateTransaction(rejectedTransaction);
       }
     } catch (err: any) {
       console.error('[CashPendingScreen] Rejection failed:', err);
@@ -344,7 +379,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       });
       setIsSubmitting(false);
     }
-  }, [effectiveTx, isSubmitting, clearance, creatorProfile, onReject]);
+  }, [effectiveTx, isSubmitting, clearance, creatorProfile, onReject, onUpdateTransaction]);
 
   const handleOpenEditModal = useCallback(() => {
     if (!effectiveTx) return;
@@ -403,6 +438,10 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       body: JSON.stringify(updated)
     }).catch(() => {});
 
+    try {
+      upsertTransaction(updated).catch(() => {});
+    } catch {}
+
     if (onUpdateTransaction) {
       onUpdateTransaction(updated);
     }
@@ -424,16 +463,16 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       {/* Screen Title & Subtitle */}
       <div className="space-y-1.5 px-2">
         <h2 className="text-lg font-black text-slate-900 leading-tight">
-          {clearance.canClear ? 'Cash Clearance Review' : 'Pawisa pek enfiah mek a ni'}
+          {clearance.canClear ? 'Treasurer / Admin Clearance Review' : 'PENDING TREASURER APPROVAL'}
         </h2>
-        <p className="text-xs text-slate-500 font-medium leading-relaxed">
+        <p className="text-xs text-slate-600 font-medium leading-relaxed">
           {clearance.canClear ? (
             <>
-              Cash record a in-submit fel e. Treasurer, Accountant emaw Creator i nihna angin a hnuaiah hian i verify in i pawm (Approve) thei e. Duh hunah edit theih a ni bawk.
+              Cash record thehluh a ni e. Treasurer, Accountant, Admin emaw Creator i nihna angin a hnuaiah hian i verify in i pawm (Approve) thei e.
             </>
           ) : (
             <>
-              Pawisa pek enfiah mek a ni. Creator / Treasurer / Admin ten an lo endik a, an pawm (approve) hunah chauh official ledger leh receipt-ah a tlang ang.
+              Pawisa pek hi enfiah mek a ni. Creator / Treasurer / Admin ten an lo endik a, an pawm (approve) hunah chauh official ledger leh report-ah a tlang ang.
             </>
           )}
         </p>
@@ -446,18 +485,22 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
             ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' 
             : 'bg-rose-50 text-rose-800 border border-rose-300'
         }`}>
-          {actionFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+          {actionFeedback.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
           <span>{actionFeedback.message}</span>
         </div>
       )}
 
       {/* Official Receipt Card */}
       <div className="bg-amber-50/90 border border-amber-200/90 p-4 rounded-2xl text-left space-y-3 text-xs shadow-xs">
-        {/* Status Row with prominent status badge */}
+        {/* Prominent Status Row */}
         <div className="flex justify-between items-center border-b border-amber-200 pb-2.5">
           <span className="text-slate-500 font-semibold text-[11px]">Status</span>
           <span className="font-extrabold text-amber-900 bg-amber-200/90 px-2.5 py-1 rounded-md text-[10px] tracking-wide border border-amber-300 flex items-center gap-1.5 shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-amber-800" /> {clearance.canClear ? 'PENDING TREASURER APPROVAL' : 'Pending'}
+            <Clock className="w-3.5 h-3.5 text-amber-800" /> PENDING TREASURER APPROVAL
           </span>
         </div>
 
@@ -535,9 +578,11 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
       </div>
 
       {/* 
-        ROLE-BASED CONDITIONAL RENDERING:
-        ONLY render clearance action buttons if role is 'creator', 'treasurer', 'accountant', or 'admin'.
-        For all other users / donors, render the clean read-only view above without any clearance buttons.
+        1. CLEAN ROLE-BASED CONDITIONAL RENDERING:
+        - ONLY show the 'Treasurer / Admin Clearance' card (with 'Approve Cash Receipt' and 'Reject' buttons)
+          if user role is 'creator', 'treasurer', 'accountant', or 'admin'.
+        - For all other users/donors, render a clean read-only view showing "PENDING TREASURER APPROVAL" status
+          without any clearance buttons.
       */}
       {clearance.canClear ? (
         <div className="bg-emerald-50/90 border border-emerald-300 p-4 rounded-2xl text-left space-y-3 shadow-xs animate-fadeIn">
@@ -555,9 +600,9 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
 
           <p className="text-[11px] text-emerald-900 leading-snug">
             {creatorProfile?.name ? (
-              <>Cleared by: <strong className="font-bold text-emerald-950">{creatorProfile.name}</strong> ({clearance.roleLabel})</>
+              <>Approver: <strong className="font-bold text-emerald-950">{creatorProfile.name}</strong> ({clearance.roleLabel})</>
             ) : (
-              <>Treasurer / Accountant emaw Creator i nihna angin a hnuaiah hian he cash receipt hi i pawm (Approve) thei e.</>
+              <>Treasurer, Accountant, Admin emaw Creator i nihna angin he cash receipt hi i pawm (Approve) thei e.</>
             )}
           </p>
 
@@ -570,13 +615,13 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
               type="text"
               value={approvalNote}
               onChange={(e) => setApprovalNote(e.target.value)}
-              placeholder="e.g. Cash received at office / Voucher #12"
+              placeholder="e.g. Cash received at counter / Voucher #104"
               className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               disabled={isSubmitting}
             />
           </div>
 
-          {/* Approval, Rejection & Edit Buttons */}
+          {/* Approval, Rejection & Edit Action Buttons */}
           <div className="flex flex-col gap-2 pt-1">
             <div className="flex gap-2">
               <button
@@ -606,7 +651,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
               </button>
             </div>
 
-            {/* Creator / Treasurer Edit Button: "An duh hun ah an edit thei bawk ang" */}
+            {/* Edit details if misentered before approving */}
             <button
               type="button"
               onClick={handleOpenEditModal}
@@ -618,14 +663,16 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
           </div>
         </div>
       ) : (
-        /* Read-only advisory card for donors & public users */
-        <div className="bg-amber-50/70 border border-amber-200 p-3.5 rounded-2xl text-left space-y-1.5 shadow-2xs">
-          <div className="flex items-center gap-2 text-amber-800">
-            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-[12px] font-bold text-amber-950">Pawisa pek enfiah mek a ni</span>
+        /* Read-only view for general users / donors: ZERO clearance buttons */
+        <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl text-left space-y-2 shadow-2xs animate-fadeIn">
+          <div className="flex items-center gap-2 text-amber-900">
+            <Clock className="w-4 h-4 text-amber-700 shrink-0" />
+            <span className="text-xs font-black tracking-wide">
+              PENDING TREASURER APPROVAL
+            </span>
           </div>
-          <p className="text-[11px] text-amber-800/90 leading-relaxed font-medium">
-            I cash thehluh hi pawm (approve) a nih hma chuan enfiah mek (Pending) a ni a. Treasurer / Creator in an pawm veleh a tlang nghal ang.
+          <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+            Cash hmanga i thawh/pekna hi lakluh fel a ni a, Treasurer emaw Campaign Admin ten an endik hma chuan <strong className="font-bold">PENDING TREASURER APPROVAL</strong> status-ah a awm rih e. An pawm (approve) veleh official ledger leh receipt report-ah a tlang nghal ang.
           </p>
         </div>
       )}
@@ -641,7 +688,7 @@ export const CashPendingScreen: React.FC<CashPendingScreenProps> = ({
         </button>
       </div>
 
-      {/* Creator / Treasurer Edit Modal */}
+      {/* Authorized Editor Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/70 backdrop-blur-xs animate-fadeIn text-left">
           <div className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-3.5 shadow-2xl border border-slate-200">
