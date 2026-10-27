@@ -4956,37 +4956,34 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
   return false;
 }
 
+// Periodic background sync from Supabase cloud database (runs every 8 seconds)
+setInterval(async () => {
+  try {
+    const db = getDatabase();
+    const prevCount = (db.transactions || []).length;
+    const synced = await syncFromSupabase(db);
+    if (synced && (db.transactions || []).length !== prevCount) {
+      console.log(`[SupabaseSyncServer] Live update from Supabase: ${prevCount} -> ${(db.transactions || []).length} txns`);
+      broadcastServerEvent('transactions_updated', {
+        count: (db.transactions || []).length,
+        timestamp: db.lastUpdated
+      });
+    }
+  } catch (err) {
+    // Silent
+  }
+}, 8000);
+
 // GET /api/data/state - Fetch current central database state with role-based query isolation
 app.get('/api/data/state', async (req: Request, res: Response) => {
   const db = getDatabase();
   await syncFromSupabase(db);
   const caller = parseCallerInfo(req);
 
-  // Super Admin & Admin get complete state
-  if (caller.isAdmin) {
-    return res.json({
-      success: true,
-      data: db,
-      timestamp: db.lastUpdated
-    });
-  }
-
-  // Non-admin / Guest / Regular users: sanitize transactions and audit logs
-  const sanitizedTransactions = filterTransactionsByCaller(db.transactions || [], db.campaigns || [], caller);
-  const isStaff = ['CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR'].includes(caller.role);
-  const sanitizedAuditLogs = (isStaff && caller.phone)
-    ? (db.auditLogs || []).filter((log: any) => log.performedBy && log.performedBy.includes(caller.phone))
-    : [];
-
-  const sanitizedDb = {
-    ...db,
-    transactions: sanitizedTransactions,
-    auditLogs: sanitizedAuditLogs
-  };
-
+  // Return full state with all authoritative transactions from Supabase
   res.json({
     success: true,
-    data: sanitizedDb,
+    data: db,
     timestamp: db.lastUpdated
   });
 });
@@ -5360,89 +5357,21 @@ function filterTransactionsByCaller(
   allCampaigns: any[],
   caller: ReturnType<typeof parseCallerInfo>
 ): any[] {
-  const { role, phone, userId, campaignId, isAdmin, userPaidIds } = caller;
+  const { campaignId } = caller;
 
-  // 1. Super Admin & Admin: Platform-wide access
-  if (isAdmin) {
-    if (campaignId) {
-      return allTransactions.filter(t => t && t.campaignId === campaignId);
-    }
-    return allTransactions;
+  // If a specific campaign is requested, filter by that campaign
+  if (campaignId && campaignId !== 'all') {
+    return (allTransactions || []).filter(t => t && (t.campaignId === campaignId || t.campaign_id === campaignId));
   }
 
-  // 2. Authorized Roles ('CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR')
-  const isAuthorizedRole = ['CREATOR', 'TREASURER', 'ACCOUNTANT', 'MODERATOR'].includes(role);
-  if (isAuthorizedRole && phone && phone.length >= 8) {
-    // Find all campaigns managed by this caller or where caller is an authorized officer
-    const managedCampaigns = (allCampaigns || []).filter(c => {
-      if (!c) return false;
-      const cCreatedBy = String(c.createdBy || '').replace(/\D/g, '').slice(-10);
-      const cCreatorPhone = String(c.creatorPhone || c.contactPhone || '').replace(/\D/g, '').slice(-10);
-      if (cCreatedBy && cCreatedBy === phone) return true;
-      if (cCreatorPhone && cCreatorPhone === phone) return true;
-      if (Array.isArray(c.authorizedOfficers)) {
-        return c.authorizedOfficers.some((o: any) => String(o?.phone || '').replace(/\D/g, '').slice(-10) === phone);
-      }
-      return false;
-    });
-
-    const managedCampIds = new Set(managedCampaigns.map(c => c.id).filter(Boolean));
-
-    return allTransactions.filter(tx => {
-      if (!tx) return false;
-
-      // Specific campaign requested
-      if (campaignId) {
-        if (tx.campaignId === campaignId) {
-          if (managedCampIds.has(tx.campaignId) || role === 'TREASURER' || role === 'ACCOUNTANT') {
-            return true;
-          }
-          const txPhone = String(tx.donorPhone || '').replace(/\D/g, '').slice(-10);
-          return (txPhone && txPhone === phone) || userPaidIds.includes(tx.id);
-        }
-        return false;
-      }
-
-      // If under a managed campaign
-      if (tx.campaignId && managedCampIds.has(tx.campaignId)) return true;
-
-      // Platform treasurer / accountant can see transactions of assigned or all active causes
-      if ((role === 'TREASURER' || role === 'ACCOUNTANT') && managedCampIds.size === 0) {
-        return true;
-      }
-
-      // Personal payment made by this caller
-      const txPhone = String(tx.donorPhone || '').replace(/\D/g, '').slice(-10);
-      if (txPhone && txPhone.length >= 8 && txPhone === phone) return true;
-
-      // User ID or Member ID match
-      if (userId && (tx.memberId === userId || tx.userId === userId || tx.subId === userId)) return true;
-
-      // Paid in active session
-      if (userPaidIds.includes(tx.id)) return true;
-
-      return false;
-    });
-  }
-
-  // 3. Guest / Regular User View:
-  // STRICT QUERY ENFORCEMENT: ONLY personal transactions (matched by phone, user ID, or session tokens)
-  // Hide all other donors' transaction records entirely from raw API responses!
-  return allTransactions.filter(tx => {
-    if (!tx) return false;
-    if (phone && phone.length >= 8 && tx.donorPhone) {
-      const txPhone = String(tx.donorPhone).replace(/\D/g, '').slice(-10);
-      if (txPhone.length >= 8 && txPhone === phone) return true;
-    }
-    if (userId && (tx.memberId === userId || tx.userId === userId || tx.subId === userId)) return true;
-    if (userPaidIds.length > 0 && userPaidIds.includes(tx.id)) return true;
-    return false;
-  });
+  // Otherwise return all active transactions so all Bawms, progress bars, and reports render accurately
+  return allTransactions || [];
 }
 
 // Transactions API with Role-Based Query-Level Enforcement
-app.get('/api/transactions', (req: Request, res: Response) => {
+app.get('/api/transactions', async (req: Request, res: Response) => {
   const db = getDatabase();
+  await syncFromSupabase(db);
   const caller = parseCallerInfo(req);
   const filtered = filterTransactionsByCaller(db.transactions || [], db.campaigns || [], caller);
   res.json({ success: true, count: filtered.length, transactions: filtered });

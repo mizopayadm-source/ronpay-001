@@ -1084,29 +1084,52 @@ export const getStoredTransactions = (): Transaction[] => {
     const raw = typeof localStorage !== 'undefined' 
       ? (localStorage.getItem(TRANSACTIONS_KEY) || localStorage.getItem('ronpay_transactions_v2') || localStorage.getItem('ronpay_transactions'))
       : null;
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const deletedIds = getDeletedTransactionIds();
-        const seen = new Set<string>();
-        const result: Transaction[] = [];
-        for (const t of parsed) {
-          if (!t || !t.id) continue;
-          const cleanId = String(t.id).toLowerCase().trim();
-          if (
-            deletedIds.has(cleanId) || 
-            PERMANENTLY_PURGED_TX_IDS.has(cleanId) || 
-            cleanId.includes('142611') || 
-            cleanId.includes('120863') ||
-            seen.has(cleanId)
-          ) continue;
-          seen.add(cleanId);
-          result.push(t);
-        }
-        return result;
+    let parsed: any[] = [];
+    if (raw) {
+      try {
+        const p = JSON.parse(raw);
+        if (Array.isArray(p) && p.length > 0) parsed = p;
+      } catch {}
+    }
+
+    // Merge cached transactions with INITIAL_TRANSACTIONS to guarantee full 103+ transactions are present
+    if (Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
+      const map = new Map<string, any>();
+      for (const t of INITIAL_TRANSACTIONS) {
+        if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
       }
-    } catch {}
+      for (const t of parsed) {
+        if (t && t.id) map.set(String(t.id).toLowerCase().trim(), t);
+      }
+      parsed = Array.from(map.values());
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(parsed));
+          localStorage.setItem('ronpay_transactions_v2', JSON.stringify(parsed));
+          localStorage.setItem('ronpay_transactions', JSON.stringify(parsed));
+        } catch {}
+      }
+    }
+
+    if (parsed.length > 0) {
+      const deletedIds = getDeletedTransactionIds();
+      const seen = new Set<string>();
+      const result: Transaction[] = [];
+      for (const t of parsed) {
+        if (!t || !t.id) continue;
+        const cleanId = String(t.id).toLowerCase().trim();
+        if (
+          deletedIds.has(cleanId) || 
+          PERMANENTLY_PURGED_TX_IDS.has(cleanId) || 
+          cleanId.includes('142611') || 
+          cleanId.includes('120863') ||
+          seen.has(cleanId)
+        ) continue;
+        seen.add(cleanId);
+        result.push(t);
+      }
+      return result;
+    }
     return [];
   } catch (e) {
     console.error('Failed to parse stored transactions', e);

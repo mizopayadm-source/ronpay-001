@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   X, 
   Bell, 
@@ -580,11 +580,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return allNotifications.filter(n => !n.read).length;
   }, [allNotifications]);
 
+  const onUnreadCountChangeRef = useRef(onUnreadCountChange);
   useEffect(() => {
-    if (onUnreadCountChange) {
-      onUnreadCountChange(unreadCount);
+    onUnreadCountChangeRef.current = onUnreadCountChange;
+  }, [onUnreadCountChange]);
+
+  useEffect(() => {
+    if (onUnreadCountChangeRef.current) {
+      onUnreadCountChangeRef.current(unreadCount);
     }
-  }, [unreadCount, onUnreadCountChange]);
+  }, [unreadCount]);
 
   if (!isOpen) return null;
 

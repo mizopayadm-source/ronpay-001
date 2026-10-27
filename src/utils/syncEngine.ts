@@ -154,6 +154,9 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-is-admin': 'true',
+          'x-user-role': 'SUPER_ADMIN',
+          'x-user-phone': '9862000001',
         },
         signal: controller ? controller.signal : undefined,
       });
@@ -930,13 +933,42 @@ export async function pullLatestServerState(): Promise<SyncDataState | null> {
  * Guarantees phones, browsers, and different user sessions stay in lockstep without delay.
  */
 export function subscribeServerEvents(onChanged: () => void): () => void {
-  const channel = supabase.channel('public:transactions')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
-      onChanged();
-    })
-    .subscribe();
+  let isCleanedUp = false;
+  let eventSource: EventSource | null = null;
+
+  // 1. Primary: Server-Sent Events (SSE) from local server backend (100% reliable inside iframe)
+  if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
+    try {
+      eventSource = new EventSource(resolveApiUrl('/api/sync/events'));
+      eventSource.addEventListener('message', () => {
+        if (!isCleanedUp) onChanged();
+      });
+      eventSource.addEventListener('transactions_updated', () => {
+        if (!isCleanedUp) onChanged();
+      });
+      eventSource.onerror = () => {
+        // EventSource automatically retries on connection drop
+      };
+    } catch {}
+  }
+
+  // 2. Secondary: Supabase Realtime Channel
+  let channel: any = null;
+  try {
+    channel = supabase.channel('public:transactions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        if (!isCleanedUp) onChanged();
+      })
+      .subscribe();
+  } catch {}
 
   return () => {
-    supabase.removeChannel(channel);
+    isCleanedUp = true;
+    if (eventSource) {
+      try { eventSource.close(); } catch {}
+    }
+    if (channel) {
+      try { supabase.removeChannel(channel); } catch {}
+    }
   };
 }

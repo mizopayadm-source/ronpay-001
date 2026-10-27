@@ -118,7 +118,11 @@ export const INITIAL_CAMPAIGNS: any[] = [
   }
 ];
 
-export const INITIAL_TRANSACTIONS: any[] = [];
+import ronpayDb from './ronpay_db.json';
+
+export const INITIAL_TRANSACTIONS: any[] = (ronpayDb && Array.isArray((ronpayDb as any).transactions))
+  ? (ronpayDb as any).transactions
+  : [];
 
 export const INITIAL_EXPENSES: any[] = [];
 

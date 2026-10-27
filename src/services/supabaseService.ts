@@ -170,42 +170,53 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
   }
 
   const { data, error } = await query;
-  if (error) {
-    console.warn('[Supabase] Failed to fetch transactions:', error.message);
-    return [];
+  if (!error && Array.isArray(data) && data.length > 0) {
+    return (data || [])
+      .filter((row: any) => row && row.id && row.status !== 'deleted')
+      .map((row: any) => ({
+        id: row.id,
+        campaignId: row.campaign_id,
+        campaignTitle: row.campaign_title,
+        category: row.category,
+        donorName: row.donor_name,
+        donorPhone: row.donor_phone,
+        donorVeng: row.donor_veng,
+        memberId: row.member_id,
+        subId: row.sub_id,
+        donorType: row.donor_type,
+        groupName: row.group_name,
+        isAnonymous: row.is_anonymous,
+        amount: Number(row.amount) || 0,
+        platformFee: Number(row.platform_fee) || 0,
+        totalAmount: Number(row.total_amount) || Number(row.amount) || 0,
+        paymentMethod: row.payment_method,
+        status: row.status,
+        remark: row.remark,
+        periodMonth: row.period_month,
+        periodYear: row.period_year,
+        periodLabel: row.period_label,
+        utr: row.utr,
+        referenceNo: row.reference_no,
+        timestamp: row.timestamp || row.created_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        ...(row.metadata || {})
+      }));
   }
 
-  return (data || [])
-    .filter((row: any) => row && row.id && row.status !== 'deleted')
-    .map((row: any) => ({
-      id: row.id,
-      campaignId: row.campaign_id,
-      campaignTitle: row.campaign_title,
-      category: row.category,
-      donorName: row.donor_name,
-      donorPhone: row.donor_phone,
-      donorVeng: row.donor_veng,
-      memberId: row.member_id,
-      subId: row.sub_id,
-      donorType: row.donor_type,
-      groupName: row.group_name,
-      isAnonymous: row.is_anonymous,
-      amount: Number(row.amount) || 0,
-      platformFee: Number(row.platform_fee) || 0,
-      totalAmount: Number(row.total_amount) || Number(row.amount) || 0,
-      paymentMethod: row.payment_method,
-      status: row.status,
-      remark: row.remark,
-      periodMonth: row.period_month,
-      periodYear: row.period_year,
-      periodLabel: row.period_label,
-      utr: row.utr,
-      referenceNo: row.reference_no,
-      timestamp: row.timestamp || row.created_at,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      ...(row.metadata || {})
-    }));
+  // Resilient fallback to backend server which has 100% reliable link to Supabase
+  try {
+    const res = await fetch('/api/data/state');
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+        return json.data.transactions;
+      }
+    }
+  } catch {}
+
+  const stored = getStoredTransactions();
+  return Array.isArray(stored) ? stored : [];
 }
 
 // Debounced pool recalibration to prevent main-thread freezing and API flooding
@@ -1262,8 +1273,24 @@ export async function loadSupabaseInitialState(): Promise<{
       fetchSupabaseFundPool(),
     ]);
 
+    let finalTxns = Array.isArray(txns) && txns.length > 0 ? txns : [];
+    if (finalTxns.length === 0) {
+      try {
+        const res = await fetch('/api/data/state');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+            finalTxns = json.data.transactions;
+          }
+        }
+      } catch {}
+    }
+    if (finalTxns.length === 0) {
+      finalTxns = getStoredTransactions();
+    }
+
     // Update secondary cache safely
-    if (Array.isArray(txns)) saveStoredTransactions(txns, true);
+    if (finalTxns.length > 0) saveStoredTransactions(finalTxns, true);
     if (camps && camps.length > 0) saveStoredCampaigns(camps, true);
     if (mems && mems.length > 0) saveMembers(mems, true);
     if (pool) {
@@ -1273,7 +1300,7 @@ export async function loadSupabaseInitialState(): Promise<{
     }
 
     return {
-      transactions: Array.isArray(txns) ? txns : getStoredTransactions(),
+      transactions: finalTxns,
       campaigns: camps && camps.length > 0 ? camps : getStoredCampaigns(),
       members: mems && mems.length > 0 ? mems : getMembers(),
       creators: users && users.length > 0 ? users : getStoredCreatorsList(),
@@ -1281,8 +1308,19 @@ export async function loadSupabaseInitialState(): Promise<{
     };
   } catch (err) {
     console.warn('[Supabase] Initial state load fallback note:', err);
+    let fallbackTxns = getStoredTransactions();
+    try {
+      const res = await fetch('/api/data/state');
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+          fallbackTxns = json.data.transactions;
+          saveStoredTransactions(fallbackTxns, true);
+        }
+      }
+    } catch {}
     return {
-      transactions: getStoredTransactions(),
+      transactions: fallbackTxns,
       campaigns: getStoredCampaigns(),
       members: getMembers(),
       creators: getStoredCreatorsList(),

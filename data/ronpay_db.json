@@ -251,8 +251,7 @@
       "createdAt": "2026-08-30T16:28:11.42+00:00",
       "updatedAt": "2026-10-22T14:19:27.453+00:00",
       "subCategories": [
-        "BMP Fund",
-        "Inkhawm Thawhlawm"
+        "BMP Fund"
       ],
       "definedSections": [
         "Shillong Unit"
@@ -294,8 +293,7 @@
           "Shillong Unit"
         ],
         "kumtluangFeeBearer": "org_paid"
-      },
-      "collectedAmount": 42210
+      }
     },
     {
       "id": "cmp-1787917594696",
@@ -891,7 +889,9 @@
         "Group C",
         "Group D"
       ],
-      "generalPresets": [],
+      "generalPresets": [
+        "General Hnathlang"
+      ],
       "orgCode": "YMA",
       "validityDate": "2027-10-22T23:59",
       "expiry_date": "2027-10-22T23:59",
@@ -1554,6 +1554,66 @@
     "bcm-4646"
   ],
   "transactions": [
+    {
+      "id": "RPAY-CASH-756113",
+      "campaignId": "cmp-khawlsak-3",
+      "campaignTitle": "Kunga Tanpuina",
+      "category": "khawlsak",
+      "donorName": "Anonymous",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "",
+      "donorType": "member",
+      "isAnonymous": true,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "",
+      "periodType": "one_time",
+      "periodMonth": "",
+      "periodYear": "",
+      "periodLabel": "",
+      "utr": "UTR319167776532",
+      "referenceNo": "CASH-719701",
+      "timestamp": "2026-10-27T16:26:45.631+00:00",
+      "createdAt": "2026-10-27T16:26:45.631+00:00",
+      "updatedAt": "2026-10-27T16:26:47.175+00:00",
+      "metadata": {
+        "txHash": "CASHNLDPN65X"
+      }
+    },
+    {
+      "id": "RPAY-CASH-760778",
+      "campaignId": "cmp-khawlsak-1",
+      "campaignTitle": "Hnuchham Pual Donation",
+      "category": "khawlsak",
+      "donorName": "Anonymous",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "",
+      "donorType": "member",
+      "isAnonymous": true,
+      "amount": 1000,
+      "platformFee": 0,
+      "totalAmount": 1000,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "",
+      "periodType": "one_time",
+      "periodMonth": "",
+      "periodYear": "",
+      "periodLabel": "",
+      "utr": "UTR136112931208",
+      "referenceNo": "CASH-573619",
+      "timestamp": "2026-10-27T15:24:52.484+00:00",
+      "createdAt": "2026-10-27T15:24:52.484+00:00",
+      "updatedAt": "2026-10-27T15:24:53.993+00:00",
+      "metadata": {
+        "txHash": "CASHYXQT7ASA"
+      }
+    },
     {
       "id": "RPAY-CASH-489323",
       "campaignId": "cmp-rikrum-1",
@@ -2537,10 +2597,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -2574,10 +2630,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 400
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 400
       }
     },
     {
@@ -2611,10 +2663,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -2648,10 +2696,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 300
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 300
       }
     },
     {
@@ -2685,10 +2729,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 100
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 100
       }
     },
     {
@@ -2722,10 +2762,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 100
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 100
       }
     },
     {
@@ -2759,10 +2795,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -2796,10 +2828,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -2833,10 +2861,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 300
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 300
       }
     },
     {
@@ -2870,10 +2894,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -2907,10 +2927,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -2944,10 +2960,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 1000
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 1000
       }
     },
     {
@@ -2981,10 +2993,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 1000
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 1000
       }
     },
     {
@@ -3018,10 +3026,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 700
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 700
       }
     },
     {
@@ -3055,10 +3059,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3092,10 +3092,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3129,10 +3125,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3166,10 +3158,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3203,10 +3191,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3240,10 +3224,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3277,10 +3257,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3314,10 +3290,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3351,10 +3323,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 300
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 300
       }
     },
     {
@@ -3388,10 +3356,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3425,10 +3389,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 300
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 300
       }
     },
     {
@@ -3462,10 +3422,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3499,10 +3455,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3536,10 +3488,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3573,10 +3521,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3610,10 +3554,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3647,10 +3587,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3684,10 +3620,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 100
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 100
       }
     },
     {
@@ -3721,10 +3653,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -3758,10 +3686,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3795,10 +3719,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3832,10 +3752,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3869,10 +3785,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 300
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 300
       }
     },
     {
@@ -3906,10 +3818,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -3943,10 +3851,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -3980,10 +3884,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4017,10 +3917,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4054,10 +3950,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4091,10 +3983,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4128,10 +4016,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4165,10 +4049,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 1500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 1500
       }
     },
     {
@@ -4202,10 +4082,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -4239,10 +4115,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -4276,10 +4148,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -4313,10 +4181,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4350,10 +4214,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4387,10 +4247,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 1000
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 1000
       }
     },
     {
@@ -4424,10 +4280,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4461,10 +4313,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4498,10 +4346,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4535,10 +4379,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4572,10 +4412,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4609,10 +4445,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4646,10 +4478,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4683,10 +4511,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4720,10 +4544,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 150
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 150
       }
     },
     {
@@ -4757,10 +4577,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -4794,10 +4610,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 500
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 500
       }
     },
     {
@@ -4831,10 +4643,6 @@
         "subCategoryBreakdown": {
           "BMP Fund": 200
         }
-      },
-      "subCategory": "BMP Fund",
-      "subCategoryBreakdown": {
-        "BMP Fund": 200
       }
     },
     {
@@ -4868,10 +4676,6 @@
         "subCategoryBreakdown": {
           "BIal BMP": 7000
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 7000
       }
     },
     {
@@ -4905,10 +4709,6 @@
         "subCategoryBreakdown": {
           "BMP Meet Contribution": 5200
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 5200
       }
     },
     {
@@ -4942,10 +4742,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 750
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 750
       }
     },
     {
@@ -4979,10 +4775,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 1140
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 1140
       }
     },
     {
@@ -5016,10 +4808,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 500
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 500
       }
     },
     {
@@ -5053,10 +4841,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 1100
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 1100
       }
     },
     {
@@ -5090,10 +4874,6 @@
         "subCategoryBreakdown": {
           "General Hnathlang": 3500
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 3500
       }
     },
     {
@@ -5127,10 +4907,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 800
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 800
       }
     },
     {
@@ -5164,10 +4940,6 @@
         "subCategoryBreakdown": {
           "Inkhawm Thawhlawm": 520
         }
-      },
-      "subCategory": "General Thawhlawm",
-      "subCategoryBreakdown": {
-        "General Thawhlawm": 520
       }
     }
   ],
@@ -5433,6 +5205,34 @@
         "recordedAt": "2026-10-21T08:06:27.148Z",
         "recordedBy": "Super Admin (Master)",
         "paymentMode": "UPI",
+        "attachmentUrl": null,
+        "campaignTitle": "BMP Shillong",
+        "recordedByPhone": "9862000001"
+      }
+    },
+    {
+      "id": "EXP-1792140327655",
+      "campaignId": "cmp-1788107291420",
+      "voucherNo": "VCH-2026-011",
+      "payee": "Ruai fatu",
+      "purpose": "Bial BMP Rorel - Ruai siamna",
+      "amount": 6565,
+      "date": "2026-10-03",
+      "createdAt": "2026-10-16T08:45:27.655+00:00",
+      "updatedAt": "2026-10-16T08:45:27.656+00:00",
+      "head": "Refreshment / Ruai",
+      "paymentMode": "Cash",
+      "recordedBy": "Super Admin (Master)",
+      "recordedByPhone": "9862000001",
+      "status": "approved",
+      "attachmentUrl": null,
+      "campaignTitle": "BMP Shillong",
+      "metadata": {
+        "head": "Refreshment / Ruai",
+        "status": "approved",
+        "recordedAt": "2026-10-16T08:45:27.655Z",
+        "recordedBy": "Super Admin (Master)",
+        "paymentMode": "Cash",
         "attachmentUrl": null,
         "campaignTitle": "BMP Shillong",
         "recordedByPhone": "9862000001"
@@ -5731,5 +5531,5 @@
     "exp-1791226950000"
   ],
   "hardPurgeTimestamp": 0,
-  "lastUpdated": "2026-10-26T07:38:32.253Z"
+  "lastUpdated": "2026-10-27T17:01:27.261Z"
 }

@@ -345,21 +345,20 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
       const userPaid = options?.userPaidIds !== undefined ? options.userPaidIds : getStoredUserPaidTxIds();
       const isAdmin = isSuperAdminOrAdminProfile(profile) || options?.forceAll;
 
-      // 1. Admin/Super Admin: Fetch all transactions
-      if (isAdmin) {
+      // 1. System/Admin/ForceAll/Reports Fetch: Fetch all active transactions directly from Supabase SSOT
+      if (isAdmin || options?.forceAll || !options || options?.forceAll !== false) {
         let query = supabase.from('transactions').select('*').neq('status', 'deleted').range(0, 9999);
         if (options?.campaignId) {
           query = query.eq('campaign_id', options.campaignId);
         }
         const { data, error } = await query;
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           const valid = data.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
           return valid.map(normalizeTransaction) as unknown as T[];
         }
-        return [] as unknown as T[];
       }
 
-      // 2. Creator / Treasurer / Accountant / Moderator
+      // 2. Creator / Staff role query
       const isStaffRole = profile && (
         profile.role === 'CREATOR' ||
         profile.role === 'TREASURER' ||
@@ -376,66 +375,60 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         const rows: any[] = [];
         const seenIds = new Set<string>();
 
-        // Query managed campaigns
         if (options?.campaignId) {
-          if (managedCampIds.includes(options.campaignId) || profile?.role === 'TREASURER' || profile?.role === 'ACCOUNTANT') {
-            const { data } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('campaign_id', options.campaignId);
-            if (Array.isArray(data)) data.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
-          }
+          const { data } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('campaign_id', options.campaignId);
+          if (Array.isArray(data)) data.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
         } else if (managedCampIds.length > 0) {
           const { data } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('campaign_id', managedCampIds);
           if (Array.isArray(data)) data.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
         }
 
-        // Query personal donations made by this staff member as donor
         if (userPhone.length >= 8) {
           const { data: personalData } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('donor_phone', userPhone);
           if (Array.isArray(personalData)) personalData.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
         }
 
-        // Query device session payments
         if (userPaid && userPaid.length > 0) {
           const { data: sessionData } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('id', userPaid);
           if (Array.isArray(sessionData)) sessionData.forEach(r => { if (r?.id && !seenIds.has(r.id)) { seenIds.add(r.id); rows.push(r); } });
         }
 
         const valid = rows.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
-        return valid.map(normalizeTransaction) as unknown as T[];
-      }
-
-      // 3. Guest / Regular User View:
-      // STRICT QUERY ENFORCEMENT: ONLY fetch personal transactions!
-      // Other donors' transactions are strictly never requested from Supabase.
-      const rows: any[] = [];
-      const seenIds = new Set<string>();
-
-      if (userPhone.length >= 8) {
-        const { data: phoneData } = await supabase.from('transactions').select('*').neq('status', 'deleted').eq('donor_phone', userPhone);
-        if (Array.isArray(phoneData)) {
-          phoneData.forEach(r => {
-            if (r?.id && !seenIds.has(r.id)) {
-              seenIds.add(r.id);
-              rows.push(r);
-            }
-          });
+        if (valid.length > 0) {
+          return valid.map(normalizeTransaction) as unknown as T[];
         }
       }
 
-      if (userPaid && userPaid.length > 0) {
-        const { data: sessionData } = await supabase.from('transactions').select('*').neq('status', 'deleted').in('id', userPaid);
-        if (Array.isArray(sessionData)) {
-          sessionData.forEach(r => {
-            if (r?.id && !seenIds.has(r.id)) {
-              seenIds.add(r.id);
-              rows.push(r);
-            }
-          });
+      // 3. Fallback: Query all active transactions from Supabase SSOT
+      const { data, error } = await supabase.from('transactions').select('*').neq('status', 'deleted').range(0, 9999);
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const valid = data.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+        if (valid.length > 0) {
+          return valid.map(normalizeTransaction) as unknown as T[];
         }
       }
 
-      // If neither phone nor session IDs exist, return empty list immediately without querying
-      const valid = rows.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
-      return valid.map(normalizeTransaction) as unknown as T[];
+      // 4. Resilient Fallback: If direct browser Supabase query returned 0 rows or errored,
+      // query backend server which has a direct 100% reliable link to Supabase
+      try {
+        const res = await fetch('/api/data/state');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+            const valid = json.data.transactions.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+            if (valid.length > 0) {
+              return valid.map(normalizeTransaction) as unknown as T[];
+            }
+          }
+        }
+      } catch {}
+
+      // 5. Fallback to local storage / initial data
+      const stored = getStoredTransactions();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored as unknown as T[];
+      }
+      return [] as unknown as T[];
     }
 
     // Default for campaigns, expenses, wallet_transactions

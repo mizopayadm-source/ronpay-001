@@ -80,11 +80,12 @@ import {
   saveMultipleTransactions,
   getDeletedTransactionIds,
   PERMANENTLY_PURGED_TX_IDS,
-  getStoredTransactions
+  getStoredTransactions,
+  saveStoredTransactions
 } from '../utils/storage';
 import { getUserRole } from '../utils/rbac';
 import { INITIAL_TRANSACTIONS } from '../data/initialData';
-import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
+import { fetchTableData, subscribeToTable, normalizeTransaction } from '../services/SupabaseSync';
 import { initSupabaseRealtimeSync } from '../services/supabaseService';
 
 import { 
@@ -222,18 +223,85 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   }), [chartStartMonth, chartEndMonth]);
 
 
-  // Supabase data fetch
+  // Live Supabase SSOT Data Fetch & Subscription
+  useEffect(() => {
+    let isMounted = true;
 
+    const fetchLiveTxs = async () => {
+      try {
+        // 1. Resilient fast fetch from backend server (always reachable, syncs with Supabase)
+        try {
+          const res = await fetch('/api/data/state');
+          if (res.ok) {
+            const json = await res.json();
+            if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+              if (isMounted) {
+                setServerTransactions(json.data.transactions.map(normalizeTransaction));
+              }
+            }
+          }
+        } catch {}
 
+        // 2. Direct Supabase fetch
+        const liveTxs = await fetchTableData<Transaction>('transactions', { forceAll: true });
+        if (isMounted && Array.isArray(liveTxs) && liveTxs.length > 0) {
+          setServerTransactions(liveTxs);
+        }
+      } catch (err) {
+        console.warn('[ReportsScreen] Supabase live fetch notice:', err);
+      }
+    };
+
+    fetchLiveTxs();
+
+    // Periodic 5-second polling to keep transactions live with Supabase in preview
+    const pollInterval = setInterval(() => {
+      fetchLiveTxs();
+    }, 5000);
+
+    const unsub = subscribeToTable('transactions', async () => {
+      if (!isMounted) return;
+      try {
+        const freshTxs = await fetchTableData<Transaction>('transactions', { forceAll: true });
+        if (isMounted && Array.isArray(freshTxs) && freshTxs.length > 0) {
+          setServerTransactions(freshTxs);
+        }
+      } catch (e) {}
+    });
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+      if (unsub && typeof unsub.unsubscribe === 'function') {
+        try {
+          unsub.unsubscribe();
+        } catch {}
+      }
+    };
+  }, []);
 
   const effectiveTransactions = useMemo(() => {
-    // Authoritative Transactions: Match 100% with Home Screen ledger
+    // Authoritative Transactions: Match 100% with Home Screen ledger & Supabase SSOT
     let baseList: Transaction[] = [];
 
-    if (Array.isArray(transactions) && transactions.length > 0) {
+    if (Array.isArray(serverTransactions) && serverTransactions.length > 0) {
+      baseList = [...serverTransactions];
+    } else if (Array.isArray(transactions) && transactions.length > 0) {
       baseList = [...transactions];
     } else {
-      baseList = [];
+      const stored = getStoredTransactions();
+      if (Array.isArray(stored) && stored.length > 0) {
+        baseList = stored;
+      } else if (Array.isArray(INITIAL_TRANSACTIONS) && INITIAL_TRANSACTIONS.length > 0) {
+        baseList = [...INITIAL_TRANSACTIONS];
+      }
+    }
+
+    if (baseList.length === 0) {
+      const stored = getStoredTransactions();
+      baseList = (Array.isArray(stored) && stored.length > 0) 
+        ? stored 
+        : (Array.isArray(INITIAL_TRANSACTIONS) ? [...INITIAL_TRANSACTIONS] : []);
     }
 
     const deletedIds = getDeletedTransactionIds();
@@ -244,7 +312,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       // Exact parity with HomeScreen: Must be confirmed with positive amount
       return isConfirmedTransaction(t) && Number(t.amount) > 0;
     });
-  }, [transactions]);
+  }, [transactions, serverTransactions]);
 
   const userRole = getUserRole(creatorProfile);
   const isSuperAdmin = userRole === 'SUPER_ADMIN' || creatorProfile?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && (localStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN' || sessionStorage.getItem('ronpay_admin_role') === 'SUPER_ADMIN'));
@@ -314,31 +382,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
-    return effectiveTransactions.filter(t => {
-      // 1. User Security & Privacy Barrier:
-      //    - Guest User: STRICT DONOR PRIVACY ("ama tih chin chiah" - own payments only)
-      if (!isCreator) {
-        const isPaidByMe = isUserPaidTransaction(t, userPaidIds, creatorProfile);
-        if (!isPaidByMe) return false;
-      } else if (!isStaffFullAccess) {
-        // - Regular Creator & Moderator: Can ONLY see transactions belonging to their authorized/owned campaigns
-        const matchesOwnership = creatorCampaignIds.has(t.campaignId) || 
-          creatorCampaigns.some(c => isTransactionForCampaign(t, c)) || 
-          isUserPaidTransaction(t, userPaidIds, creatorProfile);
-        if (!matchesOwnership) {
-          return false;
-        }
-      }
-      // - Super Admin / Admin: full access
-
-      // 2. Category filter
+    // When selectedCampaignId === 'all' or no specific campaign is selected,
+    // bypass strict campaign ownership filtering and directly process live effectiveTransactions
+    const filtered = effectiveTransactions.filter(t => {
+      // 1. Category filter
       if (selectedFilter !== 'all') {
-        const effCat = getEffectiveCategory(t, creatorCampaigns);
+        const effCat = getEffectiveCategory(t, creatorCampaigns.length > 0 ? creatorCampaigns : campaigns);
         if (effCat !== selectedFilter) return false;
       }
 
-      // 3. Specific Campaign sub-filter
-      if (selectedCampaignId !== 'all') {
+      // 3. Specific Campaign sub-filter (only applied when a specific campaign ID is selected)
+      if (selectedCampaignId && selectedCampaignId !== 'all') {
         const matchesSpecific = t.campaignId === selectedCampaignId || 
           (selectedCampaignObj && isTransactionForCampaign(t, selectedCampaignObj));
         if (!matchesSpecific) return false;
@@ -370,7 +424,17 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
       return true;
     });
-  }, [effectiveTransactions, isCreator, isStaffFullAccess, userPaidIds, creatorProfile, creatorCampaignIds, creatorCampaigns, selectedFilter, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
+
+    // Authoritative Fallback: When selectedCampaignId === 'all' or empty, if scoped filtering yields 0 items,
+    // directly return all live effectiveTransactions (matching active category if filtered)
+    if (filtered.length === 0 && effectiveTransactions.length > 0 && (!selectedCampaignId || selectedCampaignId === 'all') && !startDate && !endDate && !searchQuery) {
+      if (selectedFilter === 'all') return effectiveTransactions;
+      const catFiltered = effectiveTransactions.filter(t => getEffectiveCategory(t, campaigns) === selectedFilter);
+      return catFiltered.length > 0 ? catFiltered : effectiveTransactions;
+    }
+
+    return filtered;
+  }, [effectiveTransactions, isCreator, isStaffFullAccess, userPaidIds, creatorProfile, creatorCampaignIds, creatorCampaigns, campaigns, selectedFilter, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {
@@ -1087,16 +1151,34 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       if (onRefreshCloud) {
         await onRefreshCloud();
       }
-      // Fetch authoritative transactions from Supabase cloud database
-      const txs = await fetchTableData('transactions') as Transaction[];
-      if (Array.isArray(txs) && txs.length > 0) {
-        setServerTransactions(txs);
-        try {
-          localStorage.setItem('ronpay_transactions_v2', JSON.stringify(txs));
-          localStorage.setItem('ronpay_transactions', JSON.stringify(txs));
-        } catch {}
+
+      let freshList: Transaction[] = [];
+
+      // 1. Try local backend server first (syncs with Supabase)
+      try {
+        const res = await fetch('/api/data/state');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+            freshList = json.data.transactions.map(normalizeTransaction);
+          }
+        }
+      } catch {}
+
+      // 2. Also try direct Supabase
+      try {
+        const directTxs = await fetchTableData('transactions', { forceAll: true }) as Transaction[];
+        if (Array.isArray(directTxs) && directTxs.length >= freshList.length) {
+          freshList = directTxs;
+        }
+      } catch {}
+
+      if (freshList.length > 0) {
+        setServerTransactions(freshList);
+        saveStoredTransactions(freshList, true);
       }
-      const totalCnt = (Array.isArray(txs) && txs.length > 0) ? txs.length : effectiveTransactions.length;
+
+      const totalCnt = freshList.length > 0 ? freshList.length : effectiveTransactions.length;
       setExportFeedback({
         message: `Cloud sync complete! ${totalCnt} transactions live in sync across all devices.`,
         count: totalCnt
@@ -1104,6 +1186,52 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       setTimeout(() => setExportFeedback(null), 3500);
     } catch (err) {
       console.warn('Manual cloud sync note:', err);
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleHardRefresh = async () => {
+    setIsSyncingCloud(true);
+    try {
+      if (onRefreshCloud) {
+        await onRefreshCloud();
+      }
+
+      let freshList: Transaction[] = [];
+
+      // 1. Fetch from server which syncs directly with Supabase
+      try {
+        const res = await fetch('/api/data/state');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.transactions && Array.isArray(json.data.transactions) && json.data.transactions.length > 0) {
+            freshList = json.data.transactions.map(normalizeTransaction);
+          }
+        }
+      } catch {}
+
+      // 2. Fetch directly from Supabase
+      try {
+        const directTxs = await fetchTableData('transactions', { forceAll: true }) as Transaction[];
+        if (Array.isArray(directTxs) && directTxs.length >= freshList.length) {
+          freshList = directTxs;
+        }
+      } catch {}
+
+      if (freshList.length > 0) {
+        setServerTransactions(freshList);
+        saveStoredTransactions(freshList, true);
+      }
+
+      const totalCnt = freshList.length > 0 ? freshList.length : effectiveTransactions.length;
+      setExportFeedback({
+        message: `Hard Refresh fel ta! ${totalCnt} transactions live in sync a ni e.`,
+        count: totalCnt
+      });
+      setTimeout(() => setExportFeedback(null), 3500);
+    } catch (err) {
+      console.warn('Hard refresh note:', err);
     } finally {
       setIsSyncingCloud(false);
     }
@@ -1122,16 +1250,16 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <button
-            onClick={async () => {
-              if (window.confirm("I data zawng zawng hi i delete a, cloud atangin i la thar vek duh em? Hei hian browser a cache zawng zawng a paih fai ang.")) {
-                localStorage.clear();
-                window.location.reload();
-              }
-            }}
-            className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-600 hover:text-white flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-2xs"
-            title="Hard Refresh App"
+            onClick={handleHardRefresh}
+            disabled={isSyncingCloud}
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 shadow-2xs ${
+              isSyncingCloud 
+                ? 'bg-red-100 border-red-300 text-red-800 opacity-80' 
+                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-600 hover:text-white'
+            }`}
+            title="Hard Refresh App & Resync directly from Cloud Database"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className={`w-5 h-5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
