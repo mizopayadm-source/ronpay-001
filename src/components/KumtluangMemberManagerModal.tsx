@@ -178,13 +178,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       // Filter out duplicate mock YMA campaign if present
       if (c.id === 'cmp-kumtluang-ymavt' && campaigns.some(x => x.id === 'cmp-1787829303143')) return false;
       return true;
+    }).map(c => {
+      if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
+        return { ...c, orgCode: 'EBE' };
+      }
+      return c;
     });
 
     if (isPrivilegedUser) {
       // For Super Admin, Admin, and Moderator: show all valid Kumtluang campaigns.
-      // Filter out empty mock/phuahchawp Bawm with 0 members that have no transactions
+      // Always include canonical default campaigns
       return kumtluangCampaigns.filter(c => {
         if (!c.id || !c.title) return false;
+        if (['cmp-kumtluang-1', 'cmp-kumtluang-2', 'cmp-1788107291420', 'cmp-1787829303143', 'cmp-1787771373697'].includes(c.id)) {
+          return true;
+        }
         const count = countCampaignMembers(c.id, c.orgCode);
         if (count > 0) return true;
         const hasTx = transactions.some(t => t.campaignId === c.id);
@@ -201,7 +209,14 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   }, [campaigns, creatorProfile, isPrivilegedUser, transactions, countCampaignMembers]);
 
   const allowedCampaignIds = useMemo(() => new Set(allowedCampaigns.map(c => c.id)), [allowedCampaigns]);
-  const allowedOrgCodes = useMemo(() => new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean)), [allowedCampaigns]);
+  const allowedOrgCodes = useMemo(() => {
+    const codes = new Set(allowedCampaigns.map(c => (c.orgCode || '').toUpperCase()).filter(Boolean));
+    if (allowedCampaigns.some(c => c.id === 'cmp-kumtluang-1' || String(c.title).toLowerCase().includes('ebenezer'))) {
+      codes.add('EBE');
+      codes.add('BCM');
+    }
+    return codes;
+  }, [allowedCampaigns]);
 
   // Helper to filter any members array to only this creator's scope
   const filterMembersForScope = useCallback((list: MemberRecord[]) => {
@@ -213,6 +228,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       if (m.id) {
         const prefix = m.id.split('-')[0].toUpperCase();
         if (allowedOrgCodes.has(prefix)) return true;
+      }
+      if ((m.orgCode === 'EBE' || m.orgCode === 'BCM' || m.id?.startsWith('EBE-') || m.id?.startsWith('BCM-')) && allowedCampaignIds.has('cmp-kumtluang-1')) {
+        return true;
       }
       return false;
     });
@@ -621,12 +639,22 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Auto-search members by last 4 digits, name or ID
   const searchResults = quickPhone4.trim().length >= 2 
-    ? members.filter(m => 
-        m.phoneLast4.includes(quickPhone4.trim()) || 
-        m.name.toLowerCase().includes(quickPhone4.trim().toLowerCase()) || 
-        m.id.toLowerCase().includes(quickPhone4.trim().toLowerCase()) ||
-        (m.dependents && m.dependents.some(d => d.name.toLowerCase().includes(quickPhone4.trim().toLowerCase()) || d.subId.toLowerCase().includes(quickPhone4.trim().toLowerCase())))
-      )
+    ? members.filter(m => {
+        if (!m) return false;
+        const p4 = String(m.phoneLast4 || '');
+        const name = String(m.name || '').toLowerCase();
+        const id = String(m.id || '').toLowerCase();
+        const q = quickPhone4.trim().toLowerCase();
+        if (p4.includes(q) || name.includes(q) || id.includes(q)) return true;
+        if (Array.isArray(m.dependents)) {
+          return m.dependents.some(d => {
+            const dName = String(d?.name || '').toLowerCase();
+            const dSubId = String(d?.subId || '').toLowerCase();
+            return dName.includes(q) || dSubId.includes(q);
+          });
+        }
+        return false;
+      })
     : [];
 
   const handleSelectQuickMember = (m: MemberRecord) => {
@@ -920,7 +948,17 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
     setIsSavingEdit(true);
     try {
-      const org = editOrgCode.trim().toUpperCase() || editingMember.orgCode;
+      const isEbe = editingMember.campaignId === 'cmp-kumtluang-1' || 
+                    editingMember.orgCode === 'EBE' || 
+                    editingMember.orgCode === 'BCM' || 
+                    editingMember.id?.startsWith('EBE-') || 
+                    editingMember.id?.startsWith('BCM-');
+
+      const targetCampaignId = isEbe 
+        ? 'cmp-kumtluang-1' 
+        : (editCampaignId || editingMember.campaignId || activeScopedCampaign?.id || selectedCampaignId || 'cmp-kumtluang-1');
+
+      const org = isEbe ? 'EBE' : (editOrgCode.trim().toUpperCase() || editingMember.orgCode || 'EBE');
       const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
       const newId = `${org}-${p4}`;
       const oldId = editingMember.id;
@@ -950,15 +988,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         subId: `${newId}-${String(idx + 1).padStart(2, '0')}`
       }));
 
-      // If ID changed, delete old one from storage and Supabase
-      if (newId !== oldId) {
-        deleteMember(oldId, editingMember.campaignId || selectedCampaignId);
+      // Only delete oldId if ID actually changed AND clean targetId is different
+      if (newId.toLowerCase().trim() !== oldId.toLowerCase().trim()) {
+        deleteMember(oldId, targetCampaignId);
       }
 
       const updatedM: MemberRecord = {
         ...editingMember,
         id: newId,
-        campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
+        campaignId: targetCampaignId,
         name: editName.trim() || editingMember.name,
         fatherName: editFatherName.trim() || undefined,
         orgCode: org,
@@ -975,7 +1013,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         yearStatus: editingMember.yearStatus
       };
 
-      // Direct, permanent save to Supabase database & storage
+      // Direct, permanent save to Supabase database & local storage
       await addOrUpdateMember(updatedM, oldId);
 
       setMembersTick(t => t + 1);

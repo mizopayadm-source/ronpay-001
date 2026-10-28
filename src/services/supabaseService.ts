@@ -1310,9 +1310,9 @@ export async function loadSupabaseInitialState(): Promise<{
       finalTxns = getStoredTransactions();
     }
 
-    // Update secondary cache safely
-    if (finalTxns.length > 0) saveStoredTransactions(finalTxns, true);
-    if (camps && camps.length > 0) saveStoredCampaigns(camps, true);
+    // Update secondary cache and server SSOT
+    if (finalTxns.length > 0) saveStoredTransactions(finalTxns, false);
+    if (camps && camps.length > 0) saveStoredCampaigns(camps, false);
     let finalMembers = mems && mems.length > 0 ? mems : getMembers();
     if (mems && mems.length > 0) {
       // Smart merge: don't let stale remote overwrite newer local edits!
@@ -1336,7 +1336,7 @@ export async function loadSupabaseInitialState(): Promise<{
         }
       }
       finalMembers = mergedMems;
-      saveMembers(mergedMems, true);
+      saveMembers(mergedMems, false);
     }
     if (pool) {
       try {

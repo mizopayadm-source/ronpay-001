@@ -489,6 +489,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
               updated.category = 'kumtluang';
+              updated.orgCode = 'EBE';
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
@@ -512,6 +513,10 @@ export const getStoredCampaigns = (): Campaign[] => {
           if (initMatch) {
             let changed = false;
             const updated = { ...camp };
+            if (String(updated.id).toLowerCase().trim() === 'cmp-kumtluang-1' && updated.orgCode !== 'EBE') {
+              updated.orgCode = 'EBE';
+              changed = true;
+            }
             if (!updated.officerPasscode && initMatch.officerPasscode) {
               updated.officerPasscode = initMatch.officerPasscode;
               changed = true;
@@ -601,8 +606,14 @@ export const derivePrefixFromText = (text?: string): string => {
 export const isPrefixCodeTaken = (prefix: string, excludeCampaignId?: string): boolean => {
   const clean = prefix.trim().toUpperCase();
   if (!clean) return false;
+  // Canonical exception: cmp-kumtluang-1 is the official owner of prefix EBE
+  if (clean === 'EBE' && excludeCampaignId === 'cmp-kumtluang-1') return false;
   const campaigns = getStoredCampaigns();
-  return campaigns.some(c => c.id !== excludeCampaignId && (c.orgCode || '').trim().toUpperCase() === clean);
+  return campaigns.some(c => {
+    if (c.id === excludeCampaignId) return false;
+    if (c.category && c.category !== 'kumtluang') return false;
+    return (c.orgCode || '').trim().toUpperCase() === clean;
+  });
 };
 
 // Dynamic Alternative Prefix Generator with clean suggestions
@@ -2248,6 +2259,18 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-04T00:00:00.000Z'
   },
   {
+    id: 'EBE-4646',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Lalnunpuia',
+    orgCode: 'EBE',
+    phoneLast4: '4646',
+    fullPhone: '9862464646',
+    section: 'Bial 3 (Venglai)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-04.5T00:00:00.000Z'
+  },
+  {
     id: 'EBE-9912',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalbiakzuala & Chhungte',
@@ -2886,13 +2909,23 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
     }
 
-    const allMembers = Array.from(map.values()).filter(m => {
+    const allMembers = Array.from(map.values()).map(m => {
+      if (!m || !m.id) return m;
+      const rawId = String(m.id);
+      if (rawId.toUpperCase().startsWith('BCM-') || rawId.toUpperCase().startsWith('EBE-') || m.campaignId === 'cmp-kumtluang-1' || (m.orgCode && (m.orgCode.toUpperCase() === 'BCM' || m.orgCode.toUpperCase() === 'EBE'))) {
+        m.campaignId = 'cmp-kumtluang-1';
+        m.orgCode = 'EBE';
+        if (rawId.toUpperCase().startsWith('BCM-')) {
+          m.id = 'EBE-' + rawId.substring(4);
+        }
+        if (m.primaryId && String(m.primaryId).toUpperCase().startsWith('BCM-')) {
+          m.primaryId = 'EBE-' + String(m.primaryId).substring(4);
+        }
+      }
+      return m;
+    }).filter(m => {
       if (!m || !m.id) return false;
       const cleanId = String(m.id).toLowerCase().trim();
-      if (cleanId.startsWith('bcm-') || (m.orgCode && m.orgCode.toUpperCase() === 'BCM')) {
-        markMemberAsDeleted(m.id);
-        return false;
-      }
       const cleanName = String(m.name || (m as any).fullName || '').trim();
       if (cleanName.length <= 1) return false;
       return !deletedMemIds.has(cleanId);
@@ -3028,17 +3061,28 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
 };
 
 export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
+  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.id?.startsWith('EBE-') || member.id?.startsWith('BCM-'));
   const stamped: MemberRecord = {
     ...member,
+    campaignId: isEbe ? 'cmp-kumtluang-1' : (member.campaignId || 'cmp-kumtluang-1'),
+    orgCode: isEbe ? 'EBE' : (member.orgCode || 'EBE'),
     createdAt: member.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+
+  // Clear tombstone deletions for both oldId and new id to prevent deletion resurrection filters
+  if (oldId) clearDeletedMemberId(oldId);
+  if (stamped.id) clearDeletedMemberId(stamped.id);
+
   const allList = getMembers(); // Load all members across all Bawms
   const targetId = (oldId || stamped.id || '').trim().toLowerCase();
-  const idx = allList.findIndex(m => 
-    (m.id || '').trim().toLowerCase() === targetId && 
-    (!stamped.campaignId || !m.campaignId || m.campaignId === stamped.campaignId)
-  );
+  const cleanNewId = (stamped.id || '').trim().toLowerCase();
+
+  const idx = allList.findIndex(m => {
+    const mClean = (m.id || '').trim().toLowerCase();
+    return mClean === targetId || mClean === cleanNewId;
+  });
+
   if (idx >= 0) {
     allList[idx] = stamped;
   } else {

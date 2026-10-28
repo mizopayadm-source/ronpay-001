@@ -4371,22 +4371,29 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Clean up purged test members and erroneous BCM- prefixed members
+  // Clean up purged test members (do NOT purge BCM/EBE members!)
   const PURGED_MEMBERS = new Set(['bmpshl-9000', 'bmpshl-9001', 'bmpshl-1253']);
-  const PURGED_BCM_IDS = new Set<string>();
   if (Array.isArray(db.members)) {
     const beforeLen = db.members.length;
     db.members = db.members.filter((m: any) => {
       if (!m || !m.id) return false;
       const cleanId = String(m.id || '').toLowerCase().trim();
-      if (cleanId.startsWith('bcm-') || (m.orgCode && m.orgCode.toUpperCase() === 'BCM')) {
-        PURGED_BCM_IDS.add(cleanId);
-        return false;
-      }
       return !PURGED_MEMBERS.has(cleanId);
     });
     if (db.members.length !== beforeLen) changed = true;
+    
+    // Normalize any BCM or EBE members to canonical EBE orgCode & campaignId cmp-kumtluang-1
     db.members.forEach((m: any) => {
+      if (!m || !m.id) return;
+      const rawId = String(m.id);
+      if (rawId.toUpperCase().startsWith('BCM-') || rawId.toUpperCase().startsWith('EBE-') || m.campaignId === 'cmp-kumtluang-1' || (m.orgCode && (m.orgCode.toUpperCase() === 'BCM' || m.orgCode.toUpperCase() === 'EBE'))) {
+        m.campaignId = 'cmp-kumtluang-1';
+        m.orgCode = 'EBE';
+        if (rawId.toUpperCase().startsWith('BCM-')) {
+          m.id = 'EBE-' + rawId.substring(4);
+          changed = true;
+        }
+      }
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
         if (!m.section) {
           m.section = 'General';
@@ -4396,12 +4403,19 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
   }
   if (!Array.isArray(db.deletedMemberIds)) db.deletedMemberIds = [];
-  for (const pid of [...PURGED_MEMBERS, ...PURGED_BCM_IDS]) {
+  for (const pid of PURGED_MEMBERS) {
     if (!db.deletedMemberIds.includes(pid)) {
       db.deletedMemberIds.push(pid);
       changed = true;
     }
   }
+  // Remove any EBE or BCM member IDs from deletedMemberIds tombstone array
+  const beforeDelLen = db.deletedMemberIds.length;
+  db.deletedMemberIds = db.deletedMemberIds.filter((id: string) => {
+    const s = String(id || '').toLowerCase();
+    return !s.startsWith('ebe-') && !s.startsWith('bcm-');
+  });
+  if (db.deletedMemberIds.length !== beforeDelLen) changed = true;
 
   // Ensure YMA Vengthar has strictly its own category (Chhiatni Fund) and zero foreign church presets
   const ymaCamp = (db.campaigns || []).find(c => c.id === 'cmp-1787829303143' || c.orgCode === 'YMAVT');
@@ -4415,6 +4429,25 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
       changed = true;
     }
   }
+
+  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) is strictly bound to official predefined prefix 'EBE'
+  const ebeCamp = (db.campaigns || []).find(c => c.id === 'cmp-kumtluang-1' || (c.title && String(c.title).toLowerCase().includes('bcm ebenezer')));
+  if (ebeCamp) {
+    if (ebeCamp.orgCode !== 'EBE') {
+      ebeCamp.orgCode = 'EBE';
+      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'EBE';
+      changed = true;
+    }
+  }
+  // Ensure non-kumtluang campaigns do not occupy or collide with 'EBE'
+  (db.campaigns || []).forEach((c: any) => {
+    if (c && c.id !== 'cmp-kumtluang-1' && !String(c.title || '').toLowerCase().includes('bcm ebenezer') && c.orgCode === 'EBE') {
+      const fallback = c.category === 'ralna' ? 'RAL' : c.category === 'rikrum' ? 'RIK' : c.category === 'khawlsak' ? 'KHW' : 'CHK';
+      c.orgCode = fallback;
+      if (c.metadata) c.metadata.orgCode = fallback;
+      changed = true;
+    }
+  });
 
   // Ensure BMP Shillong has both 'BMP Fund' and 'Inkhawm Thawhlawm' subcategories and canonical collectedAmount: ₹42,210
   const bmpCamp = (db.campaigns || []).find(c => c.id === 'cmp-1788107291420' || (c.title && c.title.toLowerCase().includes('bmp')));
