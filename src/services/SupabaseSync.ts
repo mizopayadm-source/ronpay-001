@@ -34,7 +34,7 @@ export const subscribeToTable = (
       )
       .subscribe((status, err) => {
         if (status === 'CHANNEL_ERROR' || err) {
-          console.warn(`[SupabaseSync] WebSocket connection issue for ${table}:`, status, err);
+          console.debug(`[SupabaseSync] Realtime WebSocket fallback active for ${table}:`, status);
         }
       });
   } catch (e) {

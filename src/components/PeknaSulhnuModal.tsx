@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   X, 
   History, 
@@ -43,9 +43,11 @@ import {
   isConfirmedTransaction,
   isSuperAdminOrAdminProfile,
   getDeletedTransactionIds,
-  PERMANENTLY_PURGED_TX_IDS
+  PERMANENTLY_PURGED_TX_IDS,
+  safeApiFetch
 } from '../utils/storage';
-import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
+import { fetchTableData, subscribeToTable, upsertTransaction } from '../services/SupabaseSync';
+import { evaluateClearanceRole } from './CashPendingScreen';
 
 import { 
   getCampaignCauseTitle, 
@@ -434,6 +436,43 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return filtered;
   }, [filtered, confirmedFiltered, pendingFiltered, statusFilter]);
 
+  /**
+   * Evaluates if current user has clearance authority to approve/verify a transaction.
+   * Strictly disallowed for Guest users, unauthenticated users, or regular donors.
+   * Only allowed for Creators, authorized Officers, Treasurers, Accountants, and Admins.
+   */
+  const canApproveTx = useCallback((tx: Transaction | null): boolean => {
+    if (!tx) return false;
+    // Guest users or unauthenticated profiles can NEVER approve transactions
+    if (!creatorProfile || !creatorProfile.phone || creatorProfile.role === 'GUEST') {
+      return false;
+    }
+
+    // Platform Super Admin / Administrator
+    if (
+      creatorProfile.isAdmin || 
+      creatorProfile.role === 'SUPER_ADMIN' || 
+      creatorProfile.role === 'ADMIN' || 
+      isSuperAdminOrAdminProfile(creatorProfile)
+    ) {
+      return true;
+    }
+
+    // Role-based clearance against this transaction's specific campaign
+    const targetCamp = safeCampaigns.find(c => c.id === tx.campaignId) || null;
+    const clearance = evaluateClearanceRole(creatorProfile, targetCamp);
+    if (clearance.canClear) {
+      return true;
+    }
+
+    // Campaign Creator / Manager / Officer check
+    if (targetCamp && (isCampaignCreator(targetCamp, creatorProfile) || isActualCampaignOwner(targetCamp, creatorProfile) || isCampaignManagerOrOfficer(targetCamp, creatorProfile))) {
+      return true;
+    }
+
+    return false;
+  }, [creatorProfile, safeCampaigns]);
+
   // Actions for pending payments
   const handleCheckPendingStatus = async (tx: Transaction) => {
     setCheckingTxId(tx.id);
@@ -477,7 +516,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
       setStatusDialogTx(tx);
       setStatusDialogResult({
         status: 'PENDING',
-        message: 'Network check hlawhtling rih lo. Bank account atanga a in-debit tawh chuan Manual Confirm i ti thei e.'
+        message: canApproveTx(tx)
+          ? 'Network check hlawhtling rih lo. Bank account atanga a in-debit tawh chuan Manual Confirm i ti thei e.'
+          : 'Network check hlawhtling rih lo. Bank account atanga a in-debit tawh chuan Treasurer / Admin ten an verify veleh a tlang ang.'
       });
     } finally {
       setCheckingTxId(null);
@@ -485,22 +526,52 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   };
 
   const handleManualConfirmPaid = (tx: Transaction) => {
+    // STRICT SECURITY GUARD: Guest and unauthorized users CANNOT approve transactions
+    if (!canApproveTx(tx)) {
+      setActionToast('⚠️ Thuneihna i nei lo. Creator / Treasurer chauhvin he receipt hi an pawm thei.');
+      setTimeout(() => setActionToast(null), 3500);
+      return;
+    }
+
     const utr = tx.utr || ('UTR' + Math.floor(100000000000 + Math.random() * 900000000000));
+    const nowIso = new Date().toISOString();
+    const targetCamp = safeCampaigns.find(c => c.id === tx.campaignId) || null;
+    const clearance = evaluateClearanceRole(creatorProfile, targetCamp);
+    const approverName = creatorProfile?.name || clearance.roleLabel || 'Treasurer / Admin';
+
     const updatedTx: Transaction = {
       ...tx,
-      status: 'completed',
+      status: 'SUCCESS', // Explicit SUCCESS status
       txHash: utr,
       utr: utr,
-      verifiedBy: creatorProfile?.name || 'Treasurer / Admin',
-      verifiedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      approved_by: approverName,
+      approvedBy: approverName,
+      approvedAt: nowIso,
+      verifiedBy: approverName,
+      verifiedAt: nowIso,
+      updatedAt: nowIso
     };
+
     saveTransaction(updatedTx);
     if (onRefreshData) onRefreshData();
+
     try {
       window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: getStoredTransactions() }));
       window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: getStoredTransactions() }));
+      window.dispatchEvent(new CustomEvent('ronpay_trigger_sync'));
+      window.dispatchEvent(new CustomEvent('ronpay_campaigns_updated', { detail: getStoredCampaigns() }));
     } catch {}
+
+    safeApiFetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedTx)
+    }).catch(() => {});
+
+    try {
+      upsertTransaction(updatedTx).catch(() => {});
+    } catch {}
+
     setStatusDialogTx(null);
     setStatusDialogResult(null);
     setActionToast(`✅ ${tx.id} (${tx.donorName || 'Cash'}) hi Verified-ah dah a ni ta.`);
@@ -1437,20 +1508,30 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
                       <div className="flex items-center gap-1.5">
                         {isCash ? (
-                          <button
-                            id={`sulhnu-approve-cash-btn-${tx.id}`}
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleManualConfirmPaid(tx);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10.5px] py-1 px-2.5 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs active:scale-95"
-                            title="Cash pawisa dawng fel a ni tih pawm rawh"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                            <span>Pawm / Approve</span>
-                          </button>
+                          canApproveTx(tx) ? (
+                            <button
+                              id={`sulhnu-approve-cash-btn-${tx.id}`}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleManualConfirmPaid(tx);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10.5px] py-1 px-2.5 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs active:scale-95"
+                              title="Cash pawisa dawng fel a ni tih pawm rawh (Treasurer / Creator)"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                              <span>Pawm / Approve</span>
+                            </button>
+                          ) : (
+                            <span 
+                              className="text-[9.5px] font-bold text-amber-800 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-md flex items-center gap-1"
+                              title="Pawisa pek hi enfiah mek a ni. Treasurer / Creator in an pawm hunah official receipt-ah a tlang ang."
+                            >
+                              <Clock className="w-2.5 h-2.5 text-amber-600" />
+                              <span>Pending Clearance</span>
+                            </span>
+                          )
                         ) : (
                           <button
                             id={`sulhnu-check-btn-${tx.id}`}
@@ -1600,45 +1681,61 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
               <div className="space-y-2 pt-1">
                 {statusDialogResult?.status === 'FAILED' ? (
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePendingTx(statusDialogTx.id)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition active:scale-98"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Failed Record Paih Fai Rawh</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleManualConfirmPaid(statusDialogTx)}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Pawisa a lut tawh e (Confirm as Verified)</span>
-                  </button>
-                )}
-
-                <div className="flex items-center gap-2">
-                  {statusDialogResult?.status === 'FAILED' ? (
-                    <button
-                      type="button"
-                      onClick={() => handleManualConfirmPaid(statusDialogTx)}
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Pawisa a lut zawk e</span>
-                    </button>
-                  ) : (
+                  <>
                     <button
                       type="button"
                       onClick={() => handleDeletePendingTx(statusDialogTx.id)}
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                      className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition active:scale-98"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Paih Rawh</span>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Failed Record Paih Fai Rawh</span>
                     </button>
-                  )}
+
+                    {canApproveTx(statusDialogTx) && (
+                      <button
+                        type="button"
+                        onClick={() => handleManualConfirmPaid(statusDialogTx)}
+                        className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Pawisa a lut zawk e (Authorized Confirm)</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {canApproveTx(statusDialogTx) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleManualConfirmPaid(statusDialogTx)}
+                        className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Pawisa a lut tawh e (Confirm as Verified)</span>
+                      </button>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-left space-y-1">
+                        <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                          <Clock className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Pawisa pek enfiah mek a ni</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-snug">
+                          Bank atangin a la lut fel lo emaw verification la nghah a ni. Bank account atanga a in-debit tawh chuan Treasurer / Creator ten an verify veleh a tlang ang.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePendingTx(statusDialogTx.id)}
+                    className="flex-1 py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Paih Rawh</span>
+                  </button>
 
                   <button
                     type="button"

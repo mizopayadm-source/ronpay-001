@@ -102,6 +102,7 @@ import { BillPaymentModal } from './components/BillPaymentModal';
 import { AdminDashboardModal } from './components/AdminDashboardModal';
 import { AdminApprovalModal } from './components/AdminApprovalModal';
 import { KumtluangMemberManagerModal } from './components/KumtluangMemberManagerModal';
+import { AuthorizedPersonsModal } from './components/AuthorizedPersonsModal';
 import { MemberRollPreviewModal, PreviewReportFormat } from './components/MemberRollPreviewModal';
 import { MismatchModal } from './components/MismatchModal';
 import { UpgradeModal } from './components/UpgradeModal';
@@ -242,6 +243,8 @@ export default function App() {
   const [isKumtluangManagerOpen, setIsKumtluangManagerOpen] = useState<boolean>(false);
   const [kumtluangInitialTab, setKumtluangInitialTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>('members_list');
   const [kumtluangInitialCampaignId, setKumtluangInitialCampaignId] = useState<string | undefined>(undefined);
+  const [selectedAuthorizedCampaign, setSelectedAuthorizedCampaign] = useState<Campaign | null>(null);
+  const [isAuthorizedPersonsOpen, setIsAuthorizedPersonsOpen] = useState<boolean>(false);
   const [isMemberRollPreviewOpen, setIsMemberRollPreviewOpen] = useState<boolean>(false);
   const [memberRollPreviewParams, setMemberRollPreviewParams] = useState<{
     format?: PreviewReportFormat;
@@ -1649,6 +1652,10 @@ export default function App() {
               onShareCampaign={handleShareCampaign}
               onCategoryChange={setSelectedCategory}
               onOpenMemberRoll={handleOpenMemberRoll}
+              onOpenAuthorizedPersons={(camp) => {
+                setSelectedAuthorizedCampaign(camp);
+                setIsAuthorizedPersonsOpen(true);
+              }}
               language={language}
             />
           )}
@@ -1800,6 +1807,10 @@ export default function App() {
               onBatchUpdateTransactions={handleBatchUpdateTransactions}
               onOpenImagePreview={handlePreviewImage}
               onOpenMemberRoll={handleOpenMemberRoll}
+              onOpenAuthorizedPersons={(camp) => {
+                setSelectedAuthorizedCampaign(camp);
+                setIsAuthorizedPersonsOpen(true);
+              }}
               onRefreshCloud={handleRefreshCloudData}
             />
           )}
@@ -2188,6 +2199,21 @@ export default function App() {
           onOpenCreateQR={() => {
             setIsKumtluangManagerOpen(false);
             handleNavigate('create_qr');
+          }}
+        />
+
+        <AuthorizedPersonsModal
+          isOpen={isAuthorizedPersonsOpen}
+          onClose={() => {
+            setIsAuthorizedPersonsOpen(false);
+            setSelectedAuthorizedCampaign(null);
+          }}
+          campaign={selectedAuthorizedCampaign}
+          creatorProfile={creatorProfile}
+          transactions={transactions}
+          members={members}
+          onCampaignUpdated={(updatedCamp) => {
+            handleUpdateCampaign(updatedCamp);
           }}
         />
 

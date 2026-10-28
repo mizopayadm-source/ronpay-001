@@ -31,7 +31,7 @@ import {
 import { upsertTransaction } from '../services/SupabaseSync';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
 
-export type ClearanceRole = 'creator' | 'treasurer' | 'accountant' | 'admin' | 'donor';
+export type ClearanceRole = 'creator' | 'treasurer' | 'accountant' | 'cashier' | 'collector' | 'admin' | 'officer' | 'donor';
 
 export interface ClearanceEvaluation {
   role: ClearanceRole;
@@ -54,7 +54,7 @@ interface CashPendingScreenProps {
  * Clean Role-Based Evaluation:
  * Checks the logged-in user's role against the target campaign.
  * ONLY grants clearance permissions (canClear: true) if the user role is
- * 'creator', 'treasurer', 'accountant', or 'admin'.
+ * 'creator', 'treasurer', 'accountant', 'cashier', 'collector', or 'admin'.
  * All other profiles (donors, guests, public users) receive canClear: false.
  */
 export function evaluateClearanceRole(
@@ -88,7 +88,17 @@ export function evaluateClearanceRole(
     return { role: 'accountant', canClear: true, roleLabel: 'Accountant' };
   }
 
-  // 4. Authorized Officers registered on this specific Campaign
+  // 4. Cashier on profile
+  if (roleLower.includes('cashier') || designationLower.includes('cashier')) {
+    return { role: 'cashier', canClear: true, roleLabel: 'Cashier' };
+  }
+
+  // 5. Collector on profile
+  if (roleLower.includes('collector') || designationLower.includes('collector')) {
+    return { role: 'collector', canClear: true, roleLabel: 'Collector' };
+  }
+
+  // 6. Authorized Officers registered on this specific Campaign
   if (campaign && Array.isArray(campaign.authorizedOfficers) && profile.phone) {
     const userPhoneDigits = profile.phone.replace(/\D/g, '').slice(-10);
     const matchedOfficer = campaign.authorizedOfficers.find(o => {
@@ -98,19 +108,31 @@ export function evaluateClearanceRole(
 
     if (matchedOfficer) {
       const officerRole = (matchedOfficer.role || '').toLowerCase();
+      const canClearCash = matchedOfficer.canClearCash !== false; // Default true for authorized persons
       if (officerRole.includes('treasurer')) {
-        return { role: 'treasurer', canClear: true, roleLabel: 'Campaign Treasurer' };
+        return { role: 'treasurer', canClear: canClearCash, roleLabel: 'Campaign Treasurer' };
       }
       if (officerRole.includes('accountant')) {
-        return { role: 'accountant', canClear: true, roleLabel: 'Campaign Accountant' };
+        return { role: 'accountant', canClear: canClearCash, roleLabel: 'Campaign Accountant' };
+      }
+      if (officerRole.includes('cashier')) {
+        return { role: 'cashier', canClear: canClearCash, roleLabel: 'Campaign Cashier' };
+      }
+      if (officerRole.includes('collector')) {
+        return { role: 'collector', canClear: canClearCash, roleLabel: 'Campaign Collector' };
       }
       if (officerRole.includes('creator') || officerRole.includes('admin') || officerRole.includes('leader')) {
-        return { role: 'creator', canClear: true, roleLabel: 'Campaign Officer' };
+        return { role: 'creator', canClear: canClearCash, roleLabel: 'Campaign Officer' };
       }
+      return {
+        role: 'officer',
+        canClear: canClearCash,
+        roleLabel: matchedOfficer.role ? `Authorized ${matchedOfficer.role}` : 'Campaign Officer'
+      };
     }
   }
 
-  // 5. Campaign Creator / Owner
+  // 7. Campaign Creator / Owner
   if (campaign && isCampaignCreator(campaign, profile)) {
     return { role: 'creator', canClear: true, roleLabel: 'Bawm Creator' };
   }

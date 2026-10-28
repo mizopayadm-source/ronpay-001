@@ -30,7 +30,8 @@ import {
   Compass,
   Check,
   TrendingUp,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ShieldCheck
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
@@ -51,6 +52,7 @@ interface BawmExplorerScreenProps {
   onShareCampaign?: (campaign: Campaign) => void;
   onCategoryChange?: (category: BawmCategory) => void;
   onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses', campaignId?: string) => void;
+  onOpenAuthorizedPersons?: (campaign: Campaign) => void;
   language?: Language;
 }
 
@@ -66,6 +68,7 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   onShareCampaign,
   onCategoryChange,
   onOpenMemberRoll,
+  onOpenAuthorizedPersons,
   language = 'mizo',
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<BawmCategory | 'all'>(category || 'all');
@@ -924,6 +927,20 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                       >
                         <ArrowRightLeft className="w-3 h-3 text-indigo-600" />
                         <span>Transfer</span>
+                      </button>
+                    )}
+                    {!isGuest && (isOwner || isStaff || (Array.isArray(camp.authorizedOfficers) && camp.authorizedOfficers.some(o => o.phone && (creatorProfile?.phone || '').includes(o.phone.slice(-10))))) && onOpenAuthorizedPersons && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenAuthorizedPersons(camp);
+                        }}
+                        className="p-1 px-2 text-[9.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs shrink-0 active:scale-95"
+                        title="Authorized Officers & Individual Collector Analytics"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        <span>Officers</span>
                       </button>
                     )}
                   </div>

@@ -10,8 +10,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 if (typeof window !== 'undefined') {
   // Global Crash Prevention: Catch unhandled promise rejections and errors
   window.addEventListener('unhandledrejection', (ev) => {
+    const reasonStr = String(ev?.reason?.message || ev?.reason || '');
+    if (reasonStr.includes('WebSocket') || reasonStr.includes('HMR') || reasonStr.includes('socket closed')) {
+      if (typeof ev.preventDefault === 'function') ev.preventDefault();
+      return;
+    }
     console.warn('[RonPay Crash Guard] Caught unhandled rejection:', ev.reason);
-    // Prevent unhandled promise rejection from crashing preview
     if (ev && typeof ev.preventDefault === 'function') {
       ev.preventDefault();
     }

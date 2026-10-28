@@ -42,7 +42,8 @@ import {
   MessageSquare,
   Target,
   Printer,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile, MemberRecord } from '../types';
 import { DonorPaymentsEditorModal } from './DonorPaymentsEditorModal';
@@ -115,6 +116,7 @@ interface ReportsScreenProps {
   onRefreshCloud?: () => Promise<void> | void;
   userPaidIds?: string[];
   onOpenSulhnu?: () => void;
+  onOpenAuthorizedPersons?: (campaign: Campaign) => void;
 }
 
 const MONTH_NAMES_LIST = [
@@ -171,6 +173,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
   onRefreshCloud,
   userPaidIds = [],
   onOpenSulhnu,
+  onOpenAuthorizedPersons,
 }) => {
 
   // Default to 'all' so every donation across all categories is visible immediately
@@ -2458,6 +2461,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
                     >
                       <Users className="w-3 h-3" />
                       <span>Member Roll & Cash Entry</span>
+                    </button>
+                  )}
+                  {onOpenAuthorizedPersons && (selectedCampaignId !== 'all' ? availableCampaigns.find(c => c.id === selectedCampaignId) : availableCampaigns[0]) && (
+                    <button
+                      onClick={() => {
+                        const targetCamp = (selectedCampaignId !== 'all' ? availableCampaigns.find(c => c.id === selectedCampaignId) : availableCampaigns[0]);
+                        if (targetCamp) onOpenAuthorizedPersons(targetCamp);
+                      }}
+                      className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                      title="Authorized Persons Management & Individual Collector Analytics"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Authorized Officers</span>
                     </button>
                   )}
                   <button

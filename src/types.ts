@@ -32,6 +32,26 @@ export interface BawmInfo {
 
 export type FeeOptionMode = 'ADD_ON' | 'DEDUCT' | 'DONOR_CHOICE';
 
+export type AuthorizedOfficerRole = 'Treasurer' | 'Accountant' | 'Cashier' | 'Collector' | 'Admin' | 'Officer' | string;
+
+export interface AuthorizedOfficer {
+  id?: string;
+  memberId?: string;
+  rollNo?: string;
+  section?: string;
+  fatherName?: string;
+  name: string;
+  phone: string;
+  role: AuthorizedOfficerRole;
+  pin?: string;
+  canClearCash?: boolean;
+  canRecordExpenses?: boolean;
+  canManageMembers?: boolean;
+  assignedAt?: string;
+  assignedBy?: string;
+  notes?: string;
+}
+
 export interface CampaignRenewalRequest {
   requestedAt: string;
   requestedBy?: string;
@@ -116,14 +136,7 @@ export interface Campaign {
   gatewaySessionExpiresAt?: string;
   allowPublicGroupDeposits?: boolean;
   officerPasscode?: string;
-  authorizedOfficers?: Array<{
-    name: string;
-    phone: string;
-    role?: string;
-    pin?: string;
-    canRecordExpenses?: boolean;
-    canManageMembers?: boolean;
-  }>;
+  authorizedOfficers?: AuthorizedOfficer[];
   expenseHeads?: string[];
   openingBalance?: number;
   transferredAt?: string;

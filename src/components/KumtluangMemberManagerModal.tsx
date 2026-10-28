@@ -37,9 +37,11 @@ import {
   Receipt,
   Maximize2,
   Minimize2,
-  BookOpen
+  BookOpen,
+  ShieldCheck
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
+import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
 
@@ -145,6 +147,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>(initialTab || 'members_list');
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
+  const [isAuthorizedOfficersOpen, setIsAuthorizedOfficersOpen] = useState<boolean>(false);
 
   const userRole = getUserRole(creatorProfile);
   const isPrivilegedUser = Boolean(
@@ -1337,6 +1340,21 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">SECY Handover</span>
                 <span className="sm:hidden">Handover</span>
+              </button>
+            )}
+
+            {/* Authorized Officers & Collector Analytics Button */}
+            {activeScopedCampaign && (
+              <button
+                type="button"
+                id="btn-kumtluang-officers"
+                onClick={() => setIsAuthorizedOfficersOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer active:scale-95 shrink-0"
+                title="Authorized Persons Management & Individual Collector Analytics"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Officers & Collectors</span>
+                <span className="sm:hidden">Officers</span>
               </button>
             )}
           </div>
@@ -3852,6 +3870,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           // Refresh member records list immediately
           const updated = getMembers(selectedCampaignId);
           setMembers(updated);
+        }}
+      />
+
+      {/* Authorized Persons Management & Collector Analytics Modal */}
+      <AuthorizedPersonsModal
+        isOpen={isAuthorizedOfficersOpen}
+        onClose={() => setIsAuthorizedOfficersOpen(false)}
+        campaign={activeScopedCampaign}
+        creatorProfile={creatorProfile}
+        transactions={transactions}
+        members={members}
+        onCampaignUpdated={() => {
+          onDataUpdated();
         }}
       />
     </div>
