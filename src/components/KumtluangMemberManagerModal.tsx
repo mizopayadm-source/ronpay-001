@@ -43,7 +43,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
 
 import { syncAllWithServer } from '../utils/syncEngine';
 import { getUserRole } from '../utils/rbac';
@@ -323,6 +323,9 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [deactivateReason, setDeactivateReason] = useState<'transferred_out' | 'deceased' | 'inactive'>('transferred_out');
   const [deactivateNote, setDeactivateNote] = useState<string>('');
 
+  // Permanent Delete Confirmation State
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState<{ id: string; name: string } | null>(null);
+
   // Editing Member State
   const [editingMember, setEditingMember] = useState<MemberRecord | null>(null);
   const [editCampaignId, setEditCampaignId] = useState<string>('');
@@ -466,9 +469,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         fetchSupabaseMembers('all').then(remoteMembers => {
           if (Array.isArray(remoteMembers) && remoteMembers.length > 0) {
             const currentLocal = getMembers('all');
+            const deletedMemIds = getDeletedMemberIds();
             const merged = [...currentLocal];
             remoteMembers.forEach(rm => {
               if (rm && rm.id) {
+                const rmClean = rm.id.toLowerCase().trim();
+                const rmBcmClean = rmClean.startsWith('ebe-') ? 'bcm-' + rmClean.substring(4) : (rmClean.startsWith('bcm-') ? 'ebe-' + rmClean.substring(4) : rmClean);
+                if (deletedMemIds.has(rmClean) || deletedMemIds.has(rmBcmClean)) {
+                  return; // Exclude deleted members from resurrection
+                }
                 const idx = merged.findIndex(m => m.id.toLowerCase() === rm.id.toLowerCase());
                 if (idx >= 0) {
                   const localItem = merged[idx];
@@ -993,6 +1002,29 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         deleteMember(oldId, targetCampaignId);
       }
 
+      const cleanSection = editSection.trim() || undefined;
+      const nowIso = new Date().toISOString();
+
+      // Ensure yearStatus reflects the updated section across all recorded years
+      const updatedYearStatus: MemberRecord['yearStatus'] = { ...(editingMember.yearStatus || {}) };
+      Object.keys(updatedYearStatus).forEach(yr => {
+        if (updatedYearStatus[yr]) {
+          updatedYearStatus[yr] = {
+            ...updatedYearStatus[yr],
+            section: cleanSection,
+            updatedAt: nowIso
+          };
+        }
+      });
+
+      if (selectedRollYear && selectedRollYear !== 'all') {
+        updatedYearStatus[selectedRollYear] = {
+          ...(updatedYearStatus[selectedRollYear] || { status: 'active' }),
+          section: cleanSection,
+          updatedAt: nowIso
+        };
+      }
+
       const updatedM: MemberRecord = {
         ...editingMember,
         id: newId,
@@ -1002,26 +1034,34 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         orgCode: org,
         phoneLast4: p4,
         fullPhone: editFullPhone.trim() || undefined,
-        section: editSection.trim() || undefined,
+        section: cleanSection,
         avatarUrl: editAvatarUrl || undefined,
         isFamilyHead: true,
         dependents: updatedDeps,
-        createdAt: editingMember.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: editingMember.createdAt || nowIso,
+        updatedAt: nowIso,
         enrollmentYear: editingMember.enrollmentYear || selectedRollYear,
         activeYears: editingMember.activeYears && editingMember.activeYears.length > 0 ? editingMember.activeYears : [selectedRollYear],
-        yearStatus: editingMember.yearStatus
+        yearStatus: Object.keys(updatedYearStatus).length > 0 ? updatedYearStatus : undefined
       };
 
-      // Direct, permanent save to Supabase database & local storage
+      // Direct, permanent save to Supabase database, local storage & backend
       await addOrUpdateMember(updatedM, oldId);
 
+      // Instantly trigger component refresh and multi-device event broadcasts
       setMembersTick(t => t + 1);
       if (selectedMember?.id === oldId || selectedMember?.id === newId) {
         setSelectedMember(updatedM);
       }
       setEditingMember(null);
       onDataUpdated();
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: getMembers() }));
+        window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: getMembers() }));
+        window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_updated', member: updatedM } }));
+      }
+
       setRegSuccess(`✅ Member (${newId}) & Section "${updatedM.section || 'N/A'}" database-ah save fel a ni ta!`);
     } catch (err: any) {
       console.error('Failed to save member edit:', err);
@@ -1089,16 +1129,25 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     onDataUpdated();
   };
 
-  // Delete Member
+  // Delete Member Trigger
   const handleDeleteMember = (memberId: string, memberName: string) => {
-    if (window.confirm(`Member "${memberName}" (${memberId}) hi hlumhlut takin paih (delete permanently) i chiang em?`)) {
-      deleteMember(memberId, selectedCampaignId);
-      setMembersTick(t => t + 1);
-      if (selectedMember?.id === memberId) {
-        setSelectedMember(null);
-      }
-      onDataUpdated();
+    setDeleteConfirmMember({ id: memberId, name: memberName });
+  };
+
+  const confirmExecuteDeleteMember = () => {
+    if (!deleteConfirmMember) return;
+    const { id, name } = deleteConfirmMember;
+    deleteMember(id, selectedCampaignId);
+    setMembersTick(t => t + 1);
+    if (selectedMember?.id === id) {
+      setSelectedMember(null);
     }
+    setRegSuccess(`Member "${name}" (${id}) hi hlumhlut takin paih (deleted) a ni ta!`);
+    setDeleteConfirmMember(null);
+    onDataUpdated();
+    setTimeout(() => {
+      setRegSuccess(null);
+    }, 5000);
   };
 
   // Calculate campaign member counts for the dropdown badges
@@ -3564,13 +3613,18 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </div>
 
               <div>
-                <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                  {activeEditCampaign?.sectionLabel || 'Section / Bial'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10.5px] font-bold text-slate-700 block">
+                    {activeEditCampaign?.sectionLabel || 'Section / Bial'}
+                  </label>
+                  <span className="text-[9.5px] text-indigo-600 font-semibold">
+                    Thlang la emaw a hnuai box-ah ziak rawh
+                  </span>
+                </div>
                 <select
                   value={editSection}
                   onChange={(e) => setEditSection(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 mb-1.5"
                 >
                   <option value="">-- Thlang Rawh ({activeEditCampaign?.sectionLabel || 'Bial / Section'}) --</option>
                   {(activeEditCampaign?.definedSections && activeEditCampaign.definedSections.length > 0
@@ -3585,6 +3639,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     <option value={editSection}>{editSection} (Existing)</option>
                   )}
                 </select>
+                <input
+                  type="text"
+                  value={editSection}
+                  onChange={(e) => setEditSection(e.target.value)}
+                  placeholder="Section / Bial hming chhu lut rawh..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
+                />
               </div>
 
               {/* Photo Upload in Edit Modal */}
@@ -3967,6 +4028,59 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
           setMembersTick(t => t + 1);
         }}
       />
+
+      {/* Permanent Delete Confirmation Modal */}
+      {deleteConfirmMember && (
+        <div className="fixed inset-0 z-[100050] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl border-2 border-rose-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-600 font-black text-sm uppercase">
+                <div className="w-9 h-9 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <span>Member Permanently Delete Confirmation</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmMember(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-950 font-medium">
+              <p className="font-bold text-slate-900 text-sm">
+                Member: <span className="text-rose-700 font-black">{deleteConfirmMember.name}</span> ({deleteConfirmMember.id})
+              </p>
+              <p>
+                He member hi Member Roll, Local Storage, leh Database zawng zawng atangin hlumhlut takin paih (permanently delete) i chiang em?
+              </p>
+              <p className="text-[11px] text-rose-700 font-bold bg-white/80 p-2 rounded-xl border border-rose-200">
+                ⚠️ Hriattirna: Member record hi permanently delete a ni ang a, sync/restore-ah a rawn lang tawh lo vang.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmMember(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Kansel (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={confirmExecuteDeleteMember}
+                className="px-5 py-2.5 rounded-2xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white transition flex items-center gap-1.5 shadow-md shadow-rose-600/30 cursor-pointer active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Paih Hlumhlut Rawh (Delete Permanently)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Authorized Persons Management & Collector Analytics Modal */}
       <AuthorizedPersonsModal

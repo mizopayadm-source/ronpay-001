@@ -9,7 +9,8 @@ import {
   getStoredCampaigns, 
   saveStoredCampaigns, 
   getMembers, 
-  saveMembers 
+  saveMembers,
+  getDeletedMemberIds
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -1106,25 +1107,38 @@ export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberR
     return [];
   }
 
-  return data.map((row: any) => ({
-    ...(row.metadata || {}),
-    id: row.id,
-    campaignId: row.campaign_id,
-    name: row.name,
-    fatherName: row.father_name || undefined,
-    orgCode: row.org_code || undefined,
-    phone: row.phone || undefined,
-    fullPhone: row.full_phone || row.phone || undefined,
-    phoneLast4: row.phone_last4 || undefined,
-    section: row.section || undefined,
-    isFamilyHead: Boolean(row.is_family_head),
-    pledgeAmount: Number(row.pledge_amount) || 0,
-    paidAmount: Number(row.paid_amount) || 0,
-    status: row.status,
-    dependents: row.dependents || [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  const deletedMemIds = getDeletedMemberIds();
+
+  return data.map((row: any) => {
+    const meta = row.metadata || {};
+    const effectiveSection = row.section || meta.section || undefined;
+    return {
+      ...meta,
+      id: row.id,
+      campaignId: row.campaign_id || row.campaignId,
+      name: row.name,
+      fatherName: row.father_name || undefined,
+      orgCode: row.org_code || undefined,
+      phone: row.phone || undefined,
+      fullPhone: row.full_phone || row.phone || undefined,
+      phoneLast4: row.phone_last4 || undefined,
+      section: effectiveSection,
+      isFamilyHead: Boolean(row.is_family_head),
+      pledgeAmount: Number(row.pledge_amount) || 0,
+      paidAmount: Number(row.paid_amount) || 0,
+      status: row.status,
+      dependents: row.dependents || [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      yearStatus: meta.yearStatus || row.yearStatus,
+      metadata: meta
+    };
+  }).filter(m => {
+    if (!m || !m.id) return false;
+    const clean = m.id.toLowerCase().trim();
+    const altClean = clean.startsWith('ebe-') ? 'bcm-' + clean.substring(4) : (clean.startsWith('bcm-') ? 'ebe-' + clean.substring(4) : clean);
+    return !deletedMemIds.has(clean) && !deletedMemIds.has(altClean);
+  });
 }
 
 export async function updateSupabaseMember(member: MemberRecord, oldId?: string): Promise<boolean> {
@@ -1154,6 +1168,7 @@ export async function updateSupabaseMember(member: MemberRecord, oldId?: string)
       enrollmentYear: member.enrollmentYear,
       activeYears: member.activeYears,
       yearStatus: member.yearStatus,
+      section: member.section || null,
     }
   };
 
@@ -1165,20 +1180,28 @@ export async function updateSupabaseMember(member: MemberRecord, oldId?: string)
       .eq('id', targetId)
       .select();
 
+    let success = false;
     if (!error && data && data.length > 0) {
-      return true;
+      success = true;
+    } else {
+      // 2. Fallback upsert if not found by oldId
+      const { error: upsertErr } = await supabase
+        .from('members')
+        .upsert(updatePayload, { onConflict: 'id' });
+
+      if (upsertErr) {
+        console.warn('[Supabase] Member update/upsert error:', upsertErr.message);
+        return false;
+      }
+      success = true;
     }
 
-    // 2. Fallback upsert if not found by oldId
-    const { error: upsertErr } = await supabase
-      .from('members')
-      .upsert(updatePayload, { onConflict: 'id' });
-
-    if (upsertErr) {
-      console.warn('[Supabase] Member update/upsert error:', upsertErr.message);
-      return false;
+    // Clean up old ID if changed to prevent stale duplicate rows
+    if (oldId && oldId.toLowerCase().trim() !== member.id.toLowerCase().trim()) {
+      await supabase.from('members').delete().eq('id', oldId);
     }
-    return true;
+
+    return success;
   } catch (err: any) {
     console.warn('[Supabase] Member persistence error:', err?.message);
     return false;
@@ -1193,10 +1216,13 @@ export async function deleteSupabaseMember(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !id) return false;
 
+  const clean = id.trim();
+  const altClean = clean.toUpperCase().startsWith('EBE-') ? 'BCM-' + clean.substring(4) : (clean.toUpperCase().startsWith('BCM-') ? 'EBE-' + clean.substring(4) : clean);
+
   const { error } = await supabase
     .from('members')
     .delete()
-    .eq('id', id);
+    .or(`id.eq.${clean},id.eq.${altClean}`);
 
   if (error) {
     console.warn('[Supabase] Member delete note:', error.message);

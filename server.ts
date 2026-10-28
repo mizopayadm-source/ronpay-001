@@ -4975,6 +4975,50 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
       }
     } catch {}
 
+    // 4. Fetch members from Supabase with Section / Bial synchronization
+    try {
+      const memRes = await fetch(`${sbUrl}/rest/v1/members?select=*&order=created_at.desc`, {
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (memRes.ok) {
+        const memRows: any[] = await memRes.json();
+        if (Array.isArray(memRows) && memRows.length > 0) {
+          const delMemSet = new Set((db.deletedMemberIds || []).map((id: string) => String(id).toLowerCase().trim()));
+          const validMems = memRows.filter(m => m && m.id && !delMemSet.has(String(m.id).toLowerCase().trim()));
+          const normalizedMems = validMems.map((row: any) => {
+            const meta = row.metadata || {};
+            const effectiveSection = row.section || meta.section || undefined;
+            return {
+              ...meta,
+              id: row.id,
+              campaignId: row.campaign_id || row.campaignId,
+              name: row.name,
+              fatherName: row.father_name || undefined,
+              orgCode: row.org_code || undefined,
+              phone: row.phone || undefined,
+              fullPhone: row.full_phone || row.phone || undefined,
+              phoneLast4: row.phone_last4 || undefined,
+              section: effectiveSection,
+              isFamilyHead: Boolean(row.is_family_head),
+              pledgeAmount: Number(row.pledge_amount) || 0,
+              paidAmount: Number(row.paid_amount) || 0,
+              status: row.status,
+              dependents: row.dependents || [],
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+              yearStatus: meta.yearStatus || row.yearStatus,
+              metadata: meta
+            };
+          });
+          db.members = mergeCollections(db.members || [], normalizedMems, 'id', delMemSet);
+        }
+      }
+    } catch {}
+
     saveDatabase(db);
     return true;
   } catch (err: any) {
@@ -5019,6 +5063,80 @@ app.get('/api/data/state', async (req: Request, res: Response) => {
     data: db,
     timestamp: db.lastUpdated
   });
+});
+
+// POST /api/data/sync - Central sync endpoint for web, mobile apps, and AI Studio
+app.post('/api/data/sync', (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const db = getDatabase();
+
+    if (Array.isArray(body.deletedMemberIds) && body.deletedMemberIds.length > 0) {
+      const delMemSet = new Set<string>(body.deletedMemberIds.map((id: any) => String(id).toLowerCase().trim()));
+      db.members = (db.members || []).filter(m => !delMemSet.has(String(m.id).toLowerCase().trim()));
+      db.deletedMemberIds = Array.from(new Set<string>([
+        ...(db.deletedMemberIds || []),
+        ...Array.from(delMemSet)
+      ]));
+    }
+
+    if (Array.isArray(body.campaigns) && body.campaigns.length > 0) {
+      db.campaigns = mergeCollections(db.campaigns, body.campaigns, 'id');
+    }
+    if (Array.isArray(body.members) && body.members.length > 0) {
+      const delMemSet = new Set<string>((db.deletedMemberIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.members = mergeCollections(db.members || [], body.members, 'id', delMemSet);
+    }
+    if (Array.isArray(body.transactions) && body.transactions.length > 0) {
+      const delTxSet = new Set<string>((db.deletedTransactionIds || []).map((id: string) => String(id).toLowerCase().trim()));
+      db.transactions = mergeCollections(db.transactions, body.transactions, 'id', delTxSet);
+      db.transactions = reconcileAndDeduplicateTransactions(db.transactions, delTxSet);
+    }
+    if (Array.isArray(body.deletedTransactionIds) && body.deletedTransactionIds.length > 0) {
+      const deletedSet = new Set<string>(
+        body.deletedTransactionIds.map((id: any) => String(id).toLowerCase().trim())
+      );
+      db.transactions = (db.transactions || []).filter(t => !deletedSet.has(String(t.id).toLowerCase().trim()));
+      db.deletedTransactionIds = Array.from(new Set<string>([
+        ...(db.deletedTransactionIds || []),
+        ...Array.from(deletedSet)
+      ]));
+    }
+    if (Array.isArray(body.deletedExpenseIds) && body.deletedExpenseIds.length > 0) {
+      const delExpSet = new Set<string>(body.deletedExpenseIds.map((id: any) => String(id).toLowerCase().trim()));
+      db.expenses = (db.expenses || []).filter(e => !delExpSet.has(String(e.id).toLowerCase().trim()));
+      db.deletedExpenseIds = Array.from(new Set<string>([
+        ...(db.deletedExpenseIds || []),
+        ...Array.from(delExpSet)
+      ]));
+    }
+    if (Array.isArray(body.expenses) && body.expenses.length > 0) {
+      const serverDelExpSet = new Set<string>((db.deletedExpenseIds || []).map((id: any) => String(id).toLowerCase().trim()));
+      db.expenses = mergeCollections(db.expenses || [], body.expenses, 'id', serverDelExpSet);
+    }
+    if (Array.isArray(body.creators) && body.creators.length > 0) {
+      db.creators = mergeCollections(db.creators, body.creators, 'phone');
+    }
+    if (body.pricingConfig && typeof body.pricingConfig === 'object') {
+      db.pricingConfig = { ...(db.pricingConfig || {}), ...body.pricingConfig };
+    }
+    if (body.announcement && typeof body.announcement === 'object') {
+      db.announcement = { ...(db.announcement || {}), ...body.announcement };
+    }
+    if (Array.isArray(body.auditLogs) && body.auditLogs.length > 0) {
+      db.auditLogs = mergeCollections(db.auditLogs, body.auditLogs, 'id');
+    }
+
+    saveDatabase(db);
+    res.json({
+      success: true,
+      message: 'Synchronized successfully with RonPay server database',
+      data: db,
+      timestamp: db.lastUpdated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 
@@ -5305,9 +5423,28 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
     } else {
       db.members.push(member);
     }
+
+    // Propagate section or name changes to matching transactions in db.transactions
+    if (member.section || member.name) {
+      const altCleanId = cleanId.startsWith('ebe-') ? 'bcm-' + cleanId.slice(4) : (cleanId.startsWith('bcm-') ? 'ebe-' + cleanId.slice(4) : cleanId);
+      db.transactions = (db.transactions || []).map((t: any) => {
+        const tMid = String(t.memberId || '').toLowerCase().trim();
+        if (tMid === cleanId || tMid === altCleanId) {
+          return {
+            ...t,
+            donorName: member.name || t.donorName,
+            donorVeng: member.section || t.donorVeng,
+            section: member.section || t.section,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+    }
+
     saveDatabase(db);
 
-    // Forward member to Supabase
+    // Forward member to Supabase with proper conflict resolution & metadata backup
     const sbConfig = (db as any).supabaseConfig || {};
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
@@ -5335,17 +5472,33 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
           enrollmentYear: member.enrollmentYear,
           activeYears: member.activeYears,
           yearStatus: member.yearStatus,
+          section: member.section || null,
         }
       };
-      fetch(`${sbUrl}/rest/v1/members`, {
-        method: 'POST',
+
+      // 1. Try PATCH first to directly update existing member record
+      fetch(`${sbUrl}/rest/v1/members?id=eq.${encodeURIComponent(member.id)}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`,
-          'Prefer': 'resolution=merge-duplicates'
+          'Authorization': `Bearer ${sbKey}`
         },
         body: JSON.stringify(sbRow)
+      }).then(patchRes => {
+        if (!patchRes.ok) {
+          // 2. Fallback upsert with on_conflict=id
+          fetch(`${sbUrl}/rest/v1/members?on_conflict=id`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(sbRow)
+          }).catch(() => {});
+        }
       }).catch((e: any) => console.warn('[Server Supabase Member Note]:', e?.message));
     }
 

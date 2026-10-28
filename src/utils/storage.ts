@@ -105,8 +105,10 @@ export const markMemberAsDeleted = (memberId: string): void => {
   if (!memberId) return;
   try {
     const clean = String(memberId).toLowerCase().trim();
+    const altClean = clean.startsWith('ebe-') ? 'bcm-' + clean.substring(4) : (clean.startsWith('bcm-') ? 'ebe-' + clean.substring(4) : clean);
     const set = getDeletedMemberIds();
     set.add(clean);
+    set.add(altClean);
     const arr = Array.from(set).slice(-1000);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(DELETED_MEMBER_IDS_KEY, JSON.stringify(arr));
@@ -115,7 +117,11 @@ export const markMemberAsDeleted = (memberId: string): void => {
         if (rawMems) {
           const parsed = JSON.parse(rawMems);
           if (Array.isArray(parsed)) {
-            const filtered = parsed.filter(m => m && m.id && String(m.id).toLowerCase().trim() !== clean);
+            const filtered = parsed.filter(m => {
+              if (!m || !m.id) return false;
+              const mClean = String(m.id).toLowerCase().trim();
+              return mClean !== clean && mClean !== altClean;
+            });
             if (filtered.length !== parsed.length) {
               localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(filtered));
               if (typeof window !== 'undefined') {
@@ -2822,7 +2828,8 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
     const isExcluded = (id?: string, name?: string) => {
       if (!id) return true;
       const clean = String(id).toLowerCase().trim();
-      if (PERMANENTLY_PURGED_MEMBERS.has(clean) || deletedMemIds.has(clean)) return true;
+      const altClean = clean.startsWith('ebe-') ? 'bcm-' + clean.substring(4) : (clean.startsWith('bcm-') ? 'ebe-' + clean.substring(4) : clean);
+      if (PERMANENTLY_PURGED_MEMBERS.has(clean) || PERMANENTLY_PURGED_MEMBERS.has(altClean) || deletedMemIds.has(clean) || deletedMemIds.has(altClean)) return true;
       if (name !== undefined) {
         const cleanName = String(name || '').trim();
         if (cleanName.length <= 1) return true;
@@ -3121,23 +3128,35 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     const txs = getStoredTransactions();
     let txUpdated = false;
     const matchId = (oldId || stamped.id).trim().toLowerCase();
+    const altMatchId = matchId.startsWith('ebe-') ? 'bcm-' + matchId.slice(4) : (matchId.startsWith('bcm-') ? 'ebe-' + matchId.slice(4) : matchId);
     const updatedTxs = txs.map(t => {
-      if (t.memberId && t.memberId.trim().toLowerCase() === matchId) {
+      const tMid = (t.memberId || '').trim().toLowerCase();
+      if (tMid === matchId || tMid === altMatchId) {
         txUpdated = true;
         return {
           ...t,
           memberId: stamped.id,
           donorName: stamped.name || t.donorName,
           donorVeng: stamped.section || t.donorVeng,
+          section: stamped.section || t.section,
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     });
     if (txUpdated) {
-      saveStoredTransactions(updatedTxs, true);
+      saveStoredTransactions(updatedTxs, false);
     }
   } catch (txPropErr) {
     console.warn('Transaction member info propagation note:', txPropErr);
+  }
+
+  // 4. Broadcast instant multi-device / multi-tab synchronization
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: allList }));
+    window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: allList }));
+    window.dispatchEvent(new CustomEvent('ronpay_state_sync_event', { detail: { type: 'member_updated', member: stamped } }));
+    broadcastTabSync('members', allList);
   }
 
   return supabaseSuccess;
@@ -3146,28 +3165,50 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
 export const deleteMember = (memberId: string, campaignId?: string): void => {
   if (!memberId) return;
   const cleanMid = (memberId || '').trim();
+  const lowerMid = cleanMid.toLowerCase();
+  const altLowerMid = lowerMid.startsWith('ebe-') ? 'bcm-' + lowerMid.substring(4) : (lowerMid.startsWith('bcm-') ? 'ebe-' + lowerMid.substring(4) : lowerMid);
+
+  // 1. Mark as deleted in tombstones (both primary and alternate prefixes)
   markMemberAsDeleted(cleanMid);
+  markMemberAsDeleted(altLowerMid);
+
+  // 2. Filter local storage immediately
   const allList = getMembers();
-  const targetId = cleanMid.toLowerCase();
   const filtered = allList.filter(m => {
-    if ((m.id || '').trim().toLowerCase() !== targetId) return true;
-    if (campaignId && m.campaignId && m.campaignId !== campaignId) return true;
-    return false;
+    if (!m || !m.id) return false;
+    const mClean = m.id.toLowerCase().trim();
+    if (mClean === lowerMid || mClean === altLowerMid) return false;
+    return true;
   });
   saveMembers(filtered);
+
+  // 3. Remove from Firestore & Supabase
   deleteMemberFromFirestore(cleanMid).catch(() => {});
+  deleteMemberFromFirestore(altLowerMid).catch(() => {});
   import('../services/supabaseService').then(({ deleteSupabaseMember }) => {
     deleteSupabaseMember(cleanMid).catch(() => {});
+    deleteSupabaseMember(altLowerMid).catch(() => {});
   }).catch(() => {});
+
+  // 4. Send DELETE request to backend API
   safeApiFetch(`/api/members/${encodeURIComponent(cleanMid)}`, {
     method: 'DELETE'
-  });
+  }).catch(() => {});
+  safeApiFetch(`/api/members/${encodeURIComponent(altLowerMid)}`, {
+    method: 'DELETE'
+  }).catch(() => {});
   safeApiFetch('/api/data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deletedMemberIds: [cleanMid] })
-  });
+    body: JSON.stringify({ deletedMemberIds: [cleanMid, altLowerMid] })
+  }).catch(() => {});
+
+  // 5. Broadcast instant sync to all open tabs and components
   broadcastTabSync('members', { deletedId: cleanMid });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ronpay-members-updated', { detail: filtered }));
+    window.dispatchEvent(new CustomEvent('ronpay_members_updated', { detail: filtered }));
+  }
 };
 
 export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {

@@ -532,6 +532,7 @@ export interface MemberRecord {
   fullPhone?: string;
   phone?: string;
   section?: string;
+  primaryId?: string;
   isFamilyHead?: boolean;
   dependents?: MemberDependent[];
   createdAt?: string;

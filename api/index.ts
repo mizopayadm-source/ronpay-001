@@ -212,6 +212,7 @@ const CANONICAL_BMP_RECEIPTS = [
 interface CentralDatabase {
   campaigns: any[];
   members: any[];
+  deletedMemberIds?: string[];
   transactions: any[];
   deletedTransactionIds?: string[];
   creators: any[];
@@ -1875,11 +1876,22 @@ export default async function handler(req: any, res: any) {
       const body = await parseJsonBody(req);
       const db = getCentralDatabase();
 
+      if (Array.isArray(body.deletedMemberIds) && body.deletedMemberIds.length > 0) {
+        const delMemSet = new Set<string>(body.deletedMemberIds.map((id: any) => String(id).toLowerCase().trim()));
+        db.members = (db.members || []).filter(m => !delMemSet.has(String(m.id).toLowerCase().trim()));
+        if (!Array.isArray(db.deletedMemberIds)) db.deletedMemberIds = [];
+        db.deletedMemberIds = Array.from(new Set<string>([
+          ...(db.deletedMemberIds || []),
+          ...Array.from(delMemSet)
+        ]));
+      }
       if (Array.isArray(body.campaigns) && body.campaigns.length > 0) {
         db.campaigns = mergeCollections(db.campaigns, body.campaigns, 'id');
       }
       if (Array.isArray(body.members) && body.members.length > 0) {
-        db.members = mergeCollections(db.members, body.members, 'id');
+        const delMemSet = new Set<string>((db.deletedMemberIds || []).map((id: string) => String(id).toLowerCase().trim()));
+        const validIncomingMems = body.members.filter((m: any) => m && m.id && !delMemSet.has(String(m.id).toLowerCase().trim()));
+        db.members = mergeCollections(db.members, validIncomingMems, 'id');
       }
       if (Array.isArray(body.transactions) && body.transactions.length > 0) {
         db.transactions = mergeCollections(db.transactions, body.transactions, 'id');
