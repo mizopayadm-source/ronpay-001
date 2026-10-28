@@ -145,7 +145,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   onOpenCreateQR
 }) => {
   const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>(initialTab || 'members_list');
-  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [membersTick, setMembersTick] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
   const [isAuthorizedOfficersOpen, setIsAuthorizedOfficersOpen] = useState<boolean>(false);
 
@@ -238,6 +238,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
   // Active Global QR / Bawm Filter ('all' or campaign.id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+
+  // Computed scoped members list for current view
+  const members = useMemo(() => {
+    if (!isOpen || !selectedCampaignId) return [];
+    return getScopedMembersForView(selectedCampaignId);
+  }, [isOpen, selectedCampaignId, getScopedMembersForView, membersTick]);
 
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
@@ -415,9 +421,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
 
       if (activeId) {
-        const mList = getScopedMembersForView(activeId);
-        setMembers(mList);
-
         const foundCamp = allowedCampaigns.find(c => c.id === activeId);
         if (foundCamp?.orgCode) {
           setNewOrgCode(foundCamp.orgCode);
@@ -426,7 +429,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     } else {
       prevIsOpenRef.current = false;
     }
-  }, [isOpen, allowedCampaigns, initialTab, initialCampaignId, isPrivilegedUser, getScopedMembersForView, allowedCampaignIds]);
+  }, [isOpen, initialTab, initialCampaignId, isPrivilegedUser]);
 
   // Fetch fresh members on demand from Supabase & Server when Kumtluang modal opens
   useEffect(() => {
@@ -447,23 +450,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               }
             });
             saveMembers(merged, true);
-            if (selectedCampaignId) {
-              const refreshed = getScopedMembersForView(selectedCampaignId);
-              setMembers(refreshed);
-            }
+            setMembersTick(t => t + 1);
           }
         }).catch(() => {});
       }).catch(() => {});
       syncAllWithServer(true).catch(() => {});
     }
-  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
+  }, [isOpen]);
 
   // Real-time synchronization listener: updates member list instantly when cloud sync arrives from mobile / other devices
   useEffect(() => {
     const handleRemoteMembersUpdate = () => {
-      if (isOpen && selectedCampaignId) {
-        const refreshed = getScopedMembersForView(selectedCampaignId);
-        setMembers(refreshed);
+      if (isOpen) {
+        setMembersTick(t => t + 1);
       }
     };
 
@@ -482,30 +481,24 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       window.removeEventListener('ronpay_state_sync_event', handleRemoteMembersUpdate);
       window.removeEventListener('storage', handleRemoteMembersUpdate);
     };
-  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
+  }, [isOpen]);
 
   // Polling heartbeat while modal is open: guarantees instant multi-device alignment
   useEffect(() => {
     if (!isOpen) return;
     const interval = setInterval(() => {
-      if (selectedCampaignId) {
-        const refreshed = getScopedMembersForView(selectedCampaignId);
-        setMembers(refreshed);
-      }
+      setMembersTick(t => t + 1);
     }, 3000);
     return () => clearInterval(interval);
-  }, [isOpen, selectedCampaignId, getScopedMembersForView]);
+  }, [isOpen]);
 
-  // When selectedCampaignId changes, reload scoped members
+  // When selectedCampaignId changes, reload active presets
   useEffect(() => {
     if (isOpen) {
       if (!selectedCampaignId || (allowedCampaigns.length === 0 && !isPrivilegedUser)) {
-        setMembers([]);
         setSelectedMember(null);
         return;
       }
-      const mList = getScopedMembersForView(selectedCampaignId);
-      setMembers(mList);
 
       if (selectedCampaignId !== 'all') {
         const camp = allowedCampaigns.find(c => c.id === selectedCampaignId);
@@ -530,7 +523,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       }
       setSelectedMember(null);
     }
-  }, [selectedCampaignId, isOpen, allowedCampaigns, getScopedMembersForView, isPrivilegedUser]);
+  }, [isOpen, selectedCampaignId, allowedCampaigns, isPrivilegedUser]);
 
   // When regTargetCampaignId changes during member creation, auto sync prefix
   useEffect(() => {
@@ -842,10 +835,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
 
     addOrUpdateMember(newM);
-    
-    // Explicitly reload members scoped to the current dropdown filter
-    const updated = getMembers(selectedCampaignId);
-    setMembers(updated);
+    setMembersTick(t => t + 1);
 
     setRegSuccess(`Member [${generatedId}] ${newHming} ${formattedDependents.length > 0 ? `leh dependent ${formattedDependents.length}` : ''} chu vawn fel a ni ta!`);
     setSelectedMember(newM);
@@ -966,8 +956,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     };
 
     addOrUpdateMember(updatedM);
-    const updated = getMembers(selectedCampaignId);
-    setMembers(updated);
+    setMembersTick(t => t + 1);
     if (selectedMember?.id === editingMember.id) {
       setSelectedMember(updatedM);
     }
@@ -992,8 +981,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     );
 
     saveMembers(updatedMembers);
-    const refreshed = getScopedMembersForView(selectedCampaignId);
-    setMembers(refreshed);
+    setMembersTick(t => t + 1);
     setSelectedRollYear(rolloverTargetYear);
     setRollStatusFilter('active');
     setRolloverSuccessMsg(`✅ Member ${rolledOverCount}-te chu Kum ${rolloverTargetYear} Roll-ah hlawhtling takin chhawm luh an ni ta!`);
@@ -1016,8 +1004,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       reasonText
     );
     addOrUpdateMember(updated);
-    const refreshed = getScopedMembersForView(selectedCampaignId);
-    setMembers(refreshed);
+    setMembersTick(t => t + 1);
     setDeactivateTargetMember(null);
     setDeactivateNote('');
     onDataUpdated();
@@ -1032,8 +1019,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       `Kum ${selectedRollYear} Roll-ah in-chhiar leh`
     );
     addOrUpdateMember(updated);
-    const refreshed = getScopedMembersForView(selectedCampaignId);
-    setMembers(refreshed);
+    setMembersTick(t => t + 1);
     onDataUpdated();
   };
 
@@ -1041,8 +1027,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const handleDeleteMember = (memberId: string, memberName: string) => {
     if (window.confirm(`Member "${memberName}" (${memberId}) hi hlumhlut takin paih (delete permanently) i chiang em?`)) {
       deleteMember(memberId, selectedCampaignId);
-      // Instant optimistic UI update
-      setMembers(prev => prev.filter(m => m.id !== memberId));
+      setMembersTick(t => t + 1);
       if (selectedMember?.id === memberId) {
         setSelectedMember(null);
       }
@@ -1054,7 +1039,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const allMembersList = useMemo(() => {
     const rawAll = getMembers('all');
     return filterMembersForScope(rawAll);
-  }, [members, isOpen, allowedCampaigns, creatorProfile]);
+  }, [membersTick, isOpen, allowedCampaigns, creatorProfile]);
 
   const campaignCounts = useMemo(() => {
     const counts: { [campId: string]: number } = {};
@@ -3868,8 +3853,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         initialMode={excelImportInitialMode}
         onImportComplete={(savedMembers) => {
           // Refresh member records list immediately
-          const updated = getMembers(selectedCampaignId);
-          setMembers(updated);
+          setMembersTick(t => t + 1);
         }}
       />
 

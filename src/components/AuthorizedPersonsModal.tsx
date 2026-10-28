@@ -94,7 +94,7 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   const [formNotes, setFormNotes] = useState<string>('');
 
   // Member Roll selection & database binding states
-  const [availableMembers, setAvailableMembers] = useState<MemberRecord[]>([]);
+  const [membersTick, setMembersTick] = useState<number>(0);
   const [memberSearchQuery, setMemberSearchQuery] = useState<string>('');
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState<boolean>(false);
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
@@ -103,20 +103,10 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   const [formSection, setFormSection] = useState<string>('');
   const [formFatherName, setFormFatherName] = useState<string>('');
 
-  // Synchronize campaign members list
+  // Synchronize campaign members tick on event
   useEffect(() => {
-    if (!campaign) {
-      setAvailableMembers([]);
-      return;
-    }
-    const load = () => {
-      const list = (members && members.length > 0) ? members : getMembers(campaign.id);
-      setAvailableMembers(list);
-    };
-    load();
-
     const handleMembersUpdated = () => {
-      load();
+      setMembersTick(t => t + 1);
     };
 
     window.addEventListener('ronpay-members-updated', handleMembersUpdated);
@@ -125,7 +115,14 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
       window.removeEventListener('ronpay-members-updated', handleMembersUpdated);
       window.removeEventListener('ronpay_members_updated', handleMembersUpdated);
     };
-  }, [campaign, members]);
+  }, []);
+
+  // Compute available members list without state setter loops
+  const availableMembers = useMemo(() => {
+    if (!campaign?.id) return [];
+    if (members && members.length > 0) return members;
+    return getMembers(campaign.id);
+  }, [campaign?.id, members, membersTick]);
 
   // Filtered members for dropdown selector
   const filteredMembers = useMemo(() => {
@@ -201,15 +198,16 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     }) || null;
   }, [campaign, userPhoneClean]);
 
+  const currentOfficerPhone = currentOfficerMatch?.phone ? currentOfficerMatch.phone.replace(/\D/g, '').slice(-10) : '';
   const isAssignedOfficerOnly = Boolean(currentOfficerMatch && !isFullManager);
 
   // Auto-lock individual collector view if assigned officer only
-  React.useEffect(() => {
-    if (isAssignedOfficerOnly && currentOfficerMatch) {
-      setSelectedCollectorPhone(currentOfficerMatch.phone.replace(/\D/g, '').slice(-10));
+  useEffect(() => {
+    if (isAssignedOfficerOnly && currentOfficerPhone) {
+      setSelectedCollectorPhone(currentOfficerPhone);
       setActiveTab('analytics');
     }
-  }, [isAssignedOfficerOnly, currentOfficerMatch]);
+  }, [isAssignedOfficerOnly, currentOfficerPhone]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
