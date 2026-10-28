@@ -1107,31 +1107,32 @@ export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberR
   }
 
   return data.map((row: any) => ({
+    ...(row.metadata || {}),
     id: row.id,
     campaignId: row.campaign_id,
     name: row.name,
-    fatherName: row.father_name,
-    orgCode: row.org_code,
-    phone: row.phone,
-    fullPhone: row.full_phone || row.phone,
-    phoneLast4: row.phone_last4,
-    section: row.section,
-    isFamilyHead: row.is_family_head,
+    fatherName: row.father_name || undefined,
+    orgCode: row.org_code || undefined,
+    phone: row.phone || undefined,
+    fullPhone: row.full_phone || row.phone || undefined,
+    phoneLast4: row.phone_last4 || undefined,
+    section: row.section || undefined,
+    isFamilyHead: Boolean(row.is_family_head),
     pledgeAmount: Number(row.pledge_amount) || 0,
     paidAmount: Number(row.paid_amount) || 0,
     status: row.status,
     dependents: row.dependents || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    ...(row.metadata || {})
   }));
 }
 
-export async function upsertSupabaseMember(member: MemberRecord): Promise<boolean> {
+export async function updateSupabaseMember(member: MemberRecord, oldId?: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !member || !member.id) return false;
 
-  const row = {
+  const targetId = oldId || member.id;
+  const updatePayload = {
     id: member.id,
     campaign_id: member.campaignId || 'cmp-default',
     name: member.name || 'Member',
@@ -1146,7 +1147,6 @@ export async function upsertSupabaseMember(member: MemberRecord): Promise<boolea
     paid_amount: Number(member.paidAmount) || 0,
     status: member.status || 'pending',
     dependents: member.dependents || [],
-    created_at: member.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
     metadata: {
       notes: member.notes,
@@ -1157,15 +1157,36 @@ export async function upsertSupabaseMember(member: MemberRecord): Promise<boolea
     }
   };
 
-  const { error } = await supabase
-    .from('members')
-    .upsert(row, { onConflict: 'id' });
+  try {
+    // 1. Direct SQL UPDATE query for permanent immediate persistence
+    const { data, error } = await supabase
+      .from('members')
+      .update(updatePayload)
+      .eq('id', targetId)
+      .select();
 
-  if (error) {
-    console.warn('[Supabase] Member upsert note:', error.message);
+    if (!error && data && data.length > 0) {
+      return true;
+    }
+
+    // 2. Fallback upsert if not found by oldId
+    const { error: upsertErr } = await supabase
+      .from('members')
+      .upsert(updatePayload, { onConflict: 'id' });
+
+    if (upsertErr) {
+      console.warn('[Supabase] Member update/upsert error:', upsertErr.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[Supabase] Member persistence error:', err?.message);
     return false;
   }
-  return true;
+}
+
+export async function upsertSupabaseMember(member: MemberRecord): Promise<boolean> {
+  return updateSupabaseMember(member);
 }
 
 export async function deleteSupabaseMember(id: string): Promise<boolean> {
@@ -1292,7 +1313,31 @@ export async function loadSupabaseInitialState(): Promise<{
     // Update secondary cache safely
     if (finalTxns.length > 0) saveStoredTransactions(finalTxns, true);
     if (camps && camps.length > 0) saveStoredCampaigns(camps, true);
-    if (mems && mems.length > 0) saveMembers(mems, true);
+    let finalMembers = mems && mems.length > 0 ? mems : getMembers();
+    if (mems && mems.length > 0) {
+      // Smart merge: don't let stale remote overwrite newer local edits!
+      const localMems = getMembers();
+      const mergedMems = [...mems];
+      for (const loc of localMems) {
+        const key = (loc.id || '').toLowerCase().trim();
+        const remIdx = mergedMems.findIndex(m => (m.id || '').toLowerCase().trim() === key);
+        if (remIdx >= 0) {
+          const locTime = loc.updatedAt ? new Date(loc.updatedAt).getTime() : 0;
+          const remTime = mergedMems[remIdx].updatedAt ? new Date(mergedMems[remIdx].updatedAt).getTime() : 0;
+          if (locTime > remTime) {
+            // Local is newer! Keep local and update Supabase
+            mergedMems[remIdx] = loc;
+            updateSupabaseMember(loc).catch(() => {});
+          }
+        } else {
+          // Local member not in remote yet, keep it and sync
+          mergedMems.push(loc);
+          updateSupabaseMember(loc).catch(() => {});
+        }
+      }
+      finalMembers = mergedMems;
+      saveMembers(mergedMems, true);
+    }
     if (pool) {
       try {
         localStorage.setItem('ronpay_public_pool_stats_v1', JSON.stringify(pool));
@@ -1302,7 +1347,7 @@ export async function loadSupabaseInitialState(): Promise<{
     return {
       transactions: finalTxns,
       campaigns: camps && camps.length > 0 ? camps : getStoredCampaigns(),
-      members: mems && mems.length > 0 ? mems : getMembers(),
+      members: finalMembers,
       creators: users && users.length > 0 ? users : getStoredCreatorsList(),
       fundPool: pool,
     };

@@ -2898,10 +2898,10 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       return !deletedMemIds.has(cleanId);
     });
 
-    // Enforce Shillong Unit for all BMP Shillong members
+    // Assign default section for BMP Shillong members only if completely unassigned
     allMembers.forEach(m => {
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
-        if (!m.section || m.section === 'Section A' || m.section === 'Section B' || m.section === 'Section C' || m.section === 'Section D' || m.section === 'Bial 1 (Vengchhak)' || m.section === 'Shillong') {
+        if (!m.section || m.section.trim() === '') {
           m.section = 'Shillong Unit';
         }
       }
@@ -2969,7 +2969,7 @@ function debouncedSyncMembersToSupabase(): void {
     import('../services/supabaseService').then(({ syncAllMembersToSupabase }) => {
       syncAllMembersToSupabase().catch(() => {});
     }).catch(() => {});
-  }, 3000);
+  }, 400);
 }
 
 export const saveMembers = (members: MemberRecord[], skipServerPush: boolean = false): void => {
@@ -3027,14 +3027,14 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
   return { added, updated, total: allList.length };
 };
 
-export const addOrUpdateMember = (member: MemberRecord): void => {
+export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
   const stamped: MemberRecord = {
     ...member,
     createdAt: member.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
   const allList = getMembers(); // Load all members across all Bawms
-  const targetId = (stamped.id || '').trim().toLowerCase();
+  const targetId = (oldId || stamped.id || '').trim().toLowerCase();
   const idx = allList.findIndex(m => 
     (m.id || '').trim().toLowerCase() === targetId && 
     (!stamped.campaignId || !m.campaignId || m.campaignId === stamped.campaignId)
@@ -3045,22 +3045,58 @@ export const addOrUpdateMember = (member: MemberRecord): void => {
     allList.unshift(stamped);
   }
   saveMembers(allList);
+
   if (stamped && stamped.id) {
     syncMemberToFirestore(stamped).catch(() => {});
   }
-  import('../services/supabaseService').then(({ upsertSupabaseMember }) => {
-    upsertSupabaseMember(stamped).catch(() => {});
-  }).catch(() => {});
+
+  // 1. Immediately execute direct Supabase UPDATE / UPSERT
+  let supabaseSuccess = false;
+  try {
+    const { updateSupabaseMember } = await import('../services/supabaseService');
+    supabaseSuccess = await updateSupabaseMember(stamped, oldId);
+  } catch (sbErr) {
+    console.warn('[Supabase Direct Member Update Warning]:', sbErr);
+  }
+
+  // 2. Sync to backend API endpoints
   safeApiFetch('/api/members', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(stamped)
-  });
+  }).catch(() => {});
+
   safeApiFetch('/api/data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ members: [stamped] })
-  });
+  }).catch(() => {});
+
+  // 3. Propagate updated member name / section to local transactions
+  try {
+    const txs = getStoredTransactions();
+    let txUpdated = false;
+    const matchId = (oldId || stamped.id).trim().toLowerCase();
+    const updatedTxs = txs.map(t => {
+      if (t.memberId && t.memberId.trim().toLowerCase() === matchId) {
+        txUpdated = true;
+        return {
+          ...t,
+          memberId: stamped.id,
+          donorName: stamped.name || t.donorName,
+          donorVeng: stamped.section || t.donorVeng,
+        };
+      }
+      return t;
+    });
+    if (txUpdated) {
+      saveStoredTransactions(updatedTxs, true);
+    }
+  } catch (txPropErr) {
+    console.warn('Transaction member info propagation note:', txPropErr);
+  }
+
+  return supabaseSuccess;
 };
 
 export const deleteMember = (memberId: string, campaignId?: string): void => {

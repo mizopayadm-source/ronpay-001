@@ -5256,7 +5256,7 @@ app.get('/api/members', (req: Request, res: Response) => {
   res.json({ success: true, members: result });
 });
 
-app.post('/api/members', (req: Request, res: Response) => {
+const handleUpsertMemberRequest = (req: Request, res: Response) => {
   try {
     const member = req.body;
     if (!member || !member.id) {
@@ -5277,7 +5277,7 @@ app.post('/api/members', (req: Request, res: Response) => {
     // Forward member to Supabase
     const sbConfig = (db as any).supabaseConfig || {};
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
-    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY;
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
     if (sbUrl && sbKey) {
       const sbRow = {
         id: member.id,
@@ -5296,6 +5296,13 @@ app.post('/api/members', (req: Request, res: Response) => {
         dependents: member.dependents || [],
         created_at: member.createdAt || new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        metadata: {
+          notes: member.notes,
+          avatarUrl: member.avatarUrl,
+          enrollmentYear: member.enrollmentYear,
+          activeYears: member.activeYears,
+          yearStatus: member.yearStatus,
+        }
       };
       fetch(`${sbUrl}/rest/v1/members`, {
         method: 'POST',
@@ -5313,6 +5320,16 @@ app.post('/api/members', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
+};
+
+app.post('/api/members', handleUpsertMemberRequest);
+app.put('/api/members/:id', (req: Request, res: Response) => {
+  if (req.params.id) req.body.id = req.params.id;
+  handleUpsertMemberRequest(req, res);
+});
+app.patch('/api/members/:id', (req: Request, res: Response) => {
+  if (req.params.id) req.body.id = req.params.id;
+  handleUpsertMemberRequest(req, res);
 });
 
 app.delete('/api/members/:id', (req: Request, res: Response) => {

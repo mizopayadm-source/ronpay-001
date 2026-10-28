@@ -264,10 +264,19 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [excelImportInitialMode, setExcelImportInitialMode] = useState<'file' | 'paste'>('file');
 
   // New Member Registration State
-  const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>('');
+  const [regTargetCampaignId, setRegTargetCampaignId] = useState<string>(() => {
+    if (initialCampaignId && initialCampaignId !== 'all') return initialCampaignId;
+    const defaultCamp = campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
+    return defaultCamp?.id || '';
+  });
   const [newHming, setNewHming] = useState<string>('');
   const [newFatherName, setNewFatherName] = useState<string>('');
-  const [newOrgCode, setNewOrgCode] = useState<string>('BCM');
+  const [newOrgCode, setNewOrgCode] = useState<string>(() => {
+    const initCamp = initialCampaignId && initialCampaignId !== 'all'
+      ? campaigns.find(c => c.id === initialCampaignId) 
+      : campaigns.find(c => c.category === 'kumtluang') || campaigns[0];
+    return (initCamp?.orgCode || 'EBE').toUpperCase();
+  });
   const [newPhone4, setNewPhone4] = useState<string>('');
   const [newFullPhone, setNewFullPhone] = useState<string>('');
   const [newSection, setNewSection] = useState<string>('');
@@ -309,6 +318,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const [editDependents, setEditDependents] = useState<MemberDependent[]>([]);
   const [editDepName, setEditDepName] = useState<string>('');
   const [editDepRel, setEditDepRel] = useState<string>('Fa');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   // Loading state for image compression
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
@@ -434,7 +444,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Fetch fresh members on demand from Supabase & Server when Kumtluang modal opens
   useEffect(() => {
     if (isOpen) {
-      import('../services/supabaseService').then(({ fetchSupabaseMembers }) => {
+      import('../services/supabaseService').then(({ fetchSupabaseMembers, updateSupabaseMember }) => {
         fetchSupabaseMembers('all').then(remoteMembers => {
           if (Array.isArray(remoteMembers) && remoteMembers.length > 0) {
             const currentLocal = getMembers('all');
@@ -443,7 +453,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               if (rm && rm.id) {
                 const idx = merged.findIndex(m => m.id.toLowerCase() === rm.id.toLowerCase());
                 if (idx >= 0) {
-                  merged[idx] = { ...merged[idx], ...rm };
+                  const localItem = merged[idx];
+                  const remoteTime = rm.updatedAt ? new Date(rm.updatedAt).getTime() : 0;
+                  const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+                  if (remoteTime >= localTime) {
+                    merged[idx] = { ...localItem, ...rm };
+                  } else {
+                    // Local is newer, push to Supabase
+                    updateSupabaseMember(localItem).catch(() => {});
+                  }
                 } else {
                   merged.unshift(rm);
                 }
@@ -525,16 +543,6 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     }
   }, [isOpen, selectedCampaignId, allowedCampaigns, isPrivilegedUser]);
 
-  // When regTargetCampaignId changes during member creation, auto sync prefix
-  useEffect(() => {
-    if (regTargetCampaignId) {
-      const camp = allowedCampaigns.find(c => c.id === regTargetCampaignId);
-      if (camp?.orgCode) {
-        setNewOrgCode(camp.orgCode);
-      }
-    }
-  }, [regTargetCampaignId, allowedCampaigns]);
-
   // Active campaign object based on quick entry / active filter
   const activeScopedCampaign = (selectedCampaignId !== 'all' 
     ? allowedCampaigns.find(c => c.id === selectedCampaignId) 
@@ -543,6 +551,13 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   const activeRegisterCampaign = (regTargetCampaignId 
     ? allowedCampaigns.find(c => c.id === regTargetCampaignId) 
     : null) || activeScopedCampaign;
+
+  // When activeRegisterCampaign changes during member creation, auto sync predefined prefix
+  useEffect(() => {
+    if (activeRegisterCampaign?.orgCode) {
+      setNewOrgCode(activeRegisterCampaign.orgCode.toUpperCase());
+    }
+  }, [activeRegisterCampaign?.id, activeRegisterCampaign?.orgCode]);
 
   const activeEditCampaign = (editCampaignId 
     ? allowedCampaigns.find(c => c.id === editCampaignId) 
@@ -865,10 +880,11 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Open Edit Member Modal
   const handleOpenEdit = (m: MemberRecord) => {
     setEditingMember(m);
+    const targetCamp = allowedCampaigns.find(c => c.id === m.campaignId) || campaigns.find(c => c.id === m.campaignId);
     setEditCampaignId(m.campaignId || campaigns[0]?.id || '');
     setEditName(m.name);
     setEditFatherName(m.fatherName || '');
-    setEditOrgCode(m.orgCode);
+    setEditOrgCode((targetCamp?.orgCode || m.orgCode || 'EBE').toUpperCase());
     setEditPhone4(m.phoneLast4);
     setEditFullPhone(m.fullPhone || '');
     setEditSection(m.section || '');
@@ -898,71 +914,83 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   };
 
   // Save Edit Member
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMember) return;
+    if (!editingMember || isSavingEdit) return;
 
-    const org = editOrgCode.trim().toUpperCase() || editingMember.orgCode;
-    const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
-    const newId = `${org}-${p4}`;
+    setIsSavingEdit(true);
+    try {
+      const org = editOrgCode.trim().toUpperCase() || editingMember.orgCode;
+      const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
+      const newId = `${org}-${p4}`;
+      const oldId = editingMember.id;
 
-    const allListForEditCheck = getMembers('all');
-    const exactEditDuplicate = allListForEditCheck.find(m => {
-      if (m.id.toLowerCase().trim() === editingMember.id.toLowerCase().trim()) return false;
-      const mId = (m.id || '').trim().toLowerCase();
-      const mOrg = (m.orgCode || '').trim().toLowerCase();
-      const mP4 = (m.phoneLast4 || '').trim();
-      const mName = (m.name || '').trim().toLowerCase();
-      
-      const isSameId = mId === newId.toLowerCase();
-      const isSameNameAndRoll = mName === editName.trim().toLowerCase() && mOrg === org.toLowerCase() && mP4 === p4;
-      return isSameId || isSameNameAndRoll;
-    });
+      const allListForEditCheck = getMembers('all');
+      const exactEditDuplicate = allListForEditCheck.find(m => {
+        if (m.id.toLowerCase().trim() === oldId.toLowerCase().trim()) return false;
+        const mId = (m.id || '').trim().toLowerCase();
+        const mOrg = (m.orgCode || '').trim().toLowerCase();
+        const mP4 = (m.phoneLast4 || '').trim();
+        const mName = (m.name || '').trim().toLowerCase();
+        
+        const isSameId = mId === newId.toLowerCase();
+        const isSameNameAndRoll = mName === editName.trim().toLowerCase() && mOrg === org.toLowerCase() && mP4 === p4;
+        return isSameId || isSameNameAndRoll;
+      });
 
-    if (exactEditDuplicate) {
-      alert(`Duplicate Error: Another member "${exactEditDuplicate.name}" (${exactEditDuplicate.id}) with this exact Roll number and Name already exists.`);
-      return;
+      if (exactEditDuplicate) {
+        alert(`Duplicate Error: Another member "${exactEditDuplicate.name}" (${exactEditDuplicate.id}) with this exact Roll number and Name already exists.`);
+        setIsSavingEdit(false);
+        return;
+      }
+
+      // Re-index subIds if ID changed
+      const updatedDeps: MemberDependent[] = editDependents.map((dep, idx) => ({
+        ...dep,
+        subId: `${newId}-${String(idx + 1).padStart(2, '0')}`
+      }));
+
+      // If ID changed, delete old one from storage and Supabase
+      if (newId !== oldId) {
+        deleteMember(oldId, editingMember.campaignId || selectedCampaignId);
+      }
+
+      const updatedM: MemberRecord = {
+        ...editingMember,
+        id: newId,
+        campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
+        name: editName.trim() || editingMember.name,
+        fatherName: editFatherName.trim() || undefined,
+        orgCode: org,
+        phoneLast4: p4,
+        fullPhone: editFullPhone.trim() || undefined,
+        section: editSection.trim() || undefined,
+        avatarUrl: editAvatarUrl || undefined,
+        isFamilyHead: true,
+        dependents: updatedDeps,
+        createdAt: editingMember.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        enrollmentYear: editingMember.enrollmentYear || selectedRollYear,
+        activeYears: editingMember.activeYears && editingMember.activeYears.length > 0 ? editingMember.activeYears : [selectedRollYear],
+        yearStatus: editingMember.yearStatus
+      };
+
+      // Direct, permanent save to Supabase database & storage
+      await addOrUpdateMember(updatedM, oldId);
+
+      setMembersTick(t => t + 1);
+      if (selectedMember?.id === oldId || selectedMember?.id === newId) {
+        setSelectedMember(updatedM);
+      }
+      setEditingMember(null);
+      onDataUpdated();
+      setRegSuccess(`✅ Member (${newId}) & Section "${updatedM.section || 'N/A'}" database-ah save fel a ni ta!`);
+    } catch (err: any) {
+      console.error('Failed to save member edit:', err);
+      alert(`Member siamthatna save theih a ni lo: ${err?.message || 'Error'}`);
+    } finally {
+      setIsSavingEdit(false);
     }
-
-    // Re-index subIds if ID changed
-    const updatedDeps: MemberDependent[] = editDependents.map((dep, idx) => ({
-      ...dep,
-      subId: `${newId}-${String(idx + 1).padStart(2, '0')}`
-    }));
-
-    // If ID changed, delete old one
-    if (newId !== editingMember.id) {
-      deleteMember(editingMember.id, editingMember.campaignId || selectedCampaignId);
-    }
-
-    const updatedM: MemberRecord = {
-      ...editingMember,
-      id: newId,
-      campaignId: editCampaignId || editingMember.campaignId || activeScopedCampaign?.id,
-      name: editName.trim() || editingMember.name,
-      fatherName: editFatherName.trim() || undefined,
-      orgCode: org,
-      phoneLast4: p4,
-      fullPhone: editFullPhone.trim() || undefined,
-      section: editSection.trim() || undefined,
-      avatarUrl: editAvatarUrl || undefined,
-      isFamilyHead: true,
-      dependents: updatedDeps,
-      createdAt: editingMember.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      enrollmentYear: editingMember.enrollmentYear || selectedRollYear,
-      activeYears: editingMember.activeYears && editingMember.activeYears.length > 0 ? editingMember.activeYears : [selectedRollYear],
-      yearStatus: editingMember.yearStatus
-    };
-
-    addOrUpdateMember(updatedM);
-    setMembersTick(t => t + 1);
-    if (selectedMember?.id === editingMember.id) {
-      setSelectedMember(updatedM);
-    }
-    setEditingMember(null);
-    onDataUpdated();
-    setRegSuccess(`✅ Member record (${newId}) siamthat (updated) hlawhtling ta e!`);
   };
 
   // Rollover members from previous year to new year (Annual Roll Rollover)
@@ -1921,8 +1949,15 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                       Select Target QR / Bawm: <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={regTargetCampaignId}
-                      onChange={(e) => setRegTargetCampaignId(e.target.value)}
+                      value={regTargetCampaignId || activeRegisterCampaign?.id || ''}
+                      onChange={(e) => {
+                        const targetId = e.target.value;
+                        setRegTargetCampaignId(targetId);
+                        const c = allowedCampaigns.find(x => x.id === targetId);
+                        if (c?.orgCode) {
+                          setNewOrgCode(c.orgCode.toUpperCase());
+                        }
+                      }}
                       className="w-full p-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                       required
                     >
@@ -2003,18 +2038,32 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Pawl Code (Prefix) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={5}
-                      value={newOrgCode}
-                      onChange={(e) => setNewOrgCode(e.target.value.toUpperCase())}
-                      placeholder="e.g. EBE / BCM / YMA"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono"
-                      required
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 block">
+                        Pawl Code (Prefix) <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[9.5px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                        <Lock className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Predefined</span>
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={newOrgCode}
+                        readOnly
+                        className="w-full p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-sm font-black text-slate-800 uppercase focus:outline-none font-mono cursor-not-allowed select-none shadow-2xs"
+                        title={`Pawl Code (${newOrgCode}) hi active campaign (${activeRegisterCampaign?.orgName || activeRegisterCampaign?.title || 'active campaign'}) aṭanga auto-load a ni.`}
+                        required
+                      />
+                      <div className="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                        <Lock className="w-4 h-4 text-slate-500" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium truncate">
+                      🏛️ {activeRegisterCampaign?.orgName || activeRegisterCampaign?.title} ({newOrgCode})
+                    </p>
                   </div>
 
                   <div>
@@ -3439,15 +3488,27 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
-                    Pawl Code (Prefix)
-                  </label>
-                  <input
-                    type="text"
-                    value={editOrgCode}
-                    onChange={(e) => setEditOrgCode(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900 uppercase focus:outline-none focus:bg-white focus:border-indigo-600"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10.5px] font-bold text-slate-700 block">
+                      Pawl Code (Prefix) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[9px] text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5 text-emerald-600" />
+                      <span>Predefined</span>
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={editOrgCode}
+                      readOnly
+                      className="w-full bg-slate-100 border border-slate-300 rounded-xl p-2.5 font-mono font-black text-slate-800 uppercase focus:outline-none cursor-not-allowed select-none"
+                    />
+                    <div className="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -3595,16 +3656,28 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               <div className="flex gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSavingEdit}
                   onClick={() => setEditingMember(null)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
+                  disabled={isSavingEdit}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2.5 rounded-xl transition cursor-pointer text-xs shadow-md flex items-center justify-center gap-1.5"
                 >
-                  <Check className="w-4 h-4" /> Vawng / Save Changes
+                  {isSavingEdit ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving to Database...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Vawng / Save Changes</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

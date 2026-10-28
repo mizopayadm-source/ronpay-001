@@ -330,6 +330,58 @@ export const normalizeCampaign = (row: any): Campaign => {
   };
 };
 
+export const mapMemberToSupabase = (m: MemberRecord) => {
+  return {
+    id: m.id,
+    campaign_id: m.campaignId || 'cmp-default',
+    name: m.name || 'Member',
+    father_name: m.fatherName || null,
+    org_code: m.orgCode || null,
+    phone: m.phone || m.fullPhone || null,
+    full_phone: m.fullPhone || m.phone || null,
+    phone_last4: m.phoneLast4 || (m.phone ? m.phone.slice(-4) : null),
+    section: m.section || null,
+    is_family_head: Boolean(m.isFamilyHead),
+    pledge_amount: Number(m.pledgeAmount) || 0,
+    paid_amount: Number(m.paidAmount) || 0,
+    status: m.status || 'pending',
+    dependents: m.dependents || [],
+    created_at: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    metadata: {
+      notes: m.notes,
+      avatarUrl: m.avatarUrl,
+      enrollmentYear: m.enrollmentYear,
+      activeYears: m.activeYears,
+      yearStatus: m.yearStatus,
+    }
+  };
+};
+
+export const normalizeMember = (row: any): MemberRecord => {
+  if (!row) return row;
+  const meta = row.metadata || {};
+  return {
+    ...meta,
+    id: row.id,
+    campaignId: row.campaign_id || row.campaignId || 'cmp-default',
+    name: row.name || 'Member',
+    fatherName: row.father_name || row.fatherName || undefined,
+    orgCode: row.org_code || row.orgCode || undefined,
+    phone: row.phone || row.full_phone || undefined,
+    fullPhone: row.full_phone || row.phone || undefined,
+    phoneLast4: row.phone_last4 || row.phoneLast4 || undefined,
+    section: row.section || undefined,
+    isFamilyHead: Boolean(row.is_family_head ?? row.isFamilyHead ?? true),
+    pledgeAmount: Number(row.pledge_amount ?? row.pledgeAmount ?? 0),
+    paidAmount: Number(row.paid_amount ?? row.paidAmount ?? 0),
+    status: row.status || 'pending',
+    dependents: Array.isArray(row.dependents) ? row.dependents : [],
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+  };
+};
+
 // =========================================================================
 // Authoritative Fetchers (Single Source of Truth)
 // =========================================================================
@@ -449,6 +501,16 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         });
         return validRows.map(normalizeExpense) as unknown as T[];
       }
+      if (table === 'members') {
+        let query = supabase.from('members').select('*').range(0, 9999);
+        if (options?.campaignId && options.campaignId !== 'all') {
+          query = query.eq('campaign_id', options.campaignId);
+        }
+        const { data, error } = await query;
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map(normalizeMember) as unknown as T[];
+        }
+      }
       if (table === 'wallet_transactions') {
         return data.map(normalizeWalletTx) as unknown as T[];
       }
@@ -469,6 +531,7 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
       if (json && json.data && Array.isArray(json.data[table]) && json.data[table].length > 0) {
         if (table === 'transactions') return json.data[table].map(normalizeTransaction) as T[];
         if (table === 'campaigns') return json.data[table].map(normalizeCampaign) as T[];
+        if (table === 'members') return json.data[table].map(normalizeMember) as T[];
         if (table === 'expenses') return json.data[table].map(normalizeExpense) as T[];
         return json.data[table] as T[];
       }
@@ -516,10 +579,30 @@ export const deleteCampaign = async (id: string) => {
 };
 
 export const upsertMember = async (member: MemberRecord) => {
+  const payload = mapMemberToSupabase(member);
   const { data, error } = await supabase
     .from('members')
-    .upsert(member, { onConflict: 'id' });
+    .upsert(payload, { onConflict: 'id' });
   if (error) throw error;
+  return data;
+};
+
+export const updateMemberDirect = async (member: MemberRecord, oldId?: string) => {
+  const payload = mapMemberToSupabase(member);
+  const targetId = oldId || member.id;
+  const { data, error } = await supabase
+    .from('members')
+    .update(payload)
+    .eq('id', targetId)
+    .select();
+  if (error || !data || data.length === 0) {
+    const { data: upsertData, error: upsertErr } = await supabase
+      .from('members')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+    if (upsertErr) throw upsertErr;
+    return upsertData;
+  }
   return data;
 };
 

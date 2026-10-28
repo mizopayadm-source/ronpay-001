@@ -371,11 +371,21 @@ export default function App() {
       }).catch(() => {});
     });
 
+    const unsubMem = subscribeToTable('members', () => {
+      fetchTableData<MemberRecord>('members').then(mems => {
+        if (isMounted && Array.isArray(mems) && mems.length > 0) {
+          setMembersState(mems);
+          saveMembers(mems, true);
+        }
+      }).catch(() => {});
+    });
+
     return () => {
       isMounted = false;
       clearInterval(pollInterval);
       unsubTx.unsubscribe();
       unsubCamp.unsubscribe();
+      unsubMem.unsubscribe();
     };
   }, []);
 

@@ -402,6 +402,12 @@ export const DonorPaymentsEditorModal: React.FC<DonorPaymentsEditorModalProps> =
 
         if (memberUpdated) {
           saveMembers(updatedMembers);
+          const changed = updatedMembers.find(m => m && m.id && m.id.toLowerCase().trim() === targetMid);
+          if (changed) {
+            import('../services/supabaseService').then(({ updateSupabaseMember }) => {
+              updateSupabaseMember(changed).catch(() => {});
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.warn('Could not update member record in storage:', err);
