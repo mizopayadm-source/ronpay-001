@@ -31,6 +31,7 @@ import {
   Check,
   TrendingUp,
   ArrowRightLeft,
+  EyeOff,
   ShieldCheck
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
@@ -198,14 +199,43 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   // Filtered & Sorted campaigns
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter(c => {
-      // Hide BMP Shillong and BCM Ebenezer for public/guest unless admin or owner
+      // Exclude hidden / unpublished campaigns from default public listings
+      // They remain accessible if:
+      // 1. Current user is campaign creator or admin
+      // 2. User searches explicitly using Search query (e.g. prefix code "EBE", name, or ID)
+      const qTrim = searchQuery.trim().toLowerCase();
+      const isOwner = isCampaignCreator(c, creatorProfile);
+      const isAdmin = isAuthorizedAdmin;
+
+      if (c.isHidden) {
+        const matchesDirectSearch = Boolean(
+          qTrim && (
+            (c.title || '').toLowerCase().includes(qTrim) ||
+            (c.orgCode || '').toLowerCase().includes(qTrim) ||
+            (c.id || '').toLowerCase().includes(qTrim) ||
+            (c.orgName || '').toLowerCase().includes(qTrim)
+          )
+        );
+        if (!isAdmin && !isOwner && !matchesDirectSearch) {
+          return false;
+        }
+      }
+
+      // Hide BMP Shillong and BCM Ebenezer for public/guest unless admin, owner, or directly searched
       const titleLower = (c.title || '').toLowerCase();
       const orgLower = (c.orgName || '').toLowerCase();
+      const orgCodeLower = (c.orgCode || '').toLowerCase();
       const isDefaultDemo = titleLower.includes('bmp shillong') || titleLower.includes('bcm ebenezer') || orgLower.includes('bmp shillong') || orgLower.includes('bcm ebenezer') || c.id === 'cmp-1788107291420' || c.id === 'cmp-kumtluang-1';
       if (isDefaultDemo) {
-        const isOwner = isCampaignCreator(c, creatorProfile);
-        const isAdmin = isAuthorizedAdmin;
-        if (!isAdmin && !isOwner) return false;
+        const matchesDirectSearch = Boolean(
+          qTrim && (
+            titleLower.includes(qTrim) || 
+            orgLower.includes(qTrim) || 
+            orgCodeLower.includes(qTrim) || 
+            c.id.toLowerCase().includes(qTrim)
+          )
+        );
+        if (!isAdmin && !isOwner && !matchesDirectSearch) return false;
       }
 
       // 1. Category filter
@@ -239,9 +269,10 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
         const matchesEmergency = c.emergencyTitle ? c.emergencyTitle.toLowerCase().includes(q) : false;
         const matchesUpi = c.upiId ? c.upiId.toLowerCase().includes(q) : false;
         const matchesId = c.id.toLowerCase().includes(q);
+        const matchesOrgCode = c.orgCode ? c.orgCode.toLowerCase().includes(q) : false;
         const matchesSubCats = c.subCategories ? c.subCategories.some(sub => sub.toLowerCase().includes(q)) : false;
 
-        if (!matchesTitle && !matchesSubtitle && !matchesLoc && !matchesMitthi && !matchesCause && !matchesOrg && !matchesEmergency && !matchesUpi && !matchesId && !matchesSubCats) {
+        if (!matchesTitle && !matchesSubtitle && !matchesLoc && !matchesMitthi && !matchesCause && !matchesOrg && !matchesEmergency && !matchesUpi && !matchesId && !matchesOrgCode && !matchesSubCats) {
           return false;
         }
       }
@@ -779,6 +810,16 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         }`}>
                           {getCategoryDisplayName(camp.category, language)}
                         </span>
+                        {camp.orgCode && (
+                          <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                            {camp.orgCode}
+                          </span>
+                        )}
+                        {camp.isHidden && (
+                          <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5 shrink-0">
+                            <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted
+                          </span>
+                        )}
                         <h3 className="font-extrabold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
                           {translatedTitle}
                         </h3>

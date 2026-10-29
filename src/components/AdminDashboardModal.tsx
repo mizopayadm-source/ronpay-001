@@ -228,7 +228,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'pending' | 'upgrades' | 'approved' | 'blocked'>('all');
   
   // Campaigns sub-filter
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'expired' | 'rejected'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'hidden' | 'expired' | 'rejected'>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [deleteConfirmCamp, setDeleteConfirmCamp] = useState<{
     camp: Campaign;
@@ -548,9 +548,32 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const pendingCreators = activeCreatorsList.filter(c => !c.isApproved);
   const pendingUpgrades = activeCreatorsList.filter(c => !!c.pendingUpgrade);
   const pendingCampaigns = campaigns.filter(c => c.status === 'pending_approval' || c.status === 'pending_renewal' || c.renewalRequest?.status === 'pending');
-  const activeCampaigns = campaigns.filter(c => c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && c.status !== 'pending_renewal' && !isCampaignExpired(c.validityDate || c.expiry_date || c.valid_until, c.status, c.category, c.createdAt));
+  const activeCampaigns = campaigns.filter(c => !c.isHidden && c.status !== 'rejected' && c.status !== 'expired' && c.status !== 'cancelled' && c.status !== 'archived' && c.status !== 'pending_approval' && c.status !== 'pending_renewal' && !isCampaignExpired(c.validityDate || c.expiry_date || c.valid_until, c.status, c.category, c.createdAt));
+  const hiddenCampaigns = campaigns.filter(c => c.isHidden === true);
   const expiredCampaigns = campaigns.filter(c => c.status === 'expired' || c.status === 'pending_renewal' || (c.status !== 'pending_approval' && c.status !== 'rejected' && isCampaignExpired(c.validityDate || c.expiry_date || c.valid_until, c.status, c.category, c.createdAt)));
   const rejectedCampaigns = campaigns.filter(c => c.status === 'rejected');
+
+  const handleToggleAdminHide = (camp: Campaign) => {
+    const nextHidden = !camp.isHidden;
+    const updated: Campaign = {
+      ...camp,
+      isHidden: nextHidden,
+      hiddenAt: nextHidden ? new Date().toISOString() : undefined,
+      hiddenBy: nextHidden ? (currentProfile?.name || 'Admin') : undefined,
+      updatedAt: new Date().toISOString()
+    };
+    onUpdateCampaign(updated);
+    saveCampaign(updated);
+    recordAuditLog(
+      nextHidden ? 'Campaign Hidden (Unpublished)' : 'Campaign Unhidden (Re-published)',
+      `Admin ${nextHidden ? 'hid/unpublished' : 'unhid/re-published'} QR campaign '${camp.title}' (${camp.id}).`,
+      'campaign',
+      camp.id
+    );
+    setLogsList(getStoredAuditLogs());
+    setCampaignActionToast(nextHidden ? `🙈 '${camp.title}' has been hidden from public lists.` : `👁️ '${camp.title}' has been republished.`);
+    setTimeout(() => setCampaignActionToast(null), 5000);
+  };
 
   // Quick 1-Click Approve for pending creator applications
   const handleQuickApproveCreator = (creator: CreatorProfile) => {
@@ -1050,8 +1073,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Filtered Campaigns list
   const filteredCampaigns = campaigns.filter(c => {
+    if (campaignFilter === 'hidden' && !c.isHidden) return false;
     if (campaignFilter === 'pending' && c.status !== 'pending_approval') return false;
-    if (campaignFilter === 'active' && (c.status === 'expired' || c.status === 'rejected' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'pending_approval' || isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt))) return false;
+    if (campaignFilter === 'active' && (c.isHidden || c.status === 'expired' || c.status === 'rejected' || c.status === 'cancelled' || c.status === 'archived' || c.status === 'pending_approval' || isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt))) return false;
     if (campaignFilter === 'expired' && !(c.status === 'expired' || isCampaignExpired(c.validityDate, c.status, c.category, c.createdAt))) return false;
     if (campaignFilter === 'rejected' && c.status !== 'rejected') return false;
     if (selectedCategoryFilter !== 'all' && c.category !== selectedCategoryFilter) return false;
@@ -1563,6 +1587,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         { key: 'all', label: `All (${campaigns.length})` },
                         { key: 'pending', label: `Pending Review (${pendingCampaigns.length})` },
                         { key: 'active', label: `Active QRs (${activeCampaigns.length})` },
+                        { key: 'hidden', label: `Hidden / Draft QRs (${hiddenCampaigns.length})` },
                         { key: 'expired', label: `Expired QRs (${expiredCampaigns.length})` },
                         { key: 'rejected', label: `Rejected (${rejectedCampaigns.length})` },
                       ].map(f => (
@@ -1660,6 +1685,11 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   {isRejected && (
                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
                                       REJECTED
+                                    </span>
+                                  )}
+                                  {camp.isHidden && (
+                                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1 shadow-2xs">
+                                      <EyeOff className="w-2.5 h-2.5 text-purple-700" /> HIDDEN / UNPUBLISHED
                                     </span>
                                   )}
                                 </div>
@@ -1796,6 +1826,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                                   Mark Expired
                                 </button>
                               )}
+
+                              {/* Visibility Toggle: Hide / Unpublish / Re-publish */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleAdminHide(camp)}
+                                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border ${
+                                  camp.isHidden
+                                    ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-700 shadow-xs'
+                                    : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200'
+                                }`}>
+                                {camp.isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                <span>{camp.isHidden ? 'Unhide / Publish' : 'Hide'}</span>
+                              </button>
 
                               {isRejected && (
                                 <button
@@ -5192,6 +5235,62 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         <div className="w-3 h-3 rounded-full bg-white shadow-xs"></div>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Hide / Unpublish QR Toggle Switch */}
+                <div className="bg-purple-50/70 p-3.5 rounded-2xl border border-purple-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        editingCampaign.isHidden ? 'bg-purple-700 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        <EyeOff className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">
+                          Hide / Unpublish QR (Dah Thup)
+                        </h4>
+                        <p className="text-[10px] text-purple-800 font-medium">
+                          Public Services & Recent lists atanga thupna
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Toggle Switch */}
+                    <button
+                      type="button"
+                      onClick={() => setEditingCampaign({
+                        ...editingCampaign,
+                        isHidden: !editingCampaign.isHidden,
+                        hiddenAt: !editingCampaign.isHidden ? (editingCampaign.hiddenAt || new Date().toISOString()) : undefined,
+                        hiddenBy: !editingCampaign.isHidden ? (currentProfile?.name || 'Admin') : undefined
+                      })}
+                      className={`w-12 h-6 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer shrink-0 ${
+                        editingCampaign.isHidden ? 'bg-purple-700 justify-end' : 'bg-slate-300 justify-start'
+                      }`}
+                      title={editingCampaign.isHidden ? 'QR is currently hidden' : 'QR is currently public'}
+                    >
+                      <div className="w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center text-[9px] font-bold text-slate-800">
+                        {editingCampaign.isHidden ? '🙈' : '👁️'}
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className={`p-2.5 rounded-xl text-[10px] leading-relaxed border ${
+                    editingCampaign.isHidden 
+                      ? 'bg-purple-100/80 border-purple-300 text-purple-950 font-medium'
+                      : 'bg-white border-purple-100 text-slate-600'
+                  }`}>
+                    {editingCampaign.isHidden ? (
+                      <span>
+                        <strong>🙈 Status: HIDDEN / UNPUBLISHED</strong> — He QR hi public Services, Recent QRs, leh default active list-ah a lang lo ang. Amaherawhchu <strong>QR direct scan, dynamic deep link, emaw Global Search (Prefix: {editingCampaign.orgCode || editingCampaign.id})</strong> hmangin sum pek theih reng a ni a, transactions & ledger a bo lo.
+                      </span>
+                    ) : (
+                      <span>
+                        <strong>👁️ Status: PUBLIC & PUBLISHED</strong> — Mipui tana hmuh theih leh tlawh theihin active services-ah a lang reng ang.
+                      </span>
+                    )}
                   </div>
                 </div>
 

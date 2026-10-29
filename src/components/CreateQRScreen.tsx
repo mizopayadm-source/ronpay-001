@@ -25,6 +25,7 @@ import {
   Check,
   X,
   Eye,
+  EyeOff,
   SlidersHorizontal,
   FileSpreadsheet,
   Clock,
@@ -117,6 +118,7 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
   // Navigation Tabs: Create New QR vs Manage Created QRs
   const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
   const [manageFilter, setManageFilter] = useState<string>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'active' | 'hidden' | 'expired'>('all');
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [deletingCampaign, setDeletingCampaign] = useState<Campaign | null>(null);
   const [deleteReasonText, setDeleteReasonText] = useState<string>('');
@@ -231,10 +233,44 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
     ? campaigns.filter(c => c.id !== 'cmp-kumtluang-ymavt')
     : campaigns.filter(c => isCampaignCreator(c, creatorProfile));
 
+  const hiddenCampaignsCount = myCampaigns.filter(c => c.isHidden === true).length;
+  const activeCampaignsCount = myCampaigns.filter(c => !c.isHidden && (c.status === 'active' || !c.status) && !isCampaignExpired(c.validityDate, c.status)).length;
+  const expiredCampaignsCount = myCampaigns.filter(c => c.status === 'expired' || isCampaignExpired(c.validityDate, c.status)).length;
+
   const displayedCampaigns = myCampaigns.filter(c => {
-    if (manageFilter === 'all') return true;
-    return c.category === manageFilter;
+    // 1. Category filter
+    if (manageFilter !== 'all' && c.category !== manageFilter) return false;
+
+    // 2. Visibility / Status filter
+    if (visibilityFilter === 'hidden') {
+      return c.isHidden === true;
+    }
+    if (visibilityFilter === 'active') {
+      return !c.isHidden && (c.status === 'active' || !c.status) && !isCampaignExpired(c.validityDate, c.status);
+    }
+    if (visibilityFilter === 'expired') {
+      return c.status === 'expired' || isCampaignExpired(c.validityDate, c.status);
+    }
+    return true;
   });
+
+  const handleToggleHideCampaign = (camp: Campaign) => {
+    if (!onUpdateCampaign) return;
+    const nextHidden = !camp.isHidden;
+    const updated: Campaign = {
+      ...camp,
+      isHidden: nextHidden,
+      hiddenAt: nextHidden ? new Date().toISOString() : undefined,
+      hiddenBy: nextHidden ? (creatorProfile?.name || creatorProfile?.phone || 'Creator') : undefined,
+      updatedAt: new Date().toISOString()
+    };
+    onUpdateCampaign(updated);
+    if (nextHidden) {
+      alert(`🙈 "${camp.title}" chu Dah Thup (Hidden / Unlisted) a ni ta e.\n\nPublic services leh recent QR list-ah a lang tawh lo ang a, QR direct scan, dynamic link, emaw Bawm Search (Prefix: ${camp.orgCode || camp.id}) hmangin a pek theih reng ang.`);
+    } else {
+      alert(`👁️ "${camp.title}" chu Publish (Unhidden) a ni leh ta e.\n\nPublic services leh browse list-ah a lang leh tawh ang.`);
+    }
+  };
 
   // Pending Cash Approvals for Creator / Treasurer
   const pendingCashApprovals = transactions.filter(t => 
@@ -2407,25 +2443,55 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
           )}
 
           {/* Header & Filter */}
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="font-black text-sm text-slate-900">Ka QR Siam Tawh Te</h3>
-              <p className="text-[10px] text-slate-500 font-medium">
-                QR information leh validity siamthat (edit) nan hman tur
-              </p>
+          <div className="space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-black text-sm text-slate-900">Ka QR Siam Tawh Te</h3>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  QR information, validity, leh unpublish/thup siamthat nan hman tur
+                </p>
+              </div>
+
+              <select
+                value={manageFilter}
+                onChange={(e) => setManageFilter(e.target.value)}
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none self-start sm:self-auto"
+              >
+                <option value="all">All Categories ({myCampaigns.length})</option>
+                <option value="ralna">Ralna Bawm</option>
+                <option value="khawlsak">Khawlsak Bawm</option>
+                <option value="rikrum">Rikrum Bawm</option>
+                <option value="kumtluang">Kumtluang Bawm</option>
+              </select>
             </div>
 
-            <select
-              value={manageFilter}
-              onChange={(e) => setManageFilter(e.target.value)}
-              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none"
-            >
-              <option value="all">All Categories ({myCampaigns.length})</option>
-              <option value="ralna">Ralna Bawm</option>
-              <option value="khawlsak">Khawlsak Bawm</option>
-              <option value="rikrum">Rikrum Bawm</option>
-              <option value="kumtluang">Kumtluang Bawm</option>
-            </select>
+            {/* Visibility & Status Sub-Filter Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {[
+                { id: 'all' as const, label: `All (${myCampaigns.length})` },
+                { id: 'active' as const, label: `Active (${activeCampaignsCount})` },
+                { id: 'hidden' as const, label: `Hidden / Draft QRs (${hiddenCampaignsCount})`, highlight: hiddenCampaignsCount > 0 },
+                { id: 'expired' as const, label: `Expired (${expiredCampaignsCount})` }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setVisibilityFilter(tab.id)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                    visibilityFilter === tab.id
+                      ? tab.id === 'hidden'
+                        ? 'bg-purple-700 text-white shadow-xs'
+                        : 'bg-slate-900 text-white shadow-xs'
+                      : tab.id === 'hidden' && tab.highlight
+                      ? 'bg-purple-50 text-purple-900 border border-purple-300 hover:bg-purple-100'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.id === 'hidden' && <EyeOff className="w-3 h-3" />}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {displayedCampaigns.length === 0 ? (
@@ -2501,6 +2567,12 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                                 ? 'PENDING APPROVAL'
                                 : 'EXPIRED'}
                             </span>
+                            {camp.isHidden && (
+                              <span className="text-[8.5px] font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1 shadow-2xs">
+                                <EyeOff className="w-2.5 h-2.5 text-purple-700" />
+                                HIDDEN / UNPUBLISHED
+                              </span>
+                            )}
                           </div>
                           <h4 className="font-black text-slate-900 text-xs truncate mt-0.5">
                             {camp.title}
@@ -2661,6 +2733,21 @@ export const CreateQRScreen: React.FC<CreateQRScreenProps> = ({
                             <Users className="w-3 h-3" /> Member Roll & Cash Entry
                           </button>
                         )}
+
+                        {/* Hide / Unpublish Toggle Action */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleHideCampaign(camp)}
+                          className={`text-[10.5px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 shadow-2xs ${
+                            camp.isHidden
+                              ? 'bg-purple-600 hover:bg-purple-700 text-white border-purple-700'
+                              : 'bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-800 border-slate-300'
+                          }`}
+                          title={camp.isHidden ? 'Publish again to public list' : 'Hide from public lists (direct link & scan still work)'}
+                        >
+                          {camp.isHidden ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                          <span>{camp.isHidden ? 'Unhide / Re-publish' : 'Hide / Unpublish'}</span>
+                        </button>
                       </div>
 
                       {onSelectCampaign && (
@@ -2952,6 +3039,10 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
   const [allowOnlinePG, setAllowOnlinePG] = useState<boolean>(campaign.allow_online_pg ?? true);
   const [allowCashPayment, setAllowCashPayment] = useState<boolean>(campaign.allow_cash_payment ?? true);
   
+  // Visibility & Unpublish Control
+  const [isHidden, setIsHidden] = useState<boolean>(Boolean(campaign.isHidden));
+  const [hideReason, setHideReason] = useState<string>(campaign.hideReason || '');
+  
   // Specifics
   const [mitthiHming, setMitthiHming] = useState<string>(campaign.mitthiHming || '');
   const [age, setAge] = useState<string>(campaign.age?.toString() || '');
@@ -3146,6 +3237,10 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
       orgCode: finalPrefix,
       allow_online_pg: allowOnlinePG,
       allow_cash_payment: allowCashPayment,
+      isHidden: isHidden,
+      hiddenAt: isHidden ? (campaign.hiddenAt || new Date().toISOString()) : undefined,
+      hiddenBy: isHidden ? (campaign.hiddenBy || creatorProfile?.name || creatorProfile?.phone || 'Creator') : undefined,
+      hideReason: isHidden ? (hideReason.trim() || undefined) : undefined,
       updatedAt: new Date().toISOString(),
       
       mitthiHming: campaign.category === 'ralna' ? mitthiHming.trim() : undefined,
@@ -4220,6 +4315,72 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Hide / Unpublish QR Toggle Switch */}
+          <div className="bg-purple-50/70 p-3 rounded-2xl border border-purple-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                  isHidden ? 'bg-purple-700 text-white' : 'bg-slate-200 text-slate-500'
+                }`}>
+                  <EyeOff className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-purple-950 uppercase tracking-wide">
+                    Hide / Unpublish QR (Dah Thup)
+                  </h4>
+                  <p className="text-[9.5px] text-purple-800 font-medium">
+                    Public service & recent list atanga thupna
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                type="button"
+                onClick={() => setIsHidden(!isHidden)}
+                className={`w-12 h-6 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer shrink-0 ${
+                  isHidden ? 'bg-purple-700 justify-end' : 'bg-slate-300 justify-start'
+                }`}
+                title={isHidden ? 'QR is currently hidden' : 'QR is currently public'}
+              >
+                <div className="w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center text-[9px] font-bold text-slate-800">
+                  {isHidden ? '🙈' : '👁️'}
+                </div>
+              </button>
+            </div>
+
+            <div className={`p-2.5 rounded-xl text-[10px] leading-relaxed border ${
+              isHidden 
+                ? 'bg-purple-100/80 border-purple-300 text-purple-950 font-medium'
+                : 'bg-white border-purple-100 text-slate-600'
+            }`}>
+              {isHidden ? (
+                <span>
+                  <strong>🙈 Status: HIDDEN / UNPUBLISHED</strong> — He QR hi public Services, Recent QRs, leh default active list-ah a lang lo ang. Amaherawhchu <strong>QR direct scan, dynamic link, emaw Bawm Search (Prefix: {campaign.orgCode || campaign.id})</strong> hmangin mipui leh members-ten sum an chhunlut reng thei a, transaction history leh ledger sum zat a reh lovang.
+                </span>
+              ) : (
+                <span>
+                  <strong>👁️ Status: PUBLIC & PUBLISHED</strong> — Mipui tana hmuh theih leh tlawh theihin public services leh homepage active lists-ah a lang reng ang.
+                </span>
+              )}
+            </div>
+
+            {isHidden && (
+              <div>
+                <label className="text-[10px] font-bold text-purple-900 block mb-1">
+                  Dah thup chhan (Optional Reason / Note):
+                </label>
+                <input
+                  type="text"
+                  value={hideReason}
+                  onChange={(e) => setHideReason(e.target.value)}
+                  placeholder="e.g. Mimal pual liau liau / Private gathering / Draft..."
+                  className="w-full bg-white border border-purple-300 rounded-xl p-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-purple-600"
+                />
+              </div>
+            )}
           </div>
 
           {/* Admin Approval Notice if Reactivation is selected or previous was expired */}

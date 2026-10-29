@@ -56,6 +56,7 @@ import {
   fetchTableData,
   subscribeToTable,
   upsertTransaction,
+  upsertCampaign,
   deleteTransaction,
   runStartupCleanupSequence
 } from './services/SupabaseSync';
@@ -1343,9 +1344,10 @@ export default function App() {
   const handleUpdateCampaign = (campaign: Campaign) => {
     const stamped: Campaign = {
       ...campaign,
-      updatedAt: campaign.updatedAt || new Date().toISOString()
+      updatedAt: new Date().toISOString()
     };
     saveCampaign(stamped);
+    upsertCampaign(stamped).catch(err => console.warn('Supabase update campaign error:', err));
     setCampaigns(prev => {
       const idx = prev.findIndex(c => c.id === stamped.id);
       if (idx >= 0) {

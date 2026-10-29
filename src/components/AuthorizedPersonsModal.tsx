@@ -117,12 +117,33 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
     };
   }, []);
 
-  // Compute available members list without state setter loops
+  // Compute available members list filtered strictly for this specific Bawm/Campaign
   const availableMembers = useMemo(() => {
     if (!campaign?.id) return [];
-    if (members && members.length > 0) return members;
-    return getMembers(campaign.id);
-  }, [campaign?.id, members, membersTick]);
+    const source = (members && members.length > 0) ? members : getMembers(campaign.id);
+    const campId = String(campaign.id).toLowerCase().trim();
+    const campCode = (campaign.orgCode || '').toLowerCase().trim();
+
+    return source.filter(m => {
+      if (!m) return false;
+      const mCampId = String(m.campaignId || (m as any).campaign_id || '').toLowerCase().trim();
+      const mOrgCode = String(m.orgCode || (m as any).org_code || '').toLowerCase().trim();
+
+      // 1. Exact campaign ID match
+      if (mCampId && mCampId === campId) return true;
+
+      // 2. Exact orgCode match (e.g., 'EBE', 'BMP', 'YMA')
+      if (campCode && mOrgCode && mOrgCode === campCode) return true;
+
+      // 3. Roll ID prefix match (e.g., 'EBE-101' matches orgCode 'EBE')
+      if (campCode && m.id && String(m.id).toLowerCase().startsWith(campCode + '-')) return true;
+
+      // 4. Fallback: if campId is short orgCode (e.g. 'ebe') and member roll ID starts with 'ebe-'
+      if (m.id && String(m.id).toLowerCase().startsWith(campId + '-')) return true;
+
+      return false;
+    });
+  }, [campaign?.id, campaign?.orgCode, members, membersTick]);
 
   // Filtered members for dropdown selector
   const filteredMembers = useMemo(() => {

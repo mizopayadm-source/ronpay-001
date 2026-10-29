@@ -155,6 +155,10 @@ export interface Campaign {
   lastEditReason?: string;
   customExpenseHeads?: string[];
   renewalRequest?: CampaignRenewalRequest;
+  isHidden?: boolean;
+  hiddenAt?: string;
+  hiddenBy?: string;
+  hideReason?: string;
 }
 
 export interface ExpenseRecord {

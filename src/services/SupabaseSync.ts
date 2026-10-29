@@ -267,6 +267,10 @@ export const mapCampaignToSupabase = (camp: any) => {
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
       expenseHeads: camp.expenseHeads,
+      isHidden: Boolean(camp.isHidden),
+      hiddenAt: camp.hiddenAt || null,
+      hiddenBy: camp.hiddenBy || null,
+      hideReason: camp.hideReason || null,
     }
   };
 };
@@ -326,6 +330,10 @@ export const normalizeCampaign = (row: any): Campaign => {
     officerPasscode: meta.officerPasscode ?? row.officerPasscode,
     authorizedOfficers: meta.authorizedOfficers ?? row.authorizedOfficers,
     expenseHeads: meta.expenseHeads ?? row.expenseHeads,
+    isHidden: Boolean(meta.isHidden ?? row.is_hidden ?? row.isHidden ?? false),
+    hiddenAt: meta.hiddenAt ?? row.hidden_at ?? row.hiddenAt,
+    hiddenBy: meta.hiddenBy ?? row.hidden_by ?? row.hiddenBy,
+    hideReason: meta.hideReason ?? row.hide_reason ?? row.hideReason,
     metadata: meta
   };
 };

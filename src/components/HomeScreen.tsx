@@ -20,6 +20,7 @@ import {
   Wifi,
   CreditCard,
   Search,
+  EyeOff,
   Lock,
   LogIn,
   UserCheck,
@@ -281,6 +282,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string>('all');
   const [showAllQRs, setShowAllQRs] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  // Global Find Bawm / Campaign search query
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   // Check if current session is a Guest User (non-logged-in explorer or guest role)
   const isGuestUser = useMemo(() => {
@@ -428,8 +431,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   //    Sort by distance (closest to farthest, Nearest to Farthest).
   // 2. Fallback (if user denies GPS, location unavailable, or sortMode === 'newest'):
   //    Sort by newest/recently created Active QRs.
+  //    Hidden QRs are automatically excluded from default active lists and public services!
   const activeSortedQRs = useMemo(() => {
-    const active = safeCampaigns.filter(isCampaignActive);
+    const active = safeCampaigns.filter(c => isCampaignActive(c) && !c.isHidden);
     const isGpsActive = sortMode === 'gps' && userCoords !== null;
 
     return [...active].sort((a, b) => {
@@ -462,15 +466,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return isDataInitialized ? activeSortedQRs.length : 0;
   }, [isDataInitialized, activeSortedQRs]);
 
-  // Filtered QRs based on search keyword and category filter (using activeSortedQRs)
+  // Global search across all active campaigns (including unlisted/hidden campaigns via Prefix code like "EBE" or name)
+  const globalSearchResults = useMemo(() => {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return safeCampaigns.filter(c => {
+      if (!isCampaignActive(c)) return false;
+      const matchTitle = (c.title || '').toLowerCase().includes(q);
+      const matchOrg = (c.orgName || '').toLowerCase().includes(q);
+      const matchCode = (c.orgCode || '').toLowerCase().includes(q);
+      const matchId = (c.id || '').toLowerCase().includes(q);
+      const matchLoc = (c.location || '').toLowerCase().includes(q);
+      const matchMitthi = (c.mitthiHming || '').toLowerCase().includes(q);
+      const matchCause = (c.cause || '').toLowerCase().includes(q) || (c.causeMizo || '').toLowerCase().includes(q) || (c.causeEn || '').toLowerCase().includes(q);
+      const matchCat = (c.category || '').toLowerCase().includes(q);
+      return matchTitle || matchOrg || matchCode || matchId || matchLoc || matchMitthi || matchCause || matchCat;
+    });
+  }, [safeCampaigns, globalSearchQuery]);
+
+  // Filtered QRs based on search keyword and category filter
+  // If search query is typed, search across all active campaigns (including unlisted/hidden QRs)
   const filteredQRs = useMemo(() => {
-    let list = activeSortedQRs;
+    const query = qrSearchQuery.trim().toLowerCase();
+    let list = query 
+      ? safeCampaigns.filter(isCampaignActive) 
+      : activeSortedQRs;
 
     if (qrCategoryFilter !== 'all') {
       list = list.filter(c => c.category === qrCategoryFilter);
     }
 
-    const query = qrSearchQuery.trim().toLowerCase();
     if (query) {
       list = list.filter(c => {
         const matchTitle = (c.title || '').toLowerCase().includes(query);
@@ -481,12 +506,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         const matchCode = (c.orgCode || '').toLowerCase().includes(query);
         const matchMitthi = (c.mitthiHming || '').toLowerCase().includes(query);
         const matchCat = (c.category || '').toLowerCase().includes(query);
-        return matchTitle || matchLoc || matchUpi || matchDesc || matchCause || matchCode || matchMitthi || matchCat;
+        const matchId = (c.id || '').toLowerCase().includes(query);
+        return matchTitle || matchLoc || matchUpi || matchDesc || matchCause || matchCode || matchMitthi || matchCat || matchId;
       });
     }
 
     return list;
-  }, [activeSortedQRs, qrSearchQuery, qrCategoryFilter]);
+  }, [activeSortedQRs, safeCampaigns, qrSearchQuery, qrCategoryFilter]);
 
   // Displayed QRs (Strictly Latest 5 on first page; expands on search, category filter, or showAllQRs toggle)
   const displayedQRs = useMemo(() => {
@@ -873,6 +899,115 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <span className="text-[9px] bg-gradient-to-r from-slate-100 to-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-full font-bold border border-indigo-200">
             RonPay Bawmte
           </span>
+        </div>
+
+        {/* Global Search Bar: "Find Bawm / Campaign" */}
+        <div className="mb-3 space-y-2">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-indigo-500">
+              <Search className="w-3.5 h-3.5" />
+            </div>
+            <input
+              type="text"
+              id="global-find-bawm-input"
+              value={globalSearchQuery}
+              onChange={(e) => setGlobalSearchQuery(e.target.value)}
+              placeholder={language === 'mizo' 
+                ? 'Find Bawm / Campaign (e.g. EBE, BCM, Ralna, YMA, Khawlsak)...' 
+                : 'Find Bawm / Campaign (Prefix code e.g. EBE, title, or NGO)...'}
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-slate-900 border border-indigo-200/90 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition shadow-2xs placeholder:text-slate-400"
+            />
+            {globalSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setGlobalSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Real-time Global Search Results Dropdown/Card list */}
+          {globalSearchQuery.trim() && (
+            <div className="bg-slate-50 border border-indigo-100 rounded-xl p-2.5 space-y-2 animate-fadeIn max-h-72 overflow-y-auto">
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 px-1">
+                <span>{globalSearchResults.length} Bawm / Campaign hmuh a ni</span>
+                {globalSearchResults.some(c => c.isHidden) && (
+                  <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-extrabold flex items-center gap-1">
+                    <EyeOff className="w-2.5 h-2.5" /> Unlisted QRs included
+                  </span>
+                )}
+              </div>
+
+              {globalSearchResults.length === 0 ? (
+                <div className="text-center py-3 text-slate-500 text-xs">
+                  <p className="font-semibold">&quot;{globalSearchQuery}&quot; nen inmil Bawm hmuh a awm lo.</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Prefix code (e.g. EBE), Kohhran hming, emaw Bawm hming zawn tum rawh.</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {globalSearchResults.map(camp => (
+                    <div
+                      key={camp.id}
+                      onClick={() => {
+                        setGlobalSearchQuery('');
+                        if (onSelectCampaign) onSelectCampaign(camp);
+                        else onSelectBawm(camp.category);
+                      }}
+                      className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition cursor-pointer flex items-center justify-between gap-2 shadow-2xs group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black shrink-0 ${
+                          camp.category === 'ralna' ? 'bg-slate-900' :
+                          camp.category === 'khawlsak' ? 'bg-emerald-600' :
+                          camp.category === 'rikrum' ? 'bg-rose-600' :
+                          camp.category === 'kumtluang' ? 'bg-blue-600' : 'bg-indigo-600'
+                        }`}>
+                          {camp.orgCode ? camp.orgCode.slice(0, 3) : <QrCode className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-slate-900 group-hover:text-indigo-600 transition truncate">
+                              {camp.title}
+                            </span>
+                            {camp.orgCode && (
+                              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {camp.orgCode}
+                              </span>
+                            )}
+                            {camp.isHidden && (
+                              <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
+                                <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9.5px] text-slate-500 font-medium truncate mt-0.5">
+                            {camp.location || 'Mizoram'} • {camp.orgName || camp.cause || camp.category}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGlobalSearchQuery('');
+                          if (onSelectCampaign) onSelectCampaign(camp);
+                          else onSelectBawm(camp.category);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition shrink-0 shadow-2xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>+ Pay Now</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1360,9 +1495,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
-                        {getCampaignListTitle(camp, language)}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
+                          {getCampaignListTitle(camp, language)}
+                        </p>
+                        {camp.orgCode && (
+                          <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {camp.orgCode}
+                          </span>
+                        )}
+                        {camp.isHidden && (
+                          <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
+                            <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                         <p className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1">
                           <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />

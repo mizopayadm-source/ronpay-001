@@ -4927,6 +4927,10 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
               valid_until: meta.valid_until ?? meta.validityDate ?? meta.expiry_date ?? r.valid_until ?? r.validityDate ?? r.expiry_date,
               gpsCoords: meta.gpsCoords ?? r.gpsCoords,
               kumtluangFeeBearer: meta.kumtluangFeeBearer ?? r.kumtluangFeeBearer,
+              isHidden: Boolean(meta.isHidden ?? r.is_hidden ?? r.isHidden ?? false),
+              hiddenAt: meta.hiddenAt ?? r.hidden_at ?? r.hiddenAt,
+              hiddenBy: meta.hiddenBy ?? r.hidden_by ?? r.hiddenBy,
+              hideReason: meta.hideReason ?? r.hide_reason ?? r.hideReason,
               metadata: meta
             };
           });
@@ -5225,6 +5229,10 @@ app.post('/api/campaigns', (req: Request, res: Response) => {
             officerPasscode: stamped.officerPasscode,
             authorizedOfficers: stamped.authorizedOfficers,
             expenseHeads: stamped.expenseHeads,
+            isHidden: Boolean(stamped.isHidden),
+            hiddenAt: stamped.hiddenAt || null,
+            hiddenBy: stamped.hiddenBy || null,
+            hideReason: stamped.hideReason || null,
           },
           updated_at: new Date().toISOString()
         })

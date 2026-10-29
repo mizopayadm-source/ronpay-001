@@ -784,6 +784,10 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
       valid_until: meta.valid_until ?? row.valid_until ?? meta.expiry_date ?? row.expiry_date ?? meta.validityDate ?? row.validityDate,
       gpsCoords: meta.gpsCoords ?? row.gpsCoords,
       kumtluangFeeBearer: meta.kumtluangFeeBearer ?? row.kumtluangFeeBearer,
+      isHidden: Boolean(meta.isHidden ?? row.is_hidden ?? row.isHidden ?? false),
+      hiddenAt: meta.hiddenAt ?? row.hidden_at ?? row.hiddenAt,
+      hiddenBy: meta.hiddenBy ?? row.hidden_by ?? row.hiddenBy,
+      hideReason: meta.hideReason ?? row.hide_reason ?? row.hideReason,
       metadata: meta
     };
   });
@@ -842,6 +846,10 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
       officerPasscode: camp.officerPasscode,
       authorizedOfficers: camp.authorizedOfficers,
       expenseHeads: camp.expenseHeads,
+      isHidden: Boolean(camp.isHidden),
+      hiddenAt: camp.hiddenAt || null,
+      hiddenBy: camp.hiddenBy || null,
+      hideReason: camp.hideReason || null,
     }
   };
 
