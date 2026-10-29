@@ -132,6 +132,13 @@ import {
   isCampaignPaidInSession 
 } from './utils/urlRouting';
 import { checkDirectPhonePeStatus, getPhonePeMercuryUrl } from './utils/phonepeDirect';
+import { 
+  recordGuestVisit, 
+  recordGuestCampaignVisit, 
+  recordGuestTransactionActivity 
+} from './utils/guestPersonalization';
+import { PushPromptOptions } from './utils/pushNotifications';
+import { WebPushPromptToast } from './components/WebPushPromptToast';
 
 export default function App() {
   // Splash screen state for smooth UX
@@ -201,6 +208,7 @@ export default function App() {
   const [members, setMembersState] = useState<MemberRecord[]>(() => getMembers());
   const [userPaidIds, setUserPaidIds] = useState<string[]>(() => getStoredUserPaidTxIds());
   const [publicPoolStats, setPublicPoolStats] = useState<PublicPoolStats>({ totalAmount: 0, totalCount: 0, todayCount: 0 });
+  const [pushPromptOptions, setPushPromptOptions] = useState<PushPromptOptions | null>(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -208,6 +216,8 @@ export default function App() {
       if (stats) setPublicPoolStats(stats);
     }
     loadStats();
+    // Cache and track guest session visits for re-engagement
+    recordGuestVisit();
   }, []);
 
   // Modals Visibility
@@ -640,6 +650,13 @@ export default function App() {
     if (route.campaign) {
       setSelectedCampaign(route.campaign);
       setSelectedCategory(route.category || route.campaign.category);
+      recordGuestCampaignVisit(route.campaign);
+      if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
+        setPushPromptOptions({
+          reason: 'campaign_view',
+          campaignTitle: route.campaign.title,
+        });
+      }
     }
     if (route.category && !route.campaign) {
       setSelectedCategory(route.category);
@@ -1157,6 +1174,13 @@ export default function App() {
   const handleSelectCampaign = (campaign: Campaign, forceAutoOpenPayment: boolean = false) => {
     setSelectedCampaign(campaign);
     setSelectedCategory(campaign.category);
+    recordGuestCampaignVisit(campaign);
+    if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
+      setPushPromptOptions({
+        reason: 'campaign_view',
+        campaignTitle: campaign.title,
+      });
+    }
     const hasPresetAmount = Boolean(campaign.customAmount && campaign.customAmount > 0);
     if (forceAutoOpenPayment && hasPresetAmount) {
       setAutoOpenPhonePeCheckout(true);
@@ -1212,6 +1236,11 @@ export default function App() {
     };
     saveTransaction(newTx);
     recordUserPaidTxId(newTx.id);
+    recordGuestTransactionActivity({
+      id: newTx.id,
+      donorPhone: newTx.donorPhone,
+      donorName: newTx.donorName,
+    });
     setCompletedTransaction(newTx);
     reloadLocalData();
     setIsBillModalOpen(false);
@@ -1221,6 +1250,19 @@ export default function App() {
   const handlePaymentSuccess = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
+    recordGuestTransactionActivity({
+      id: transaction.id,
+      donorPhone: transaction.donorPhone,
+      donorName: transaction.donorName,
+      campaignId: transaction.campaignId,
+    });
+    if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
+      setPushPromptOptions({
+        reason: 'transaction_create',
+        receiptId: transaction.id,
+        campaignTitle: transaction.campaignTitle,
+      });
+    }
     if (transaction.campaignId) {
       markCampaignPaidInSession(transaction.campaignId);
     }
@@ -1247,6 +1289,19 @@ export default function App() {
   const handleCashPending = (transaction: Transaction) => {
     saveTransaction(transaction);
     recordUserPaidTxId(transaction.id);
+    recordGuestTransactionActivity({
+      id: transaction.id,
+      donorPhone: transaction.donorPhone,
+      donorName: transaction.donorName,
+      campaignId: transaction.campaignId,
+    });
+    if (!creatorProfile.phone || creatorProfile.role === 'GUEST' || creatorProfile.phone === '9999999999') {
+      setPushPromptOptions({
+        reason: 'transaction_create',
+        receiptId: transaction.id,
+        campaignTitle: transaction.campaignTitle,
+      });
+    }
     setCompletedTransaction(transaction);
     try {
       localStorage.setItem('RONPAY_LAST_CASH_TXN', JSON.stringify(transaction));
@@ -2361,6 +2416,15 @@ export default function App() {
             setIsLoginModalOpen(false);
           }}
         />
+
+        {/* Web Push Prompt Toast for Guest User Re-engagement */}
+        {pushPromptOptions && (
+          <WebPushPromptToast
+            options={pushPromptOptions}
+            onDismiss={() => setPushPromptOptions(null)}
+            language={language}
+          />
+        )}
       </div>
     </div>
   );

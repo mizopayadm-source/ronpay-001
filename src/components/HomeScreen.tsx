@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, BillService, CreatorProfile, AnnouncementBanner, AnnouncementItem, PublicPoolStats } from '../types';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
+import { GuestReengagementBanner } from './GuestReengagementBanner';
 import { CampaignTransferModal } from './CampaignTransferModal';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
 import { usePublicPoolStats } from '../hooks/usePublicPoolStats';
@@ -497,6 +498,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
+      {/* Browser Re-engagement & Retargeting Banner for Guest Users */}
+      <GuestReengagementBanner
+        creatorProfile={creatorProfile}
+        campaigns={campaigns}
+        onOpenReceipts={onOpenHistory || (() => {})}
+        onOpenRegister={onCreateQRClick}
+        onSelectCampaign={onSelectCampaign}
+        language={language}
+      />
+
       {/* Admin Custom Live Rotating Announcement Banner with Canva & Media support */}
       {announcement && announcement.isActive && (
         <AnnouncementBannerCard

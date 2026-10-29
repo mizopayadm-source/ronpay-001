@@ -26,6 +26,7 @@ import {
 import { BawmCategory, CreatorProfile } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
 import { getStoredCreatorsList, saveStoredCreatorsList } from '../utils/storage';
+import { getGuestActivity } from '../utils/guestPersonalization';
 
 interface CreatorRegScreenProps {
   onBack: () => void;
@@ -47,15 +48,25 @@ export const CreatorRegScreen: React.FC<CreatorRegScreenProps> = ({
   const [registeredPendingProfile, setRegisteredPendingProfile] = useState<CreatorProfile | null>(null);
 
   // Login states
-  const [loginPhone, setLoginPhone] = useState<string>(creatorProfile.phone || '');
+  const [loginPhone, setLoginPhone] = useState<string>(() => {
+    if (creatorProfile.phone && creatorProfile.phone !== '9999999999') return creatorProfile.phone;
+    return getGuestActivity().lastDonorPhone || '';
+  });
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
 
   // Register states
-  const [applicantName, setApplicantName] = useState<string>(creatorProfile.name || '');
+  const [applicantName, setApplicantName] = useState<string>(() => {
+    const n = (creatorProfile.name || '').trim().toLowerCase();
+    if (n && n !== 'khualmi' && n !== 'guest user' && n !== 'khualmi (guest user)') return creatorProfile.name;
+    return getGuestActivity().lastDonorName || '';
+  });
   const [orgName, setOrgName] = useState<string>(creatorProfile.orgName || '');
   const [designation, setDesignation] = useState<string>(creatorProfile.designation || '');
-  const [phone, setPhone] = useState<string>(creatorProfile.phone || '');
+  const [phone, setPhone] = useState<string>(() => {
+    if (creatorProfile.phone && creatorProfile.phone !== '9999999999') return creatorProfile.phone;
+    return getGuestActivity().lastDonorPhone || '';
+  });
   const [password, setPassword] = useState<string>('');
   const [category, setCategory] = useState<BawmCategory>('ralna');
   const [uploadedDocName, setUploadedDocName] = useState<string>(creatorProfile.authDocName || '');

@@ -70,6 +70,11 @@ import { getPhonePeMercuryUrl, checkDirectPhonePeStatus } from '../utils/phonepe
 import { PhonePeCheckoutModal } from './PhonePeCheckoutModal';
 import { UPIIntentModal } from './UPIIntentModal';
 import { CampaignRenewalModal } from './CampaignRenewalModal';
+import { 
+  getGuestActivity, 
+  recordGuestCampaignVisit, 
+  recordGuestTransactionActivity 
+} from '../utils/guestPersonalization';
 
 interface CheckoutScreenProps {
   category: BawmCategory;
@@ -191,6 +196,12 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       };
       saveTransaction(finalTx);
       recordUserPaidTxId(finalTx.id);
+      recordGuestTransactionActivity({
+        id: finalTx.id,
+        donorPhone: finalTx.donorPhone,
+        donorName: finalTx.donorName,
+        campaignId: finalTx.campaignId,
+      });
       onPaymentSuccess(finalTx);
     };
 
@@ -350,7 +361,11 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
     return '';
   });
   const [amountError, setAmountError] = useState<string>('');
-  const [donorName, setDonorName] = useState<string>(() => initialDonorName || '');
+  const [donorName, setDonorName] = useState<string>(() => {
+    if (initialDonorName) return initialDonorName;
+    const act = getGuestActivity();
+    return act.lastDonorName || '';
+  });
   const [remark, setRemark] = useState<string>('');
   const [isAnonymous, setIsAnonymous] = useState<boolean>(() => Boolean(initialIsAnonymous));
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -469,7 +484,24 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [showAddGeneralPreset, setShowAddGeneralPreset] = useState<boolean>(false);
 
   // Kumtluang Member & Family Sub-ID State
-  const [donorPhone, setDonorPhone] = useState<string>('');
+  const [donorPhone, setDonorPhone] = useState<string>(() => {
+    const act = getGuestActivity();
+    return act.lastDonorPhone || '';
+  });
+
+  // Record guest campaign visit in local storage for re-engagement
+  useEffect(() => {
+    if (campaign && campaign.id) {
+      recordGuestCampaignVisit({
+        id: campaign.id,
+        title: campaign.title,
+        category: campaign.category,
+        imageUrl: campaign.imageUrl,
+        targetAmount: campaign.targetAmount,
+        creatorName: campaign.creatorName,
+      });
+    }
+  }, [campaign?.id, campaign?.title]);
   const [donorSection, setDonorSection] = useState<string>(() => initialDonorSection || 'Bial 1 (Vengchhak)');
   const [phoneSearchQuery, setPhoneSearchQuery] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(null);
