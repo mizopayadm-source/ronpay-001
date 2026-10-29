@@ -810,11 +810,6 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                         }`}>
                           {getCategoryDisplayName(camp.category, language)}
                         </span>
-                        {camp.orgCode && (
-                          <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
-                            {camp.orgCode}
-                          </span>
-                        )}
                         {camp.isHidden && (
                           <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5 shrink-0">
                             <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted

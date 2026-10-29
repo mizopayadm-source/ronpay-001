@@ -965,18 +965,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                           camp.category === 'rikrum' ? 'bg-rose-600' :
                           camp.category === 'kumtluang' ? 'bg-blue-600' : 'bg-indigo-600'
                         }`}>
-                          {camp.orgCode ? camp.orgCode.slice(0, 3) : <QrCode className="w-4 h-4" />}
+                          <QrCode className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-xs text-slate-900 group-hover:text-indigo-600 transition truncate">
                               {camp.title}
                             </span>
-                            {camp.orgCode && (
-                              <span className="text-[8.5px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                {camp.orgCode}
-                              </span>
-                            )}
                             {camp.isHidden && (
                               <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
                                 <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted
@@ -1499,11 +1494,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         <p className="font-bold text-slate-900 text-xs truncate group-hover:text-indigo-600 transition-colors">
                           {getCampaignListTitle(camp, language)}
                         </p>
-                        {camp.orgCode && (
-                          <span className="text-[8px] font-mono font-black px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {camp.orgCode}
-                          </span>
-                        )}
                         {camp.isHidden && (
                           <span className="text-[8px] font-black px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
                             <EyeOff className="w-2.5 h-2.5 text-amber-700" /> Unlisted
