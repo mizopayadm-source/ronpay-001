@@ -51,6 +51,7 @@ import {
   saveAdminAuthState,
   mergeTransactions,
   wipeAllClientStorage,
+  findAllBrowserCachedTransactions
 } from './utils/storage';
 import {
   fetchTableData,
@@ -61,7 +62,12 @@ import {
   runStartupCleanupSequence
 } from './services/SupabaseSync';
 
-import { fetchSupabaseFundPool, loadSupabaseInitialState } from './services/supabaseService';
+import { 
+  fetchSupabaseFundPool, 
+  loadSupabaseInitialState, 
+  restoreCacheToSupabase, 
+  getSupabaseTableCount 
+} from './services/supabaseService';
 
 import {
   subscribeCrossTabSync,
@@ -108,7 +114,7 @@ import { MemberRollPreviewModal, PreviewReportFormat } from './components/Member
 import { MismatchModal } from './components/MismatchModal';
 import { UpgradeModal } from './components/UpgradeModal';
 import { BiometricAuthModal } from './components/BiometricAuthModal';
-import { Fingerprint, Activity, X } from 'lucide-react';
+import { Fingerprint, Activity, X, Database, RotateCw, CheckCircle2 } from 'lucide-react';
 import { AdminSyncDiagnosticView } from './components/AdminSyncDiagnosticView';
 import { ExternalUPILandingModal } from './components/ExternalUPILandingModal';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
@@ -316,6 +322,108 @@ export default function App() {
     setMembersState(getMembers());
     setUserPaidIds(getStoredUserPaidTxIds());
   }, []);
+
+  // Cache Restore State & Handlers
+  const [cacheRestoreState, setCacheRestoreState] = useState<{
+    isRestoring: boolean;
+    restoredCount: number;
+    totalAmount: number;
+    bannerVisible: boolean;
+    message: string;
+    type: 'info' | 'success' | 'warning';
+  }>({
+    isRestoring: false,
+    restoredCount: 0,
+    totalAmount: 0,
+    bannerVisible: false,
+    message: '',
+    type: 'info'
+  });
+
+  const handleManualRestoreCache = useCallback(async () => {
+    setCacheRestoreState(prev => ({
+      ...prev,
+      isRestoring: true,
+      bannerVisible: true,
+      message: 'Browser Cache-a transactions awm te Supabase-ah restore mek a ni...',
+      type: 'info'
+    }));
+    try {
+      const res = await restoreCacheToSupabase();
+      if (res.success && res.restoredCount > 0) {
+        reloadLocalData();
+        setCacheRestoreState({
+          isRestoring: false,
+          restoredCount: res.restoredCount,
+          totalAmount: res.totalAmount,
+          bannerVisible: true,
+          message: `✅ Web Cache-a transactions ${res.restoredCount} (₹${res.totalAmount.toLocaleString('en-IN')}) chu Supabase-ah hlawhtling takin restore fel a ni ta!`,
+          type: 'success'
+        });
+      } else {
+        setCacheRestoreState({
+          isRestoring: false,
+          restoredCount: 0,
+          totalAmount: 0,
+          bannerVisible: true,
+          message: res.message || 'Cache-ah transactions thar restore tur a awm lo.',
+          type: 'warning'
+        });
+      }
+    } catch (err: any) {
+      setCacheRestoreState({
+        isRestoring: false,
+        restoredCount: 0,
+        totalAmount: 0,
+        bannerVisible: true,
+        message: `Restore tih sual a awm: ${err.message || 'Error'}`,
+        type: 'warning'
+      });
+    }
+  }, [reloadLocalData]);
+
+  // Automatic Cache Inspection & Auto-Restore on boot if Supabase has 0 txns:
+  useEffect(() => {
+    let active = true;
+    const runCacheInspection = async () => {
+      try {
+        const cached = findAllBrowserCachedTransactions();
+        if (cached.length > 0) {
+          const count = await getSupabaseTableCount('transactions');
+          if (count === 0 && active) {
+            console.info(`[RonPay SSOT] Supabase table has 0 txns, but browser cache has ${cached.length} txns. Auto-restoring...`);
+            setCacheRestoreState({
+              isRestoring: true,
+              restoredCount: cached.length,
+              totalAmount: cached.reduce((sum, t) => sum + (Number(t.amount) || 0), 0),
+              bannerVisible: true,
+              message: `Supabase-a transactions bo hmuhchhuah a ni. Web Cache-a transactions ${cached.length} te Supabase-ah restore mek a ni...`,
+              type: 'info'
+            });
+            const res = await restoreCacheToSupabase(cached);
+            if (active && res.success && res.restoredCount > 0) {
+              reloadLocalData();
+              setCacheRestoreState({
+                isRestoring: false,
+                restoredCount: res.restoredCount,
+                totalAmount: res.totalAmount,
+                bannerVisible: true,
+                message: `✅ Web Cache-a transactions ${res.restoredCount} (₹${res.totalAmount.toLocaleString('en-IN')}) te chu Supabase-ah hlawhtling takin restore fel a ni ta!`,
+                type: 'success'
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Cache inspection error:', e);
+      }
+    };
+    const timer = setTimeout(runCacheInspection, 1200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [reloadLocalData]);
 
   // Cache Invalidation & Automatic Server Sync on Auth / Session Boot:
   useEffect(() => {
@@ -1634,6 +1742,43 @@ export default function App() {
       <div className={`w-full ${isDesktopView ? 'max-w-6xl' : 'max-w-md'} bg-white min-h-screen flex flex-col shadow-xl transition-all duration-300 relative overflow-x-hidden`}>
         {/* Offline & Connection Status Banner */}
         <OfflineStatusBanner onRefreshCache={reloadLocalData} />
+
+        {/* Cache Recovery & Restore Banner */}
+        {cacheRestoreState.bannerVisible && (
+          <div className={`w-full px-4 py-2.5 flex items-center justify-between text-xs font-bold border-b transition-all duration-300 z-40 ${
+            cacheRestoreState.type === 'success' 
+              ? 'bg-emerald-950 text-emerald-200 border-emerald-800' 
+              : (cacheRestoreState.type === 'warning' ? 'bg-amber-950 text-amber-200 border-amber-800' : 'bg-slate-900 text-cyan-200 border-cyan-800')
+          }`}>
+            <div className="flex items-center gap-2 min-w-0 pr-2">
+              {cacheRestoreState.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <Database className={`w-4 h-4 shrink-0 ${cacheRestoreState.isRestoring ? 'animate-pulse text-cyan-400' : 'text-amber-400'}`} />
+              )}
+              <span className="truncate">{cacheRestoreState.message}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleManualRestoreCache}
+                disabled={cacheRestoreState.isRestoring}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-lg text-[10px] uppercase tracking-wider flex items-center gap-1 cursor-pointer transition disabled:opacity-50"
+              >
+                <RotateCw className={`w-3 h-3 ${cacheRestoreState.isRestoring ? 'animate-spin' : ''}`} />
+                <span>{cacheRestoreState.isRestoring ? 'Restoring...' : 'Restore Cache'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCacheRestoreState(prev => ({ ...prev, bannerVisible: false }))}
+                className="p-1 hover:bg-white/10 text-white/70 hover:text-white rounded-md cursor-pointer transition"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Global Header */}
         {currentScreen !== 'phonepe_checkout' && (

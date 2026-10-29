@@ -42,7 +42,8 @@ import {
   upsertCampaign,
   deleteTransaction,
   deleteCampaign,
-  wipeSupabaseTables
+  wipeSupabaseTables,
+  restoreCacheToSupabase
 } from '../services/SupabaseSync';
 
 import { 
@@ -287,6 +288,37 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       } else {
         setActionNotice({
           message: `❌ Transaction paih fai a hlawhchham. Khawngaihin retry leh rawh.`,
+          type: 'error'
+        });
+      }
+    } catch (err: any) {
+      setActionNotice({
+        message: `❌ Error: ${err?.message || String(err)}`,
+        type: 'error'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleRestoreBrowserCache = async () => {
+    setIsScanning(true);
+    setActionNotice({
+      message: '⏳ Browser Cache aṭangin Transactions zawng zawng Supabase-ah restore mek a ni...',
+      type: 'success'
+    });
+    try {
+      const res = await restoreCacheToSupabase();
+      if (res.success && res.restoredCount > 0) {
+        setActionNotice({
+          message: `✅ Web Cache aṭangin Transactions ${res.restoredCount} (₹${res.totalAmount.toLocaleString('en-IN')}) Supabase-ah restore fel a ni ta!`,
+          type: 'success'
+        });
+        if (onRefreshParent) onRefreshParent();
+        await runDiagnosticScan();
+      } else {
+        setActionNotice({
+          message: res.message || 'Cache-ah restore tur transaction a awm lo.',
           type: 'error'
         });
       }
@@ -615,6 +647,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <p className="text-[11px] text-slate-400">Hengte hi emergency reset emaw cleanup atana chauhva hman tur a ni.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleRestoreBrowserCache}
+              disabled={isScanning}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-white ${isScanning ? 'animate-spin' : ''}`} />
+              <span>Restore Cache to Supabase</span>
+            </button>
+
             <button
                 type="button"
                 onClick={handlePurgeAllTransactions}

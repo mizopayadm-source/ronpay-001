@@ -26,6 +26,7 @@ import {
 import { 
   checkSupabaseHealth, 
   syncAllLocalToSupabase, 
+  restoreCacheToSupabase,
   SupabaseHealthCheckResult 
 } from '../services/supabaseService';
 
@@ -316,6 +317,24 @@ ON CONFLICT (id) DO UPDATE SET
     }
   };
 
+  const handleRestoreCache = async () => {
+    setIsSyncing(true);
+    setSyncStatus('Browser Cache aṭangin transactions zawng zawng Supabase-ah restore mek a ni...');
+    try {
+      const res = await restoreCacheToSupabase();
+      if (res.success) {
+        setSyncStatus(`✅ ${res.message}`);
+        handleTestConnection();
+      } else {
+        setSyncStatus(`Restore note: ${res.message}`);
+      }
+    } catch (err: any) {
+      setSyncStatus(`Restore Error: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -506,16 +525,25 @@ ON CONFLICT (id) DO UPDATE SET
                 </div>
               </div>
 
-              {/* Data Sync Button */}
+              {/* Data Sync & Cache Restore Buttons */}
               <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={handleRestoreCache}
+                  disabled={isSyncing || !healthResult?.connected}
+                  className="flex-1 bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white font-extrabold px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md active:scale-98 disabled:opacity-50 text-xs"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Restoring Cache to Supabase...' : 'Restore Browser Cache to Supabase'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleSyncData}
                   disabled={isSyncing || !healthResult?.connected}
-                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md active:scale-98 disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md active:scale-98 disabled:opacity-50 text-xs"
                 >
                   <UploadCloud className={`w-4 h-4 ${isSyncing ? 'animate-bounce' : ''}`} />
-                  <span>{isSyncing ? 'Uploading to Supabase...' : 'Sync Current Local Records to Supabase'}</span>
+                  <span>{isSyncing ? 'Uploading to Supabase...' : 'Sync Local Records to Supabase'}</span>
                 </button>
               </div>
             </div>

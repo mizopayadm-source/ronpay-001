@@ -4832,7 +4832,11 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
     if (!Array.isArray(supaRows)) return false;
 
     if (supaRows.length === 0) {
-      db.transactions = [];
+      // Safety guard: if Supabase transactions were accidentally deleted or cleared,
+      // do NOT wipe existing server transactions! Preserve them so they can be restored.
+      if (!Array.isArray(db.transactions) || db.transactions.length === 0) {
+        db.transactions = [];
+      }
     } else {
       const validRows = supaRows.filter(row => {
         if (!row || !row.id) return false;
@@ -5586,6 +5590,147 @@ app.get('/api/transactions', async (req: Request, res: Response) => {
   const caller = parseCallerInfo(req);
   const filtered = filterTransactionsByCaller(db.transactions || [], db.campaigns || [], caller);
   res.json({ success: true, count: filtered.length, transactions: filtered });
+});
+
+// Dedicated Emergency Restore API: Pushes cached transactions back to Supabase SSOT
+app.post('/api/restore-transactions-to-supabase', async (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const incomingTxs: any[] = Array.isArray(req.body?.transactions) && req.body.transactions.length > 0
+      ? req.body.transactions
+      : (db.transactions || []);
+
+    if (!incomingTxs || incomingTxs.length === 0) {
+      return res.status(400).json({ success: false, message: 'Restore tur transaction a awm lo (No transactions provided).' });
+    }
+
+    // 1. Sanitize & deduplicate incoming transactions
+    const restoredMap = new Map<string, any>();
+    const restoredIds = new Set<string>();
+
+    for (const t of incomingTxs) {
+      if (!t || !t.id) continue;
+      const cleanId = String(t.id).toLowerCase().trim();
+      const amt = Number(t.amount);
+      if (isNaN(amt) || amt <= 0) continue;
+      restoredMap.set(cleanId, t);
+      restoredIds.add(cleanId);
+    }
+
+    const validTxs = Array.from(restoredMap.values());
+    if (validTxs.length === 0) {
+      return res.status(400).json({ success: false, message: 'Transaction dik lo or amount 0 vek a ni (No valid transactions).' });
+    }
+
+    // 2. Clear tombstones for these restored IDs so they are never suppressed as deleted
+    db.deletedTransactionIds = (db.deletedTransactionIds || []).filter((id: string) => !restoredIds.has(String(id).toLowerCase().trim()));
+    db.transactions = mergeCollections(db.transactions || [], validTxs, 'id');
+    saveDatabase(db);
+
+    // 3. Batch push to Supabase transactions table
+    const sbConfig = (db as any).supabaseConfig || {};
+    const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
+    const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
+
+    let supabaseUpsertCount = 0;
+    if (sbUrl && sbKey) {
+      const mappedRows = validTxs.map(t => {
+        const metadata: Record<string, any> = { ...(t.metadata || {}) };
+        if (t.feeOption) metadata.feeOption = t.feeOption;
+        if (t.subCategoryBreakdown) metadata.subCategoryBreakdown = t.subCategoryBreakdown;
+        if (t.payerUPI) metadata.payerUPI = t.payerUPI;
+        if (t.utrRef) metadata.utrRef = t.utrRef;
+
+        return {
+          id: t.id,
+          campaign_id: t.campaignId || t.campaign_id || 'cmp-default',
+          campaign_title: t.campaignTitle || t.campaign_title || 'RonPay Community Bawm',
+          category: t.category || 'others',
+          donor_name: t.donorName || t.donor_name || 'Valued Donor',
+          donor_phone: t.donorPhone || t.donor_phone || null,
+          donor_veng: t.donorVeng || t.donorSection || null,
+          member_id: t.memberId || t.member_id || null,
+          sub_id: t.subId || t.sub_id || null,
+          donor_type: t.donorType || t.donor_type || 'member',
+          group_name: t.groupName || t.group_name || null,
+          is_anonymous: Boolean(t.isAnonymous ?? t.is_anonymous ?? false),
+          amount: Number(t.amount) || 0,
+          platform_fee: Number(t.platformFee ?? t.platform_fee ?? 0),
+          total_amount: Number(t.totalAmount ?? t.total_amount ?? t.amount ?? 0),
+          payment_method: t.paymentMethod || t.payment_method || 'upi',
+          status: t.status || 'completed',
+          remark: t.remark || null,
+          period_type: t.periodType || t.period_type || 'monthly',
+          period_month: t.periodMonth || t.period_month || null,
+          period_year: t.periodYear || t.period_year || null,
+          period_label: t.periodLabel || t.period_label || null,
+          utr: t.utr || t.utrRef || null,
+          reference_no: t.referenceNo || t.reference_no || null,
+          timestamp: t.timestamp ? new Date(t.timestamp).toISOString() : new Date().toISOString(),
+          created_at: t.createdAt ? new Date(t.createdAt).toISOString() : (t.timestamp ? new Date(t.timestamp).toISOString() : new Date().toISOString()),
+          updated_at: new Date().toISOString(),
+          metadata
+        };
+      });
+
+      // Upsert to Supabase in batches of 50
+      for (let i = 0; i < mappedRows.length; i += 50) {
+        const chunk = mappedRows.slice(i, i + 50);
+        try {
+          const upRes = await fetch(`${sbUrl}/rest/v1/transactions?on_conflict=id`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': sbKey,
+              'Authorization': `Bearer ${sbKey}`,
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(chunk)
+          });
+          if (upRes.ok) {
+            supabaseUpsertCount += chunk.length;
+          } else {
+            const errTxt = await upRes.text();
+            console.warn('[Restore to Supabase Chunk Warning]:', errTxt);
+          }
+        } catch (postErr: any) {
+          console.warn('[Restore to Supabase Network Error]:', postErr?.message);
+        }
+      }
+
+      // Recalibrate fund_pools table in Supabase
+      const totalSum = validTxs.reduce((acc, x) => acc + (Number(x.amount) || 0), 0);
+      try {
+        await fetch(`${sbUrl}/rest/v1/fund_pools?on_conflict=id`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': sbKey,
+            'Authorization': `Bearer ${sbKey}`,
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify([{
+            id: 'public_pool',
+            name: 'RonPay Public Fund Pool',
+            total_amount: Math.round(totalSum * 100) / 100,
+            total_count: validTxs.length,
+            last_updated: new Date().toISOString()
+          }])
+        });
+      } catch {}
+    }
+
+    res.json({
+      success: true,
+      message: `Hlawhtling takin Transactions ${validTxs.length} Supabase leh Central Server-ah restore a ni ta!`,
+      restoredCount: validTxs.length,
+      supabaseUpsertCount,
+      transactions: validTxs
+    });
+  } catch (err: any) {
+    console.error('Error restoring transactions to Supabase:', err);
+    res.status(500).json({ success: false, message: err?.message || 'Restore failed' });
+  }
 });
 
 // Audit Logs API with Role-Based Filtering
@@ -7048,7 +7193,8 @@ async function startServer() {
     return;
   }
   const distPath = path.join(process.cwd(), 'dist');
-  const isProduction = process.env.NODE_ENV === 'production';
+  const indexPath = path.join(distPath, 'index.html');
+  const isProduction = process.env.NODE_ENV === 'production' && fs.existsSync(indexPath);
 
   // Vite middleware for development only
   if (!isProduction) {

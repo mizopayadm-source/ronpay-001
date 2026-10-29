@@ -1054,6 +1054,115 @@ export const getDeletedTransactionIds = (): Set<string> => {
   return result;
 };
 
+export const unpurgeTransactionIds = (ids: string[]): void => {
+  if (!ids || ids.length === 0) return;
+  try {
+    const set = getDeletedTransactionIds();
+    for (const id of ids) {
+      if (!id) continue;
+      const clean = String(id).toLowerCase().trim();
+      set.delete(clean);
+      PERMANENTLY_PURGED_TX_IDS.delete(clean);
+    }
+    const arr = Array.from(set);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(arr));
+      localStorage.setItem('ronpay_deleted_tx_ids', JSON.stringify(arr));
+      localStorage.setItem('ronpay_permanently_purged_tx_ids_v1', JSON.stringify(Array.from(PERMANENTLY_PURGED_TX_IDS)));
+    }
+  } catch (e) {}
+};
+
+export const findAllBrowserCachedTransactions = (): Transaction[] => {
+  if (typeof localStorage === 'undefined') return [];
+  const foundMap = new Map<string, Transaction>();
+
+  const candidateKeys = [
+    TRANSACTIONS_KEY,
+    'ronpay_transactions_v4',
+    'ronpay_transactions_v3',
+    'ronpay_transactions_v2',
+    'ronpay_transactions_v1',
+    'ronpay_transactions',
+    'ronpay_restored_cache_txs',
+    'ronpay_supabase_pending_txs',
+    'ronpay_offline_cache',
+    'ronpay_db_backup_full',
+    'ronpay_db_backup_v1',
+    'ronpay_db_backup',
+    'RONPAY_LAST_CASH_TXN',
+  ];
+
+  // 1. Direct candidate keys
+  for (const k of candidateKeys) {
+    try {
+      const val = localStorage.getItem(k);
+      if (val) {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item && item.id && Number(item.amount) > 0) {
+              const cleanId = String(item.id).toLowerCase().trim();
+              if (!foundMap.has(cleanId)) {
+                foundMap.set(cleanId, item);
+              }
+            }
+          }
+        } else if (parsed && typeof parsed === 'object') {
+          if (parsed.id && Number(parsed.amount) > 0) {
+            const cleanId = String(parsed.id).toLowerCase().trim();
+            if (!foundMap.has(cleanId)) {
+              foundMap.set(cleanId, parsed);
+            }
+          } else if (Array.isArray(parsed.transactions)) {
+            for (const item of parsed.transactions) {
+              if (item && item.id && Number(item.amount) > 0) {
+                const cleanId = String(item.id).toLowerCase().trim();
+                if (!foundMap.has(cleanId)) {
+                  foundMap.set(cleanId, item);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Loop all keys in localStorage for any missed arrays containing transactions
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (candidateKeys.includes(k)) continue;
+      try {
+        const val = localStorage.getItem(k);
+        if (val && val.startsWith('[') && val.includes('"amount"')) {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (item && item.id && Number(item.amount) > 0 && (item.campaignId || item.campaignTitle || item.donorName)) {
+                const cleanId = String(item.id).toLowerCase().trim();
+                if (!foundMap.has(cleanId)) {
+                  foundMap.set(cleanId, item);
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  const result = Array.from(foundMap.values());
+  result.sort((a, b) => {
+    const timeA = new Date(a.updatedAt || a.createdAt || a.timestamp || 0).getTime();
+    const timeB = new Date(b.updatedAt || b.createdAt || b.timestamp || 0).getTime();
+    return timeB - timeA;
+  });
+  return result;
+};
+
 export const syncTombstonesFromFirestore = async (): Promise<void> => {
   return;
 };

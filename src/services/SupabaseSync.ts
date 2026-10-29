@@ -10,7 +10,8 @@ import {
   isSuperAdminOrAdminProfile,
   isCampaignManagerOrOfficer,
   getStoredCreatorProfile,
-  getStoredUserPaidTxIds
+  getStoredUserPaidTxIds,
+  findAllBrowserCachedTransactions
 } from '../utils/storage';
 
 // =========================================================================
@@ -485,8 +486,11 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         }
       } catch {}
 
-      // 5. Fallback to local storage / initial data
-      const stored = getStoredTransactions();
+      // 5. Fallback to local storage / browser cache
+      let stored = getStoredTransactions();
+      if (!Array.isArray(stored) || stored.length === 0) {
+        stored = findAllBrowserCachedTransactions();
+      }
       if (Array.isArray(stored) && stored.length > 0) {
         return stored as unknown as T[];
       }
@@ -827,5 +831,5 @@ export const migrateAndSwitchToSupabase = async (allLocalTransactions: Transacti
 };
 */
 
-export { wipeSupabaseTables } from '../services/supabaseService';
+export { wipeSupabaseTables, restoreCacheToSupabase } from '../services/supabaseService';
 

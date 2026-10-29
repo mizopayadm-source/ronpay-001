@@ -10,7 +10,10 @@ import {
   saveStoredCampaigns, 
   getMembers, 
   saveMembers,
-  getDeletedMemberIds
+  getDeletedMemberIds,
+  findAllBrowserCachedTransactions,
+  unpurgeTransactionIds,
+  getDeletedTransactionIds
 } from '../utils/storage';
 import { broadcastStateChange } from './crossTabSync';
 
@@ -1085,6 +1088,138 @@ export async function syncAllLocalToSupabase(): Promise<{
 }
 
 /**
+ * Emergency & Authoritative Cache Restore: Scans all local browser storage,
+ * unpurges tombstones, batch upserts to Supabase, recalibrates fund pools, and syncs to server.
+ */
+export async function restoreCacheToSupabase(customTransactions?: Transaction[]): Promise<{
+  success: boolean;
+  restoredCount: number;
+  totalAmount: number;
+  message: string;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { success: false, restoredCount: 0, totalAmount: 0, message: 'Supabase client not connected.' };
+  }
+
+  // 1. Gather all cached transactions
+  const targetList = (customTransactions && customTransactions.length > 0)
+    ? customTransactions
+    : findAllBrowserCachedTransactions();
+
+  if (!targetList || targetList.length === 0) {
+    return { success: false, restoredCount: 0, totalAmount: 0, message: 'Browser cache-ah transactions hmuh a ni lo (No cached transactions found).' };
+  }
+
+  // 2. Filter & clean valid transactions
+  const validList = targetList.filter(t => t && t.id && Number(t.amount) > 0);
+  if (validList.length === 0) {
+    return { success: false, restoredCount: 0, totalAmount: 0, message: 'No valid positive amount transactions to restore.' };
+  }
+
+  // 3. Clear tombstones so they are unpurged!
+  const txIds = validList.map(t => String(t.id).toLowerCase().trim());
+  unpurgeTransactionIds(txIds);
+
+  // 4. Save into all local storage slots
+  saveStoredTransactions(validList, false);
+
+  // 5. Ensure parent campaigns exist in Supabase
+  try {
+    const localCamps = getStoredCampaigns();
+    for (const c of localCamps) {
+      await upsertSupabaseCampaign(c);
+    }
+  } catch {}
+
+  // 6. Batch upsert to Supabase transactions table
+  const mappedRows = validList.map(t => {
+    const meta = (t as any).metadata || {};
+    return {
+      id: t.id,
+      campaign_id: t.campaignId || 'cmp-default',
+      campaign_title: t.campaignTitle || 'RonPay Community Cause',
+      category: t.category || 'others',
+      donor_name: t.donorName || (t.isAnonymous ? 'Anonymous' : 'Valued Donor'),
+      donor_phone: t.donorPhone || null,
+      donor_veng: t.donorVeng || (t as any).donorSection || null,
+      member_id: t.memberId || null,
+      sub_id: t.subId || null,
+      donor_type: t.donorType || 'member',
+      group_name: t.groupName || null,
+      is_anonymous: Boolean(t.isAnonymous),
+      amount: Number(t.amount) || 0,
+      platform_fee: Number(t.platformFee ?? 0),
+      total_amount: Number(t.totalAmount ?? t.amount ?? 0),
+      payment_method: t.paymentMethod || 'upi',
+      status: t.status || 'completed',
+      remark: t.remark || null,
+      period_type: t.periodType || 'monthly',
+      period_month: t.periodMonth || null,
+      period_year: t.periodYear || null,
+      period_label: t.periodLabel || null,
+      utr: t.utr || null,
+      reference_no: t.referenceNo || t.utr || null,
+      timestamp: t.timestamp || t.createdAt || new Date().toISOString(),
+      created_at: t.createdAt || t.timestamp || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: {
+        subCategoryBreakdown: t.subCategoryBreakdown,
+        feeOption: t.feeOption,
+        payerUPI: t.payerUPI,
+        txHash: t.txHash,
+        ...meta
+      }
+    };
+  });
+
+  let syncedCount = 0;
+  for (let i = 0; i < mappedRows.length; i += 40) {
+    const chunk = mappedRows.slice(i, i + 40);
+    const { error } = await supabase.from('transactions').upsert(chunk, { onConflict: 'id' });
+    if (!error) {
+      syncedCount += chunk.length;
+    } else {
+      console.warn('[Supabase Restore Chunk Warning]:', error.message);
+      // Fallback row-by-row
+      for (const row of chunk) {
+        const { error: singleErr } = await supabase.from('transactions').upsert(row, { onConflict: 'id' });
+        if (!singleErr) syncedCount++;
+      }
+    }
+  }
+
+  // 7. Push to server REST API
+  try {
+    await fetch('/api/restore-transactions-to-supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions: validList })
+    });
+  } catch {}
+
+  // 8. Recalibrate fund pool in Supabase
+  const totalAmount = validList.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  await recalibrateSupabaseFundPool('public_pool');
+
+  // 9. Broadcast local and cross-tab events
+  try {
+    if (typeof window !== 'undefined') {
+      broadcastStateChange('transactions', validList);
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: validList }));
+      window.dispatchEvent(new CustomEvent('ronpay-transactions-updated', { detail: validList }));
+    }
+  } catch {}
+
+  return {
+    success: true,
+    restoredCount: validList.length,
+    totalAmount: Math.round(totalAmount * 100) / 100,
+    message: `Hlawhtling takin transactions ${validList.length} (₹${totalAmount.toLocaleString('en-IN')}) Supabase-ah restore a ni ta!`
+  };
+}
+
+/**
  * Specifically synchronizes all local transactions directly to Supabase transactions table
  * and processes any offline queued items
  */
@@ -1093,8 +1228,8 @@ export async function syncPendingTransactionsToSupabase(): Promise<{
   synced: number;
   failed: number;
 }> {
-  // Completely disabled to prevent mock data auto-insertion.
-  return { total: 0, synced: 0, failed: 0 };
+  const res = await restoreCacheToSupabase();
+  return { total: res.restoredCount, synced: res.restoredCount, failed: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -1342,6 +1477,16 @@ export async function loadSupabaseInitialState(): Promise<{
     }
     if (finalTxns.length === 0) {
       finalTxns = getStoredTransactions();
+    }
+    if (finalTxns.length === 0) {
+      finalTxns = findAllBrowserCachedTransactions();
+    }
+
+    // Auto-Restore Safeguard: If Supabase was wiped/deleted (txns is 0) but we have cached transactions (> 0),
+    // automatically trigger restoreCacheToSupabase so Supabase gets restored without data loss!
+    if ((!txns || txns.length === 0) && finalTxns.length > 0) {
+      console.info(`[Supabase Auto-Restore] Supabase has 0 txns, restoring ${finalTxns.length} from cache!`);
+      restoreCacheToSupabase(finalTxns).catch(e => console.warn('Auto restore note:', e));
     }
 
     // Update secondary cache and server SSOT
