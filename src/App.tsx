@@ -476,7 +476,7 @@ export default function App() {
     }, 10000);
 
     const unsubTx = subscribeToTable('transactions', () => {
-      fetchTableData('transactions').then(txs => {
+      fetchTableData('transactions', { forceAll: true }).then(txs => {
         if (isMounted && Array.isArray(txs) && txs.length > 0) {
           setTransactions(txs as Transaction[]);
           saveStoredTransactions(txs as Transaction[], true);

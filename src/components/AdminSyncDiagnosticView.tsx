@@ -33,6 +33,7 @@ import {
   saveStoredTransactions,
   saveStoredCampaigns,
   getDeletedTransactionIds,
+  unpurgeTransactionIds,
   markTransactionAsDeleted,
   isConfirmedTransaction
 } from '../utils/storage';
@@ -170,8 +171,13 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
       try {
         setCloudStatus('checking');
         const startTime = Date.now();
-        const transactions = await fetchTableData('transactions');
+        const transactions = await fetchTableData('transactions', { forceAll: true });
         const campaigns = await fetchTableData('campaigns');
+        if (Array.isArray(transactions) && transactions.length > 0) {
+          const txList = transactions as Transaction[];
+          unpurgeTransactionIds(txList.map(t => String(t.id)));
+          saveStoredTransactions(txList, true);
+        }
         setCloudTxList((transactions || []) as Transaction[]);
         setCloudCampList((campaigns || []) as Campaign[]);
         setCloudTombstones([]);
@@ -197,14 +203,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     setActionNotice(null);
 
     try {
-      const fresh = await fetchTableData('transactions');
-      if (Array.isArray(fresh)) {
-        saveStoredTransactions(fresh as Transaction[], true);
-        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: fresh }));
+      const fresh = await fetchTableData('transactions', { forceAll: true });
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        const txList = fresh as Transaction[];
+        unpurgeTransactionIds(txList.map(t => String(t.id)));
+        saveStoredTransactions(txList, true);
+        window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: txList }));
       }
       
       setActionNotice({
-        message: 'Deep Audit Complete: Supabase database is the authoritative source.',
+        message: `✅ Deep Audit Complete: Supabase database-aṭangin transactions ${fresh?.length || 0} te tluang takin in-sync vek a ni ta.`,
         type: 'success'
       });
 

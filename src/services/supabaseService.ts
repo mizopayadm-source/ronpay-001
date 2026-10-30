@@ -175,9 +175,11 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
 
   const { data, error } = await query;
   if (!error && Array.isArray(data) && data.length > 0) {
-    return (data || [])
-      .filter((row: any) => row && row.id && row.status !== 'deleted')
-      .map((row: any) => ({
+    const validRows = (data || []).filter((row: any) => row && row.id && row.status !== 'deleted');
+    if (validRows.length > 0) {
+      unpurgeTransactionIds(validRows.map((r: any) => String(r.id)));
+    }
+    return validRows.map((row: any) => ({
         id: row.id,
         campaignId: row.campaign_id,
         campaignTitle: row.campaign_title,

@@ -1247,8 +1247,6 @@ export const getStoredTransactions = (): Transaction[] => {
         if (
           deletedIds.has(cleanId) || 
           PERMANENTLY_PURGED_TX_IDS.has(cleanId) || 
-          cleanId.includes('142611') || 
-          cleanId.includes('120863') ||
           seen.has(cleanId)
         ) continue;
         seen.add(cleanId);

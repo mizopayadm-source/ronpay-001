@@ -7,6 +7,7 @@ import {
   DEFAULT_WALLET, 
   getDeletedTransactionIds, 
   PERMANENTLY_PURGED_TX_IDS,
+  unpurgeTransactionIds,
   isSuperAdminOrAdminProfile,
   isCampaignManagerOrOfficer,
   getStoredCreatorProfile,
@@ -417,6 +418,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         const { data, error } = await query;
         if (!error && Array.isArray(data) && data.length > 0) {
           const valid = data.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
+          if (valid.length > 0) {
+            unpurgeTransactionIds(valid.map(r => String(r.id)));
+          }
           return valid.map(normalizeTransaction) as unknown as T[];
         }
       }
