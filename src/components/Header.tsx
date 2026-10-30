@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
+import { isGuestUser } from '../utils/storage';
 
 interface HeaderProps {
   currentScreen: ScreenId;
@@ -695,7 +696,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Report</span>
             </button>
 
-            {onOpenBackupSync && (
+            {onOpenBackupSync && !isGuestUser(creatorProfile) && (
               <button
                 id="header-backup-btn"
                 type="button"

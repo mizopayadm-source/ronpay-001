@@ -19,7 +19,9 @@ import {
   getMembers, 
   getStoredExpenses,
   recordAuditLog,
-  getStoredStaffAccounts
+  getStoredStaffAccounts,
+  isGuestUser,
+  isCampaignCreator
 } from '../utils/storage';
 import { downloadFileUniversal } from '../utils/export';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
@@ -432,16 +434,30 @@ export async function decryptData(
 // -------------------------------------------------------------
 
 export function compileFullLedgerPackage(): any {
-  const campaigns = getStoredCampaigns();
-  const transactions = getStoredTransactions();
-  const members = getMembers();
-  const expenses = getStoredExpenses();
-  const creators = getStoredCreatorsList();
   const creatorProfile = getStoredCreatorProfile();
+  if (isGuestUser(creatorProfile)) {
+    throw new Error('Khualmi (Guest user) tan backup siam theih a ni lo.');
+  }
+
+  const isSuperAdmin = Boolean(creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN');
+  let campaigns = getStoredCampaigns();
+  let transactions = getStoredTransactions();
+  let members = getMembers();
+  let expenses = getStoredExpenses();
+  const creators = getStoredCreatorsList();
   const pricingConfig = getStoredPricingConfig();
   const announcement = getStoredAnnouncement();
-  const auditLogs = getStoredAuditLogs();
-  const staff = getStoredStaffAccounts();
+  const auditLogs = isSuperAdmin ? getStoredAuditLogs() : [];
+  const staff = isSuperAdmin ? getStoredStaffAccounts() : [];
+
+  if (!isSuperAdmin) {
+    // Scope to Creator's own campaigns ("Ama bawk siam chauh")
+    campaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+    const myCampIds = new Set(campaigns.map(c => String(c.id).toLowerCase().trim()));
+    transactions = transactions.filter(t => myCampIds.has(String(t.campaignId).toLowerCase().trim()));
+    members = members.filter(m => myCampIds.has(String(m.campaignId).toLowerCase().trim()));
+    expenses = expenses.filter(e => myCampIds.has(String(e.campaignId).toLowerCase().trim()));
+  }
 
   const totalCollected = transactions
     .filter(t => t.status !== 'failed' && t.status !== 'rejected')
@@ -455,6 +471,7 @@ export function compileFullLedgerPackage(): any {
     ronpay_ledger_version: '2.5.0',
     exportedAt: new Date().toISOString(),
     system: 'RonPay Financial & Community Ledger',
+    scope: isSuperAdmin ? 'full_system' : 'creator_only',
     stats: {
       totalCampaigns: campaigns.length,
       totalTransactions: transactions.length,
@@ -469,7 +486,7 @@ export function compileFullLedgerPackage(): any {
       transactions,
       members,
       expenses,
-      creators,
+      creators: isSuperAdmin ? creators : [creatorProfile],
       creatorProfile,
       pricingConfig,
       announcement,
@@ -480,9 +497,22 @@ export function compileFullLedgerPackage(): any {
 }
 
 export function compileLedgerCSV(): string {
-  const txs = getStoredTransactions();
-  const campaigns = getStoredCampaigns();
-  const expenses = getStoredExpenses();
+  const creatorProfile = getStoredCreatorProfile();
+  if (isGuestUser(creatorProfile)) {
+    throw new Error('Khualmi (Guest user) tan backup siam theih a ni lo.');
+  }
+
+  const isSuperAdmin = Boolean(creatorProfile?.isAdmin || creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN');
+  let campaigns = getStoredCampaigns();
+  let txs = getStoredTransactions();
+  let expenses = getStoredExpenses();
+
+  if (!isSuperAdmin) {
+    campaigns = campaigns.filter(c => isCampaignCreator(c, creatorProfile));
+    const myCampIds = new Set(campaigns.map(c => String(c.id).toLowerCase().trim()));
+    txs = txs.filter(t => myCampIds.has(String(t.campaignId).toLowerCase().trim()));
+    expenses = expenses.filter(e => myCampIds.has(String(e.campaignId).toLowerCase().trim()));
+  }
 
   const campMap = new Map<string, string>();
   campaigns.forEach(c => {

@@ -52,7 +52,7 @@ import {
   decryptData
 } from '../services/backupService';
 import { formatDateTimeDDMMYYYY } from '../utils/date';
-import { restoreFullDatabaseBackup } from '../utils/storage';
+import { restoreFullDatabaseBackup, isGuestUser, getStoredCreatorProfile } from '../utils/storage';
 
 interface BackupSyncSettingsModalProps {
   isOpen: boolean;
@@ -335,7 +335,8 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
   // Restore Execution Handler
   const executeRestorePayload = (plainJsonText: string) => {
     try {
-      const res = restoreFullDatabaseBackup(plainJsonText);
+      const activeProfile = getStoredCreatorProfile();
+      const res = restoreFullDatabaseBackup(plainJsonText, activeProfile);
       if (res.success) {
         setRestoreStatus({
           success: true,
@@ -431,6 +432,9 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
     }
   };
 
+  const currentProfile = getStoredCreatorProfile();
+  const isGuest = isGuestUser(currentProfile);
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn">
       <div className="bg-slate-900 border border-slate-700/80 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-100">
@@ -461,6 +465,29 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Guest User Access Restriction View */}
+        {isGuest ? (
+          <div className="p-6 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-black text-white">Khualmi (Guest User) Tan Backup A In-Off</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Guest user te hian Bawm an siam ngai loh avangin Backup hi mamawh a ni lo. Backup hi Creator-te tan chauh, anmahni Bawm siam chauh vawng tura duan a ni.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition cursor-pointer"
+            >
+              Hrethiam E / Khawp Mai
+            </button>
+          </div>
+        ) : (
+          <>
 
         {/* Navigation Tabs - Mobile Optimized 4-Column Responsive Grid */}
         <div className="grid grid-cols-4 bg-slate-950/90 border-b border-slate-800 p-1 gap-1 shrink-0">
@@ -1360,6 +1387,9 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
             Close
           </button>
         </div>
+
+        </>
+      )}
 
       </div>
 

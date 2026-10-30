@@ -1364,6 +1364,17 @@ export const DEFAULT_INITIAL_CREATOR: CreatorProfile = {
   createdQRsCount: 5,
 };
 
+export const isGuestUser = (profile?: CreatorProfile | null): boolean => {
+  if (!profile) return true;
+  if (profile.isAdmin === true) return false;
+  if (profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN' || profile.role === 'MODERATOR') return false;
+  const cleanName = (profile.name || '').trim().toLowerCase();
+  const phone = (profile.phone || '').trim();
+  if (!phone || phone === '9999999999' || profile.role === 'GUEST') return true;
+  if (cleanName === 'khualmi' || cleanName === 'khualmi (guest user)' || cleanName === 'guest user' || cleanName === 'guest') return true;
+  return false;
+};
+
 export const getStoredCreatorProfile = (): CreatorProfile => {
   try {
     const raw = localStorage.getItem(CREATOR_PROFILE_KEY);
@@ -2237,29 +2248,50 @@ export interface RonPayBackupPackage {
   };
 }
 
-export const exportFullDatabaseBackup = (): string => {
-  const backup: RonPayBackupPackage = {
+export const exportFullDatabaseBackup = (currentProfile?: CreatorProfile | null): string => {
+  const profile = currentProfile || getStoredCreatorProfile();
+  if (isGuestUser(profile)) {
+    throw new Error('Khualmi (Guest user) tan backup siam theih a ni lo.');
+  }
+
+  const isSuperAdmin = Boolean(profile?.isAdmin || profile?.role === 'SUPER_ADMIN' || profile?.role === 'ADMIN');
+  let campaigns = getStoredCampaigns();
+  let transactions = getStoredTransactions();
+  let members = getMembers();
+  let expenses = getStoredExpenses();
+
+  if (!isSuperAdmin) {
+    // Creator scope: Filter strictly to campaigns created/owned by this creator ("Ama bawk siam chauh")
+    campaigns = campaigns.filter(c => isCampaignCreator(c, profile));
+    const myCampIds = new Set(campaigns.map(c => String(c.id).toLowerCase().trim()));
+    transactions = transactions.filter(t => myCampIds.has(String(t.campaignId).toLowerCase().trim()));
+    members = members.filter(m => myCampIds.has(String(m.campaignId).toLowerCase().trim()));
+    expenses = expenses.filter(e => myCampIds.has(String(e.campaignId).toLowerCase().trim()));
+  }
+
+  const backup: RonPayBackupPackage & { scope?: string } = {
     version: '2.5.0',
     exportedAt: new Date().toISOString(),
     app: 'RonPay Community Platform',
+    scope: isSuperAdmin ? 'full_system' : 'creator_only',
     data: {
-      campaigns: getStoredCampaigns(),
-      transactions: getStoredTransactions(),
-      creatorsList: getStoredCreatorsList(),
-      creatorProfile: getStoredCreatorProfile(),
+      campaigns,
+      transactions,
+      creatorsList: isSuperAdmin ? getStoredCreatorsList() : [profile],
+      creatorProfile: profile,
       pricingConfig: getStoredPricingConfig(),
       announcement: getStoredAnnouncement(),
-      auditLogs: getStoredAuditLogs(),
+      auditLogs: isSuperAdmin ? getStoredAuditLogs() : [],
       userPaidTxIds: getStoredUserPaidTxIds(),
-      members: getMembers(),
-      expenses: getStoredExpenses(),
-      staffAccounts: getStoredStaffAccounts(),
+      members,
+      expenses,
+      staffAccounts: isSuperAdmin ? getStoredStaffAccounts() : [],
     }
   };
 
   recordAuditLog(
     'Database Backup Exported',
-    `Exported full backup containing ${backup.data.campaigns.length} campaigns, ${backup.data.transactions.length} transactions, and ${backup.data.creatorsList.length} creators.`,
+    `Exported backup (${backup.scope}) containing ${campaigns.length} campaigns, ${transactions.length} transactions by ${profile.name}.`,
     'system'
   );
 
@@ -2267,27 +2299,127 @@ export const exportFullDatabaseBackup = (): string => {
 };
 
 export const restoreFullDatabaseBackup = (
-  jsonString: string
+  jsonString: string,
+  currentProfile?: CreatorProfile | null
 ): { success: boolean; error?: string; counts?: { campaigns: number; transactions: number; creators: number; members?: number; expenses?: number } } => {
   try {
-    const parsed: RonPayBackupPackage = JSON.parse(jsonString);
+    const parsed: any = JSON.parse(jsonString);
     if (!parsed || !parsed.data) {
       return { success: false, error: 'Invalid backup file structure: missing data payload.' };
     }
 
     const { data } = parsed;
+    const activeProfile = currentProfile || getStoredCreatorProfile();
+    const isSuperAdmin = Boolean(activeProfile?.isAdmin || activeProfile?.role === 'SUPER_ADMIN' || activeProfile?.role === 'ADMIN');
+    const isCreatorOnlyScope = !isSuperAdmin || parsed.scope === 'creator_only';
 
+    let restoredCampaignsCount = 0;
+    let restoredTxnCount = 0;
+    let restoredMembersCount = 0;
+    let restoredExpensesCount = 0;
+
+    if (isCreatorOnlyScope) {
+      // -------------------------------------------------------------
+      // CREATOR-SCOPED RESTORE: PROTECT ALL OTHER CREATORS' DATA!
+      // Merges only this creator's campaigns, transactions, members & expenses.
+      // NEVER overwrites or wipes other creators' Bawms!
+      // -------------------------------------------------------------
+      const incomingCampaigns: Campaign[] = Array.isArray(data.campaigns) ? data.campaigns : [];
+      const currentCampaigns = getStoredCampaigns();
+      const incomingCampMap = new Map(incomingCampaigns.map(c => [String(c.id).toLowerCase().trim(), c]));
+
+      // 1. Merge campaigns: update matching, keep all existing ones from other creators
+      const mergedCampaigns = currentCampaigns.map(c => {
+        const clean = String(c.id).toLowerCase().trim();
+        if (incomingCampMap.has(clean)) {
+          return incomingCampMap.get(clean)!;
+        }
+        return c;
+      });
+      const existingIds = new Set(currentCampaigns.map(c => String(c.id).toLowerCase().trim()));
+      incomingCampaigns.forEach(c => {
+        if (!existingIds.has(String(c.id).toLowerCase().trim())) {
+          mergedCampaigns.push(c);
+        }
+      });
+      saveStoredCampaigns(mergedCampaigns);
+      restoredCampaignsCount = incomingCampaigns.length;
+
+      // 2. Merge transactions: merge incoming into existing transactions without losing others
+      const incomingTx: Transaction[] = Array.isArray(data.transactions) ? data.transactions : [];
+      const existingTx = getStoredTransactions();
+      const mergedTx = mergeTransactions(existingTx, incomingTx);
+      saveStoredTransactions(mergedTx);
+      restoredTxnCount = incomingTx.length;
+
+      // 3. Merge members:
+      const incomingMembers: MemberRecord[] = Array.isArray(data.members) ? data.members : [];
+      const existingMembers = getMembers();
+      const memMap = new Map(existingMembers.map(m => [String(m.id).toLowerCase().trim(), m]));
+      incomingMembers.forEach(m => {
+        if (m && m.id) memMap.set(String(m.id).toLowerCase().trim(), m);
+      });
+      const mergedMembers = Array.from(memMap.values());
+      saveMembers(mergedMembers);
+      restoredMembersCount = incomingMembers.length;
+
+      // 4. Merge expenses:
+      const incomingExpenses: KumtluangExpense[] = Array.isArray(data.expenses) ? data.expenses : [];
+      const existingExpenses = getStoredExpenses();
+      const expMap = new Map(existingExpenses.map(e => [String(e.id).toLowerCase().trim(), e]));
+      incomingExpenses.forEach(e => {
+        if (e && e.id) expMap.set(String(e.id).toLowerCase().trim(), e);
+      });
+      const mergedExpenses = Array.from(expMap.values());
+      saveStoredExpenses(mergedExpenses);
+      restoredExpensesCount = incomingExpenses.length;
+
+      // Sync only the merged data to server
+      safeApiFetch('/api/data/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaigns: incomingCampaigns,
+          transactions: incomingTx,
+          members: incomingMembers,
+          expenses: incomingExpenses,
+        })
+      }).catch(() => {});
+
+      recordAuditLog(
+        'Creator Backup Restored',
+        `Creator ${activeProfile?.name || 'User'} restored their personal backup: ${incomingTx.length} transactions, ${incomingCampaigns.length} campaigns. Other creators preserved intact.`,
+        'system'
+      );
+
+      return {
+        success: true,
+        counts: {
+          campaigns: restoredCampaignsCount,
+          transactions: restoredTxnCount,
+          members: restoredMembersCount,
+          expenses: restoredExpensesCount,
+          creators: 1,
+        }
+      };
+    }
+
+    // Full system restore for Super Admin
     if (Array.isArray(data.campaigns)) {
       saveStoredCampaigns(data.campaigns);
+      restoredCampaignsCount = data.campaigns.length;
     }
     if (Array.isArray(data.transactions)) {
       saveStoredTransactions(data.transactions);
+      restoredTxnCount = data.transactions.length;
     }
     if (Array.isArray(data.members)) {
       saveMembers(data.members);
+      restoredMembersCount = data.members.length;
     }
     if (Array.isArray(data.expenses)) {
       saveStoredExpenses(data.expenses);
+      restoredExpensesCount = data.expenses.length;
     }
     if (Array.isArray(data.staffAccounts)) {
       saveStoredStaffAccounts(data.staffAccounts);
@@ -2329,17 +2461,17 @@ export const restoreFullDatabaseBackup = (
 
     recordAuditLog(
       'Database Restored from Backup',
-      `Restored snapshot: ${data.transactions?.length || 0} transactions, ${data.campaigns?.length || 0} campaigns, ${data.members?.length || 0} members, ${data.expenses?.length || 0} expenses.`,
+      `Restored snapshot: ${restoredTxnCount} transactions, ${restoredCampaignsCount} campaigns, ${restoredMembersCount} members, ${restoredExpensesCount} expenses.`,
       'system'
     );
 
     return {
       success: true,
       counts: {
-        campaigns: data.campaigns?.length || 0,
-        transactions: data.transactions?.length || 0,
-        members: data.members?.length || 0,
-        expenses: data.expenses?.length || 0,
+        campaigns: restoredCampaignsCount,
+        transactions: restoredTxnCount,
+        members: restoredMembersCount,
+        expenses: restoredExpensesCount,
         creators: (data.creatorsList?.length || data.creators?.length) || 0,
       }
     };

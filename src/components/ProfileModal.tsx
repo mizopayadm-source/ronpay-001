@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
-import { saveStoredCreatorProfile, wipeAllClientStorage } from '../utils/storage';
+import { saveStoredCreatorProfile, wipeAllClientStorage, isGuestUser } from '../utils/storage';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -614,8 +614,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
-        {/* Backup & Sync Settings Trigger */}
-        {onOpenBackupSync && (
+        {/* Backup & Sync Settings Trigger - Only for Creators and Admins (Not for Guest users) */}
+        {onOpenBackupSync && !isGuestUser(creatorProfile) && (
           <button
             id="profile-backup-sync-btn"
             onClick={() => {
