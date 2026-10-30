@@ -107,6 +107,7 @@ export interface Campaign {
   urgencyLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | string;
   urgencyDeadline?: string;
   subCategories?: string[];
+  collectedAmount?: number;
   trxnFeeBearer?: 'user_paid' | 'creator_paid' | string;
   kumtluangFeeBearer?: string;
   feeOptionRule?: FeeOptionMode;
@@ -290,6 +291,7 @@ export interface CreatorProfile {
   id?: string;
   phone: string;
   name: string;
+  email?: string;
   designation?: string;
   orgName?: string;
   location?: string;
@@ -673,5 +675,74 @@ export interface PublicPoolStats {
   lastUpdated?: string;
   todayCount?: number;
 }
+
+// -------------------------------------------------------------
+// Backup & Sync Settings Types
+// -------------------------------------------------------------
+
+export interface BackupSyncConfig {
+  // 1. Local Device Backup (HDD / Phone Storage)
+  localBackupEnabled: boolean;
+  midnightAutoBackup: boolean;
+  backupFormat: 'json' | 'csv' | 'both';
+  encryptionEnabled: boolean;
+  encryptionPassword?: string;
+  folderName?: string;
+  storageMode?: 'downloads' | 'directory_handle' | 'opfs' | 'custom';
+  hasFolderHandle?: boolean;
+  lastLocalBackupAt?: string;
+  lastLocalBackupStatus?: 'success' | 'failed' | 'idle';
+  lastLocalBackupFile?: string;
+  lastLocalBackupSize?: number;
+  lastMidnightRunDate?: string;
+
+  // 2. Optional Email Backup & Sync
+  emailBackupEnabled: boolean;
+  emailRecipient: string;
+  emailWeeklyDigest: boolean; // Sunday midnight
+  lastEmailBackupAt?: string;
+  lastEmailBackupStatus?: 'success' | 'failed' | 'idle';
+  lastSundayDigestDate?: string;
+
+  // 3. Optional WhatsApp Backup
+  whatsappBackupEnabled: boolean;
+  whatsappNumber: string;
+  includeFinancialSummary: boolean;
+  lastWhatsappShareAt?: string;
+
+  updatedAt?: string;
+}
+
+export interface BackupHistoryItem {
+  id: string;
+  timestamp: string;
+  type: 'local_auto_midnight' | 'local_manual' | 'email_auto_weekly' | 'email_manual' | 'whatsapp_summary' | 'whatsapp_export';
+  format: 'json' | 'csv' | 'both' | 'text';
+  fileName?: string;
+  fileSizeBytes?: number;
+  isEncrypted: boolean;
+  status: 'success' | 'failed';
+  summary?: string;
+  recordCounts?: {
+    campaigns: number;
+    transactions: number;
+    members: number;
+    expenses: number;
+  };
+}
+
+export interface EncryptedBackupEnvelope {
+  ronpay_envelope: boolean;
+  format: 'json' | 'csv' | 'both';
+  version: string;
+  cipher: 'AES-GCM-256';
+  encryptedAt: string;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+  app: string;
+  checksum?: string;
+}
+
 
 

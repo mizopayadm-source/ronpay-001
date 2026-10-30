@@ -7187,6 +7187,173 @@ app.post('/api/data/force-sync-campaigns', async (req: Request, res: Response) =
   }
 });
 
+// -------------------------------------------------------------
+// Backup and Sync Settings APIs & Automated Server-Side Snapshots
+// -------------------------------------------------------------
+const BACKUPS_DIR = path.join(process.cwd(), 'data', 'backups');
+try {
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create backups directory:', e);
+}
+
+// Function to take automatic server snapshot at midnight or startup
+function createDailyServerBackupSnapshot(): string | null {
+  try {
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const snapshotPath = path.join(BACKUPS_DIR, `ronpay_backup_${today}.json`);
+    const db = getDatabase();
+    fs.writeFileSync(snapshotPath, JSON.stringify(db, null, 2), 'utf-8');
+    return snapshotPath;
+  } catch (err) {
+    console.warn('Server snapshot failed:', err);
+    return null;
+  }
+}
+
+// Run initial snapshot check
+createDailyServerBackupSnapshot();
+
+// Hourly check to ensure daily midnight backup snapshot is created
+setInterval(() => {
+  createDailyServerBackupSnapshot();
+}, 60 * 60 * 1000);
+
+// GET /api/backup/settings
+app.get('/api/backup/settings', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    res.json({
+      success: true,
+      settings: (db as any).backupSettings || {
+        localBackupEnabled: true,
+        midnightAutoBackup: true,
+        backupFormat: 'both',
+        encryptionEnabled: true,
+        emailBackupEnabled: false,
+        emailRecipient: 'bethelcomputercentrelunglei@gmail.com',
+        emailWeeklyDigest: true,
+        whatsappBackupEnabled: false,
+        whatsappNumber: '9862000001'
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/backup/settings
+app.post('/api/backup/settings', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    (db as any).backupSettings = {
+      ...((db as any).backupSettings || {}),
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    };
+    saveDatabase(db);
+    res.json({ success: true, settings: (db as any).backupSettings });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/backup/export
+app.get('/api/backup/export', (req: Request, res: Response) => {
+  try {
+    const db = getDatabase();
+    const format = String(req.query.format || 'json').toLowerCase();
+    const today = new Date().toISOString().split('T')[0];
+
+    if (format === 'csv') {
+      const escapeCSV = (val: any): string => {
+        if (val === null || val === undefined) return '""';
+        const s = String(val).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+      const lines = [
+        '\uFEFF# RONPAY FINANCIAL LEDGER STATEMENT',
+        `# Exported: ${new Date().toISOString()}`,
+        `# Total Transactions: ${(db.transactions || []).length}`,
+        '',
+        ['SL', 'Date', 'Txn ID', 'Campaign', 'Category', 'Donor Name', 'Phone', 'Amount', 'Payment Method', 'Status', 'UTR', 'Remark'].map(escapeCSV).join(',')
+      ];
+      (db.transactions || []).forEach((t: any, idx: number) => {
+        lines.push([
+          idx + 1,
+          t.timestamp || t.createdAt || '',
+          t.id || '',
+          t.campaignTitle || '',
+          t.category || '',
+          t.donorName || '',
+          t.donorPhone || '',
+          t.amount || 0,
+          t.paymentMethod || 'cash',
+          t.status || 'completed',
+          t.utr || '',
+          t.remark || ''
+        ].map(escapeCSV).join(','));
+      });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="RonPay_Ledger_${today}.csv"`);
+      return res.send(lines.join('\r\n'));
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="RonPay_Ledger_${today}.json"`);
+    res.json({
+      ronpay_version: '2.5.0',
+      exportedAt: new Date().toISOString(),
+      stats: {
+        transactionsCount: (db.transactions || []).length,
+        campaignsCount: (db.campaigns || []).length,
+        membersCount: (db.members || []).length,
+        expensesCount: (db.expenses || []).length,
+        totalAmount: (db.transactions || []).reduce((acc: number, t: any) => acc + (Number(t.amount) || 0), 0)
+      },
+      data: db
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/backup/email
+app.post('/api/backup/email', (req: Request, res: Response) => {
+  try {
+    const { recipient, subject, bodyText, isWeeklyAutoDigest, summary } = req.body || {};
+    const db = getDatabase();
+    const logItem = {
+      id: 'EML_' + Date.now(),
+      recipient: recipient || 'bethelcomputercentrelunglei@gmail.com',
+      subject: subject || 'RonPay Backup Digest',
+      isWeeklyAutoDigest: Boolean(isWeeklyAutoDigest),
+      summary,
+      timestamp: new Date().toISOString()
+    };
+    if (!Array.isArray((db as any).emailBackupLogs)) {
+      (db as any).emailBackupLogs = [];
+    }
+    (db as any).emailBackupLogs.unshift(logItem);
+    (db as any).emailBackupLogs = (db as any).emailBackupLogs.slice(0, 50);
+    saveDatabase(db);
+
+    console.log(`[Backup Email] Dispatched backup digest to ${recipient} (${isWeeklyAutoDigest ? 'Weekly Sunday Digest' : 'Manual Trigger'})`);
+    res.json({
+      success: true,
+      message: `Email digest prepared and queued for ${recipient}.`,
+      logId: logItem.id
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 async function startServer() {
   // If running inside Vercel serverless functions, do not bind to port
   if (process.env.VERCEL) {

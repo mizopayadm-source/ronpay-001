@@ -29,7 +29,8 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Activity
+  Activity,
+  HardDrive
 } from 'lucide-react';
 import { CreatorProfile, BawmCategory } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -46,6 +47,7 @@ interface ProfileModalProps {
   onLoginClick?: (method?: 'switch' | 'credentials') => void;
   onOpenAdmin?: () => void;
   onOpenSyncDiagnostic?: () => void;
+  onOpenBackupSync?: () => void;
   biometricEnabled?: boolean;
   onToggleBiometric?: () => void;
   onLockNow?: () => void;
@@ -63,6 +65,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onLoginClick,
   onOpenAdmin,
   onOpenSyncDiagnostic,
+  onOpenBackupSync,
   biometricEnabled = true,
   onToggleBiometric,
   onLockNow,
@@ -608,6 +611,36 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               PhonePe TSP & PG V2 Portal
             </span>
             <span className="text-[10.5px] bg-purple-200/80 text-purple-900 font-mono font-bold px-2 py-0.5 rounded-md">UAT</span>
+          </button>
+        )}
+
+        {/* Backup & Sync Settings Trigger */}
+        {onOpenBackupSync && (
+          <button
+            id="profile-backup-sync-btn"
+            onClick={() => {
+              onClose();
+              onOpenBackupSync();
+            }}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-md border border-amber-500/40 group"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+                <HardDrive className="w-3.5 h-3.5 text-slate-950" />
+              </div>
+              <div className="text-left">
+                <p className="font-black text-white text-xs flex items-center gap-1.5">
+                  Backup & Sync Settings
+                  <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-400/30">
+                    Midnight Auto
+                  </span>
+                </p>
+                <p className="text-[9.5px] text-slate-300">Local HDD/Phone • Email Digest • WhatsApp</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-amber-400 text-slate-950 px-2.5 py-1 rounded-full font-black uppercase shadow-xs group-hover:scale-105 transition-transform">
+              Settings
+            </span>
           </button>
         )}
 

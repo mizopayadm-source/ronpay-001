@@ -79,7 +79,8 @@ import {
   SlidersHorizontal,
   Activity,
   Banknote,
-  Wallet
+  Wallet,
+  HardDrive
 } from 'lucide-react';
 import { AdminSyncDiagnosticView } from './AdminSyncDiagnosticView';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
@@ -174,6 +175,7 @@ interface AdminDashboardModalProps {
   currentProfile?: CreatorProfile | null;
   onViewReceipt?: (tx: any) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
+  onOpenBackupSync?: () => void;
 }
 
 export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
@@ -201,6 +203,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onUpdateAnnouncement,
   onRestoreDatabase,
   onResetData,
+  onOpenBackupSync,
 }) => {
   // Mandatory Login Gate: Check if current user profile has the `isAdmin: true` flag.
   // If not, redirect them or prompt for an admin password before allowing access.
@@ -1024,23 +1027,44 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setLogsList(getStoredAuditLogs());
   };
 
-  // Backup Restore
-  const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Backup Restore (supports plain .json and encrypted .enc.json)
+  const handleFileRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const content = evt.target?.result as string;
-      if (!content) return;
+    try {
+      const content = await file.text();
+      if (!content || !content.trim()) return;
 
-      const result = restoreFullDatabaseBackup(content);
+      let plainContent = content;
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed && (parsed.ronpay_envelope || parsed.cipher === 'AES-GCM-256')) {
+          const { decryptData } = await import('../services/backupService');
+          let decrypted = '';
+          try {
+            decrypted = await decryptData(content);
+          } catch {
+            const pwd = window.prompt('He file hi AES-GCM 256 hmanga encrypt a ni. Khawngaihin decryption password dah rawh:', '');
+            if (pwd === null) return;
+            decrypted = await decryptData(content, pwd);
+          }
+          plainContent = decrypted;
+        }
+      } catch (err: any) {
+        if (err.message && (err.message.includes('MAC') || err.message.includes('password'))) {
+          setRestoreNotice({ message: '❌ Password / Passphrase a dik lo.', isError: true });
+          return;
+        }
+      }
+
+      const result = restoreFullDatabaseBackup(plainContent);
       if (result.success) {
         setRestoreNotice({
-          message: `✅ Backup successfully restored! Loaded ${result.counts?.campaigns} campaigns, ${result.counts?.transactions} transactions, and ${result.counts?.creators} creators.`
+          message: `✅ Backup successfully restored! Loaded ${result.counts?.campaigns ?? 0} campaigns, ${result.counts?.transactions ?? 0} transactions, and ${result.counts?.creators ?? 0} creators.`
         });
         if (onRestoreDatabase) {
-          onRestoreDatabase(content);
+          onRestoreDatabase(plainContent);
         }
         setLogsList(getStoredAuditLogs());
         setTimeout(() => window.location.reload(), 1500);
@@ -1050,8 +1074,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           isError: true
         });
       }
-    };
-    reader.readAsText(file);
+    } catch (e: any) {
+      setRestoreNotice({
+        message: `❌ Failed to restore: ${e?.message || 'File chhiar theih a ni lo'}`,
+        isError: true
+      });
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // Filtered Creators list
@@ -3659,6 +3689,33 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   {/* Supabase Real-time Connection Status Monitor (visualizes fetchTableData, Auth, and DB latency) */}
                   <ConnectionStatusMonitor variant="card" />
 
+                  {/* Backup & Sync Settings Quick Link */}
+                  {onOpenBackupSync && (
+                    <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 rounded-2xl border border-amber-500/30 flex items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0">
+                          <HardDrive className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 flex items-center gap-2">
+                            Backup & Sync Settings Console
+                            <span className="text-[9.5px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                              Midnight Auto
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-600">Local Device HDD / Storage • AES-GCM Encrypted Ledgers • Optional Email Digest & WhatsApp</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onOpenBackupSync}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-black text-xs transition cursor-pointer shadow-xs shrink-0"
+                      >
+                        Open Console
+                      </button>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Export Card */}
                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3 text-center flex flex-col justify-between">
@@ -3686,7 +3743,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                       <input
                         type="file"
-                        accept=".json"
+                        accept=".json,.enc.json,application/json"
                         ref={fileInputRef}
                         onChange={handleFileRestore}
                         className="hidden"
@@ -3697,7 +3754,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <Upload className="w-3.5 h-3.5" /> Select Backup File (.json)
+                        <Upload className="w-3.5 h-3.5" /> Select Backup File (.json / .enc.json)
                       </button>
                     </div>
                   </div>

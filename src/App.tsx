@@ -127,6 +127,8 @@ import { NotificationsModal } from './components/NotificationsModal';
 import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
+import { BackupSyncSettingsModal } from './components/BackupSyncSettingsModal';
+import { initBackupScheduler } from './services/backupService';
 import { 
   getUrlRoute, 
   updateBrowserUrl, 
@@ -225,9 +227,12 @@ export default function App() {
     loadStats();
     // Cache and track guest session visits for re-engagement
     recordGuestVisit();
+    // Start automated midnight and weekly backup scheduler engine
+    initBackupScheduler();
   }, []);
 
   // Modals Visibility
+  const [isBackupSyncOpen, setIsBackupSyncOpen] = useState<boolean>(false);
   const [isAIHriatpuiOpen, setIsAIHriatpuiOpen] = useState<boolean>(false);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
 
@@ -1805,6 +1810,7 @@ export default function App() {
             }}
             creatorProfile={creatorProfile}
             onSwitchToWebsite={handleSwitchToWebsite}
+            onOpenBackupSync={() => setIsBackupSyncOpen(true)}
           />
         )}
 
@@ -2225,6 +2231,10 @@ export default function App() {
             setIsProfileOpen(false);
             setIsSyncDiagnosticOpen(true);
           }}
+          onOpenBackupSync={() => {
+            setIsProfileOpen(false);
+            setIsBackupSyncOpen(true);
+          }}
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
           onUpdateProfile={handleUpdateCreator}
@@ -2339,6 +2349,10 @@ export default function App() {
             setIsAdminDashboardOpen(false);
             setCompletedTransaction(tx);
             setCurrentScreen('success');
+          }}
+          onOpenBackupSync={() => {
+            setIsAdminDashboardOpen(false);
+            setIsBackupSyncOpen(true);
           }}
         />
 
@@ -2572,6 +2586,14 @@ export default function App() {
             language={language}
           />
         )}
+
+        {/* Backup and Sync Settings Modal (HDD Storage, Midnight Auto, Optional Email & WhatsApp) */}
+        <BackupSyncSettingsModal
+          isOpen={isBackupSyncOpen}
+          onClose={() => setIsBackupSyncOpen(false)}
+          creatorEmail={creatorProfile?.email || 'bethelcomputercentrelunglei@gmail.com'}
+          creatorPhone={creatorProfile?.phone || '9862000001'}
+        />
       </div>
     </div>
   );

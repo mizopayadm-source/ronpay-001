@@ -21,7 +21,8 @@ import {
   User,
   LogIn,
   KeyRound,
-  Globe
+  Globe,
+  HardDrive
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
@@ -43,6 +44,7 @@ interface HeaderProps {
   onOpenSecretDevLogin?: () => void;
   creatorProfile?: CreatorProfile;
   onSwitchToWebsite?: () => void;
+  onOpenBackupSync?: () => void;
 }
 
 
@@ -161,6 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSecretDevLogin,
   creatorProfile,
   onSwitchToWebsite,
+  onOpenBackupSync,
 }) => {
 
   const [userLocation, setUserLocation] = useState<string>(() => {
@@ -691,6 +694,23 @@ export const Header: React.FC<HeaderProps> = ({
               <FileDown className="w-3 h-3 text-emerald-400" />
               <span>Report</span>
             </button>
+
+            {onOpenBackupSync && (
+              <button
+                id="header-backup-btn"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onOpenBackupSync();
+                }}
+                title="Backup & Sync Settings (Local HDD, Email, WhatsApp)"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 hover:text-amber-300 text-slate-300 text-[10px] font-bold border border-slate-700/80 transition cursor-pointer active:scale-95 shrink-0"
+              >
+                <HardDrive className="w-3 h-3 text-amber-400" />
+                <span>Backup</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -2230,6 +2230,10 @@ export interface RonPayBackupPackage {
     announcement: AnnouncementBanner;
     auditLogs: AuditLog[];
     userPaidTxIds: string[];
+    members?: MemberRecord[];
+    expenses?: KumtluangExpense[];
+    staffAccounts?: StaffAccount[];
+    creators?: CreatorProfile[];
   };
 }
 
@@ -2247,6 +2251,9 @@ export const exportFullDatabaseBackup = (): string => {
       announcement: getStoredAnnouncement(),
       auditLogs: getStoredAuditLogs(),
       userPaidTxIds: getStoredUserPaidTxIds(),
+      members: getMembers(),
+      expenses: getStoredExpenses(),
+      staffAccounts: getStoredStaffAccounts(),
     }
   };
 
@@ -2261,7 +2268,7 @@ export const exportFullDatabaseBackup = (): string => {
 
 export const restoreFullDatabaseBackup = (
   jsonString: string
-): { success: boolean; error?: string; counts?: { campaigns: number; transactions: number; creators: number } } => {
+): { success: boolean; error?: string; counts?: { campaigns: number; transactions: number; creators: number; members?: number; expenses?: number } } => {
   try {
     const parsed: RonPayBackupPackage = JSON.parse(jsonString);
     if (!parsed || !parsed.data) {
@@ -2276,8 +2283,19 @@ export const restoreFullDatabaseBackup = (
     if (Array.isArray(data.transactions)) {
       saveStoredTransactions(data.transactions);
     }
+    if (Array.isArray(data.members)) {
+      saveMembers(data.members);
+    }
+    if (Array.isArray(data.expenses)) {
+      saveStoredExpenses(data.expenses);
+    }
+    if (Array.isArray(data.staffAccounts)) {
+      saveStoredStaffAccounts(data.staffAccounts);
+    }
     if (Array.isArray(data.creatorsList)) {
       saveStoredCreatorsList(data.creatorsList);
+    } else if (Array.isArray(data.creators)) {
+      saveStoredCreatorsList(data.creators);
     }
     if (data.creatorProfile && typeof data.creatorProfile === 'object') {
       saveStoredCreatorProfile(data.creatorProfile);
@@ -2295,9 +2313,23 @@ export const restoreFullDatabaseBackup = (
       saveStoredUserPaidTxIds(data.userPaidTxIds);
     }
 
+    // Sync restored payload to server
+    safeApiFetch('/api/data/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaigns: data.campaigns,
+        transactions: data.transactions,
+        members: data.members,
+        expenses: data.expenses,
+        staffAccounts: data.staffAccounts,
+        creators: data.creatorsList || data.creators
+      })
+    }).catch(() => {});
+
     recordAuditLog(
       'Database Restored from Backup',
-      `Restored database snapshot from ${parsed.exportedAt || 'backup file'}.`,
+      `Restored snapshot: ${data.transactions?.length || 0} transactions, ${data.campaigns?.length || 0} campaigns, ${data.members?.length || 0} members, ${data.expenses?.length || 0} expenses.`,
       'system'
     );
 
@@ -2306,7 +2338,9 @@ export const restoreFullDatabaseBackup = (
       counts: {
         campaigns: data.campaigns?.length || 0,
         transactions: data.transactions?.length || 0,
-        creators: data.creatorsList?.length || 0,
+        members: data.members?.length || 0,
+        expenses: data.expenses?.length || 0,
+        creators: (data.creatorsList?.length || data.creators?.length) || 0,
       }
     };
   } catch (err: any) {
