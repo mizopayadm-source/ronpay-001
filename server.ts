@@ -1226,6 +1226,34 @@ app.all([
 });
 
 // -------------------------------------------------------------
+// API 4c: Backup & Sync Email Dispatch Proxy Endpoint
+// -------------------------------------------------------------
+app.post('/api/backup/email', (req: Request, res: Response) => {
+  try {
+    const { recipient, subject, bodyText, summary, isWeeklyAutoDigest } = req.body || {};
+    const safeRecipient = (recipient || 'your.backup.email@gmail.com').trim();
+    const safeSubject = subject || '[RonPay Backup] Financial Ledger Statement';
+    
+    console.log(`[Email Backup Engine] Dispatch requested for: ${safeRecipient} | Subject: ${safeSubject}`);
+
+    // Generate mailto URL for direct client application trigger
+    const mailtoUrl = `mailto:${encodeURIComponent(safeRecipient)}?subject=${encodeURIComponent(safeSubject)}&body=${encodeURIComponent(bodyText || '')}`;
+
+    return res.json({
+      success: true,
+      requiresMailClient: true,
+      recipient: safeRecipient,
+      subject: safeSubject,
+      mailtoUrl,
+      message: `Email backup draft prepared for ${safeRecipient}. Launching email client app...`
+    });
+  } catch (err: any) {
+    console.error('[Email Backup Error]:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Email dispatch failed' });
+  }
+});
+
+// -------------------------------------------------------------
 // API 4b: Mark transaction as paid / confirmed (User confirmation & UAT sync)
 // -------------------------------------------------------------
 app.post('/api/phonepe/confirm-paid', (req: Request, res: Response) => {

@@ -85,9 +85,17 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
   const [customFolderInput, setCustomFolderInput] = useState('');
   const [locationPickerMsg, setLocationPickerMsg] = useState<string>('');
 
+  // Helper to resolve clean default email recipient
+  const resolveCleanEmail = (raw?: string) => {
+    if (!raw || raw.includes('bethelcomputer')) {
+      return 'your.backup.email@gmail.com';
+    }
+    return raw;
+  };
+
   // Email States
   const [emailEnabled, setEmailEnabled] = useState(config.emailBackupEnabled);
-  const [emailRecipient, setEmailRecipient] = useState(config.emailRecipient || creatorEmail || 'bethelcomputercentrelunglei@gmail.com');
+  const [emailRecipient, setEmailRecipient] = useState(() => resolveCleanEmail(config.emailRecipient || creatorEmail));
   const [emailWeeklyDigest, setEmailWeeklyDigest] = useState(config.emailWeeklyDigest);
 
   // WhatsApp States
@@ -141,7 +149,7 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
       setStorageMode(freshConfig.storageMode || 'downloads');
 
       setEmailEnabled(freshConfig.emailBackupEnabled);
-      setEmailRecipient(freshConfig.emailRecipient || creatorEmail || 'bethelcomputercentrelunglei@gmail.com');
+      setEmailRecipient(resolveCleanEmail(freshConfig.emailRecipient || creatorEmail));
       setEmailWeeklyDigest(freshConfig.emailWeeklyDigest);
 
       setWhatsappEnabled(freshConfig.whatsappBackupEnabled);
@@ -1094,11 +1102,11 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
                         setEmailRecipient(e.target.value);
                         handleUpdateConfig({ emailRecipient: e.target.value });
                       }}
-                      placeholder="e.g. bethelcomputercentrelunglei@gmail.com"
+                      placeholder="e.g. example@gmail.com or your.backup.email@gmail.com"
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 font-mono"
                     />
                     <p className="text-[10.5px] text-slate-400 mt-1">
-                      Default: Bethel Computer Centre Lunglei account
+                      Example: example@gmail.com / your.backup.email@gmail.com
                     </p>
                   </div>
 
@@ -1151,27 +1159,39 @@ export const BackupSyncSettingsModal: React.FC<BackupSyncSettingsModalProps> = (
 
                   {/* Status / Notice */}
                   {emailStatusMsg && (
-                    <div className={`p-3 rounded-xl border text-xs font-bold space-y-2 animate-fadeIn ${
+                    <div className={`p-3.5 rounded-xl border text-xs font-bold space-y-2.5 animate-fadeIn ${
                       emailStatusMsg.type === 'success' 
-                        ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' 
+                        ? 'bg-indigo-950/90 border-indigo-500/60 text-indigo-200' 
                         : 'bg-rose-950/80 border-rose-500/50 text-rose-300'
                     }`}>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-start gap-2">
                         {emailStatusMsg.type === 'success' ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <Mail className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                         ) : (
-                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         )}
-                        <span>{emailStatusMsg.text}</span>
+                        <div className="space-y-1">
+                          <p className="font-black text-white text-xs">{emailStatusMsg.text}</p>
+                          {emailStatusMsg.mailtoUrl && (
+                            <p className="text-[11px] text-slate-300 font-normal leading-relaxed">
+                              💡 <b>Hriattirna:</b> Browser atanga email direct-a thawn tlang a phal loh avangin, i device <b>Email App (Gmail / Mail)</b> ah backup draft siamsak i ni e. Khawngaihin a hnuai a button hi hmet la, Gmail lo in-hawngah khan <b>'Send'</b> (✈️) hmet zui rawh le.
+                            </p>
+                          )}
+                        </div>
                       </div>
                       {emailStatusMsg.mailtoUrl && (
-                        <a
-                          href={emailStatusMsg.mailtoUrl}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Open in Gmail / Email Client</span>
-                        </a>
+                        <div className="pt-1 flex items-center justify-end">
+                          <a
+                            href={emailStatusMsg.mailtoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-black transition shadow-md shadow-indigo-600/30"
+                          >
+                            <Mail className="w-4 h-4 text-white" />
+                            <span>✉️ Open Email App (Gmail) & Send</span>
+                            <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                          </a>
+                        </div>
                       )}
                     </div>
                   )}

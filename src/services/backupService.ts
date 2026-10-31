@@ -49,7 +49,7 @@ export const DEFAULT_BACKUP_CONFIG: BackupSyncConfig = {
   lastMidnightRunDate: undefined,
 
   emailBackupEnabled: false,
-  emailRecipient: 'bethelcomputercentrelunglei@gmail.com',
+  emailRecipient: 'your.backup.email@gmail.com',
   emailWeeklyDigest: true,
   lastEmailBackupAt: undefined,
   lastEmailBackupStatus: 'idle',
@@ -828,7 +828,7 @@ export async function sendEmailBackup(
   customRecipient?: string
 ): Promise<{ success: boolean; message: string; mailtoUrl?: string }> {
   const config = getBackupConfig();
-  const recipient = (customRecipient || config.emailRecipient || 'bethelcomputercentrelunglei@gmail.com').trim();
+  const recipient = (customRecipient || config.emailRecipient || 'your.backup.email@gmail.com').trim();
 
   if (!recipient || !recipient.includes('@')) {
     return { success: false, message: 'Recipient email address dik chhu lut rawh.' };
@@ -872,8 +872,23 @@ Verified & Authenticated.
   const mailtoUrl = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
 
   try {
-    // Attempt backend dispatch route
-    const res = await fetch('/api/backup/email', {
+    // 1. Automatically attempt launching the device's default Email App (Gmail / Outlook / Mail)
+    if (typeof window !== 'undefined') {
+      try {
+        const link = document.createElement('a');
+        link.href = mailtoUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch {
+        window.location.href = mailtoUrl;
+      }
+    }
+
+    // 2. Notify backend endpoint for server logging
+    await fetch('/api/backup/email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -889,13 +904,14 @@ Verified & Authenticated.
           netBalance: totalAmount - totalExpense
         }
       })
-    });
+    }).catch(() => {});
 
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
 
     const updatedConfig: BackupSyncConfig = {
       ...config,
+      emailRecipient: recipient,
       lastEmailBackupAt: now.toISOString(),
       lastEmailBackupStatus: 'success',
       lastSundayDigestDate: isWeeklyAutoDigest ? dateStr : config.lastSundayDigestDate
@@ -908,25 +924,24 @@ Verified & Authenticated.
       format: 'text',
       isEncrypted: false,
       status: 'success',
-      summary: `Email digest dispatched to ${recipient}`
+      summary: `Email digest prepared for ${recipient}`
     });
 
     recordAuditLog(
       isWeeklyAutoDigest ? '[Email Auto-Digest] Weekly Sunday Backup' : 'Email Backup Dispatched',
-      `Sent digest to ${recipient} (${txs.length} txns, ₹${totalAmount.toLocaleString('en-IN')})`,
+      `Prepared digest for ${recipient} (${txs.length} txns, ₹${totalAmount.toLocaleString('en-IN')})`,
       'system'
     );
 
     return {
       success: true,
-      message: `Email backup digest hi ${recipient} hnenah thawn fel a ni e.`,
+      message: `Email draft chu ${recipient} hnenah thawn turin i Phone/PC Email App (Gmail)-ah in-hawng chho e. Khawngaihin Email App atang khan 'Send' hmet thawn rawh le!`,
       mailtoUrl
     };
   } catch (err: any) {
-    // If backend endpoint is unavailable, mailtoUrl is returned so client can trigger email app directly
     return {
       success: true,
-      message: `Email app kaltlangin thawn theih a ni e.`,
+      message: `Email App (Gmail) kaltlangin thawn chhunzawm rawh le.`,
       mailtoUrl
     };
   }

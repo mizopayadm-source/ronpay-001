@@ -385,9 +385,31 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
   // Base Transactions matching creator scope, category, campaign, date, and search
   const baseTransactions = useMemo(() => {
-    // When selectedCampaignId === 'all' or no specific campaign is selected,
-    // bypass strict campaign ownership filtering and directly process live effectiveTransactions
+    const isFullAccess = Boolean(isStaffFullAccess || isModerator);
+
     const filtered = effectiveTransactions.filter(t => {
+      // 0. Strict Creator Isolation ("a ma bawm hnuai a mi chiah"):
+      // Moderator, Admin, Super Admin can see all campaigns/transactions across the system.
+      // Regular creators (and Guest users) CAN ONLY see transactions for campaigns created by them.
+      if (!isFullAccess) {
+        let isCreatorOwned = false;
+        if (t.campaignId && creatorCampaignIds.has(t.campaignId)) {
+          isCreatorOwned = true;
+        } else if (creatorCampaigns.some(c => isTransactionForCampaign(t, c))) {
+          isCreatorOwned = true;
+        } else if (creatorProfile?.phone) {
+          const cPhone = creatorProfile.phone.replace(/[^0-9]/g, '');
+          const txCreatorPhone = (t as any).creatorPhone || (t as any).creator_phone;
+          const txCreatedBy = (t as any).createdBy || (t as any).created_by;
+          if (txCreatorPhone && String(txCreatorPhone).replace(/[^0-9]/g, '') === cPhone) {
+            isCreatorOwned = true;
+          } else if (txCreatedBy && (txCreatedBy === creatorProfile.id || txCreatedBy === creatorProfile.phone)) {
+            isCreatorOwned = true;
+          }
+        }
+        if (!isCreatorOwned) return false;
+      }
+
       // 1. Category filter
       if (selectedFilter !== 'all') {
         const effCat = getEffectiveCategory(t, creatorCampaigns.length > 0 ? creatorCampaigns : campaigns);
@@ -428,16 +450,15 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
       return true;
     });
 
-    // Authoritative Fallback: When selectedCampaignId === 'all' or empty, if scoped filtering yields 0 items,
-    // directly return all live effectiveTransactions (matching active category if filtered)
-    if (filtered.length === 0 && effectiveTransactions.length > 0 && (!selectedCampaignId || selectedCampaignId === 'all') && !startDate && !endDate && !searchQuery) {
+    // Authoritative Fallback for privileged staff/moderator ONLY
+    if (isFullAccess && filtered.length === 0 && effectiveTransactions.length > 0 && (!selectedCampaignId || selectedCampaignId === 'all') && !startDate && !endDate && !searchQuery) {
       if (selectedFilter === 'all') return effectiveTransactions;
       const catFiltered = effectiveTransactions.filter(t => getEffectiveCategory(t, campaigns) === selectedFilter);
       return catFiltered.length > 0 ? catFiltered : effectiveTransactions;
     }
 
     return filtered;
-  }, [effectiveTransactions, isCreator, isStaffFullAccess, userPaidIds, creatorProfile, creatorCampaignIds, creatorCampaigns, campaigns, selectedFilter, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
+  }, [effectiveTransactions, isCreator, isStaffFullAccess, isModerator, userPaidIds, creatorProfile, creatorCampaignIds, creatorCampaigns, campaigns, selectedFilter, selectedCampaignId, selectedCampaignObj, startDate, endDate, searchQuery]);
 
   // Counts and totals segregated by record type (Strict isolation: Mimal vs Group vs General)
   const countsByRecordType = useMemo(() => {

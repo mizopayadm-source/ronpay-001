@@ -2591,7 +2591,7 @@ export default function App() {
         <BackupSyncSettingsModal
           isOpen={isBackupSyncOpen}
           onClose={() => setIsBackupSyncOpen(false)}
-          creatorEmail={creatorProfile?.email || 'bethelcomputercentrelunglei@gmail.com'}
+          creatorEmail={creatorProfile?.email && !creatorProfile.email.includes('bethelcomputer') ? creatorProfile.email : 'your.backup.email@gmail.com'}
           creatorPhone={creatorProfile?.phone || '9862000001'}
         />
       </div>
