@@ -184,6 +184,13 @@ export const ADMIN_PASSWORD_VERIFIED_KEY = 'ronpay_admin_password_verified';
 export const isStoredAdminAuthorized = (): boolean => {
   try {
     if (typeof window !== 'undefined') {
+      const rawProfile = localStorage.getItem(CREATOR_PROFILE_KEY);
+      if (rawProfile) {
+        const parsed = JSON.parse(rawProfile);
+        if (parsed && !parsed.isAdmin && parsed.role !== 'SUPER_ADMIN' && parsed.role !== 'ADMIN') {
+          return false;
+        }
+      }
       const localAuth = localStorage.getItem(ADMIN_AUTH_LOCAL_KEY) === 'true';
       const localPwd = localStorage.getItem(ADMIN_PASSWORD_VERIFIED_KEY) === 'true';
       const sessionAuth = sessionStorage.getItem('ronpay_admin_auth') === 'true';
@@ -200,8 +207,14 @@ export const isStoredAdminAuthorized = (): boolean => {
  */
 export const isSuperAdminOrAdminProfile = (creatorProfile?: CreatorProfile | null): boolean => {
   // 1. Direct profile checks
-  if (creatorProfile?.isAdmin === true) return true;
-  if (creatorProfile?.role === 'SUPER_ADMIN' || creatorProfile?.role === 'ADMIN') return true;
+  if (creatorProfile) {
+    if (creatorProfile.isAdmin === true || creatorProfile.role === 'SUPER_ADMIN' || creatorProfile.role === 'ADMIN') {
+      return true;
+    }
+    if (creatorProfile.isAdmin === false && creatorProfile.role !== 'SUPER_ADMIN' && creatorProfile.role !== 'ADMIN') {
+      return false;
+    }
+  }
 
   // 2. Active authorized admin session check
   if (typeof window !== 'undefined') {
@@ -1383,8 +1396,24 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
       if (parsed && typeof parsed === 'object') {
         if (parsed.orgName === 'RonPay HQ / Master Console') {
           parsed.orgName = 'BCM Ebenezer';
-          saveStoredCreatorProfile(parsed);
+          localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(parsed));
         }
+
+        // Explicitly non-admin profile check (e.g. TESTER, DEVELOPER, MEMBER, CREATOR, GUEST)
+        const isNonAdminProfile = !parsed.isAdmin && parsed.role !== 'SUPER_ADMIN' && parsed.role !== 'ADMIN';
+        if (isNonAdminProfile) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(ADMIN_AUTH_LOCAL_KEY);
+            localStorage.removeItem(ADMIN_PASSWORD_VERIFIED_KEY);
+            localStorage.removeItem('ronpay_admin_role');
+            sessionStorage.removeItem('ronpay_admin_auth');
+            sessionStorage.removeItem(ADMIN_PASSWORD_VERIFIED_KEY);
+            sessionStorage.removeItem('ronpay_admin_role');
+          }
+          parsed.isAdmin = false;
+          return parsed;
+        }
+
         // 1. If an authorized admin/staff session is actively logged in on this device:
         const isAuthorizedAdminSession = isStoredAdminAuthorized();
         const storedAdminRole = typeof window !== 'undefined' 
@@ -1415,7 +1444,9 @@ export const getStoredCreatorProfile = (): CreatorProfile => {
     console.error('Failed to parse creator profile', e);
   }
   // First time app launch: new user enters as Guest User (Khualmi)
-  saveStoredCreatorProfile(GUEST_CREATOR_PROFILE);
+  try {
+    localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(GUEST_CREATOR_PROFILE));
+  } catch {}
   return GUEST_CREATOR_PROFILE;
 };
 
@@ -1438,8 +1469,13 @@ export const logoutCreator = (): CreatorProfile => {
 export const loginCreator = (profile: CreatorProfile): void => {
   try {
     localStorage.setItem(CREATOR_PROFILE_KEY, JSON.stringify(profile));
-    if (profile.isAdmin) {
+    if (profile.isAdmin || profile.role === 'SUPER_ADMIN' || profile.role === 'ADMIN') {
       sessionStorage.setItem('ronpay_admin_auth', 'true');
+      localStorage.setItem(ADMIN_AUTH_LOCAL_KEY, 'true');
+      localStorage.setItem(ADMIN_PASSWORD_VERIFIED_KEY, 'true');
+      localStorage.setItem('ronpay_admin_role', profile.role || 'ADMIN');
+    } else {
+      clearAdminAuthState();
     }
     
     // Update or insert into registered creators list
@@ -3179,9 +3215,55 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
           }
         }
       }
-      if ((hasRecovered || storedMembers.length < map.size) && typeof localStorage !== 'undefined') {
-        localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
+    // Self-healing from group memberships: Ensure every registered user group membership in a Kumtluang campaign exists as a MemberRecord
+    try {
+      const rawGroupMems = typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_group_memberships_v1') : null;
+      if (rawGroupMems) {
+        const groupMems = JSON.parse(rawGroupMems);
+        if (Array.isArray(groupMems)) {
+          let hasGroupRecovered = false;
+          const campaigns = getStoredCampaigns();
+          const campMap = new Map<string, Campaign>(campaigns.map(c => [c.id, c]));
+
+          for (const gm of groupMems) {
+            if (!gm || !gm.campaignId) continue;
+            const camp = campMap.get(gm.campaignId);
+            if (!camp || camp.category !== 'kumtluang') continue;
+
+            const cleanPhone = String(gm.userPhone || '').replace(/\D/g, '').slice(-10);
+            const orgCode = (gm.orgCode || camp.orgCode || derivePrefixFromText(camp.orgName || camp.title)).toUpperCase();
+            const phoneLast4 = cleanPhone ? cleanPhone.slice(-4) : '0000';
+            const memberId = gm.memberId || `${orgCode}-${phoneLast4}`;
+            const k = memberId.toLowerCase().trim();
+
+            if (!deletedMemIds.has(k) && !map.has(k)) {
+              map.set(k, {
+                id: memberId,
+                campaignId: gm.campaignId,
+                name: gm.userName || `Member ${cleanPhone}`,
+                userPhone: cleanPhone,
+                accountType: gm.accountType || 'user',
+                orgCode: orgCode,
+                phoneLast4: phoneLast4,
+                fullPhone: cleanPhone,
+                phone: cleanPhone,
+                section: gm.section || camp.section || 'General',
+                isFamilyHead: true,
+                dependents: [],
+                createdAt: gm.joinedAt || new Date().toISOString(),
+                status: 'paid'
+              });
+              hasGroupRecovered = true;
+            }
+          }
+          if ((hasRecovered || hasGroupRecovered || storedMembers.length < map.size) && typeof localStorage !== 'undefined') {
+            localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
+          }
+        }
       }
+    } catch (gmErr) {
+      console.warn('Group membership self-healing check:', gmErr);
+    }
     } catch (recoverErr) {
       console.warn('Storage transaction self-healing check:', recoverErr);
     }

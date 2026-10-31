@@ -32,7 +32,8 @@ import {
   TrendingUp,
   ArrowRightLeft,
   EyeOff,
-  ShieldCheck
+  ShieldCheck,
+  UserPlus
 } from 'lucide-react';
 import { BawmCategory, Campaign, Transaction, CreatorProfile } from '../types';
 import { BAWM_CONFIG, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
@@ -40,6 +41,7 @@ import { formatDateDDMMYYYY, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, translateCampaignCause, translateCampaignTitle, getCategoryDisplayName, getCampaignListTitle } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign } from '../utils/storage';
 import { CampaignTransferModal } from './CampaignTransferModal';
+import { getUserGroupMemberships, requestToJoinCampaign, sanitizePhone } from '../services/groupMembershipService';
 
 interface BawmExplorerScreenProps {
   category: BawmCategory;
@@ -79,6 +81,9 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
   const [sortBy, setSortBy] = useState<'newest' | 'az' | 'urgent'>('newest');
   const [transferCampaign, setTransferCampaign] = useState<Campaign | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
+  const [joinToast, setJoinToast] = useState<string | null>(null);
+  const activeUserPhone = useMemo(() => sanitizePhone(creatorProfile?.phone), [creatorProfile?.phone]);
+  const userMemberships = useMemo(() => getUserGroupMemberships(activeUserPhone), [activeUserPhone, campaigns]);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -349,6 +354,17 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
 
   return (
     <div className="space-y-4 pb-1 animate-fadeIn">
+      {joinToast && (
+        <div className="p-3 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-between animate-bounce">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-200" />
+            <span>{joinToast}</span>
+          </div>
+          <button onClick={() => setJoinToast(null)} className="text-emerald-100 hover:text-white p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Top Header */}
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
         <button
@@ -937,6 +953,41 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                     >
                       <Share2 className="w-3 h-3" /> {t.share}
                     </button>
+                    {!isGuest && camp.category === 'kumtluang' && (() => {
+                      const mObj = userMemberships.find(m => m.campaignId === camp.id && m.status === 'active');
+                      if (mObj) {
+                        return (
+                          <span className="p-1 px-2 text-[9.5px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center gap-1 shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Member ({mObj.memberId || 'Active'})</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            try {
+                              const newMem = requestToJoinCampaign(
+                                { phone: activeUserPhone, name: creatorProfile?.name || 'Member User', email: creatorProfile?.email },
+                                camp.id,
+                                camp.section || 'General'
+                              );
+                              setJoinToast(`🎉 "${camp.title}" Member-ah hlawhtling takin i zawm e! (Member ID: ${newMem.memberId || 'Active'})`);
+                              setTimeout(() => setJoinToast(null), 4500);
+                            } catch (err: any) {
+                              alert(err.message || 'Could not join group');
+                            }
+                          }}
+                          className="p-1 px-2.5 text-[9.5px] font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
+                          title="Kumtluang Bawm chhunga member thar a in-register-na"
+                        >
+                          <UserPlus className="w-3 h-3" />
+                          <span>Member-ah Zawm Rawh</span>
+                        </button>
+                      );
+                    })()}
                     {!isGuest && camp.category === 'kumtluang' && (isOwner || isStaff) && onOpenMemberRoll && (
                       <button
                         type="button"
@@ -944,10 +995,10 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                           e.stopPropagation();
                           onOpenMemberRoll('members_list', camp.id);
                         }}
-                        className="p-1 px-2 text-[9.5px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
+                        className="p-1 px-2 text-[9.5px] font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs shrink-0 active:scale-95"
                         title="Open Member Roll"
                       >
-                        <Users className="w-3 h-3" /> Roll
+                        <Users className="w-3 h-3 text-slate-600" /> Roll
                       </button>
                     )}
                     {!isGuest && (isOwner || isStaff) && (

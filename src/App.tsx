@@ -128,6 +128,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
 import { BackupSyncSettingsModal } from './components/BackupSyncSettingsModal';
+import { MyMembershipsModal } from './components/MyMembershipsModal';
 import { initBackupScheduler } from './services/backupService';
 import { 
   getUrlRoute, 
@@ -242,6 +243,7 @@ export default function App() {
   const [isGeneratedQROpen, setIsGeneratedQROpen] = useState<boolean>(false);
   const [generatedQRCampaign, setGeneratedQRCampaign] = useState<Campaign | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isMyMembershipsOpen, setIsMyMembershipsOpen] = useState<boolean>(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [loginModalInitialMethod, setLoginModalInitialMethod] = useState<'credentials' | 'biometric' | 'google' | 'demo'>('credentials');
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
@@ -1852,6 +1854,7 @@ export default function App() {
                 setLoginModalInitialMethod('credentials');
                 setIsLoginModalOpen(true);
               }}
+              onOpenMemberships={() => setIsMyMembershipsOpen(true)}
               onOpenWebsite={handleSwitchToWebsite}
             />
           )}
@@ -2214,9 +2217,11 @@ export default function App() {
           isOpen={isProfileOpen}
           onClose={() => setIsProfileOpen(false)}
           creatorProfile={creatorProfile}
+          campaigns={campaigns}
           onResetData={handleResetData}
           onOpenHistory={handleOpenHistory}
           onOpenPhonePePortal={() => setIsPhonePeOpen(true)}
+          onOpenMemberships={() => setIsMyMembershipsOpen(true)}
           onLogout={handleLogout}
           onLoginClick={() => {
             setIsProfileOpen(false);
@@ -2238,6 +2243,22 @@ export default function App() {
           biometricEnabled={biometricEnabled}
           onToggleBiometric={handleToggleBiometric}
           onUpdateProfile={handleUpdateCreator}
+          onSelectCampaignContext={handleSelectCampaign}
+          onOpenMemberRoll={handleOpenMemberRoll}
+          onOpenReports={handleOpenReports}
+        />
+
+        {/* Dedicated My Memberships Modal (Multi-Group Context & Directory) */}
+        <MyMembershipsModal
+          isOpen={isMyMembershipsOpen}
+          onClose={() => setIsMyMembershipsOpen(false)}
+          creatorProfile={creatorProfile}
+          campaigns={campaigns}
+          onSelectCampaignContext={(camp) => {
+            handleSelectCampaign(camp);
+          }}
+          onOpenMemberRoll={handleOpenMemberRoll}
+          onOpenReports={handleOpenReports}
         />
 
         <ErrorBoundary name="PeknaSulhnuModal">

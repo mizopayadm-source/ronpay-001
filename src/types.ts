@@ -334,6 +334,31 @@ export interface CreatorProfile {
   logoUrl?: string;
   avatarUrl?: string;
   defaultFeeOptionRule?: FeeOptionMode;
+  activeCampaignId?: string;
+  activeCampaignTitle?: string;
+  assignedCampaignIds?: string[];
+  groupMemberships?: UserGroupMembership[];
+  accountType?: 'user' | 'tester' | 'developer' | 'creator' | 'staff' | string;
+}
+
+export interface UserGroupMembership {
+  id: string; // e.g. "mem-9862300000-cmp-kumtluang-1"
+  userPhone: string;
+  userName: string;
+  userEmail?: string;
+  accountType?: 'user' | 'tester' | 'developer' | 'creator' | 'staff' | string;
+  campaignId: string;
+  campaignTitle: string;
+  category: BawmCategory;
+  orgCode?: string;
+  orgName?: string;
+  memberId?: string; // e.g. EBE-1460, BMPSHL-1718
+  section?: string;
+  role: 'Member' | 'Officer' | 'Treasurer' | 'Collector' | 'Developer' | 'Tester' | 'Admin' | string;
+  status: 'active' | 'pending_approval' | 'inactive';
+  joinedAt: string;
+  isPrimary?: boolean;
+  notes?: string;
 }
 
 export interface SectionQuickPreset {
@@ -531,6 +556,9 @@ export interface MemberDependent {
 export interface MemberRecord {
   id: string; // e.g. EBE-1460
   campaignId: string;
+  campaignIds?: string[]; // Many-to-many list of assigned campaigns/groups
+  userPhone?: string;
+  accountType?: 'user' | 'tester' | 'developer' | 'creator' | 'staff' | string;
   name: string;
   fatherName?: string;
   orgCode?: string;

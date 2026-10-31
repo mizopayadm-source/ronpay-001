@@ -91,6 +91,7 @@ interface HomeScreenProps {
   onShareCampaign?: (campaign: Campaign) => void;
   onOpenAIHriatpui?: () => void;
   onOpenLogin?: () => void;
+  onOpenMemberships?: () => void;
   onOpenAdminDashboard?: () => void;
   onOpenSyncDiagnostic?: () => void;
   onOpenWebsite?: () => void;
@@ -120,6 +121,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onShareCampaign,
   onOpenAIHriatpui,
   onOpenLogin,
+  onOpenMemberships,
   onOpenAdminDashboard,
   onOpenSyncDiagnostic,
   onOpenWebsite,
@@ -143,13 +145,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   useEffect(() => {
     if (Array.isArray(campaigns) && campaigns.length > 0) {
-      setCampaigns(campaigns);
+      setCampaigns(prev => (prev === campaigns ? prev : campaigns));
     }
   }, [campaigns]);
 
   useEffect(() => {
     if (Array.isArray(propTransactions) && propTransactions.length > 0) {
-      setTransactions(propTransactions);
+      setTransactions(prev => (prev === propTransactions ? prev : propTransactions));
     }
   }, [propTransactions]);
 
@@ -575,8 +577,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Smart Login & Active User Strip */}
       {onOpenLogin && (
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-2xl border border-indigo-800/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shadow-xs shrink-0 ${
               creatorProfile.isApproved && creatorProfile.phone
                 ? 'bg-emerald-600/80 border border-emerald-400/40 text-emerald-100'
@@ -588,14 +590,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <Lock className="w-4 h-4 text-amber-300" />
               )}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-black text-xs text-white truncate">
+                <span className="font-black text-xs sm:text-sm text-white break-words">
                   {creatorProfile.isApproved && creatorProfile.phone
                     ? creatorProfile.name
                     : (language === 'mizo' ? 'Creator & Member Login' : 'Creator & Member Login')}
                 </span>
-                <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded-full border ${
+                <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded-full border shrink-0 ${
                   creatorProfile.isApproved && creatorProfile.phone
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
                     : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
@@ -613,19 +615,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            id="home-open-login-btn"
-            onClick={onOpenLogin}
-            className={`shrink-0 px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
-              creatorProfile.isApproved && creatorProfile.phone
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-                : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-            }`}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+            {/* Strictly hidden in Guest Mode as requested */}
+            {onOpenMemberships && !isGuestUser && (
+              <button
+                type="button"
+                id="home-open-memberships-btn"
+                onClick={onOpenMemberships}
+                className="px-2.5 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/40 active:scale-95"
+                title="My Memberships & Multi-Group Context"
+              >
+                <Layers className="w-3.5 h-3.5 text-amber-300" />
+                <span>Pawl & Bawmte</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              id="home-open-login-btn"
+              onClick={onOpenLogin}
+              className={`px-3 py-1.5 rounded-xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                creatorProfile.isApproved && creatorProfile.phone
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>{creatorProfile.isApproved && creatorProfile.phone ? 'Switch / Login' : (language === 'mizo' ? 'Lut Rawh' : 'Login')}</span>
+            </button>
+          </div>
         </div>
       )}
 

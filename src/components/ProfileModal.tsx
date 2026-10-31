@@ -30,19 +30,25 @@ import {
   EyeOff,
   AlertCircle,
   Activity,
-  HardDrive
+  HardDrive,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
-import { CreatorProfile, BawmCategory } from '../types';
+import { CreatorProfile, BawmCategory, Campaign } from '../types';
 import { BAWM_CONFIG } from '../data/initialData';
 import { saveStoredCreatorProfile, wipeAllClientStorage, isGuestUser } from '../utils/storage';
+import { MyMembershipsModal } from './MyMembershipsModal';
+import { getUserGroupMemberships, getActiveCampaignContext } from '../services/groupMembershipService';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   creatorProfile: CreatorProfile;
+  campaigns?: Campaign[];
   onResetData: () => void;
   onOpenHistory?: () => void;
   onOpenPhonePePortal?: () => void;
+  onOpenMemberships?: () => void;
   onLogout?: () => void;
   onLoginClick?: (method?: 'switch' | 'credentials') => void;
   onOpenAdmin?: () => void;
@@ -52,15 +58,20 @@ interface ProfileModalProps {
   onToggleBiometric?: () => void;
   onLockNow?: () => void;
   onUpdateProfile?: (updated: CreatorProfile) => void;
+  onSelectCampaignContext?: (campaign: Campaign) => void;
+  onOpenMemberRoll?: (tab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses', campaignId?: string) => void;
+  onOpenReports?: () => void;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
   creatorProfile,
+  campaigns = [],
   onResetData,
   onOpenHistory,
   onOpenPhonePePortal,
+  onOpenMemberships,
   onLogout,
   onLoginClick,
   onOpenAdmin,
@@ -70,8 +81,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onToggleBiometric,
   onLockNow,
   onUpdateProfile,
+  onSelectCampaignContext,
+  onOpenMemberRoll,
+  onOpenReports,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isInternalMembershipsOpen, setIsInternalMembershipsOpen] = useState(false);
   const [editName, setEditName] = useState(creatorProfile.name || '');
   const [editOrgName, setEditOrgName] = useState(creatorProfile.orgName || '');
   const [editDesignation, setEditDesignation] = useState(creatorProfile.designation || '');
@@ -597,6 +612,40 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         )}
 
+        {/* My Memberships (Ka Pawl & Bawmte) Trigger - Multi-Group Membership */}
+        <button
+          id="profile-my-memberships-btn"
+          type="button"
+          onClick={() => {
+            if (onOpenMemberships) {
+              onClose();
+              onOpenMemberships();
+            } else {
+              setIsInternalMembershipsOpen(true);
+            }
+          }}
+          className="w-full bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-50 hover:from-indigo-100 hover:to-purple-100 border border-indigo-200 text-indigo-950 p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition cursor-pointer shadow-2xs group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-left">
+              <p className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                <span>My Memberships (Ka Pawl & Bawmte)</span>
+                <span className="text-[9px] bg-indigo-600 text-white px-1.5 py-0.2 rounded font-extrabold">
+                  {getUserGroupMemberships(creatorProfile?.phone || '').length} Groups
+                </span>
+              </p>
+              <p className="text-[9.5px] text-slate-600">Kumtluang Member Roll • Context Switch • Join New</p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-indigo-600 text-white px-2.5 py-1 rounded-full font-black uppercase shadow-xs group-hover:scale-105 transition-transform flex items-center gap-1">
+            <span>Hawng Rawh</span>
+            <ArrowRight className="w-3 h-3" />
+          </span>
+        </button>
+
         {/* PhonePe PG V2 Management Trigger */}
         {onOpenPhonePePortal && (
           <button
@@ -770,6 +819,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Multi-Group Membership Modal */}
+      <MyMembershipsModal
+        isOpen={isInternalMembershipsOpen}
+        onClose={() => setIsInternalMembershipsOpen(false)}
+        creatorProfile={creatorProfile}
+        campaigns={campaigns}
+        onSelectCampaignContext={onSelectCampaignContext}
+        onOpenMemberRoll={onOpenMemberRoll}
+        onOpenReports={onOpenReports}
+      />
     </div>
   );
 };

@@ -140,6 +140,7 @@ import {
   getRoleBadgeInfo
 } from '../utils/rbac';
 import { StaffManagementTab } from './StaffManagementTab';
+import { GroupAssignmentTab } from './GroupAssignmentTab';
 import { syncAllWithServer } from '../utils/syncEngine';
 import { AnnouncementBannerCard } from './AnnouncementBannerCard';
 import { 
@@ -224,7 +225,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'group_assignments' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Creators sub-filter
@@ -1478,6 +1479,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   icon: Layers,
                   badge: pendingCampaigns.length > 0 ? pendingCampaigns.length : undefined,
                   badgeColor: 'bg-amber-500 text-white',
+                  minRole: 'MODERATOR' as UserRole
+                },
+                { 
+                  id: 'group_assignments' as const, 
+                  label: 'Group Assignments', 
+                  icon: Users,
+                  badge: 'Many-to-Many',
+                  badgeColor: 'bg-indigo-600 text-white',
                   minRole: 'MODERATOR' as UserRole
                 },
                 { 
@@ -4297,6 +4306,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   onDeleteStaff={(staffId) => {
                     deleteStaffAccount(staffId);
                     setStaffList(getStoredStaffAccounts());
+                  }}
+                />
+              )}
+
+              {/* ========================================================= */}
+              {/* TAB: DYNAMIC GROUP & MEMBER ASSIGNMENTS (Many-to-Many)    */}
+              {/* ========================================================= */}
+              {activeTab === 'group_assignments' && (
+                <GroupAssignmentTab
+                  campaigns={campaigns}
+                  onOpenCreateQR={() => {
+                    onClose();
                   }}
                 />
               )}
