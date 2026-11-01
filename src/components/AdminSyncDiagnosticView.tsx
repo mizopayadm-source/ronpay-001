@@ -44,7 +44,8 @@ import {
   deleteTransaction,
   deleteCampaign,
   wipeSupabaseTables,
-  restoreCacheToSupabase
+  restoreCacheToSupabase,
+  reconcileSupabaseToMatchLocal108
 } from '../services/SupabaseSync';
 
 import { 
@@ -333,6 +334,37 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     } catch (err: any) {
       setActionNotice({
         message: `❌ Error: ${err?.message || String(err)}`,
+        type: 'error'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleReconcileSupabaseTo108 = async () => {
+    setIsScanning(true);
+    setActionNotice({
+      message: '⏳ Supabase database thianghlim takin RonPay valid 108 txns nen in-match turin a in-reconcile mek e...',
+      type: 'success'
+    });
+    try {
+      const res = await reconcileSupabaseToMatchLocal108();
+      if (res.success) {
+        setActionNotice({
+          message: res.message,
+          type: 'success'
+        });
+        if (onRefreshParent) onRefreshParent();
+        await runDiagnosticScan();
+      } else {
+        setActionNotice({
+          message: res.message,
+          type: 'error'
+        });
+      }
+    } catch (err: any) {
+      setActionNotice({
+        message: `❌ Error: ${err?.message || 'Reconciliation failed'}`,
         type: 'error'
       });
     } finally {
@@ -655,6 +687,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             <p className="text-[11px] text-slate-400">Hengte hi emergency reset emaw cleanup atana chauhva hman tur a ni.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleReconcileSupabaseTo108}
+              disabled={isScanning}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-300" />
+              <span>Reconcile Supabase (Match 108 Txns)</span>
+            </button>
+
             <button
               type="button"
               onClick={handleRestoreBrowserCache}

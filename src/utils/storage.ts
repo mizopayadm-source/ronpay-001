@@ -508,7 +508,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
               updated.category = 'kumtluang';
-              updated.orgCode = 'EBE';
+              if (!updated.orgCode) updated.orgCode = 'EBEZBK';
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
@@ -516,7 +516,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {
               updated.category = 'kumtluang';
-              updated.orgCode = 'YMAVT';
+              if (!updated.orgCode) updated.orgCode = 'YMAVT';
               // If previously contaminated with synthetic svg data URI or broken unsplash URL, restore to clean default
               if (!updated.imageUrl || updated.imageUrl.startsWith('data:image/svg+xml') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = YMA_DEFAULT_LOGO;
@@ -533,10 +533,6 @@ export const getStoredCampaigns = (): Campaign[] => {
           if (initMatch) {
             let changed = false;
             const updated = { ...camp };
-            if (String(updated.id).toLowerCase().trim() === 'cmp-kumtluang-1' && updated.orgCode !== 'EBE') {
-              updated.orgCode = 'EBE';
-              changed = true;
-            }
             if (String(updated.id).toLowerCase().trim() === 'cmp-1787829303143' && updated.orgCode !== 'YMAVT') {
               updated.orgCode = 'YMAVT';
               changed = true;
@@ -1032,47 +1028,7 @@ export const clearDeletedTransactionId = (txId: string): void => {
   } catch (e) {}
 };
 
-export const PERMANENTLY_PURGED_TX_IDS = new Set([
-  'rpay-test-123456',
-  'test-123',
-  'rpay-cash-142611',
-  'rpay-cash-120863',
-  'rpay-cash-520699',
-  'rpay-cash-168598',
-  'rpay-cash-742024',
-  'rpay-cash-531295',
-  'rpay-cash-773692',
-  'rpay-cash-536139',
-  'rpay-cash-426904',
-  'rpay-cash-553088',
-  'rpay_txn_1790874919399_965',
-  'rpay-cash-800-web',
-  'rpay-cash-800-app',
-  'rpay_txn_1790753980087_908',
-  'tx-manual-1790888181260-628',
-  'tx-manual-1790888224928-5',
-  'tx-manual-1790888268953-440',
-  'tx-manual-1790888513362-65',
-  'tx-manual-1790887619584-483',
-  'tx-manual-1790887692663-523',
-  'tx-manual-1790887914629-551',
-  'tx-manual-1790888034425-369',
-  'tx-manual-1790887450167-879',
-  'tx-manual-1790887177103-526',
-  'tx-manual-1790887107422-42',
-  'tx-manual-1790886883155-450',
-  'rpay_txn_1790875972483_197',
-  'rpay_txn_1789150125034_382',
-  'rpay_txn_1789149531480_724',
-  'rpay_txn_1789055627850_921',
-  'upi-156410',
-  'rpay-cash-553089',
-  'rpay_txn_1790236637582_542',
-  'rpay_txn_1790524654457_867',
-  'rpay_txn_1790749698765_269',
-  'rpay-cash-738522',
-  'rpay_txn_1791688702224_953'
-]);
+export const PERMANENTLY_PURGED_TX_IDS = new Set<string>();
 
 export const getDeletedTransactionIds = (): Set<string> => {
   const result = new Set<string>();
@@ -1089,18 +1045,6 @@ export const getDeletedTransactionIds = (): Set<string> => {
         arr.forEach(id => {
           if (!id) return;
           result.add(String(id).toLowerCase().trim());
-        });
-      }
-    }
-    const purgedRaw = localStorage.getItem('ronpay_permanently_purged_tx_ids_v1');
-    if (purgedRaw) {
-      const pArr = JSON.parse(purgedRaw);
-      if (Array.isArray(pArr)) {
-        pArr.forEach(id => {
-          if (!id) return;
-          const cleanId = String(id).toLowerCase().trim();
-          result.add(cleanId);
-          PERMANENTLY_PURGED_TX_IDS.add(cleanId);
         });
       }
     }
@@ -1297,8 +1241,12 @@ export const getStoredTransactions = (): Transaction[] => {
       const result: Transaction[] = [];
       for (const t of parsed) {
         if (!t || !t.id) continue;
-        const cleanId = String(t.id).toLowerCase().trim();
+        const rawId = String(t.id).trim();
+        const cleanId = rawId.toLowerCase();
         if (
+          rawId.startsWith('VCH-') ||
+          rawId.startsWith('EXP-') ||
+          t.status === 'approved' ||
           deletedIds.has(cleanId) || 
           PERMANENTLY_PURGED_TX_IDS.has(cleanId) || 
           seen.has(cleanId)
@@ -2573,54 +2521,54 @@ export const restoreFullDatabaseBackup = (
 
 export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   {
-    id: 'EBE-1460',
+    id: 'EBEZBK-1460',
     campaignId: 'cmp-kumtluang-1',
     name: 'Rammuanpuia Ralte',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '1460',
     fullPhone: '9436141460',
     section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
-      { subId: 'EBE-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
+      { subId: 'EBEZBK-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
+      { subId: 'EBEZBK-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
     ],
     createdAt: '2026-01-01T00:00:00.000Z'
   },
   {
-    id: 'EBE-8622',
+    id: 'EBEZBK-8622',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalduhawma Fanai',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '8622',
     fullPhone: '9862358622',
     section: 'Bial 2 (Vengthlang)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
-      { subId: 'EBE-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
+      { subId: 'EBEZBK-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
+      { subId: 'EBEZBK-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
     ],
     createdAt: '2026-01-02T00:00:00.000Z'
   },
   {
-    id: 'EBE-3120',
+    id: 'EBEZBK-3120',
     campaignId: 'cmp-kumtluang-1',
     name: 'Zonunsanga Hnamte',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '3120',
     fullPhone: '8794563120',
     section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBE-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
+      { subId: 'EBEZBK-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
     ],
     createdAt: '2026-01-03T00:00:00.000Z'
   },
   {
-    id: 'EBE-5544',
+    id: 'EBEZBK-5544',
     campaignId: 'cmp-kumtluang-1',
     name: 'C. Lalmuanpuia',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '5544',
     fullPhone: '9436125544',
     section: 'Bial 3 (Venglai)',
@@ -2629,10 +2577,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-04T00:00:00.000Z'
   },
   {
-    id: 'EBE-4646',
+    id: 'EBEZBK-4646',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalnunpuia',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '4646',
     fullPhone: '9862464646',
     section: 'Bial 3 (Venglai)',
@@ -2641,24 +2589,24 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-04.5T00:00:00.000Z'
   },
   {
-    id: 'EBE-9912',
+    id: 'EBEZBK-9912',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalbiakzuala & Chhungte',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '9912',
     fullPhone: '9862399912',
     section: 'Bial 4 (Field Veng)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBE-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
+      { subId: 'EBEZBK-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
     ],
     createdAt: '2026-01-05T00:00:00.000Z'
   },
   {
-    id: 'EBE-4455',
+    id: 'EBEZBK-4455',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalrosanga Sailo',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '4455',
     fullPhone: '9862114455',
     section: 'Bial 1 (Vengchhak)',
@@ -2667,10 +2615,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-06T00:00:00.000Z'
   },
   {
-    id: 'EBE-7788',
+    id: 'EBEZBK-7788',
     campaignId: 'cmp-kumtluang-1',
     name: 'Vanlalruati Pachuau',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '7788',
     fullPhone: '9436227788',
     section: 'Bial 2 (Vengthlang)',
@@ -2679,10 +2627,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-07T00:00:00.000Z'
   },
   {
-    id: 'EBE-2233',
+    id: 'EBEZBK-2233',
     campaignId: 'cmp-kumtluang-1',
     name: 'C. Lalrinsanga',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '2233',
     fullPhone: '8794332233',
     section: 'Bial 3 (Venglai)',
@@ -2691,10 +2639,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-08T00:00:00.000Z'
   },
   {
-    id: 'EBE-6677',
+    id: 'EBEZBK-6677',
     campaignId: 'cmp-kumtluang-1',
     name: 'H. Lalthansanga',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '6677',
     fullPhone: '9615446677',
     section: 'Bial 4 (Field Veng)',
@@ -2703,10 +2651,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-09T00:00:00.000Z'
   },
   {
-    id: 'EBE-9988',
+    id: 'EBEZBK-9988',
     campaignId: 'cmp-kumtluang-1',
     name: 'Dr. Zoramthanga Fanai',
-    orgCode: 'EBE',
+    orgCode: 'EBEZBK',
     phoneLast4: '9988',
     fullPhone: '7005559988',
     section: 'General / Khawchhung',
@@ -3335,60 +3283,55 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
     const allMembers = Array.from(map.values()).map(m => {
       if (!m || !m.id) return m;
       const rawId = String(m.id);
-      if (rawId.toUpperCase().startsWith('BCM-') || rawId.toUpperCase().startsWith('EBE-') || m.campaignId === 'cmp-kumtluang-1' || (m.orgCode && (m.orgCode.toUpperCase() === 'BCM' || m.orgCode.toUpperCase() === 'EBE'))) {
-        m.campaignId = 'cmp-kumtluang-1';
-        m.orgCode = 'EBE';
-        if (rawId.toUpperCase().startsWith('BCM-')) {
-          m.id = 'EBE-' + rawId.substring(4);
-        }
-        if (m.primaryId && String(m.primaryId).toUpperCase().startsWith('BCM-')) {
-          m.primaryId = 'EBE-' + String(m.primaryId).substring(4);
-        }
-      }
 
-      // YMA Vengthar auto-sync: ensure campaignId is cmp-1787829303143 and orgCode is YMAVT
-      if (
-        m.campaignId === 'cmp-1787829303143' ||
-        m.campaignId === 'cmp-kumtluang-ymavt' ||
-        rawId.toUpperCase().startsWith('YMA-') ||
-        (m.orgCode && m.orgCode.toUpperCase() === 'YMA')
-      ) {
+      // Auto-resolve legacy campaign aliases
+      if (m.campaignId === 'cmp-kumtluang-ymavt') {
         m.campaignId = 'cmp-1787829303143';
-        m.orgCode = 'YMAVT';
-        if (rawId.toUpperCase().startsWith('YMA-')) {
-          m.id = 'YMAVT-' + rawId.substring(4);
-        }
-        if (m.primaryId && String(m.primaryId).toUpperCase().startsWith('YMA-')) {
-          m.primaryId = 'YMAVT-' + String(m.primaryId).substring(4);
-        }
-        if (m.dependents && Array.isArray(m.dependents)) {
-          m.dependents = m.dependents.map((dep) => {
-            if (!dep) return dep;
-            if (dep.subId && dep.subId.toUpperCase().startsWith('YMA-')) {
-              return {
-                ...dep,
-                subId: 'YMAVT-' + dep.subId.substring(4)
-              };
-            }
-            return dep;
-          });
-        }
       }
 
-      // Generic campaign Pawl Code auto-healing for any campaign:
+      // Dynamic campaign Pawl Code (orgCode) auto-alignment for ALL campaigns:
       if (m.campaignId && campOrgMap.has(m.campaignId)) {
         const camp = campOrgMap.get(m.campaignId);
         if (camp && camp.orgCode) {
-          const campCode = camp.orgCode.trim().toUpperCase();
-          if (m.orgCode && m.orgCode.toUpperCase() !== campCode) {
-            m.orgCode = campCode;
-          }
+          const campCode = String(camp.orgCode).trim().toUpperCase();
+          m.orgCode = campCode;
+
           if (m.id && m.id.includes('-')) {
-            const currentPrefix = m.id.split('-')[0].toUpperCase();
-            if (currentPrefix !== campCode && currentPrefix !== 'MEM' && currentPrefix.length >= 2) {
-              const suffix = m.id.split('-').slice(1).join('-');
+            const parts = m.id.split('-');
+            const currentPrefix = parts[0].toUpperCase();
+            if (currentPrefix !== campCode) {
+              const suffix = parts.slice(1).join('-');
               m.id = `${campCode}-${suffix}`;
             }
+          } else if (m.id) {
+            const suffix = m.phoneLast4 || m.id.slice(-4);
+            m.id = `${campCode}-${suffix}`;
+          }
+
+          if (m.primaryId && m.primaryId.includes('-')) {
+            const parts = m.primaryId.split('-');
+            const currentPrefix = parts[0].toUpperCase();
+            if (currentPrefix !== campCode) {
+              const suffix = parts.slice(1).join('-');
+              m.primaryId = `${campCode}-${suffix}`;
+            }
+          }
+
+          if (m.dependents && Array.isArray(m.dependents)) {
+            m.dependents = m.dependents.map((dep, depIdx) => {
+              if (!dep) return dep;
+              if (dep.subId) {
+                const subParts = dep.subId.split('-');
+                if (subParts[0].toUpperCase() !== campCode) {
+                  const depSuffix = subParts.slice(2).join('-') || subParts.slice(1).join('-') || `${depIdx + 1}`.padStart(2, '0');
+                  return {
+                    ...dep,
+                    subId: `${m.id}-${depSuffix}`
+                  };
+                }
+              }
+              return dep;
+            });
           }
         }
       }
@@ -3532,7 +3475,7 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
 };
 
 export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
-  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.id?.startsWith('EBE-') || member.id?.startsWith('BCM-'));
+  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.id?.startsWith('EBEZBK-') || member.id?.startsWith('BCM-'));
   const stamped: MemberRecord = {
     ...member,
     campaignId: isEbe ? 'cmp-kumtluang-1' : (member.campaignId || 'cmp-kumtluang-1'),

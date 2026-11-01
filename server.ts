@@ -4290,7 +4290,9 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     const origLen = db.transactions.length;
     db.transactions = db.transactions.filter((t: any) => {
       if (!t || !t.id) return false;
-      const cleanId = String(t.id).toLowerCase().trim();
+      const rawId = String(t.id).trim();
+      const cleanId = rawId.toLowerCase();
+      if (rawId.startsWith('VCH-') || rawId.startsWith('EXP-') || t.status === 'approved') return false;
       if (PURGED_SIMULATOR_TXS.has(cleanId)) return false;
       const amt = Number(t.amount);
       if (!isFinite(amt) || isNaN(amt) || amt <= 0 || amt > 500000) return false;
@@ -4302,6 +4304,87 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
     if (db.transactions.length !== origLen) {
       changed = true;
+    }
+  }
+
+  // 0b. Auto-cascade Pawl Code / Prefix migration to all members & transactions if any campaign orgCode has changed
+  if (Array.isArray(db.campaigns) && Array.isArray(db.members)) {
+    const campOrgMap = new Map<string, string>();
+    db.campaigns.forEach((c: any) => {
+      if (c && c.id && c.orgCode) {
+        campOrgMap.set(String(c.id).trim(), String(c.orgCode).trim().toUpperCase());
+      }
+    });
+
+    const idReplacementMap: Record<string, string> = {};
+
+    db.members = db.members.map((m: any) => {
+      if (!m || !m.campaignId || !campOrgMap.has(m.campaignId)) return m;
+      const targetOrg = campOrgMap.get(m.campaignId)!;
+      const currentOrg = String(m.orgCode || '').trim().toUpperCase();
+      const currentId = String(m.id || '').trim();
+
+      let memberUpdated = false;
+      let newOrgCode = currentOrg;
+      if (currentOrg !== targetOrg) {
+        newOrgCode = targetOrg;
+        memberUpdated = true;
+      }
+
+      let newId = currentId;
+      if (!currentId.toUpperCase().startsWith(targetOrg + '-')) {
+        memberUpdated = true;
+        let suffix = '';
+        if (currentId.includes('-')) {
+          suffix = currentId.split('-').slice(1).join('-');
+        } else if (m.phoneLast4) {
+          suffix = m.phoneLast4;
+        } else {
+          suffix = currentId.slice(-4);
+        }
+        newId = `${targetOrg}-${suffix}`;
+        idReplacementMap[currentId] = newId;
+        idReplacementMap[currentId.toLowerCase()] = newId;
+      }
+
+      if (memberUpdated) {
+        changed = true;
+        const updatedDeps = (m.dependents || []).map((dep: any, depIdx: number) => {
+          if (!dep) return dep;
+          const depOldSubId = dep.subId || '';
+          let depSuffix = '';
+          if (depOldSubId.includes('-')) {
+            const parts = depOldSubId.split('-');
+            depSuffix = parts.slice(2).join('-') || parts.slice(1).join('-') || `${depIdx + 1}`.padStart(2, '0');
+          } else {
+            depSuffix = `${depIdx + 1}`.padStart(2, '0');
+          }
+          const newSubId = `${newId}-${depSuffix}`;
+          if (depOldSubId) idReplacementMap[depOldSubId] = newSubId;
+          return { ...dep, subId: newSubId };
+        });
+
+        return {
+          ...m,
+          orgCode: targetOrg,
+          id: newId,
+          dependents: updatedDeps,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return m;
+    });
+
+    if (Object.keys(idReplacementMap).length > 0 && Array.isArray(db.transactions)) {
+      db.transactions = db.transactions.map((tx: any) => {
+        if (!tx) return tx;
+        const oldMid = String(tx.memberId || '').trim();
+        if (oldMid && idReplacementMap[oldMid]) {
+          changed = true;
+          return { ...tx, memberId: idReplacementMap[oldMid], updatedAt: new Date().toISOString() };
+        }
+        return tx;
+      });
     }
   }
 
@@ -4410,17 +4493,18 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
     if (db.members.length !== beforeLen) changed = true;
     
-    // Normalize any BCM or EBE members to canonical EBE orgCode & campaignId cmp-kumtluang-1
+    // Normalize legacy BCM or EBE member IDs to current campaign orgCode
+    const ebeCampObj = (db.campaigns || []).find((c: any) => c.id === 'cmp-kumtluang-1');
+    const targetEbeOrg = (ebeCampObj && ebeCampObj.orgCode) ? String(ebeCampObj.orgCode).trim().toUpperCase() : 'EBEZBK';
+
     db.members.forEach((m: any) => {
       if (!m || !m.id) return;
       const rawId = String(m.id);
-      if (rawId.toUpperCase().startsWith('BCM-') || rawId.toUpperCase().startsWith('EBE-') || m.campaignId === 'cmp-kumtluang-1' || (m.orgCode && (m.orgCode.toUpperCase() === 'BCM' || m.orgCode.toUpperCase() === 'EBE'))) {
+      if (rawId.toUpperCase().startsWith('BCM-')) {
+        m.id = targetEbeOrg + '-' + rawId.substring(4);
         m.campaignId = 'cmp-kumtluang-1';
-        m.orgCode = 'EBE';
-        if (rawId.toUpperCase().startsWith('BCM-')) {
-          m.id = 'EBE-' + rawId.substring(4);
-          changed = true;
-        }
+        m.orgCode = targetEbeOrg;
+        changed = true;
       }
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
         if (!m.section) {
@@ -4441,7 +4525,7 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
   const beforeDelLen = db.deletedMemberIds.length;
   db.deletedMemberIds = db.deletedMemberIds.filter((id: string) => {
     const s = String(id || '').toLowerCase();
-    return !s.startsWith('ebe-') && !s.startsWith('bcm-');
+    return !s.startsWith('ebe-') && !s.startsWith('ebezbk-') && !s.startsWith('bcm-');
   });
   if (db.deletedMemberIds.length !== beforeDelLen) changed = true;
 
@@ -4458,12 +4542,12 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) is strictly bound to official predefined prefix 'EBE'
+  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) has orgCode default EBEZBK if missing
   const ebeCamp = (db.campaigns || []).find(c => c.id === 'cmp-kumtluang-1' || (c.title && String(c.title).toLowerCase().includes('bcm ebenezer')));
   if (ebeCamp) {
-    if (ebeCamp.orgCode !== 'EBE') {
-      ebeCamp.orgCode = 'EBE';
-      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'EBE';
+    if (!ebeCamp.orgCode) {
+      ebeCamp.orgCode = 'EBEZBK';
+      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'EBEZBK';
       changed = true;
     }
   }

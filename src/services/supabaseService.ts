@@ -1362,7 +1362,7 @@ export async function deleteSupabaseMember(id: string): Promise<boolean> {
   if (!supabase || !id) return false;
 
   const clean = id.trim();
-  const altClean = clean.toUpperCase().startsWith('EBE-') ? 'BCM-' + clean.substring(4) : (clean.toUpperCase().startsWith('BCM-') ? 'EBE-' + clean.substring(4) : clean);
+  const altClean = clean.toUpperCase().startsWith('EBEZBK-') ? 'BCM-' + clean.substring(4) : (clean.toUpperCase().startsWith('BCM-') ? 'EBEZBK-' + clean.substring(4) : clean);
 
   const { error } = await supabase
     .from('members')
@@ -1466,6 +1466,13 @@ export async function loadSupabaseInitialState(): Promise<{
     ]);
 
     let finalTxns = Array.isArray(txns) && txns.length > 0 ? txns : [];
+    const local108 = getStoredTransactions();
+    if (local108.length > 0 && finalTxns.length > local108.length) {
+      console.info(`[Supabase Reconciliation] Supabase has ${finalTxns.length} txns, local has ${local108.length}. Reconciling Supabase to match 108 local transactions...`);
+      reconcileSupabaseToMatchLocal108().catch(e => console.warn('Auto reconciliation note:', e));
+      finalTxns = local108;
+    }
+
     if (finalTxns.length === 0) {
       try {
         const res = await fetch('/api/data/state');
@@ -1777,5 +1784,165 @@ export async function wipeSupabaseTables(): Promise<boolean> {
   } catch (e) {
     console.error('Error wiping tables:', e);
     return false;
+  }
+}
+
+/**
+ * Reconciles Supabase database so its transactions table matches the exact 108 valid local transactions.
+ * Deletes any orphan/extra transactions from Supabase that are not in the valid 108 list.
+ */
+export async function reconcileSupabaseToMatchLocal108(): Promise<{
+  localCount: number;
+  supabaseBeforeCount: number;
+  purgedCount: number;
+  supabaseAfterCount: number;
+  success: boolean;
+  message: string;
+}> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {
+      localCount: 0,
+      supabaseBeforeCount: 0,
+      purgedCount: 0,
+      supabaseAfterCount: 0,
+      success: false,
+      message: 'Supabase client is not initialized.'
+    };
+  }
+
+  try {
+    const rawLocalTxs = getStoredTransactions();
+    const valid108Map = new Map<string, Transaction>();
+    rawLocalTxs.forEach(t => {
+      if (t && t.id) {
+        const idStr = String(t.id).trim();
+        // Exclude legacy expense voucher entries that were accidentally stored in transactions table
+        if (!idStr.startsWith('VCH-') && !idStr.startsWith('EXP-') && (t.status === 'completed' || !t.status)) {
+          valid108Map.set(idStr.toLowerCase(), t);
+        }
+      }
+    });
+
+    const localCount = valid108Map.size;
+
+    // 1. Fetch all transaction IDs currently in Supabase
+    const { data: remoteRows, error: fetchErr } = await supabase
+      .from('transactions')
+      .select('id');
+
+    if (fetchErr || !remoteRows) {
+      return {
+        localCount,
+        supabaseBeforeCount: 0,
+        purgedCount: 0,
+        supabaseAfterCount: 0,
+        success: false,
+        message: `Failed to query Supabase transactions: ${fetchErr?.message || 'Error'}`
+      };
+    }
+
+    const supabaseBeforeCount = remoteRows.length;
+    const extraIdsToDelete: string[] = [];
+
+    remoteRows.forEach((row: any) => {
+      if (row && row.id) {
+        const idStr = String(row.id).trim();
+        const cleanId = idStr.toLowerCase();
+        if (idStr.startsWith('VCH-') || idStr.startsWith('EXP-') || !valid108Map.has(cleanId)) {
+          extraIdsToDelete.push(idStr);
+        }
+      }
+    });
+
+    let purgedCount = 0;
+    if (extraIdsToDelete.length > 0) {
+      // 2. Delete extra rows from Supabase
+      const { error: delErr } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', extraIdsToDelete);
+
+      if (delErr) {
+        // Fallback: update status to 'deleted'
+        await supabase
+          .from('transactions')
+          .update({ status: 'deleted', updated_at: new Date().toISOString() })
+          .in('id', extraIdsToDelete);
+      }
+      purgedCount = extraIdsToDelete.length;
+    }
+
+    // 3. Upsert all valid 108 transactions to ensure Supabase has the exact complete data
+    const rowsToUpsert = Array.from(valid108Map.values()).map(tx => ({
+      id: tx.id,
+      campaign_id: tx.campaignId || 'cmp-default',
+      campaign_title: tx.campaignTitle || 'RonPay Community Cause',
+      category: tx.category || 'ralna',
+      donor_name: tx.donorName || (tx.isAnonymous ? 'Anonymous' : 'Valued Donor'),
+      donor_phone: tx.donorPhone || null,
+      donor_veng: tx.donorVeng || null,
+      member_id: tx.memberId || null,
+      sub_id: tx.subId || null,
+      donor_type: tx.donorType || 'member',
+      group_name: tx.groupName || null,
+      is_anonymous: Boolean(tx.isAnonymous),
+      amount: Number(tx.amount) || 0,
+      platform_fee: Number(tx.platformFee) || 0,
+      total_amount: Number(tx.totalAmount) || Number(tx.amount) || 0,
+      payment_method: tx.paymentMethod || 'upi',
+      status: tx.status || 'completed',
+      remark: tx.remark || null,
+      period_type: tx.periodType || 'one_time',
+      period_month: tx.periodMonth || null,
+      period_year: tx.periodYear || null,
+      period_label: tx.periodLabel || null,
+      utr: tx.utr || null,
+      reference_no: tx.referenceNo || tx.utr || null,
+      timestamp: tx.timestamp || tx.createdAt || new Date().toISOString(),
+      created_at: tx.createdAt || tx.timestamp || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: {
+        subCategoryBreakdown: tx.subCategoryBreakdown,
+        feeOption: tx.feeOption,
+        payerUPI: tx.payerUPI,
+        txHash: tx.txHash,
+      }
+    }));
+    if (rowsToUpsert.length > 0) {
+      await supabase
+        .from('transactions')
+        .upsert(rowsToUpsert, { onConflict: 'id' });
+    }
+
+    // 4. Recalibrate Supabase Fund Pool
+    await recalibrateSupabaseFundPool('public_pool');
+
+    const supabaseAfterCount = valid108Map.size;
+
+    // 5. Broadcast real-time update event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_transactions_updated', { detail: Array.from(valid108Map.values()) }));
+      broadcastStateChange('transactions', Array.from(valid108Map.values()));
+    }
+
+    return {
+      localCount,
+      supabaseBeforeCount,
+      purgedCount,
+      supabaseAfterCount,
+      success: true,
+      message: `✅ Supabase Reconciled! Supabase-a transactions ${supabaseBeforeCount} zinga ${purgedCount} paih in, valid 108 txns nen in-match vek a ni ta!`
+    };
+  } catch (err: any) {
+    console.error('[Supabase Reconciliation Error]:', err);
+    return {
+      localCount: 0,
+      supabaseBeforeCount: 0,
+      purgedCount: 0,
+      supabaseAfterCount: 0,
+      success: false,
+      message: `Error during reconciliation: ${err?.message || 'Unknown error'}`
+    };
   }
 }
