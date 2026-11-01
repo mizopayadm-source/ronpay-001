@@ -3176,103 +3176,18 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
         map.set(k, { ...m, campaignId: resolvedCampaignId });
       }
     }
-    // 2. Then add initial default members ONLY if their ID is not already in storedMembers
-    for (const m of INITIAL_DEFAULT_MEMBERS) {
-      if (m && m.id && !isExcluded(m.id, m.name)) {
-        const k = m.id.toLowerCase().trim();
-        if (!map.has(k)) {
-          map.set(k, m);
-        }
-      }
-    }
-
-    // Self-healing from transactions: If any transactions exist for members not yet in map, automatically recover them (unless explicitly deleted)!
-    try {
-      const txs = getStoredTransactions();
-      let hasRecovered = false;
-      for (const t of txs) {
-        if (t && t.memberId && String(t.memberId).trim()) {
-          const mid = String(t.memberId).trim();
-          const k = mid.toLowerCase();
-          if (k === 'bmpshl-1253') continue;
-          const donorName = String(t.donorName || '').trim();
-          // Never resurrect single-character test names
-          if (donorName.length <= 1) continue;
-          if (!deletedMemIds.has(k) && !map.has(k)) {
-            const orgCode = mid.split('-')[0] || '';
-            const phoneLast4 = t.donorPhone ? String(t.donorPhone).slice(-4) : (mid.split('-')[1] || '');
-            map.set(k, {
-              id: mid,
-              campaignId: t.campaignId || '',
-              name: t.donorName || `Member ${mid}`,
-              orgCode: orgCode.toUpperCase(),
-              phoneLast4: phoneLast4,
-              fullPhone: (t.donorPhone && String(t.donorPhone).length >= 10) ? String(t.donorPhone) : '',
-              section: t.donorVeng || 'Section A',
-              isFamilyHead: true,
-              dependents: [],
-              createdAt: t.timestamp || new Date().toISOString(),
-              status: 'paid'
-            });
-            hasRecovered = true;
+    // 2. Then add initial default members ONLY if storedMembers is empty
+    if (storedMembers.length === 0) {
+      for (const m of INITIAL_DEFAULT_MEMBERS) {
+        if (m && m.id && !isExcluded(m.id, m.name)) {
+          const k = m.id.toLowerCase().trim();
+          if (!map.has(k)) {
+            map.set(k, m);
           }
         }
       }
-    // Self-healing from group memberships: Ensure every registered user group membership in a Kumtluang campaign exists as a MemberRecord
-    try {
-      const rawGroupMems = typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_group_memberships_v1') : null;
-      if (rawGroupMems) {
-        const groupMems = JSON.parse(rawGroupMems);
-        if (Array.isArray(groupMems)) {
-          let hasGroupRecovered = false;
-          const campaigns = getStoredCampaigns();
-          const campMap = new Map<string, Campaign>(campaigns.map(c => [c.id, c]));
-
-          for (const gm of groupMems) {
-            if (!gm || !gm.campaignId) continue;
-            const camp = campMap.get(gm.campaignId);
-            if (!camp || camp.category !== 'kumtluang') continue;
-
-            const cleanPhone = String(gm.userPhone || '').replace(/\D/g, '').slice(-10);
-            const orgCode = (gm.orgCode || camp.orgCode || derivePrefixFromText(camp.orgName || camp.title)).toUpperCase();
-            const phoneLast4 = cleanPhone ? cleanPhone.slice(-4) : '0000';
-            const memberId = gm.memberId || `${orgCode}-${phoneLast4}`;
-            const k = memberId.toLowerCase().trim();
-
-            if (!deletedMemIds.has(k) && !map.has(k)) {
-              map.set(k, {
-                id: memberId,
-                campaignId: gm.campaignId,
-                name: gm.userName || `Member ${cleanPhone}`,
-                userPhone: cleanPhone,
-                accountType: gm.accountType || 'user',
-                orgCode: orgCode,
-                phoneLast4: phoneLast4,
-                fullPhone: cleanPhone,
-                phone: cleanPhone,
-                section: gm.section || camp.section || 'General',
-                isFamilyHead: true,
-                dependents: [],
-                createdAt: gm.joinedAt || new Date().toISOString(),
-                status: 'paid'
-              });
-              hasGroupRecovered = true;
-            }
-          }
-          if ((hasRecovered || hasGroupRecovered || storedMembers.length < map.size) && typeof localStorage !== 'undefined') {
-            localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
-          }
-        }
-      }
-    } catch (gmErr) {
-      console.warn('Group membership self-healing check:', gmErr);
     }
-    } catch (recoverErr) {
-      console.warn('Storage transaction self-healing check:', recoverErr);
-    }
-    if (storedMembers.length < map.size && typeof localStorage !== 'undefined') {
-      localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
-    }
+
 
     const campaignsForSync = getStoredCampaigns();
     const campOrgMap = new Map<string, Campaign>();
