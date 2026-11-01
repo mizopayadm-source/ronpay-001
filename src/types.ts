@@ -354,11 +354,14 @@ export interface UserGroupMembership {
   orgName?: string;
   memberId?: string; // e.g. EBE-1460, BMPSHL-1718
   section?: string;
-  role: 'Member' | 'Officer' | 'Treasurer' | 'Collector' | 'Developer' | 'Tester' | 'Admin' | string;
+  role: 'Member' | 'Officer' | 'Treasurer' | 'Collector' | 'Developer' | 'Tester' | 'Admin' | 'Creator' | string;
   status: 'active' | 'pending_approval' | 'inactive';
   joinedAt: string;
   isPrimary?: boolean;
   notes?: string;
+  requestedRole?: 'Creator' | 'Officer' | 'Member' | string;
+  requestedRoleAt?: string;
+  roleRequestStatus?: 'none' | 'pending' | 'approved' | 'rejected';
 }
 
 export interface SectionQuickPreset {

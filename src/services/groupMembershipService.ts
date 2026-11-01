@@ -9,7 +9,8 @@ import {
   saveStoredCreatorProfile,
   recordAuditLog,
   saveStoredCreatorsList,
-  derivePrefixFromText
+  derivePrefixFromText,
+  saveCampaign
 } from '../utils/storage';
 
 export const GROUP_MEMBERSHIPS_KEY = 'ronpay_group_memberships_v1';
@@ -798,3 +799,111 @@ export function rejectMembershipRequest(membershipId: string, rejectedBy: string
     );
   }
 }
+
+export function requestCreatorRoleInCampaign(
+  userPhone: string,
+  campaignId: string,
+  notes?: string
+): UserGroupMembership {
+  const cleanPhone = sanitizePhone(userPhone);
+  if (!cleanPhone || !campaignId) throw new Error('Phone number leh Campaign ID a ngai e.');
+
+  const all = getStoredGroupMemberships();
+  const matched = all.find(m => sanitizePhone(m.userPhone) === cleanPhone && m.campaignId === campaignId);
+  if (!matched) {
+    throw new Error('He Pawl/Bawmah hian member i la ni lo. Member nih hmasak a ngai e.');
+  }
+
+  if (matched.role === 'Creator') {
+    throw new Error('He Bawmah hian Creator i ni tawh sa e.');
+  }
+
+  matched.requestedRole = 'Creator';
+  matched.roleRequestStatus = 'pending';
+  matched.requestedRoleAt = new Date().toISOString();
+  if (notes) matched.notes = notes;
+
+  saveStoredGroupMemberships(all);
+
+  recordAuditLog(
+    'Creator Role Requested',
+    `User ${matched.userName} (${cleanPhone}) requested Creator permissions for campaign "${matched.campaignTitle}".`,
+    'member',
+    cleanPhone,
+    matched.userName
+  );
+
+  return matched;
+}
+
+export function approveCreatorRoleRequest(membershipId: string, approvedBy: string = 'Admin'): void {
+  const all = getStoredGroupMemberships();
+  const matched = all.find(m => m.id === membershipId);
+  if (!matched) return;
+
+  matched.role = 'Creator';
+  matched.roleRequestStatus = 'approved';
+  matched.requestedRole = undefined;
+  saveStoredGroupMemberships(all);
+
+  // Sync into campaign's authorizedOfficers
+  try {
+    const campaigns = getStoredCampaigns();
+    const camp = campaigns.find(c => c.id === matched.campaignId);
+    if (camp) {
+      const cleanPhone = sanitizePhone(matched.userPhone);
+      const existingOfficers = Array.isArray(camp.authorizedOfficers) ? [...camp.authorizedOfficers] : [];
+      const officerIdx = existingOfficers.findIndex(o => sanitizePhone(o.phone) === cleanPhone);
+
+      const newOfficerObj = {
+        name: matched.userName,
+        phone: cleanPhone,
+        role: 'Creator' as const,
+        section: matched.section || 'General',
+        assignedAt: new Date().toISOString(),
+        assignedBy: approvedBy,
+        canClearCash: true,
+        canRecordExpenses: true,
+        canManageMembers: true
+      };
+
+      if (officerIdx >= 0) {
+        existingOfficers[officerIdx] = { ...existingOfficers[officerIdx], ...newOfficerObj };
+      } else {
+        existingOfficers.push(newOfficerObj);
+      }
+
+      camp.authorizedOfficers = existingOfficers;
+      saveCampaign(camp);
+    }
+  } catch (e) {
+    console.warn('[GroupMembership] Failed to sync creator role into campaign authorizedOfficers:', e);
+  }
+
+  recordAuditLog(
+    'Creator Role Approved',
+    `Approved Creator role for ${matched.userName} (${matched.userPhone}) in "${matched.campaignTitle}" by ${approvedBy}.`,
+    'creator',
+    matched.userPhone,
+    approvedBy
+  );
+}
+
+export function rejectCreatorRoleRequest(membershipId: string, rejectedBy: string = 'Admin'): void {
+  const all = getStoredGroupMemberships();
+  const matched = all.find(m => m.id === membershipId);
+  if (!matched) return;
+
+  matched.roleRequestStatus = 'rejected';
+  matched.requestedRole = undefined;
+  saveStoredGroupMemberships(all);
+
+  recordAuditLog(
+    'Creator Role Request Rejected',
+    `Rejected Creator role request for ${matched.userName} (${matched.userPhone}) in "${matched.campaignTitle}" by ${rejectedBy}. Retained as Member.`,
+    'creator',
+    matched.userPhone,
+    rejectedBy
+  );
+}
+

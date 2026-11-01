@@ -28,9 +28,11 @@ import {
   setActiveCampaignContext, 
   requestToJoinCampaign, 
   removeUserFromCampaign,
-  sanitizePhone
+  sanitizePhone,
+  requestCreatorRoleInCampaign
 } from '../services/groupMembershipService';
 import { formatDateDDMMYYYY } from '../utils/date';
+import { isCampaignCreator } from '../utils/storage';
 
 interface MyMembershipsModalProps {
   isOpen: boolean;
@@ -96,6 +98,21 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
     return (memberships || []).filter(m => m.category === 'kumtluang');
   }, [memberships]);
 
+  const isPrivilegedAdmin = Boolean(
+    creatorProfile?.isAdmin ||
+    creatorProfile?.role === 'SUPER_ADMIN' ||
+    creatorProfile?.role === 'ADMIN' ||
+    creatorProfile?.role === 'MODERATOR'
+  );
+
+  // Check if active user is an authorized Creator or Admin for any Kumtluang campaign
+  const isUserCreatorOrAdmin = useMemo(() => {
+    if (isPrivilegedAdmin) return true;
+    const ownsAnyKumtluang = kumtluangCampaigns.some(c => isCampaignCreator(c, creatorProfile));
+    const hasActiveCreatorRole = kumtluangMemberships.some(m => m.role === 'Creator' && m.status === 'active');
+    return ownsAnyKumtluang || hasActiveCreatorRole;
+  }, [isPrivilegedAdmin, creatorProfile, kumtluangCampaigns, kumtluangMemberships]);
+
   if (!isOpen) return null;
 
   // Active Campaign Object (prefer Kumtluang)
@@ -133,10 +150,10 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
     setTimeout(() => setFeedbackToast(null), 3000);
   };
 
-  // Join a new campaign
+  // Join a new campaign (Pending Creator / Admin approval)
   const handleJoinCampaign = (campaign: Campaign) => {
     try {
-      const newMem = requestToJoinCampaign(
+      requestToJoinCampaign(
         {
           phone: userPhone,
           name: creatorProfile.name || 'Member User',
@@ -145,11 +162,25 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
         campaign.id,
         campaign.section || 'General'
       );
-      setFeedbackToast(`🎉 "${campaign.title}" hlawhtling takin i zawm e!`);
+      setFeedbackToast(`🎉 "${campaign.title}" zawmna request thawn a ni ta! Creator emaw Admin in an approve hnuah member i ni ang.`);
       reloadMemberships();
-      setTimeout(() => setFeedbackToast(null), 3500);
+      setTimeout(() => setFeedbackToast(null), 4500);
     } catch (e: any) {
       alert(e.message || 'Could not join group');
+    }
+  };
+
+  // Request Creator role for this specific campaign
+  const handleRequestCreatorRole = (mem: UserGroupMembership) => {
+    if (confirm(`"${mem.campaignTitle}"-ah hian Creator nihna dil i duh em? He Bawm Creator lo ni tawh sa emaw Admin in emaw an approve hnu ah chiah Creator nihna i nei thei chauh ang.`)) {
+      try {
+        requestCreatorRoleInCampaign(userPhone, mem.campaignId);
+        setFeedbackToast(`👑 "${mem.campaignTitle}"-ah Creator nihna dilna thawn fel a ni ta! Creator / Admin in an approve hnuah Creator nihna i nei ang.`);
+        reloadMemberships();
+        setTimeout(() => setFeedbackToast(null), 4500);
+      } catch (e: any) {
+        alert(e.message || 'Could not request creator role');
+      }
     }
   };
 
@@ -204,8 +235,8 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
           </div>
         )}
 
-        {/* Active Campaign Context Banner */}
-        {activeCampaignObj && (
+        {/* Active Campaign Context Banner - Only shown to authorized Creators and Admins */}
+        {isUserCreatorOrAdmin && activeCampaignObj && (
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-4 rounded-2xl border border-indigo-800 shadow-md space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wider">
@@ -301,14 +332,24 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
               </div>
             ) : (
               kumtluangMemberships.map((mem) => {
-                const isCurrentActive = mem.campaignId === activeContextId;
+                const isPending = mem.status === 'pending_approval';
+                const isCurrentActive = !isPending && mem.campaignId === activeContextId;
                 const campObj = campaigns.find(c => c.id === mem.campaignId);
+                const canAccessRoll = Boolean(
+                  isPrivilegedAdmin ||
+                  (campObj && isCampaignCreator(campObj, creatorProfile)) ||
+                  (mem.role === 'Creator' && mem.status === 'active') ||
+                  (mem.role === 'Officer' && mem.status === 'active') ||
+                  (mem.role === 'Treasurer' && mem.status === 'active')
+                );
 
                 return (
                   <div
                     key={mem.id}
                     className={`p-3.5 rounded-2xl border transition space-y-2.5 ${
-                      isCurrentActive
+                      isPending
+                        ? 'bg-amber-50/40 border-amber-300'
+                        : isCurrentActive
                         ? 'bg-indigo-50/70 border-indigo-400 shadow-xs'
                         : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
@@ -330,32 +371,54 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
                         </p>
                       </div>
 
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 shrink-0 font-mono">
-                        {mem.role}
-                      </span>
+                      {isPending ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 shrink-0 font-medium">
+                          ⏳ Dil Mek (Pending)
+                        </span>
+                      ) : mem.role === 'Creator' ? (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-300 shrink-0">
+                          👑 Creator
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 border border-indigo-200 shrink-0 font-mono">
+                          {mem.role}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Member Roll Info Details */}
-                    <div className="flex flex-wrap items-center gap-2 text-[10.5px] bg-slate-50 p-2 rounded-xl border border-slate-200/80">
-                      {mem.memberId && (
-                        <span className="text-slate-600 font-medium">
-                          Roll ID: <strong className="text-slate-900 font-mono">{mem.memberId}</strong>
+                    {/* Member Roll Info Details or Pending Notice */}
+                    {isPending ? (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/90 text-[11px] text-amber-950 font-medium space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>Creator / Admin Approve Nghak Mek</span>
+                        </div>
+                        <p className="text-[10.5px] text-amber-800">
+                          He Bawmah hian Member nihna i dil mek a, Creator emaw Admin in an pawm (approve) hnuah Member puitling niin Roll-ah a lang ang.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 text-[10.5px] bg-slate-50 p-2 rounded-xl border border-slate-200/80">
+                        {mem.memberId && (
+                          <span className="text-slate-600 font-medium">
+                            Roll ID: <strong className="text-slate-900 font-mono">{mem.memberId}</strong>
+                          </span>
+                        )}
+                        {mem.section && (
+                          <span className="text-slate-600 font-medium">
+                            Section: <strong className="text-slate-900">{mem.section}</strong>
+                          </span>
+                        )}
+                        <span className="text-slate-400 ml-auto text-[10px]">
+                          Joined: {formatDateDDMMYYYY(mem.joinedAt)}
                         </span>
-                      )}
-                      {mem.section && (
-                        <span className="text-slate-600 font-medium">
-                          Section: <strong className="text-slate-900">{mem.section}</strong>
-                        </span>
-                      )}
-                      <span className="text-slate-400 ml-auto text-[10px]">
-                        Joined: {formatDateDDMMYYYY(mem.joinedAt)}
-                      </span>
-                    </div>
+                      </div>
+                    )}
 
                     {/* Group Action Buttons */}
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <div className="flex items-center gap-1.5">
-                        {!isCurrentActive ? (
+                    <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {!isPending && !isCurrentActive && (
                           <button
                             type="button"
                             onClick={() => handleSwitchContext(mem.campaignId)}
@@ -364,14 +427,15 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
                             <ArrowRight className="w-3.5 h-3.5" />
                             <span>Switch Context</span>
                           </button>
-                        ) : (
+                        )}
+                        {!isPending && isCurrentActive && (
                           <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Selected</span>
                           </span>
                         )}
 
-                        {onOpenMemberRoll && (
+                        {!isPending && canAccessRoll && onOpenMemberRoll && (
                           <button
                             type="button"
                             onClick={() => {
@@ -379,9 +443,28 @@ export const MyMembershipsModal: React.FC<MyMembershipsModalProps> = ({
                               onOpenMemberRoll('members_list', mem.campaignId);
                             }}
                             className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition cursor-pointer"
+                            title="Open Member Roll"
                           >
                             Roll
                           </button>
+                        )}
+
+                        {/* Creator role request button if member is active and not already Creator */}
+                        {!isPending && mem.role !== 'Creator' && (
+                          mem.roleRequestStatus === 'pending' ? (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-xl bg-purple-50 text-purple-900 border border-purple-200 flex items-center gap-1">
+                              ⏳ Creator Dil Mek
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestCreatorRole(mem)}
+                              className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold text-[10.5px] rounded-xl border border-purple-200 transition cursor-pointer flex items-center gap-1 shrink-0"
+                              title="He Bawmah hian Creator nihna dil rawh"
+                            >
+                              <span>👑 Creator nihna dil</span>
+                            </button>
+                          )
                         )}
                       </div>
 

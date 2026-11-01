@@ -38,12 +38,20 @@ import {
   Maximize2,
   Minimize2,
   BookOpen,
-  ShieldCheck
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
 import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
+import {
+  getStoredGroupMemberships,
+  approveMembershipRequest,
+  rejectMembershipRequest,
+  approveCreatorRoleRequest,
+  rejectCreatorRoleRequest
+} from '../services/groupMembershipService';
 
 import { syncAllWithServer } from '../utils/syncEngine';
 import { getUserRole } from '../utils/rbac';
@@ -79,7 +87,7 @@ import {
 } from '../utils/memberYearRoll';
 import { fetchMembersFromFirestore } from '../services/firestoreSync';
 
-// Helper to check if a campaign was strictly created by this creator (strict ownership, no cross-creator leakage)
+// Helper to check if a campaign was strictly created by this creator or if creator role was explicitly granted
 const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null): boolean => {
   if (!profile || !camp) return false;
   const userPhone = (profile.phone || '').trim().replace(/\D/g, '').slice(-10);
@@ -87,9 +95,37 @@ const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null):
   const campCreatorPhone = ((camp as any).creatorPhone || (camp as any).contactPhone || '').trim().replace(/\D/g, '').slice(-10);
 
   if (userPhone && userPhone.length >= 8) {
+    // 1. Direct campaign creator
     if (campCreatedByDigits && campCreatedByDigits === userPhone) return true;
     if (campCreatorPhone && campCreatorPhone === userPhone) return true;
     if (camp.createdBy && camp.createdBy === (profile.phone || '').trim()) return true;
+    const transferred = ((camp as any).transferredTo || '').trim().replace(/\D/g, '').slice(-10);
+    if (transferred && transferred === userPhone) return true;
+
+    // 2. Explicitly assigned authorized officers for THIS specific campaign
+    if (Array.isArray(camp.authorizedOfficers) && camp.authorizedOfficers.length > 0) {
+      const isAuthOfficer = camp.authorizedOfficers.some(o => {
+        const oPhone = String(o?.phone || '').replace(/\D/g, '').slice(-10);
+        return oPhone && oPhone === userPhone;
+      });
+      if (isAuthOfficer) return true;
+    }
+
+    // 3. Explicitly approved Creator role in UserGroupMembership for THIS specific campaign
+    try {
+      const allMemberships = getStoredGroupMemberships();
+      const mem = allMemberships.find(m => 
+        m.campaignId === camp.id && 
+        String(m.userPhone || '').replace(/\D/g, '').slice(-10) === userPhone &&
+        m.status === 'active'
+      );
+      if (mem) {
+        const mRole = String(mem.role || '').toLowerCase();
+        if (mRole === 'creator' || mRole === 'admin' || mRole === 'officer' || mRole === 'treasurer' || mRole === 'accountant') {
+          return true;
+        }
+      }
+    } catch {}
   }
 
   const userName = (profile.name || '').trim().toLowerCase();
@@ -102,20 +138,6 @@ const isStrictCampaignOwner = (camp: Campaign, profile?: CreatorProfile | null):
     if (campCreatorName && (campCreatorName === userName || campCreatorName === cleanUserName)) return true;
   }
 
-  if (profile.orgName && (camp.orgName || camp.title)) {
-    const pOrg = profile.orgName.trim().toLowerCase();
-    const cOrg = (camp.orgName || camp.title).trim().toLowerCase();
-    const genericOrgs = ['ronpay community', 'standard user', 'guest', 'ronpay', 'community', 'creator', 'user'];
-    if (!genericOrgs.includes(pOrg) && pOrg.length >= 4 && (pOrg === cOrg || cOrg.includes(pOrg) || pOrg.includes(cOrg))) {
-      return true;
-    }
-  }
-
-  if ((userPhone === '9862300000' || userPhone === '9862311223') && 
-      (campCreatedByDigits === '9862311223' || campCreatedByDigits === '9862300000')) {
-    return true;
-  }
-
   return false;
 };
 
@@ -126,7 +148,7 @@ interface KumtluangMemberManagerModalProps {
   creatorProfile: CreatorProfile;
   campaigns: Campaign[];
   transactions: Transaction[];
-  initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses';
+  initialTab?: 'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses' | 'requests';
   initialCampaignId?: string;
   onDataUpdated: () => void;
   onOpenCreateQR?: () => void;
@@ -144,8 +166,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   onDataUpdated,
   onOpenCreateQR
 }) => {
-  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses'>(initialTab || 'members_list');
+  const [activeTab, setActiveTab] = useState<'quick_entry' | 'register_member' | 'members_list' | 'print_reports' | 'expenses' | 'requests'>(initialTab || 'members_list');
   const [membersTick, setMembersTick] = useState<number>(0);
+  const [membershipTick, setMembershipTick] = useState<number>(0);
+  const [requestFeedbackMsg, setRequestFeedbackMsg] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
   const [isAuthorizedOfficersOpen, setIsAuthorizedOfficersOpen] = useState<boolean>(false);
 
@@ -262,6 +286,30 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     if (!isOpen || !selectedCampaignId) return [];
     return getScopedMembersForView(selectedCampaignId);
   }, [isOpen, selectedCampaignId, getScopedMembersForView, membersTick]);
+
+  // Membership & Creator Role Requests for this campaign
+  const campaignGroupRequests = useMemo(() => {
+    if (!isOpen) return [];
+    const allMems = getStoredGroupMemberships();
+    return allMems.filter(m => {
+      if (selectedCampaignId && selectedCampaignId !== 'all') {
+        if (m.campaignId !== selectedCampaignId) return false;
+      } else if (!isPrivilegedUser) {
+        if (!allowedCampaignIds.has(m.campaignId)) return false;
+      }
+      return m.status === 'pending_approval' || m.roleRequestStatus === 'pending';
+    });
+  }, [isOpen, selectedCampaignId, allowedCampaignIds, isPrivilegedUser, membershipTick, membersTick]);
+
+  const pendingJoinRequests = useMemo(() => {
+    return campaignGroupRequests.filter(m => m.status === 'pending_approval');
+  }, [campaignGroupRequests]);
+
+  const pendingCreatorRequests = useMemo(() => {
+    return campaignGroupRequests.filter(m => m.roleRequestStatus === 'pending');
+  }, [campaignGroupRequests]);
+
+  const totalPendingRequestsCount = campaignGroupRequests.length;
 
   // Quick Entry State
   const [quickPhone4, setQuickPhone4] = useState<string>('');
@@ -1480,7 +1528,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
 
         {/* Tab Navigation - Ultra-Clean Single Row for Mobile & Desktop */}
         <div className="p-2 sm:p-3 bg-slate-50/95 border-b border-slate-200 shrink-0 space-y-2">
-          <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xs">
+          <div className="grid grid-cols-6 gap-1 sm:gap-1.5 w-full bg-slate-200/80 p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xs">
             {/* Tab 1: Quick Entry (Digit 4) */}
             <button
               type="button"
@@ -1513,23 +1561,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Family</span>
             </button>
 
-            {/* Tab 3: Statement Print (4 Formats) */}
-            <button
-              type="button"
-              id="tab-btn-print-reports"
-              onClick={() => setActiveTab('print_reports')}
-              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
-                activeTab === 'print_reports'
-                  ? 'bg-white text-blue-950 shadow-sm border border-blue-200 font-black'
-                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
-              }`}
-            >
-              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 mb-0.5 shrink-0" />
-              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Statement</span>
-              <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Print (4)</span>
-            </button>
-
-            {/* Tab 4: Member Roll */}
+            {/* Tab 3: Member Roll */}
             <button
               type="button"
               id="tab-btn-members-list"
@@ -1547,6 +1579,26 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               </span>
             </button>
 
+            {/* Tab 4: Dilna / Requests */}
+            <button
+              type="button"
+              id="tab-btn-requests"
+              onClick={() => setActiveTab('requests')}
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center relative ${
+                activeTab === 'requests'
+                  ? 'bg-white text-amber-950 shadow-sm border border-amber-300 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Dilna</span>
+              <span className={`text-[8.5px] sm:text-[9.5px] font-bold px-1.5 py-0.2 rounded mt-0.5 whitespace-nowrap ${
+                totalPendingRequestsCount > 0 ? 'bg-amber-500 text-white animate-pulse' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {totalPendingRequestsCount} {totalPendingRequestsCount === 1 ? 'Req' : 'Reqs'}
+              </span>
+            </button>
+
             {/* Tab 5: Pawisa Hman (Expenses) */}
             <button
               type="button"
@@ -1559,10 +1611,42 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               }`}
             >
               <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-600 mb-0.5 shrink-0" />
-              <span className="text-[10px] sm:text-xs font-black tracking-tight text-rose-700 whitespace-nowrap truncate max-w-full">Pawisa Hman</span>
-              <span className="text-[8.5px] sm:text-[9.5px] text-rose-500 font-semibold whitespace-nowrap truncate max-w-full">Expenses</span>
+              <span className="text-[10px] sm:text-xs font-black tracking-tight text-rose-700 whitespace-nowrap truncate max-w-full">Expenses</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-rose-500 font-semibold whitespace-nowrap truncate max-w-full">Pawisa Hman</span>
+            </button>
+
+            {/* Tab 6: Statement Print (4 Formats) */}
+            <button
+              type="button"
+              id="tab-btn-print-reports"
+              onClick={() => setActiveTab('print_reports')}
+              className={`w-full min-w-0 flex flex-col items-center justify-center px-0.5 sm:px-2 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition cursor-pointer text-center ${
+                activeTab === 'print_reports'
+                  ? 'bg-white text-blue-950 shadow-sm border border-blue-200 font-black'
+                  : 'bg-white/60 text-slate-600 hover:text-slate-900 hover:bg-white font-bold'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 mb-0.5 shrink-0" />
+              <span className="text-[10px] sm:text-xs font-black tracking-tight whitespace-nowrap truncate max-w-full">Statement</span>
+              <span className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-semibold whitespace-nowrap truncate max-w-full">Print (4)</span>
             </button>
           </div>
+
+          {requestFeedbackMsg && (
+            <div className="bg-emerald-600 text-white p-2.5 px-4 rounded-xl flex items-center justify-between text-xs font-bold animate-fadeIn shadow-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-200" />
+                <span>{requestFeedbackMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRequestFeedbackMsg(null)}
+                className="p-1 hover:bg-emerald-700 rounded-lg text-emerald-200 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Member utilities: Only show Paste & Excel when in Member-related tabs */}
           {(activeTab === 'quick_entry' || activeTab === 'members_list') && (
@@ -3467,6 +3551,222 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                 }}
                 language={language}
               />
+            </div>
+          )}
+
+          {/* TAB 4: MEMBER LEH CREATOR DILNATE (REQUESTS & APPROVALS) */}
+          {activeTab === 'requests' && (
+            <div className="space-y-4 animate-fadeIn">
+              {/* Header card for Requests */}
+              <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 text-white p-4 sm:p-5 rounded-2xl border border-amber-800/60 shadow-md space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      <Clock className="w-5 h-5 text-amber-400" />
+                    </span>
+                    <div>
+                      <h3 className="text-base font-black text-white">
+                        Member & Creator Dilnate ({totalPendingRequestsCount})
+                      </h3>
+                      <p className="text-xs text-amber-200/80">
+                        {activeScopedCampaign?.orgName || activeScopedCampaign?.title || 'Selected Campaign'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30 font-mono">
+                    {totalPendingRequestsCount} Pending
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  User in member nih an dil emaw, Creator nihna an dilte chu heta tang hian Creator / Admin in approve emaw reject emaw theih a ni e.
+                </p>
+              </div>
+
+              {/* 1. Member Join Requests Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-emerald-600" />
+                    <h4 className="font-black text-xs sm:text-sm text-slate-900">
+                      Member-ah Luhluh Dilnate (Join Requests)
+                    </h4>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    pendingJoinRequests.length > 0 ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {pendingJoinRequests.length} Dilna
+                  </span>
+                </div>
+
+                {pendingJoinRequests.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 space-y-1">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                    <p className="text-xs font-bold text-slate-700">Member nih dilna thar a awm rih lo</p>
+                    <p className="text-[11px] text-slate-500">He Bawma member thar luh dil zawng zawng chinfel vek a ni e.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {pendingJoinRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        className="p-3 sm:p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 hover:bg-amber-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs sm:text-sm text-slate-900">
+                              {req.userName}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                              📞 {req.userPhone}
+                            </span>
+                            <span className="text-[9.5px] font-bold px-2 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                              ⏳ Approval Nghak Mek
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-600 flex items-center gap-2 flex-wrap">
+                            <span>Bawm: <strong>{req.campaignTitle}</strong></span>
+                            {req.section && <span>• Section: <strong>{req.section}</strong></span>}
+                            <span className="text-slate-400">• Dil hun: {new Date(req.joinedAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              approveMembershipRequest(req.id, creatorProfile.name || 'Creator');
+                              setMembershipTick(t => t + 1);
+                              setMembersTick(t => t + 1);
+                              onDataUpdated();
+                              setRequestFeedbackMsg(`✅ "${req.userName}" chu member-ah pawm (approve) fel a ni ta! Member Record Roll-ah a lang nghal e.`);
+                              setTimeout(() => setRequestFeedbackMsg(null), 4000);
+                            }}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Approve</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`"${req.userName}" dilna hi hnawl (reject) i duh tak zet em?`)) {
+                                rejectMembershipRequest(req.id, creatorProfile.name || 'Creator');
+                                setMembershipTick(t => t + 1);
+                                setMembersTick(t => t + 1);
+                                onDataUpdated();
+                                setRequestFeedbackMsg(`❌ "${req.userName}" dilna chu hnawl a ni.`);
+                                setTimeout(() => setRequestFeedbackMsg(null), 3000);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-rose-600/90 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Creator Role Requests Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-purple-600" />
+                    <div>
+                      <h4 className="font-black text-xs sm:text-sm text-slate-900">
+                        Creator Nihna Dilnate (Creator Role Requests)
+                      </h4>
+                      <p className="text-[10px] text-slate-500">
+                        Member pangai in he Bawm Creator nihna an dilte approve-na
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    pendingCreatorRequests.length > 0 ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {pendingCreatorRequests.length} Dilna
+                  </span>
+                </div>
+
+                {pendingCreatorRequests.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 space-y-1">
+                    <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-700">Creator nihna dil thar an awm rih lo</p>
+                    <p className="text-[11px] text-slate-500">
+                      User dang in he Bawmah hian Creator nihna an dil chuan hetah hian an lo lang ang.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {pendingCreatorRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        className="p-3 sm:p-3.5 rounded-xl border border-purple-200 bg-purple-50/40 hover:bg-purple-50/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs sm:text-sm text-slate-900">
+                              👑 {req.userName}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-700">
+                              📞 {req.userPhone}
+                            </span>
+                            <span className="text-[9.5px] font-bold px-2 py-0.2 rounded bg-purple-100 text-purple-800 border border-purple-300">
+                              Creator Role Dil Mek
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            He Bawmah hian <strong>{req.role || 'Member'}</strong> a ni a, Creator nihna nei turin dilna a thehlut e. Creator-a i approve chuan he Bawm enkawl theihna a nei ve ang.
+                          </p>
+                          {req.requestedRoleAt && (
+                            <p className="text-[10px] text-slate-400">
+                              Dil hun: {new Date(req.requestedRoleAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              approveCreatorRoleRequest(req.id, creatorProfile.name || 'Creator');
+                              setMembershipTick(t => t + 1);
+                              setMembersTick(t => t + 1);
+                              onDataUpdated();
+                              setRequestFeedbackMsg(`👑 "${req.userName}" chu "${req.campaignTitle}"-ah Creator nihna hlawhtling taka pek a ni ta!`);
+                              setTimeout(() => setRequestFeedbackMsg(null), 4500);
+                            }}
+                            className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 text-white font-black text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Creator-ah Approve</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`"${req.userName}" Creator nihna dilna hi hnawl in Member pangai a dah i duh em?`)) {
+                                rejectCreatorRoleRequest(req.id, creatorProfile.name || 'Creator');
+                                setMembershipTick(t => t + 1);
+                                setMembersTick(t => t + 1);
+                                onDataUpdated();
+                                setRequestFeedbackMsg(`"${req.userName}" Creator dilna chu hnawl a ni a, Member pangai a dah a ni.`);
+                                setTimeout(() => setRequestFeedbackMsg(null), 3500);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Member-ah Dah (Reject)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

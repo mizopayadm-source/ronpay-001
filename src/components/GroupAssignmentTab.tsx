@@ -35,7 +35,9 @@ import {
   getStoredGroupMemberships,
   sanitizePhone,
   approveMembershipRequest,
-  rejectMembershipRequest
+  rejectMembershipRequest,
+  approveCreatorRoleRequest,
+  rejectCreatorRoleRequest
 } from '../services/groupMembershipService';
 import { getStoredCreatorsList, saveStoredCreatorsList } from '../utils/storage';
 import { BAWM_CONFIG } from '../data/initialData';
@@ -293,7 +295,7 @@ export const GroupAssignmentTab: React.FC<GroupAssignmentTabProps> = ({
   };
 
   const pendingRequests = useMemo(() => {
-    return getStoredGroupMemberships().filter(m => m.status === 'pending_approval');
+    return getStoredGroupMemberships().filter(m => m.status === 'pending_approval' || m.roleRequestStatus === 'pending');
   }, [users]);
 
   return (
@@ -326,14 +328,14 @@ export const GroupAssignmentTab: React.FC<GroupAssignmentTabProps> = ({
           </button>
         </div>
 
-        {/* Pending Member Join Requests Card */}
+        {/* Pending Member Join & Creator Requests Card */}
         {pendingRequests.length > 0 && (
           <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 p-4 rounded-2xl border-2 border-amber-500/50 text-white space-y-3 shadow-lg animate-fadeIn">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
                 <h4 className="text-sm font-black text-amber-200 uppercase tracking-wide">
-                  Pending Member Join Requests ({pendingRequests.length})
+                  Pending Join & Creator Role Requests ({pendingRequests.length})
                 </h4>
               </div>
               <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-400/30">
@@ -341,42 +343,87 @@ export const GroupAssignmentTab: React.FC<GroupAssignmentTabProps> = ({
               </span>
             </div>
 
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-              {pendingRequests.map(req => (
-                <div key={req.id} className="bg-slate-900/90 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between gap-2 text-xs flex-wrap">
-                  <div>
-                    <span className="font-extrabold text-white text-xs">{req.userName}</span>
-                    <span className="text-slate-400 ml-2 font-mono">({req.userPhone})</span>
-                    <p className="text-[11px] text-amber-300 font-bold mt-0.5">
-                      Requested Group: {req.campaignTitle} ({req.section || 'General'})
-                    </p>
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {pendingRequests.map(req => {
+                const isCreatorReq = req.roleRequestStatus === 'pending';
+
+                return (
+                  <div key={req.id} className="bg-slate-900/90 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between gap-2 text-xs flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-white text-xs">
+                          {isCreatorReq ? '👑 ' : ''}{req.userName}
+                        </span>
+                        <span className="text-slate-400 font-mono">({req.userPhone})</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase ${
+                          isCreatorReq ? 'bg-purple-900/80 text-purple-200 border border-purple-500/40' : 'bg-amber-900/80 text-amber-200 border border-amber-500/40'
+                        }`}>
+                          {isCreatorReq ? 'Creator Role Request' : 'Member Join Request'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-300 font-bold mt-0.5">
+                        Group: {req.campaignTitle} {req.section ? `(${req.section})` : ''} • Current Role: {req.role || 'Member'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isCreatorReq ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              approveCreatorRoleRequest(req.id, 'Super Admin');
+                              setBulkSuccessMsg(`👑 ${req.userName} hnenah Creator nihna hlawhtling taka pek a ni e!`);
+                              reloadData();
+                              setTimeout(() => setBulkSuccessMsg(null), 3500);
+                            }}
+                            className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Approve Creator
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rejectCreatorRoleRequest(req.id, 'Super Admin');
+                              setBulkSuccessMsg(`${req.userName} Creator dilna hnawl a ni a, Member pangai a dah a ni.`);
+                              reloadData();
+                              setTimeout(() => setBulkSuccessMsg(null), 3500);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <X className="w-3.5 h-3.5" /> Reject
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              approveMembershipRequest(req.id, 'Creator / Admin');
+                              setBulkSuccessMsg(`✅ ${req.userName} member request hlawhtling takin approved a ni e!`);
+                              reloadData();
+                              setTimeout(() => setBulkSuccessMsg(null), 3500);
+                            }}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Approve Member
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rejectMembershipRequest(req.id, 'Creator / Admin');
+                              reloadData();
+                            }}
+                            className="px-2.5 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
+                          >
+                            <X className="w-3.5 h-3.5" /> Reject
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        approveMembershipRequest(req.id, 'Creator / Admin');
-                        setBulkSuccessMsg(`✅ ${req.userName} member request hlawhtling takin approved a ni e!`);
-                        reloadData();
-                        setTimeout(() => setBulkSuccessMsg(null), 3500);
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        rejectMembershipRequest(req.id, 'Creator / Admin');
-                        reloadData();
-                      }}
-                      className="px-2.5 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1"
-                    >
-                      <X className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

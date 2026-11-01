@@ -963,25 +963,34 @@ export const BawmExplorerScreen: React.FC<BawmExplorerScreenProps> = ({
                           </span>
                         );
                       }
+                      const mPending = userMemberships.find(m => m.campaignId === camp.id && m.status === 'pending_approval');
+                      if (mPending) {
+                        return (
+                          <span className="p-1 px-2 text-[9.5px] font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded-lg flex items-center gap-1 shrink-0" title="Approval Nghak Mek">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>⏳ Dil Mek (Approval Nghak)</span>
+                          </span>
+                        );
+                      }
                       return (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             try {
-                              const newMem = requestToJoinCampaign(
+                              requestToJoinCampaign(
                                 { phone: activeUserPhone, name: creatorProfile?.name || 'Member User', email: creatorProfile?.email },
                                 camp.id,
                                 camp.section || 'General'
                               );
-                              setJoinToast(`🎉 "${camp.title}" Member-ah hlawhtling takin i zawm e! (Member ID: ${newMem.memberId || 'Active'})`);
+                              setJoinToast(`🎉 "${camp.title}" Member nihna dil thawn a ni ta! Creator / Admin in an approve hnuah member i ni ang.`);
                               setTimeout(() => setJoinToast(null), 4500);
                             } catch (err: any) {
                               alert(err.message || 'Could not join group');
                             }
                           }}
                           className="p-1 px-2.5 text-[9.5px] font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-xs shrink-0 active:scale-95"
-                          title="Kumtluang Bawm chhunga member thar a in-register-na"
+                          title="Kumtluang Bawm chhunga member thar a in-register-na (Creator/Admin approve nghak tur)"
                         >
                           <UserPlus className="w-3 h-3" />
                           <span>Member-ah Zawm Rawh</span>

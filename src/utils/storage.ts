@@ -516,6 +516,7 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-1787829303143' || String(updated.title).toLowerCase().includes('yma vengthar')) {
               updated.category = 'kumtluang';
+              updated.orgCode = 'YMAVT';
               // If previously contaminated with synthetic svg data URI or broken unsplash URL, restore to clean default
               if (!updated.imageUrl || updated.imageUrl.startsWith('data:image/svg+xml') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = YMA_DEFAULT_LOGO;
@@ -534,6 +535,10 @@ export const getStoredCampaigns = (): Campaign[] => {
             const updated = { ...camp };
             if (String(updated.id).toLowerCase().trim() === 'cmp-kumtluang-1' && updated.orgCode !== 'EBE') {
               updated.orgCode = 'EBE';
+              changed = true;
+            }
+            if (String(updated.id).toLowerCase().trim() === 'cmp-1787829303143' && updated.orgCode !== 'YMAVT') {
+              updated.orgCode = 'YMAVT';
               changed = true;
             }
             if (!updated.officerPasscode && initMatch.officerPasscode) {
@@ -710,6 +715,31 @@ export const saveStoredCampaigns = (campaigns: Campaign[], skipServerPush: boole
       return { ...c, orgCode: code };
     });
 
+    // Auto-detect and cascade Pawl Code migration if any campaign orgCode has changed
+    try {
+      const rawPrev = typeof localStorage !== 'undefined' ? localStorage.getItem(CAMPAIGNS_KEY) : null;
+      if (rawPrev) {
+        const prevList = JSON.parse(rawPrev);
+        if (Array.isArray(prevList)) {
+          const prevMap = new Map<string, string>();
+          prevList.forEach((c: any) => {
+            if (c && c.id && c.orgCode) prevMap.set(String(c.id).toLowerCase().trim(), String(c.orgCode).trim().toUpperCase());
+          });
+          sanitized.forEach(c => {
+            if (c && c.id && c.orgCode) {
+              const oldC = prevMap.get(String(c.id).toLowerCase().trim());
+              const newC = String(c.orgCode).trim().toUpperCase();
+              if (oldC && oldC !== newC) {
+                migrateCampaignMembersPrefix(c.id, oldC, newC);
+              }
+            }
+          });
+        }
+      }
+    } catch (migErr) {
+      console.warn('saveStoredCampaigns auto-migration check:', migErr);
+    }
+
     const sortedSanitized = sanitized.sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -750,6 +780,17 @@ export const saveCampaign = (camp: Campaign): void => {
   };
   const current = getStoredCampaigns();
   const idx = current.findIndex(c => c.id === stamped.id);
+
+  // Auto-cascade Pawl Code migration if orgCode has changed
+  if (idx >= 0) {
+    const existing = current[idx];
+    const oldCode = existing?.orgCode ? String(existing.orgCode).trim().toUpperCase() : '';
+    const newCode = stamped?.orgCode ? String(stamped.orgCode).trim().toUpperCase() : '';
+    if (oldCode && newCode && oldCode !== newCode) {
+      migrateCampaignMembersPrefix(stamped.id, oldCode, newCode);
+    }
+  }
+
   let updated: Campaign[];
   if (idx >= 0) {
     updated = [...current];
@@ -1837,15 +1878,10 @@ export const isCampaignManagerOrOfficer = (
   if (!creatorProfile || !camp) return false;
   if (isSuperAdminOrAdminProfile(creatorProfile)) return true;
 
-  // Platform treasurer or accountant designation
-  const roleLower = String(creatorProfile.role || '').toLowerCase();
-  const desigLower = String(creatorProfile.designation || '').toLowerCase();
-  const isPlatformFinStaff = roleLower === 'treasurer' || roleLower === 'accountant' || desigLower.includes('treasurer') || desigLower.includes('accountant');
-
   const uPhone = (creatorProfile.phone || '').trim().replace(/\D/g, '').slice(-10);
   const uName = (creatorProfile.name || '').trim().toLowerCase();
 
-  // Check assigned authorizedOfficers on this campaign
+  // 1. Check assigned authorizedOfficers on this specific campaign
   if (Array.isArray(camp.authorizedOfficers) && camp.authorizedOfficers.length > 0) {
     const isAssigned = camp.authorizedOfficers.some((o: any) => {
       if (!o) return false;
@@ -1861,9 +1897,28 @@ export const isCampaignManagerOrOfficer = (
     if (isAssigned) return true;
   }
 
-  if (isPlatformFinStaff) {
-    return true;
-  }
+  // 2. Check UserGroupMembership for this specific campaign with approved Creator/Officer role
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_group_memberships_v1') : null;
+    if (raw) {
+      const memberships = JSON.parse(raw);
+      if (Array.isArray(memberships)) {
+        const mem = memberships.find((m: any) => 
+          m && 
+          m.campaignId === camp.id && 
+          String(m.userPhone || '').replace(/\D/g, '').slice(-10) === uPhone &&
+          m.status === 'active'
+        );
+        if (mem) {
+          const mRole = String(mem.role || '').toLowerCase();
+          // If granted Creator or Officer role in THIS campaign
+          if (mRole === 'creator' || mRole === 'admin' || mRole === 'officer' || mRole === 'treasurer' || mRole === 'accountant') {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
 
   return isActualCampaignOwner(camp, creatorProfile);
 };
@@ -3271,6 +3326,12 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       localStorage.setItem(MEMBERS_LIST_KEY, JSON.stringify(Array.from(map.values())));
     }
 
+    const campaignsForSync = getStoredCampaigns();
+    const campOrgMap = new Map<string, Campaign>();
+    campaignsForSync.forEach(c => {
+      if (c && c.id) campOrgMap.set(c.id, c);
+    });
+
     const allMembers = Array.from(map.values()).map(m => {
       if (!m || !m.id) return m;
       const rawId = String(m.id);
@@ -3284,6 +3345,54 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
           m.primaryId = 'EBE-' + String(m.primaryId).substring(4);
         }
       }
+
+      // YMA Vengthar auto-sync: ensure campaignId is cmp-1787829303143 and orgCode is YMAVT
+      if (
+        m.campaignId === 'cmp-1787829303143' ||
+        m.campaignId === 'cmp-kumtluang-ymavt' ||
+        rawId.toUpperCase().startsWith('YMA-') ||
+        (m.orgCode && m.orgCode.toUpperCase() === 'YMA')
+      ) {
+        m.campaignId = 'cmp-1787829303143';
+        m.orgCode = 'YMAVT';
+        if (rawId.toUpperCase().startsWith('YMA-')) {
+          m.id = 'YMAVT-' + rawId.substring(4);
+        }
+        if (m.primaryId && String(m.primaryId).toUpperCase().startsWith('YMA-')) {
+          m.primaryId = 'YMAVT-' + String(m.primaryId).substring(4);
+        }
+        if (m.dependents && Array.isArray(m.dependents)) {
+          m.dependents = m.dependents.map((dep) => {
+            if (!dep) return dep;
+            if (dep.subId && dep.subId.toUpperCase().startsWith('YMA-')) {
+              return {
+                ...dep,
+                subId: 'YMAVT-' + dep.subId.substring(4)
+              };
+            }
+            return dep;
+          });
+        }
+      }
+
+      // Generic campaign Pawl Code auto-healing for any campaign:
+      if (m.campaignId && campOrgMap.has(m.campaignId)) {
+        const camp = campOrgMap.get(m.campaignId);
+        if (camp && camp.orgCode) {
+          const campCode = camp.orgCode.trim().toUpperCase();
+          if (m.orgCode && m.orgCode.toUpperCase() !== campCode) {
+            m.orgCode = campCode;
+          }
+          if (m.id && m.id.includes('-')) {
+            const currentPrefix = m.id.split('-')[0].toUpperCase();
+            if (currentPrefix !== campCode && currentPrefix !== 'MEM' && currentPrefix.length >= 2) {
+              const suffix = m.id.split('-').slice(1).join('-');
+              m.id = `${campCode}-${suffix}`;
+            }
+          }
+        }
+      }
+
       return m;
     }).filter(m => {
       if (!m || !m.id) return false;
@@ -3566,24 +3675,80 @@ export const deleteMember = (memberId: string, campaignId?: string): void => {
   }
 };
 
-export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: string, newPrefix: string): number => {
+export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: string, newPrefix: string): number {
   if (!campaignId || !newPrefix) return 0;
   const cleanOld = (oldPrefix || '').trim().toUpperCase();
   const cleanNew = newPrefix.trim().toUpperCase();
   if (cleanOld && cleanOld === cleanNew) return 0;
 
-  const allMembers = getMembers();
+  const allMembers = getMembers('all');
   let migratedCount = 0;
+  const oldToNewIdMap: Record<string, string> = {};
+
   const updatedMembers = allMembers.map(m => {
-    const isThisCampaign = m.campaignId === campaignId || (!m.campaignId && cleanOld && m.orgCode === cleanOld);
+    if (!m) return m;
+    const mIdUpper = String(m.id || '').toUpperCase();
+    const mOrgUpper = String(m.orgCode || '').toUpperCase();
+    const isThisCampaign =
+      m.campaignId === campaignId ||
+      (!m.campaignId && cleanOld && (mOrgUpper === cleanOld || mIdUpper.startsWith(cleanOld + '-'))) ||
+      (cleanOld && mOrgUpper === cleanOld) ||
+      (cleanOld && mIdUpper.startsWith(cleanOld + '-'));
+
     if (isThisCampaign) {
+      const oldId = m.id;
+      let suffix = '';
+      if (m.id && m.id.includes('-')) {
+        suffix = m.id.split('-').slice(1).join('-');
+      } else if (m.phoneLast4) {
+        suffix = m.phoneLast4;
+      } else if (m.id) {
+        suffix = m.id.slice(-4);
+      } else {
+        suffix = '0000';
+      }
+
+      const newId = `${cleanNew}-${suffix}`;
+      if (oldId && oldId !== newId) {
+        oldToNewIdMap[oldId.toLowerCase()] = newId;
+        oldToNewIdMap[oldId] = newId;
+        clearDeletedMemberId(oldId);
+        clearDeletedMemberId(newId);
+      }
+
+      // Update dependents subIds to match new parent ID
+      const updatedDependents = (m.dependents || []).map((dep, depIdx) => {
+        if (!dep) return dep;
+        const depOldSubId = dep.subId || '';
+        let depSuffix = '';
+        if (depOldSubId.includes('-')) {
+          const parts = depOldSubId.split('-');
+          depSuffix = parts.slice(2).join('-') || parts.slice(1).join('-') || `${(depIdx + 1).toString().padStart(2, '0')}`;
+        } else {
+          depSuffix = `${(depIdx + 1).toString().padStart(2, '0')}`;
+        }
+        const newSubId = `${newId}-${depSuffix}`;
+        if (depOldSubId && depOldSubId !== newSubId) {
+          oldToNewIdMap[depOldSubId.toLowerCase()] = newSubId;
+          oldToNewIdMap[depOldSubId] = newSubId;
+          clearDeletedMemberId(depOldSubId);
+          clearDeletedMemberId(newSubId);
+        }
+        return {
+          ...dep,
+          subId: newSubId
+        };
+      });
+
       migratedCount++;
-      const p4 = m.phoneLast4 || (m.id.includes('-') ? m.id.split('-')[1] : m.id.slice(-4));
       return {
         ...m,
         campaignId,
         orgCode: cleanNew,
-        id: `${cleanNew}-${p4}`
+        id: newId,
+        primaryId: m.primaryId && oldToNewIdMap[m.primaryId] ? oldToNewIdMap[m.primaryId] : (m.primaryId ? `${cleanNew}-${m.primaryId.split('-').slice(1).join('-')}` : undefined),
+        dependents: updatedDependents,
+        updatedAt: new Date().toISOString()
       };
     }
     return m;
@@ -3591,9 +3756,97 @@ export const migrateCampaignMembersPrefix = (campaignId: string, oldPrefix: stri
 
   if (migratedCount > 0) {
     saveMembers(updatedMembers);
+
+    // 1. Update ronpay_group_memberships_v1
+    try {
+      const rawGMs = typeof localStorage !== 'undefined' ? localStorage.getItem('ronpay_group_memberships_v1') : null;
+      if (rawGMs) {
+        const parsedGMs = JSON.parse(rawGMs);
+        if (Array.isArray(parsedGMs)) {
+          let gmsChanged = false;
+          const updatedGMs = parsedGMs.map((gm: any) => {
+            if (!gm) return gm;
+            const matchesCamp = gm.campaignId === campaignId || (cleanOld && gm.orgCode?.toUpperCase() === cleanOld);
+            if (matchesCamp) {
+              gmsChanged = true;
+              let newGmMemberId = gm.memberId;
+              if (gm.memberId && oldToNewIdMap[gm.memberId.toLowerCase()]) {
+                newGmMemberId = oldToNewIdMap[gm.memberId.toLowerCase()];
+              } else if (gm.memberId && gm.memberId.includes('-')) {
+                const s = gm.memberId.split('-').slice(1).join('-');
+                newGmMemberId = `${cleanNew}-${s}`;
+              } else if (gm.userPhone) {
+                newGmMemberId = `${cleanNew}-${gm.userPhone.slice(-4)}`;
+              }
+              return {
+                ...gm,
+                campaignId,
+                orgCode: cleanNew,
+                memberId: newGmMemberId,
+                updatedAt: new Date().toISOString()
+              };
+            }
+            return gm;
+          });
+
+          if (gmsChanged) {
+            localStorage.setItem('ronpay_group_memberships_v1', JSON.stringify(updatedGMs));
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('ronpay_group_memberships_updated', { detail: updatedGMs }));
+              window.dispatchEvent(new CustomEvent('ronpay-group-memberships-updated', { detail: updatedGMs }));
+            }
+          }
+        }
+      }
+    } catch (gmErr) {
+      console.warn('Group membership migration note:', gmErr);
+    }
+
+    // 2. Update ronpay_transactions_v4
+    try {
+      const txs = getStoredTransactions();
+      let txsChanged = false;
+      const updatedTxs = txs.map(tx => {
+        if (!tx) return tx;
+        const matchesCamp = tx.campaignId === campaignId;
+        const oldMidLower = (tx.memberId || '').trim().toLowerCase();
+        if (oldMidLower && oldToNewIdMap[oldMidLower]) {
+          txsChanged = true;
+          return {
+            ...tx,
+            memberId: oldToNewIdMap[oldMidLower],
+            updatedAt: new Date().toISOString()
+          };
+        } else if (matchesCamp && tx.memberId && cleanOld && tx.memberId.toUpperCase().startsWith(cleanOld + '-')) {
+          txsChanged = true;
+          const s = tx.memberId.split('-').slice(1).join('-');
+          return {
+            ...tx,
+            memberId: `${cleanNew}-${s}`,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return tx;
+      });
+
+      if (txsChanged) {
+        saveStoredTransactions(updatedTxs, false);
+      }
+    } catch (txErr) {
+      console.warn('Transaction memberId migration note:', txErr);
+    }
+
+    // 3. Log audit event
+    recordAuditLog(
+      'Pawl Code Auto-Migrated',
+      `Campaign ${campaignId} Pawl Code changed from [${cleanOld || 'N/A'}] to [${cleanNew}]. Auto-migrated ${migratedCount} members, memberships, and transactions.`,
+      'campaign',
+      campaignId
+    );
   }
+
   return migratedCount;
-};
+}
 
 export const saveTransaction = (tx: Transaction): void => {
   if (!tx || !tx.id) return;

@@ -3268,7 +3268,9 @@ const EditCampaignModal: React.FC<EditCampaignModalProps> = ({
 
     onSave(updated);
     if (migratedCount > 0) {
-      alert(`✅ BAWM DETAILS & PREFIX UPDATED!\n\nBawm Prefix chu [${finalPrefix}] ah thlak fel a ni a, he Bawm a member awmsa (${migratedCount}) te ID pawh '${finalPrefix}-XXXX' ah auto-migrate/update fel nghal a ni e!`);
+      alert(`✅ BAWM DETAILS & PAWL CODE UPDATED!\n\nPawl Code chu [${finalPrefix}] ah thlak fel a ni a, he Bawm chhunga member (${migratedCount}) te ID leh dependents zawng zawng pawh '${finalPrefix}-XXXX' ah auto-in thlak vek nghal a ni e!`);
+    } else if (oldPrefix && oldPrefix !== finalPrefix) {
+      alert(`✅ BAWM DETAILS & PAWL CODE UPDATED!\n\nPawl Code chu [${finalPrefix}] ah thlak fel a ni a, he Bawm thar/dang a member lo awm zel tur te pawh he code thar hi auto-in a pe zel ang!`);
     }
   };
 
