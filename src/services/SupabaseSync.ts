@@ -835,5 +835,5 @@ export const migrateAndSwitchToSupabase = async (allLocalTransactions: Transacti
 };
 */
 
-export { wipeSupabaseTables, restoreCacheToSupabase, reconcileSupabaseToMatchLocal108 } from '../services/supabaseService';
+export { wipeSupabaseTables, restoreCacheToSupabase, reconcileSupabaseToMatchLocal108, purgeLegacySupabaseMembers } from '../services/supabaseService';
 

@@ -45,7 +45,8 @@ import {
   deleteCampaign,
   wipeSupabaseTables,
   restoreCacheToSupabase,
-  reconcileSupabaseToMatchLocal108
+  reconcileSupabaseToMatchLocal108,
+  purgeLegacySupabaseMembers
 } from '../services/SupabaseSync';
 
 import { 
@@ -365,6 +366,30 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     } catch (err: any) {
       setActionNotice({
         message: `❌ Error: ${err?.message || 'Reconciliation failed'}`,
+        type: 'error'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePurgeLegacyMembers = async () => {
+    setIsScanning(true);
+    setActionNotice({
+      message: '⏳ Supabase aṭangin legacy/unused member records (EBE, EBEBCM etc.) paih fai mek a ni...',
+      type: 'success'
+    });
+    try {
+      const res = await purgeLegacySupabaseMembers();
+      setActionNotice({
+        message: `✅ Supabase aṭangin legacy member ${res.deletedCount} paih fai a ni ta! Supabase-ah active member ${res.remainingCount} an la awm e.`,
+        type: 'success'
+      });
+      if (onRefreshParent) onRefreshParent();
+      await runDiagnosticScan();
+    } catch (err: any) {
+      setActionNotice({
+        message: `❌ Error purging legacy members: ${err?.message || String(err)}`,
         type: 'error'
       });
     } finally {
@@ -705,6 +730,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             >
               <RefreshCw className={`w-3.5 h-3.5 text-white ${isScanning ? 'animate-spin' : ''}`} />
               <span>Restore Cache to Supabase</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePurgeLegacyMembers}
+              disabled={isScanning}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-white" />
+              <span>Purge Legacy Members (Clean Duplicates)</span>
             </button>
 
             <button

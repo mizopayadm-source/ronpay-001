@@ -15,6 +15,7 @@ import {
   deleteExpenseFromFirestore,
 } from '../services/firestoreSync';
 import { broadcastStateChange, StateSyncTopic } from '../services/crossTabSync';
+import { updateSupabaseMember, deleteSupabaseMember } from '../services/supabaseService';
 
 const CAMPAIGNS_KEY = 'ronpay_campaigns_v3';
 const TRANSACTIONS_KEY = 'ronpay_transactions_v4';
@@ -3543,6 +3544,8 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
   let migratedCount = 0;
   const oldToNewIdMap: Record<string, string> = {};
 
+  const migrationRecords: Array<{ member: MemberRecord; oldId: string }> = [];
+
   const updatedMembers = allMembers.map(m => {
     if (!m) return m;
     const mIdUpper = String(m.id || '').toUpperCase();
@@ -3599,7 +3602,7 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
       });
 
       migratedCount++;
-      return {
+      const updatedMem: MemberRecord = {
         ...m,
         campaignId,
         orgCode: cleanNew,
@@ -3608,12 +3611,28 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
         dependents: updatedDependents,
         updatedAt: new Date().toISOString()
       };
+      if (oldId) {
+        migrationRecords.push({ member: updatedMem, oldId });
+      }
+      return updatedMem;
     }
     return m;
   });
 
   if (migratedCount > 0) {
     saveMembers(updatedMembers);
+
+    // Sync member updates and cleanup old ghost records in Supabase
+    try {
+      migrationRecords.forEach(({ member, oldId }) => {
+        updateSupabaseMember(member, oldId).catch(() => {});
+        if (oldId && oldId !== member.id) {
+          deleteSupabaseMember(oldId).catch(() => {});
+        }
+      });
+    } catch (supErr) {
+      console.warn('Supabase member prefix migration sync note:', supErr);
+    }
 
     // 1. Update ronpay_group_memberships_v1
     try {

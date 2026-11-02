@@ -25,6 +25,15 @@ export interface SupabaseTableStatus {
   error?: string;
 }
 
+function logSupabaseError(context: string, error: any) {
+  const msg = typeof error === 'string' ? error : error?.message || String(error);
+  if (msg.includes('exceed_egress_quota') || msg.includes('quota') || msg.includes('restricted')) {
+    console.warn(`[Supabase Quota Exceeded] ${context}: ${msg}`);
+  } else {
+    console.warn(`[Supabase Warning] ${context}: ${msg}`);
+  }
+}
+
 export interface SupabaseHealthCheckResult {
   connected: boolean;
   url: string;
@@ -148,7 +157,7 @@ export async function upsertSupabaseUser(user: CreatorProfile): Promise<boolean>
     .upsert(row, { onConflict: 'phone' });
 
   if (error) {
-    console.error('[Supabase] Error upserting user:', error.message);
+    logSupabaseError('upsert user', error);
     return false;
   }
   return true;
@@ -320,7 +329,7 @@ export async function insertSupabaseTransaction(tx: Transaction): Promise<boolea
   }
 
   if (error) {
-    console.error('[Supabase] Error inserting transaction:', error.message);
+    logSupabaseError('insert/upsert transaction', error);
     // Queue on failure
     try {
       const qRaw = localStorage.getItem('ronpay_supabase_pending_txs');
@@ -374,7 +383,7 @@ export async function updateSupabaseTransaction(tx: Partial<Transaction> & { id:
     .eq('id', tx.id);
 
   if (error) {
-    console.error('[Supabase] Error updating transaction:', error.message);
+    logSupabaseError('update transaction', error);
     return false;
   }
 
@@ -532,7 +541,7 @@ export async function upsertSupabaseWallet(wallet: RonPayWallet, userId?: string
     .upsert(row, { onConflict: 'id' });
 
   if (error) {
-    console.error('[Supabase] Error upserting wallet:', error.message);
+    logSupabaseError('upsert wallet', error);
     return false;
   }
   return true;
@@ -663,7 +672,7 @@ export async function upsertSupabaseFundPool(stats: PublicPoolStats, poolId: str
     .upsert(row, { onConflict: 'id' });
 
   if (error) {
-    console.error('[Supabase] Error upserting fund pool:', error.message);
+    logSupabaseError('upsert fund pool', error);
     return false;
   }
   return true;
@@ -863,7 +872,7 @@ export async function upsertSupabaseCampaign(camp: Campaign): Promise<boolean> {
     .upsert(row, { onConflict: 'id' });
 
   if (error) {
-    console.error('[Supabase] Error upserting campaign:', error.message);
+    logSupabaseError('upsert campaign', error);
     return false;
   }
   return true;
@@ -1946,3 +1955,44 @@ export async function reconcileSupabaseToMatchLocal108(): Promise<{
     };
   }
 }
+
+/**
+ * Purges obsolete/legacy prefix member records from Supabase (e.g., old EBE-, EBEBCM- records
+ * when campaigns have been updated to EBEZBK-, or any member records not matching active local members).
+ */
+export async function purgeLegacySupabaseMembers(): Promise<{ deletedCount: number; remainingCount: number }> {
+  const supabase = getSupabase();
+  if (!supabase) return { deletedCount: 0, remainingCount: 0 };
+
+  try {
+    const { data: cloudRows, error } = await supabase.from('members').select('id, org_code, campaign_id');
+    if (error || !cloudRows) return { deletedCount: 0, remainingCount: 0 };
+
+    const localMembers = getMembers('all');
+    const validIds = new Set(localMembers.map(m => String(m.id || '').toLowerCase().trim()));
+    const validPrefixes = new Set(localMembers.map(m => String(m.orgCode || '').toUpperCase().trim()).filter(Boolean));
+
+    let deletedCount = 0;
+    for (const row of cloudRows) {
+      const rowId = String(row.id || '').toLowerCase().trim();
+      const rowOrgCode = String(row.org_code || '').toUpperCase().trim();
+      
+      const isObsoletePrefix = (rowId.startsWith('ebe-') || rowId.startsWith('ebebcm-')) && !rowId.startsWith('ebezbk-');
+      const isOrphaned = !validIds.has(rowId);
+
+      if (isObsoletePrefix || (isOrphaned && rowOrgCode && !validPrefixes.has(rowOrgCode))) {
+        const { error: delErr } = await supabase.from('members').delete().eq('id', row.id);
+        if (!delErr) {
+          deletedCount++;
+        }
+      }
+    }
+
+    const { count: remaining } = await supabase.from('members').select('*', { count: 'exact', head: true });
+    return { deletedCount, remainingCount: remaining || 0 };
+  } catch (err) {
+    logSupabaseError('purgeLegacySupabaseMembers', err);
+    return { deletedCount: 0, remainingCount: 0 };
+  }
+}
+
