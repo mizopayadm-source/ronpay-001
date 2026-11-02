@@ -157,6 +157,18 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
 
   return (
     <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white p-5 rounded-3xl shadow-xl border border-indigo-500/30 space-y-4">
+      {typeof window !== 'undefined' && (window as any).__SUPABASE_QUOTA_EXCEEDED && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-1">
+          <div className="flex items-center gap-2 font-black text-amber-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>Supabase Egress Quota Exceeded (402 Payment Required)</span>
+          </div>
+          <p className="text-[11px] text-amber-200/90 leading-relaxed">
+            Console-a <strong>402 Payment Required</strong> errors i hmuhte hi Supabase project egress quota/bandwidth a zawh tawh vang a ni. He app hian Local Storage hmangin hlawhtling takin a thawk chhunzawm zel a, data a bo lo va, a him vek e.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-500/20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-900/50">

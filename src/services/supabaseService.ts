@@ -27,8 +27,12 @@ export interface SupabaseTableStatus {
 
 function logSupabaseError(context: string, error: any) {
   const msg = typeof error === 'string' ? error : error?.message || String(error);
-  if (msg.includes('exceed_egress_quota') || msg.includes('quota') || msg.includes('restricted')) {
-    console.warn(`[Supabase Quota Exceeded] ${context}: ${msg}`);
+  const status = error?.status || error?.statusCode || 0;
+  if (msg.includes('exceed_egress_quota') || msg.includes('quota') || msg.includes('restricted') || status === 402 || msg.includes('402') || msg.includes('Payment Required')) {
+    if (typeof window !== 'undefined') {
+      (window as any).__SUPABASE_QUOTA_EXCEEDED = true;
+    }
+    console.warn(`[Supabase Quota / 402 Payment Required] ${context}: ${msg}`);
   } else {
     console.warn(`[Supabase Warning] ${context}: ${msg}`);
   }
