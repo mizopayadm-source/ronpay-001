@@ -257,11 +257,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
     fetchLiveTxs();
 
-    // Periodic 5-second polling to keep transactions live with Supabase in preview
-    const pollInterval = setInterval(() => {
-      fetchLiveTxs();
-    }, 5000);
-
+    // Event-driven real-time update (replaces heavy 5-second polling to eliminate egress quota waste)
     const unsub = subscribeToTable('transactions', async () => {
       if (!isMounted) return;
       try {
@@ -274,7 +270,6 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({
 
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
       if (unsub && typeof unsub.unsubscribe === 'function') {
         try {
           unsub.unsubscribe();

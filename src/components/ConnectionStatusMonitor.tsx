@@ -13,8 +13,9 @@ import {
   Server,
   Radio
 } from 'lucide-react';
-import { supabase, getSupabaseUrl } from '../lib/supabase';
+import { supabase, getSupabaseUrl, isSupabaseQuotaBlocked } from '../lib/supabase';
 import { fetchTableData, subscribeToTable } from '../services/SupabaseSync';
+import { getStoredTransactions, getStoredCampaigns } from '../utils/storage';
 import { Transaction, Campaign } from '../types';
 
 export interface ConnectionStatusMonitorProps {
@@ -46,33 +47,49 @@ export const ConnectionStatusMonitor: React.FC<ConnectionStatusMonitorProps> = (
     onRefreshRef.current = onRefresh;
   }, [onRefresh]);
 
-  // Ping Supabase using the authoritative fetchTableData service
+  // Lightweight Ping Supabase using zero-body count query (preserves egress quota)
   const checkConnection = useCallback(async () => {
     if (!isMountedRef.current) return;
+
+    if (isSupabaseQuotaBlocked()) {
+      if (isMountedRef.current) {
+        setDbStatus('degraded');
+        setDbLatency(999);
+        setTransactionsCount(getStoredTransactions().length);
+        setCampaignsCount(getStoredCampaigns().length);
+      }
+      return;
+    }
+
     setIsPinging(true);
     const startTime = performance.now();
 
     try {
-      // 1. Measure DB Latency using authoritative fetchTableData service
-      const txData = await fetchTableData<Transaction>('transactions');
+      // 1. Measure DB Latency using lightweight count query (0 rows returned)
+      const { count: txCount, error: txErr } = await supabase
+        .from('transactions')
+        .select('*', { count: 'exact', head: true });
+
       const endTime = performance.now();
       const latency = Math.max(1, Math.round(endTime - startTime));
 
       if (isMountedRef.current) {
         setDbLatency(latency);
-        if (Array.isArray(txData)) {
-          setTransactionsCount(txData.length);
+        if (!txErr) {
+          setTransactionsCount(txCount ?? getStoredTransactions().length);
           setDbStatus('connected');
         } else {
           setDbStatus('degraded');
         }
       }
 
-      // Also get campaign count
+      // Also get campaign count with head: true
       try {
-        const campData = await fetchTableData<Campaign>('campaigns');
-        if (isMountedRef.current && Array.isArray(campData)) {
-          setCampaignsCount(campData.length);
+        const { count: campCount } = await supabase
+          .from('campaigns')
+          .select('*', { count: 'exact', head: true });
+        if (isMountedRef.current && campCount !== null) {
+          setCampaignsCount(campCount);
         }
       } catch {}
 
@@ -120,35 +137,8 @@ export const ConnectionStatusMonitor: React.FC<ConnectionStatusMonitorProps> = (
     isMountedRef.current = true;
     checkConnection();
 
-    // 3. Realtime subscription health test
-    const channel = supabase.channel(`conn-monitor-${Math.random().toString(36).substring(2, 7)}`);
-    channel.subscribe((status) => {
-      if (!isMountedRef.current) return;
-      if (status === 'SUBSCRIBED') {
-        setRealtimeConnected(true);
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        setRealtimeConnected(false);
-      }
-    });
-
-    // Also listen to transaction table updates
-    const txUnsub = subscribeToTable('transactions', () => {
-      if (isMountedRef.current) {
-        checkConnection();
-      }
-    });
-
-    const interval = setInterval(() => {
-      checkConnection();
-    }, 25000); // Re-check latency every 25s
-
     return () => {
       isMountedRef.current = false;
-      clearInterval(interval);
-      try {
-        supabase.removeChannel(channel);
-        if (txUnsub) supabase.removeChannel(txUnsub);
-      } catch {}
     };
   }, [checkConnection]);
 

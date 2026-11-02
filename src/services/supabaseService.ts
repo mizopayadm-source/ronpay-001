@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured, getSupabaseUrl } from '../lib/supabase';
+import { getSupabase, isSupabaseConfigured, getSupabaseUrl, isSupabaseQuotaBlocked, markSupabaseQuotaBlocked } from '../lib/supabase';
 export { isSupabaseConfigured } from '../lib/supabase';
 import { Transaction, CreatorProfile, RonPayWallet, WalletTransaction, PublicPoolStats, Campaign, MemberRecord } from '../types';
 import { 
@@ -51,6 +51,7 @@ export interface SupabaseHealthCheckResult {
 // ---------------------------------------------------------------------------
 
 export async function fetchSupabaseUsers(): Promise<CreatorProfile[]> {
+  if (isSupabaseQuotaBlocked()) return getStoredCreatorsList();
   const supabase = getSupabase();
   if (!supabase) return [];
 
@@ -61,8 +62,11 @@ export async function fetchSupabaseUsers(): Promise<CreatorProfile[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
+    if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted')) {
+      markSupabaseQuotaBlocked(error.message);
+    }
     console.warn('[Supabase] Failed to fetch users:', error.message);
-    return [];
+    return getStoredCreatorsList();
   }
 
   return (data || []).map((row: any) => ({
@@ -172,8 +176,9 @@ export async function upsertSupabaseUser(user: CreatorProfile): Promise<boolean>
 // ---------------------------------------------------------------------------
 
 export async function fetchSupabaseTransactions(campaignId?: string): Promise<Transaction[]> {
+  if (isSupabaseQuotaBlocked()) return getStoredTransactions();
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase) return getStoredTransactions();
 
   let query = supabase
     .from('transactions')
@@ -187,6 +192,11 @@ export async function fetchSupabaseTransactions(campaignId?: string): Promise<Tr
   }
 
   const { data, error } = await query;
+  if (error) {
+    if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted')) {
+      markSupabaseQuotaBlocked(error.message);
+    }
+  }
   if (!error && Array.isArray(data) && data.length > 0) {
     const validRows = (data || []).filter((row: any) => row && row.id && row.status !== 'deleted');
     if (validRows.length > 0) {
@@ -751,8 +761,9 @@ export async function recalibrateSupabaseFundPool(poolId: string = 'public_pool'
 // ---------------------------------------------------------------------------
 
 export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
+  if (isSupabaseQuotaBlocked()) return getStoredCampaigns();
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase) return getStoredCampaigns();
 
   const { data, error } = await supabase
     .from('campaigns')
@@ -761,8 +772,11 @@ export async function fetchSupabaseCampaigns(): Promise<Campaign[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
+    if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted')) {
+      markSupabaseQuotaBlocked(error.message);
+    }
     console.warn('[Supabase] Failed to fetch campaigns:', error.message);
-    return [];
+    return getStoredCampaigns();
   }
 
   return (data || []).map((row: any) => {
@@ -1252,8 +1266,9 @@ export async function syncPendingTransactionsToSupabase(): Promise<{
 // ---------------------------------------------------------------------------
 
 export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberRecord[]> {
+  if (isSupabaseQuotaBlocked()) return getMembers(campaignId);
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase) return getMembers(campaignId);
 
   let query = supabase.from('members').select('*').range(0, 9999);
   if (campaignId && campaignId !== 'all') {
@@ -1262,7 +1277,10 @@ export async function fetchSupabaseMembers(campaignId?: string): Promise<MemberR
 
   const { data, error } = await query;
   if (error || !data) {
-    return [];
+    if (error && (error.message?.includes('exceed_egress_quota') || (error as any).status === 402 || error.message?.includes('restricted'))) {
+      markSupabaseQuotaBlocked(error.message);
+    }
+    return getMembers(campaignId);
   }
 
   const deletedMemIds = getDeletedMemberIds();
@@ -1459,7 +1477,7 @@ export async function loadSupabaseInitialState(): Promise<{
   fundPool: PublicPoolStats | null;
 }> {
   const supabase = getSupabase();
-  if (!supabase) {
+  if (!supabase || isSupabaseQuotaBlocked()) {
     return {
       transactions: getStoredTransactions(),
       campaigns: getStoredCampaigns(),

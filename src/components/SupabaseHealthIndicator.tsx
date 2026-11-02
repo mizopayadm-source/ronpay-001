@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Database, Zap, ShieldCheck, Activity, RefreshCw, CheckCircle2, AlertTriangle, Wifi, Lock, Wallet, Receipt, Check } from 'lucide-react';
-import { supabase, getSupabaseUrl } from '../lib/supabase';
+import { Database, Zap, ShieldCheck, Activity, RefreshCw, CheckCircle2, AlertTriangle, Wifi, Lock, Wallet, Receipt, Check, RotateCcw } from 'lucide-react';
+import { supabase, getSupabaseUrl, isSupabaseQuotaBlocked, clearSupabaseQuotaBlocked } from '../lib/supabase';
 import { 
   verifySupabaseSingleSourceOfTruth,
   SSOTVerificationResult,
   normalizeTransaction 
 } from '../services/SupabaseSync';
-import { saveStoredTransactions } from '../utils/storage';
+import { saveStoredTransactions, getStoredTransactions, getStoredCampaigns } from '../utils/storage';
 
 interface SupabaseHealthIndicatorProps {
   compact?: boolean;
@@ -37,6 +37,14 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
   }, [onRefresh]);
 
   const checkHealth = useCallback(async () => {
+    if (isSupabaseQuotaBlocked()) {
+      setDbStatus('degraded');
+      setTransactionCount(getStoredTransactions().length);
+      setCampaignCount(getStoredCampaigns().length);
+      setIsChecking(false);
+      return;
+    }
+
     setIsChecking(true);
     const start = performance.now();
     try {
@@ -72,17 +80,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
         setAuthStatus('anonymous/guest');
       }
 
-      // 3. Check Realtime channel
-      const testChannel = supabase.channel(`health-check-${Math.random()}`);
-      testChannel.subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          setRealtimeStatus('active');
-          supabase.removeChannel(testChannel);
-        } else if (status === 'CHANNEL_ERROR' || err) {
-          setRealtimeStatus('error');
-        }
-      });
-
       setLastChecked(new Date().toLocaleTimeString());
     } catch (err) {
       console.warn('[SupabaseHealth] Health check error:', err);
@@ -94,6 +91,9 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
   }, []);
 
   const handleManualPing = useCallback(async () => {
+    if (isSupabaseQuotaBlocked()) {
+      clearSupabaseQuotaBlocked();
+    }
     await checkHealth();
     try {
       const { data: freshTxns } = await supabase
@@ -113,7 +113,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
     }
   }, [checkHealth]);
 
-
   const handleVerifySSOT = async () => {
     setIsVerifying(true);
     try {
@@ -131,8 +130,6 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
 
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
   }, [checkHealth]);
 
   if (compact) {
@@ -157,14 +154,27 @@ export const SupabaseHealthIndicator: React.FC<SupabaseHealthIndicatorProps> = (
 
   return (
     <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 text-white p-5 rounded-3xl shadow-xl border border-indigo-500/30 space-y-4">
-      {typeof window !== 'undefined' && (window as any).__SUPABASE_QUOTA_EXCEEDED && (
-        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-1">
-          <div className="flex items-center gap-2 font-black text-amber-300">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-            <span>Supabase Egress Quota Exceeded (402 Payment Required)</span>
+      {typeof window !== 'undefined' && isSupabaseQuotaBlocked() && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-black text-amber-300">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>Supabase Egress Quota Exceeded (Circuit Breaker Active)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                clearSupabaseQuotaBlocked();
+                checkHealth();
+              }}
+              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-[10.5px] flex items-center gap-1 cursor-pointer transition active:scale-95 shadow-sm shrink-0"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset & Re-test</span>
+            </button>
           </div>
           <p className="text-[11px] text-amber-200/90 leading-relaxed">
-            Console-a <strong>402 Payment Required</strong> errors i hmuhte hi Supabase project egress quota/bandwidth a zawh tawh vang a ni. He app hian Local Storage hmangin hlawhtling takin a thawk chhunzawm zel a, data a bo lo va, a him vek e.
+            Egress quota a zawh avangin Supabase outgoing network requests te hi pause a ni a. Hetiang hian loop vanga data tam tak ral tur a veng nghal a ni. Local Storage hmangin RonPay hian a thawk chhunzawm zel a, data a him vek e.
           </p>
         </div>
       )}

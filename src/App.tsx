@@ -477,11 +477,7 @@ export default function App() {
 
     loadSupabaseData();
 
-    // Periodic live sync (every 10 seconds) ensuring external additions in Supabase / Web auto-sync into AI Studio
-    const pollInterval = setInterval(() => {
-      loadSupabaseData();
-    }, 10000);
-
+    // Event-driven real-time updates (replaces 10s heavy full-table polling to stop egress spikes)
     const unsubTx = subscribeToTable('transactions', () => {
       fetchTableData('transactions', { forceAll: true }).then(txs => {
         if (isMounted && Array.isArray(txs) && txs.length > 0) {
@@ -508,7 +504,6 @@ export default function App() {
 
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
       unsubTx.unsubscribe();
       unsubCamp.unsubscribe();
       unsubMem.unsubscribe();
