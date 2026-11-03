@@ -19,31 +19,17 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Google Analytics 4 (GA4) Tag Loader -->
+    <!-- Google tag (gtag.js) for GA4: G-P29J9QMYK6 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-P29J9QMYK6"></script>
     <script>
-      (function() {
-        var gaId = '%VITE_GA_MEASUREMENT_ID%';
-        if (!gaId || gaId.indexOf('VITE_GA_') !== -1) {
-          gaId = '%VITE_FIREBASE_MEASUREMENT_ID%';
-        }
-        if (!gaId || gaId.indexOf('VITE_FIREBASE_') !== -1) {
-          try {
-            gaId = localStorage.getItem('ronpay_ga_measurement_id') || '';
-          } catch(e) {}
-        }
-        if (gaId && gaId.indexOf('G-') === 0) {
-          var s = document.createElement('script');
-          s.async = true;
-          s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
-          document.head.appendChild(s);
-
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          window.gtag = gtag;
-          gtag('js', new Date());
-          gtag('config', gaId, { send_page_view: true });
-        }
-      })();
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+      gtag('config', 'G-P29J9QMYK6', {
+        send_page_view: true,
+        cookie_flags: 'SameSite=None;Secure'
+      });
     </script>
 
     <script>
