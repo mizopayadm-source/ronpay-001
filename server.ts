@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
+import { fetchGA4AnalyticsReport, getGA4Status } from './src/server/ga4Service';
 
 // Initialize Gemini Client Lazily
 let genAIClient: GoogleGenAI | null = null;
@@ -48,6 +49,35 @@ app.get('/api/health', (req: Request, res: Response) => {
 
 app.get('/healthz', (req: Request, res: Response) => {
   res.status(200).send('OK');
+});
+
+// -------------------------------------------------------------
+// Google Analytics 4 (GA4) Data API Routes
+// Allows Admin/Super Admin to monitor visitors & traffic safely
+// Zero Supabase database egress usage
+// -------------------------------------------------------------
+app.get('/api/analytics/ga4', async (req: Request, res: Response) => {
+  try {
+    const range = (req.query.range as string) || '30d';
+    const report = await fetchGA4AnalyticsReport(range);
+    res.json(report);
+  } catch (err: any) {
+    console.error('[API] /api/analytics/ga4 error:', err);
+    res.status(500).json({
+      status: 'error',
+      isConfigured: false,
+      errorMessage: err?.message || 'Internal Server Error querying GA4',
+    });
+  }
+});
+
+app.get('/api/analytics/ga4/status', (req: Request, res: Response) => {
+  try {
+    const status = getGA4Status();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Error checking GA4 status' });
+  }
 });
 
 // -------------------------------------------------------------

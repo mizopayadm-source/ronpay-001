@@ -84,6 +84,7 @@ import {
 } from 'lucide-react';
 import { AdminSyncDiagnosticView } from './AdminSyncDiagnosticView';
 import { SupabaseSyncModal } from './SupabaseSyncModal';
+import { AdminAnalytics } from './AdminAnalytics';
 import { 
   Campaign, 
   CreatorProfile, 
@@ -225,7 +226,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [isBiometricScanning, setIsBiometricScanning] = useState<boolean>(false);
 
   // Admin tabs
-  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'group_assignments' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'staff' | 'creators' | 'campaigns' | 'group_assignments' | 'cash_approvals' | 'announcement' | 'audit' | 'backup' | 'rates' | 'finances' | 'gateway' | 'sync_diagnostic' | 'supabase' | 'analytics'>('campaigns');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Creators sub-filter
@@ -1432,7 +1433,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       type="button"
                       onClick={() => {
                         setCurrentRole(r);
-                        if (r === 'MODERATOR' && ['staff', 'finances', 'announcement', 'audit', 'rates', 'backup', 'gateway'].includes(activeTab)) {
+                        if (r === 'MODERATOR' && ['staff', 'finances', 'announcement', 'audit', 'rates', 'backup', 'gateway', 'analytics'].includes(activeTab)) {
                           setActiveTab('creators');
                         } else if (r === 'ADMIN' && ['staff', 'rates', 'backup', 'gateway'].includes(activeTab)) {
                           setActiveTab('campaigns');
@@ -1515,6 +1516,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   id: 'audit' as const, 
                   label: 'Audit & Activity Log', 
                   icon: History,
+                  minRole: 'ADMIN' as UserRole
+                },
+                { 
+                  id: 'analytics' as const, 
+                  label: 'Visitors Stats (GA4)', 
+                  icon: TrendingUp,
+                  badge: 'GA4',
+                  badgeColor: 'bg-indigo-600 text-white',
                   minRole: 'ADMIN' as UserRole
                 },
                 { 
@@ -4368,6 +4377,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {activeTab === 'supabase' && (
                 <SupabaseSyncModal
                   isOpen={true}
+                  onClose={() => setActiveTab('campaigns')}
+                />
+              )}
+
+              {activeTab === 'analytics' && (
+                <AdminAnalytics
+                  currentRole={currentRole}
+                  creatorProfile={currentProfile}
                   onClose={() => setActiveTab('campaigns')}
                 />
               )}
