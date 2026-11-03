@@ -510,9 +510,9 @@ export const getStoredCampaigns = (): Campaign[] => {
             if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
               updated.category = 'kumtluang';
               const oldCode = updated.orgCode;
-              updated.orgCode = 'EBEZBK';
-              if (oldCode && oldCode.toUpperCase() !== 'EBEZBK') {
-                migrateCampaignMembersPrefix('cmp-kumtluang-1', oldCode, 'EBEZBK');
+              updated.orgCode = 'ZBKEBE';
+              if (oldCode && oldCode.toUpperCase() === 'EBEZBK') {
+                migrateCampaignMembersPrefix('cmp-kumtluang-1', 'EBEZBK', 'ZBKEBE');
               }
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
@@ -2526,54 +2526,54 @@ export const restoreFullDatabaseBackup = (
 
 export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
   {
-    id: 'EBEZBK-1460',
+    id: 'ZBKEBE-1460',
     campaignId: 'cmp-kumtluang-1',
     name: 'Rammuanpuia Ralte',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '1460',
     fullPhone: '9436141460',
     section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBEZBK-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
-      { subId: 'EBEZBK-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
+      { subId: 'ZBKEBE-1460-01', name: 'Lalrinchhani (Nupui)', relation: 'Nupui' },
+      { subId: 'ZBKEBE-1460-02', name: 'Muanpuia Jr. (Fapa)', relation: 'Fa' }
     ],
     createdAt: '2026-01-01T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-8622',
+    id: 'ZBKEBE-8622',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalduhawma Fanai',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '8622',
     fullPhone: '9862358622',
     section: 'Bial 2 (Vengthlang)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBEZBK-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
-      { subId: 'EBEZBK-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
+      { subId: 'ZBKEBE-8622-01', name: 'Zodingliani (Nupui)', relation: 'Nupui' },
+      { subId: 'ZBKEBE-8622-02', name: 'Lalmuanawma (Fa)', relation: 'Fa' }
     ],
     createdAt: '2026-01-02T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-3120',
+    id: 'ZBKEBE-3120',
     campaignId: 'cmp-kumtluang-1',
     name: 'Zonunsanga Hnamte',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '3120',
     fullPhone: '8794563120',
     section: 'Bial 1 (Vengchhak)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBEZBK-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
+      { subId: 'ZBKEBE-3120-01', name: 'Lalremruati (Nupui)', relation: 'Nupui' }
     ],
     createdAt: '2026-01-03T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-5544',
+    id: 'ZBKEBE-5544',
     campaignId: 'cmp-kumtluang-1',
     name: 'C. Lalmuanpuia',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '5544',
     fullPhone: '9436125544',
     section: 'Bial 3 (Venglai)',
@@ -2582,10 +2582,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-04T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-4646',
+    id: 'ZBKEBE-4646',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalnunpuia',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '4646',
     fullPhone: '9862464646',
     section: 'Bial 3 (Venglai)',
@@ -2594,24 +2594,24 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-04.5T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-9912',
+    id: 'ZBKEBE-9912',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalbiakzuala & Chhungte',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '9912',
     fullPhone: '9862399912',
     section: 'Bial 4 (Field Veng)',
     isFamilyHead: true,
     dependents: [
-      { subId: 'EBEZBK-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
+      { subId: 'ZBKEBE-9912-01', name: 'Lalhmingmawii (Nupui)', relation: 'Nupui' }
     ],
     createdAt: '2026-01-05T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-4455',
+    id: 'ZBKEBE-4455',
     campaignId: 'cmp-kumtluang-1',
     name: 'Lalrosanga Sailo',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '4455',
     fullPhone: '9862114455',
     section: 'Bial 1 (Vengchhak)',
@@ -2620,10 +2620,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-06T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-7788',
+    id: 'ZBKEBE-7788',
     campaignId: 'cmp-kumtluang-1',
     name: 'Vanlalruati Pachuau',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '7788',
     fullPhone: '9436227788',
     section: 'Bial 2 (Vengthlang)',
@@ -2632,10 +2632,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-07T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-2233',
+    id: 'ZBKEBE-2233',
     campaignId: 'cmp-kumtluang-1',
     name: 'C. Lalrinsanga',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '2233',
     fullPhone: '8794332233',
     section: 'Bial 3 (Venglai)',
@@ -2644,10 +2644,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-08T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-6677',
+    id: 'ZBKEBE-6677',
     campaignId: 'cmp-kumtluang-1',
     name: 'H. Lalthansanga',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '6677',
     fullPhone: '9615446677',
     section: 'Bial 4 (Field Veng)',
@@ -2656,10 +2656,10 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     createdAt: '2026-01-09T00:00:00.000Z'
   },
   {
-    id: 'EBEZBK-9988',
+    id: 'ZBKEBE-9988',
     campaignId: 'cmp-kumtluang-1',
     name: 'Dr. Zoramthanga Fanai',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     phoneLast4: '9988',
     fullPhone: '7005559988',
     section: 'General / Khawchhung',
@@ -3395,18 +3395,11 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
 };
 
 export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
-  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.orgCode === 'ZBKEBE' || member.orgCode === 'EBEZBK' || member.id?.startsWith('ZBKEBE-') || member.id?.startsWith('EBEZBK-') || member.id?.startsWith('BCM-'));
-  let effectiveId = member.id;
-  if (isEbe && effectiveId) {
-    if (effectiveId.startsWith('ZBKEBE-') || effectiveId.startsWith('EBE-') || effectiveId.startsWith('BCM-')) {
-      effectiveId = `EBEZBK-${effectiveId.split('-').slice(1).join('-')}`;
-    }
-  }
+  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.orgCode === 'ZBKEBE' || member.id?.startsWith('ZBKEBE-') || member.id?.startsWith('EBEZBK-') || member.id?.startsWith('BCM-'));
   const stamped: MemberRecord = {
     ...member,
-    id: effectiveId,
     campaignId: isEbe ? 'cmp-kumtluang-1' : (member.campaignId || 'cmp-kumtluang-1'),
-    orgCode: isEbe ? 'EBEZBK' : (member.orgCode || 'EBEZBK'),
+    orgCode: isEbe ? 'ZBKEBE' : (member.orgCode || 'ZBKEBE'),
     createdAt: member.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };

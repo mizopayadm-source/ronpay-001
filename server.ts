@@ -1,5 +1,4 @@
-import dotenv from 'dotenv';
-dotenv.config({ override: true });
+import 'dotenv/config';
 import express from 'express';
 import type { Request, Response } from 'express';
 import path from 'path';
