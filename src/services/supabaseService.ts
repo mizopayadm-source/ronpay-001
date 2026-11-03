@@ -1431,26 +1431,33 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
     }
   });
 
-  // Align member IDs and orgCode with campaign settings
+  // Align member IDs and orgCode with campaign settings and deduplicate
   const validMemberIds = new Set<string>();
   const alignedMembers: MemberRecord[] = [];
+  const uniqueRowMap = new Map<string, any>();
 
-  const rows = allMems.map(member => {
+  for (const member of allMems) {
+    if (!member || !member.id) continue;
     let effectiveCode = member.orgCode ? String(member.orgCode).trim().toUpperCase() : 'MEM';
     if (member.campaignId && campOrgMap.has(member.campaignId)) {
       effectiveCode = campOrgMap.get(member.campaignId)!;
     }
 
-    let effectiveId = member.id;
+    let effectiveId = String(member.id).trim();
     if (effectiveId && effectiveId.includes('-')) {
       const parts = effectiveId.split('-');
       const currPrefix = parts[0].toUpperCase();
-      if (currPrefix !== effectiveCode) {
-        effectiveId = `${effectiveCode}-${parts.slice(1).join('-')}`;
-      }
+      // If it has multiple hyphens e.g. ZBKEBE-5544-1170, normalize parts:
+      const suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
+      effectiveId = `${effectiveCode}-${suffix}`;
     } else if (effectiveId) {
       const suffix = member.phoneLast4 || effectiveId.slice(-4);
       effectiveId = `${effectiveCode}-${suffix}`;
+    }
+
+    const cleanLowerId = effectiveId.toLowerCase();
+    if (uniqueRowMap.has(cleanLowerId)) {
+      continue;
     }
 
     const updatedMember: MemberRecord = {
@@ -1462,9 +1469,13 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
     alignedMembers.push(updatedMember);
 
     validMemberIds.add(effectiveId);
-    validMemberIds.add(effectiveId.toLowerCase());
+    validMemberIds.add(cleanLowerId);
 
-    return {
+    const cleanCreated = (member.createdAt && member.createdAt.includes('.5T'))
+      ? '2026-01-04T12:00:00.000Z'
+      : (member.createdAt || new Date().toISOString());
+
+    uniqueRowMap.set(cleanLowerId, {
       id: effectiveId,
       campaign_id: member.campaignId || 'cmp-default',
       name: member.name || 'Member',
@@ -1479,7 +1490,7 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
       paid_amount: Number(member.paidAmount) || 0,
       status: member.status || 'pending',
       dependents: member.dependents || [],
-      created_at: member.createdAt || new Date().toISOString(),
+      created_at: cleanCreated,
       updated_at: new Date().toISOString(),
       metadata: {
         notes: member.notes,
@@ -1489,8 +1500,10 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
         yearStatus: member.yearStatus,
         section: member.section || null,
       }
-    };
-  });
+    });
+  }
+
+  const rows = Array.from(uniqueRowMap.values());
 
   // Save aligned members back to localStorage
   try {
@@ -2074,8 +2087,21 @@ export async function purgeLegacySupabaseMembers(): Promise<{ deletedCount: numb
   if (!supabase) return { deletedCount: 0, remainingCount: 0 };
 
   try {
-    const { data: cloudRows, error } = await supabase.from('members').select('id, org_code, campaign_id');
-    if (error || !cloudRows) return { deletedCount: 0, remainingCount: 0 };
+    let cloudRows: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('members')
+        .select('id, org_code, campaign_id')
+        .range(from, from + pageSize - 1);
+      if (error || !data || data.length === 0) break;
+      cloudRows = cloudRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    if (!cloudRows || cloudRows.length === 0) return { deletedCount: 0, remainingCount: 0 };
 
     const localMembers = getMembers('all');
     const validIds = new Set(localMembers.map(m => String(m.id || '').toLowerCase().trim()));
@@ -2086,21 +2112,30 @@ export async function purgeLegacySupabaseMembers(): Promise<{ deletedCount: numb
       if (c && c.orgCode) validPrefixes.add(String(c.orgCode).trim().toUpperCase());
     });
 
-    let deletedCount = 0;
+    const idsToDelete: string[] = [];
     for (const row of cloudRows) {
       const rowIdUpper = String(row.id || '').toUpperCase().trim();
       const rowIdLower = String(row.id || '').toLowerCase().trim();
       const rowOrgCode = String(row.org_code || '').toUpperCase().trim();
-      const rowPrefix = rowIdUpper.includes('-') ? rowIdUpper.split('-')[0] : rowOrgCode;
+      const parts = rowIdUpper.split('-');
+      const rowPrefix = parts[0] || rowOrgCode;
 
+      const hasSyntheticRepeatedSuffix = parts.length > 2;
       const isNotLocallyPresent = !validIds.has(rowIdLower);
       const isUnmatchedPrefix = Boolean(rowPrefix && !validPrefixes.has(rowPrefix));
 
-      if (isNotLocallyPresent || isUnmatchedPrefix) {
-        const { error: delErr } = await supabase.from('members').delete().eq('id', row.id);
-        if (!delErr) {
-          deletedCount++;
-        }
+      if (hasSyntheticRepeatedSuffix || isNotLocallyPresent || isUnmatchedPrefix) {
+        idsToDelete.push(row.id);
+      }
+    }
+
+    let deletedCount = 0;
+    const batchSize = 100;
+    for (let i = 0; i < idsToDelete.length; i += batchSize) {
+      const chunk = idsToDelete.slice(i, i + batchSize);
+      const { error: delErr } = await supabase.from('members').delete().in('id', chunk);
+      if (!delErr) {
+        deletedCount += chunk.length;
       }
     }
 

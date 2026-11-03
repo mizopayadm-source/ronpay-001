@@ -4367,7 +4367,8 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
         memberUpdated = true;
         let suffix = '';
         if (currentId.includes('-')) {
-          suffix = currentId.split('-').slice(1).join('-');
+          const parts = currentId.split('-');
+          suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
         } else if (m.phoneLast4) {
           suffix = m.phoneLast4;
         } else {
@@ -4419,17 +4420,35 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // 1. Recover members from transactions if any are missing (NEVER resurrect deleted or purged members)
+  // 1. Recover members from transactions if any are missing and strictly deduplicate
   const memMap = new Map<string, any>();
+  const phoneDedupMap = new Map<string, string>();
   for (const m of (db.members || [])) {
-    if (m && m.id) memMap.set(String(m.id).toLowerCase(), m);
+    if (!m || !m.id) continue;
+    let rawId = String(m.id).trim();
+    if (rawId.split('-').length > 2) {
+      rawId = rawId.split('-').slice(0, 2).join('-');
+      m.id = rawId;
+    }
+    const k = rawId.toLowerCase();
+    const phone = (m.fullPhone || m.phone || '').replace(/\D/g, '').slice(-10);
+    const pKey = phone.length >= 8 ? `${m.campaignId || 'def'}_${phone}` : null;
+    if (memMap.has(k) || (pKey && phoneDedupMap.has(pKey))) {
+      changed = true;
+      continue;
+    }
+    if (pKey) phoneDedupMap.set(pKey, k);
+    memMap.set(k, m);
   }
 
   const deletedMemberSet = new Set((db.deletedMemberIds || []).map(id => String(id).toLowerCase().trim()));
 
   for (const t of (db.transactions || [])) {
     if (t && t.memberId && String(t.memberId).trim()) {
-      const mid = String(t.memberId).trim();
+      let mid = String(t.memberId).trim();
+      if (mid.split('-').length > 2) {
+        mid = mid.split('-').slice(0, 2).join('-');
+      }
       const k = mid.toLowerCase();
       // DO NOT resurrect deleted or purged members
       if (deletedMemberSet.has(k) || k === 'bmpshl-9000' || k === 'bmpshl-9001' || k === 'bmpshl-1253') {
@@ -4956,8 +4975,11 @@ app.get('/api/data/events', (req: Request, res: Response) => {
   });
 });
 
+let serverSupabaseBlockedUntil = 0;
+
 async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
   try {
+    if (Date.now() < serverSupabaseBlockedUntil) return false;
     const sbConfig = (db as any).supabaseConfig || {};
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
@@ -4970,7 +4992,13 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
       },
       signal: AbortSignal.timeout(10000)
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      if (res.status === 402 || res.status === 429) {
+        console.warn('[Server Supabase Circuit Breaker] Pausing REST sync due to quota/rate limit (status: ' + res.status + ')');
+        serverSupabaseBlockedUntil = Date.now() + 30 * 60 * 1000;
+      }
+      return false;
+    }
     const supaRows: any[] = await res.json();
     if (!Array.isArray(supaRows)) return false;
 
@@ -5184,7 +5212,7 @@ async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
   return false;
 }
 
-// Periodic background sync from Supabase cloud database (runs every 8 seconds)
+// Periodic background sync from Supabase cloud database (runs every 15 minutes to save egress quota)
 setInterval(async () => {
   try {
     const db = getDatabase();
@@ -5200,7 +5228,7 @@ setInterval(async () => {
   } catch (err) {
     // Silent
   }
-}, 8000);
+}, 15 * 60 * 1000);
 
 // GET /api/data/state - Fetch current central database state with role-based query isolation
 app.get('/api/data/state', async (req: Request, res: Response) => {

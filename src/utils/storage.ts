@@ -2588,7 +2588,7 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     section: 'Bial 3 (Venglai)',
     isFamilyHead: true,
     dependents: [],
-    createdAt: '2026-01-04.5T00:00:00.000Z'
+    createdAt: '2026-01-04T12:00:00.000Z'
   },
   {
     id: 'ZBKEBE-9912',
@@ -2663,6 +2663,58 @@ export const INITIAL_DEFAULT_MEMBERS: MemberRecord[] = [
     isFamilyHead: true,
     dependents: [],
     createdAt: '2026-01-10T00:00:00.000Z'
+  },
+  {
+    id: 'ZBKEBE-5566',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Rohluzuala (Backend Dev)',
+    orgCode: 'ZBKEBE',
+    phoneLast4: '5566',
+    fullPhone: '9862005566',
+    phone: '9862005566',
+    section: 'Bial 2 (Vengthlang)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'ZBKEBE-1122',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Zoramliana (Mobile QA)',
+    orgCode: 'ZBKEBE',
+    phoneLast4: '1122',
+    fullPhone: '9862001122',
+    phone: '9862001122',
+    section: 'Bial 3 (Venglai)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'ZBKEBE-8670',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Laltholeha Chhakchhuak',
+    orgCode: 'ZBKEBE',
+    phoneLast4: '8670',
+    fullPhone: '8974908670',
+    phone: '8974908670',
+    section: 'Bial 2 (Vengthlang)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'ZBKEBE-5634',
+    campaignId: 'cmp-kumtluang-1',
+    name: 'Vanlalpuia',
+    orgCode: 'ZBKEBE',
+    phoneLast4: '5634',
+    fullPhone: '',
+    phone: '',
+    section: 'Bial 1 (Vengchhak)',
+    isFamilyHead: true,
+    dependents: [],
+    createdAt: '2026-01-01T00:00:00.000Z'
   },
   {
     id: 'KTL-5510',
@@ -3271,20 +3323,63 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     });
 
-    // Ensure strict uniqueness of member IDs across all members to prevent duplicate key errors
+    // Ensure strict deduplication and normalization of member IDs across all members
+    // NEVER generate synthetic repeated suffixes like ${prefix}-${suffix}-${idx + 1}
     const uniqueMap = new Map<string, MemberRecord>();
-    const seenIds = new Set<string>();
-    for (let idx = 0; idx < allMembers.length; idx++) {
-      const m = allMembers[idx];
+    const seenPhonesByCampaign = new Map<string, string>(); // campaignKey -> canonicalId
+
+    for (const m of allMembers) {
       if (!m || !m.id) continue;
-      let cleanId = String(m.id).toLowerCase().trim();
-      if (seenIds.has(cleanId)) {
-        const prefix = (m.orgCode || 'MEM').toUpperCase();
-        const suffix = m.phoneLast4 || `${idx + 1}`.padStart(4, '0');
-        m.id = `${prefix}-${suffix}-${idx + 1}`;
-        cleanId = String(m.id).toLowerCase().trim();
+      let rawId = String(m.id).trim();
+
+      // Normalize any legacy multi-hyphen synthetic IDs (e.g. ZBKEBE-5544-1170 -> ZBKEBE-5544)
+      const parts = rawId.split('-');
+      if (parts.length > 2) {
+        rawId = `${parts[0]}-${parts[1]}`;
+        m.id = rawId;
       }
-      seenIds.add(cleanId);
+
+      const cleanId = rawId.toLowerCase().trim();
+      const cleanPhone = (m.fullPhone || m.phone || '').replace(/\D/g, '').slice(-10);
+      const campId = m.campaignId || 'default';
+      const phoneDedupKey = cleanPhone.length >= 8 ? `${campId}_${cleanPhone}` : null;
+
+      // Check if this member ID was already seen
+      if (uniqueMap.has(cleanId)) {
+        // Merge richer metadata into the existing canonical member, DO NOT create a new duplicate!
+        const existing = uniqueMap.get(cleanId)!;
+        uniqueMap.set(cleanId, {
+          ...existing,
+          fullPhone: existing.fullPhone || m.fullPhone || m.phone || '',
+          phone: existing.phone || m.phone || m.fullPhone || '',
+          phoneLast4: existing.phoneLast4 || m.phoneLast4 || existing.id.split('-')[1] || '',
+          section: (existing.section && existing.section !== 'General' && existing.section !== 'Section A') ? existing.section : (m.section || existing.section),
+          dependents: (existing.dependents && existing.dependents.length > 0) ? existing.dependents : (m.dependents || []),
+          fatherName: existing.fatherName || m.fatherName,
+          notes: existing.notes || m.notes,
+        });
+        continue;
+      }
+
+      // Check if phone was already seen in this campaign
+      if (phoneDedupKey && seenPhonesByCampaign.has(phoneDedupKey)) {
+        const canonicalExistingId = seenPhonesByCampaign.get(phoneDedupKey)!;
+        const existing = uniqueMap.get(canonicalExistingId);
+        if (existing) {
+          // Merge into existing record with the same phone in this campaign
+          uniqueMap.set(canonicalExistingId, {
+            ...existing,
+            dependents: (existing.dependents && existing.dependents.length > 0) ? existing.dependents : (m.dependents || []),
+            section: (existing.section && existing.section !== 'General' && existing.section !== 'Section A') ? existing.section : (m.section || existing.section),
+            notes: existing.notes || m.notes,
+          });
+          continue;
+        }
+      }
+
+      if (phoneDedupKey) {
+        seenPhonesByCampaign.set(phoneDedupKey, cleanId);
+      }
       uniqueMap.set(cleanId, m);
     }
     const uniqueMembers = Array.from(uniqueMap.values());
@@ -3419,6 +3514,11 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
     updatedAt: new Date().toISOString()
   };
 
+  if (stamped.id && stamped.id.split('-').length > 2) {
+    const parts = stamped.id.split('-');
+    stamped.id = `${parts[0]}-${parts[1]}`;
+  }
+
   // Clear tombstone deletions for both oldId and new id to prevent deletion resurrection filters
   if (oldId) clearDeletedMemberId(oldId);
   if (stamped.id) clearDeletedMemberId(stamped.id);
@@ -3426,14 +3526,17 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
   const allList = getMembers(); // Load all members across all Bawms
   const targetId = (oldId || stamped.id || '').trim().toLowerCase();
   const cleanNewId = (stamped.id || '').trim().toLowerCase();
+  const cleanPhone = (stamped.fullPhone || stamped.phone || '').replace(/\D/g, '').slice(-10);
 
   const idx = allList.findIndex(m => {
     const mClean = (m.id || '').trim().toLowerCase();
-    return mClean === targetId || mClean === cleanNewId;
+    const mPhone = (m.fullPhone || m.phone || '').replace(/\D/g, '').slice(-10);
+    const samePhone = cleanPhone.length >= 8 && mPhone === cleanPhone && (m.campaignId === stamped.campaignId || m.orgCode === stamped.orgCode);
+    return mClean === targetId || mClean === cleanNewId || samePhone;
   });
 
   if (idx >= 0) {
-    allList[idx] = stamped;
+    allList[idx] = { ...allList[idx], ...stamped };
   } else {
     allList.unshift(stamped);
   }

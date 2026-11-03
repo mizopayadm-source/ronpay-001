@@ -403,33 +403,49 @@ export default function App() {
 
     loadSupabaseData();
 
-    // Event-driven real-time updates (replaces 10s heavy full-table polling to stop egress spikes)
+    // Event-driven real-time updates with egress-safe debouncing
+    let txDebounceTimer: any = null;
+    let campDebounceTimer: any = null;
+    let memDebounceTimer: any = null;
+
     const unsubTx = subscribeToTable('transactions', () => {
-      fetchTableData('transactions', { forceAll: true }).then(txs => {
-        if (isMounted && Array.isArray(txs) && txs.length > 0) {
-          setTransactions(txs as Transaction[]);
-          saveStoredTransactions(txs as Transaction[], true);
-        }
-      }).catch(() => {});
+      if (txDebounceTimer) clearTimeout(txDebounceTimer);
+      txDebounceTimer = setTimeout(() => {
+        fetchTableData('transactions', { forceAll: true }).then(txs => {
+          if (isMounted && Array.isArray(txs) && txs.length > 0) {
+            setTransactions(txs as Transaction[]);
+            saveStoredTransactions(txs as Transaction[], true);
+          }
+        }).catch(() => {});
+      }, 1500);
     });
 
     const unsubCamp = subscribeToTable('campaigns', () => {
-      fetchTableData('campaigns').then(camps => {
-        if (isMounted && Array.isArray(camps) && camps.length > 0) setCampaigns(camps as Campaign[]);
-      }).catch(() => {});
+      if (campDebounceTimer) clearTimeout(campDebounceTimer);
+      campDebounceTimer = setTimeout(() => {
+        fetchTableData('campaigns').then(camps => {
+          if (isMounted && Array.isArray(camps) && camps.length > 0) setCampaigns(camps as Campaign[]);
+        }).catch(() => {});
+      }, 2000);
     });
 
     const unsubMem = subscribeToTable('members', () => {
-      fetchTableData<MemberRecord>('members').then(mems => {
-        if (isMounted && Array.isArray(mems) && mems.length > 0) {
-          setMembersState(mems);
-          saveMembers(mems, true);
-        }
-      }).catch(() => {});
+      if (memDebounceTimer) clearTimeout(memDebounceTimer);
+      memDebounceTimer = setTimeout(() => {
+        fetchTableData<MemberRecord>('members').then(mems => {
+          if (isMounted && Array.isArray(mems) && mems.length > 0) {
+            setMembersState(mems);
+            saveMembers(mems, true);
+          }
+        }).catch(() => {});
+      }, 2000);
     });
 
     return () => {
       isMounted = false;
+      if (txDebounceTimer) clearTimeout(txDebounceTimer);
+      if (campDebounceTimer) clearTimeout(campDebounceTimer);
+      if (memDebounceTimer) clearTimeout(memDebounceTimer);
       unsubTx.unsubscribe();
       unsubCamp.unsubscribe();
       unsubMem.unsubscribe();

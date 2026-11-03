@@ -403,6 +403,8 @@ export interface FetchDataFilterOptions {
   forceAll?: boolean;
 }
 
+const tableCacheMap = new Map<string, { data: any[]; timestamp: number }>();
+
 export const fetchTableData = async <T>(table: string, options?: FetchDataFilterOptions): Promise<T[]> => {
   // Circuit breaker: If Supabase quota was exceeded (402 Payment Required), serve local storage immediately
   if (isSupabaseQuotaBlocked()) {
@@ -422,6 +424,13 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
       const stored = getStoredExpenses();
       return (Array.isArray(stored) ? stored : []) as unknown as T[];
     }
+  }
+
+  // 10-second memory cache to deduplicate rapid component queries and realtime refetches
+  const cacheKey = `${table}_${options?.campaignId || 'all'}_${options?.forceAll ? 'force' : 'std'}`;
+  const cached = tableCacheMap.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < 10000) && !options?.forceAll) {
+    return cached.data as unknown as T[];
   }
 
   try {
@@ -872,6 +881,11 @@ export const runStartupCleanupSequence = async () => {
     // Run SSOT verification
     const verification = await verifySupabaseSingleSourceOfTruth();
     console.log('[SupabaseSync] Live Supabase SSOT Verification:', verification);
+
+    // Automatically purge any rogue/synthetic duplicates from Supabase
+    import('../services/supabaseService').then(({ purgeLegacySupabaseMembers }) => {
+      purgeLegacySupabaseMembers().catch(() => {});
+    }).catch(() => {});
   } catch (e) {
     console.warn('[SupabaseSync] Startup cleanup warning:', e);
   }

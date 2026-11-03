@@ -166,9 +166,9 @@ export const INITIAL_GROUP_MEMBERSHIPS: UserGroupMembership[] = [
     campaignId: 'cmp-kumtluang-1',
     campaignTitle: 'BCM Ebenezer Church',
     category: 'kumtluang',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     orgName: 'BCM Ebenezer',
-    memberId: 'EBE-5566',
+    memberId: 'ZBKEBE-5566',
     section: 'Bial 2 (Vengthlang)',
     role: 'Developer',
     status: 'active',
@@ -187,9 +187,9 @@ export const INITIAL_GROUP_MEMBERSHIPS: UserGroupMembership[] = [
     campaignId: 'cmp-kumtluang-1',
     campaignTitle: 'BCM Ebenezer Church',
     category: 'kumtluang',
-    orgCode: 'EBEZBK',
+    orgCode: 'ZBKEBE',
     orgName: 'BCM Ebenezer',
-    memberId: 'EBE-1122',
+    memberId: 'ZBKEBE-1122',
     section: 'Bial 3 (Venglai)',
     role: 'Tester',
     status: 'active',
@@ -536,7 +536,11 @@ export function assignUserToCampaigns(
       try {
         const existingMems = getMembers();
         const cleanId = generatedMemberId.toLowerCase().trim();
-        if (!existingMems.some(m => m.id.toLowerCase().trim() === cleanId)) {
+        const alreadyExists = existingMems.some(m => 
+          m.id.toLowerCase().trim() === cleanId || 
+          (cleanPhone && (m.phone === cleanPhone || m.fullPhone === cleanPhone) && (m.campaignId === cid || m.orgCode === orgCode))
+        );
+        if (!alreadyExists) {
           const newMemberRecord: MemberRecord = {
             id: generatedMemberId,
             campaignId: cid,
