@@ -204,7 +204,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return true;
     }).map(c => {
       if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
-        return { ...c, orgCode: 'EBEZBK' };
+        return { ...c, orgCode: 'ZBKEBE' };
       }
       return c;
     });
@@ -238,6 +238,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
     if (allowedCampaigns.some(c => c.id === 'cmp-kumtluang-1' || String(c.title).toLowerCase().includes('ebenezer'))) {
       codes.add('EBE');
       codes.add('BCM');
+      codes.add('ZBKEBE');
     }
     return codes;
   }, [allowedCampaigns]);
@@ -253,7 +254,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         const prefix = m.id.split('-')[0].toUpperCase();
         if (allowedOrgCodes.has(prefix)) return true;
       }
-      if ((m.orgCode === 'EBE' || m.orgCode === 'BCM' || m.id?.startsWith('EBEZBK-') || m.id?.startsWith('BCM-')) && allowedCampaignIds.has('cmp-kumtluang-1')) {
+      if ((m.orgCode === 'EBE' || m.orgCode === 'BCM' || m.orgCode === 'ZBKEBE' || m.id?.startsWith('ZBKEBE-') || m.id?.startsWith('EBEZBK-') || m.id?.startsWith('BCM-')) && allowedCampaignIds.has('cmp-kumtluang-1')) {
         return true;
       }
       return false;
@@ -1008,6 +1009,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       const isEbe = editingMember.campaignId === 'cmp-kumtluang-1' || 
                     editingMember.orgCode === 'EBE' || 
                     editingMember.orgCode === 'BCM' || 
+                    editingMember.orgCode === 'ZBKEBE' ||
+                    editingMember.id?.startsWith('ZBKEBE-') || 
                     editingMember.id?.startsWith('EBEZBK-') || 
                     editingMember.id?.startsWith('BCM-');
 
