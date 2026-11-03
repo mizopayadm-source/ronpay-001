@@ -50,6 +50,7 @@ interface GA4DataPayload {
   status: 'live' | 'demo_mode' | 'error';
   isConfigured: boolean;
   propertyId?: string;
+  clientEmail?: string;
   errorMessage?: string;
   dateRange: string;
   lastUpdated: string;
@@ -214,11 +215,12 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
 
   const summary = report?.data?.summary;
   const realtime = report?.data?.realtimeActiveUsers ?? 0;
-  const isDemo = report?.status === 'demo_mode' || !report?.isConfigured;
+  const isDemo = report?.status === 'demo_mode' || report?.status === 'error' || !report?.isConfigured;
+  const isPermissionPending = Boolean(report?.errorMessage && (report.errorMessage.includes('Property Access Management') || report.errorMessage.includes('Viewer')));
 
   return (
     <div className="space-y-5 animate-fadeIn">
-      {/* Demo Standby Warning Banner */}
+      {/* Permission Pending / Demo Standby Warning Banner */}
       {isDemo && (
         <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-2 border-amber-500/70 text-amber-100 p-4 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg animate-fadeIn">
           <div className="flex items-start gap-3">
@@ -227,11 +229,36 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center gap-2">
-                <span>Google Analytics 4 Credentials In-Thlun A La Ni Lo (Demo Mode)</span>
+                <span>{isPermissionPending ? 'Google Analytics Property Access Required (Demo Mode)' : 'Google Analytics 4 Credentials In-Thlun A La Ni Lo (Demo Mode)'}</span>
               </h4>
-              <p className="text-xs text-amber-100/90 mt-1 leading-relaxed">
-                Tuna graphics leh numbers lang mek te hi <b>Sample Preview Data</b> (demo UI en chhinna) a ni e. Minutes 20 chhung leka tlawhtu dik tak endik tur chuan <b>Google Analytics 4 Property ID</b> leh <b>Service Account JSON Key</b> hi app environment variables (<code>.env</code>) ah thun tur a ni.
-              </p>
+              {isPermissionPending ? (
+                <div className="text-xs text-amber-100/90 mt-1 leading-relaxed space-y-1">
+                  <p>
+                    Google Analytics Property ID ({report?.propertyId || 'GA4'}) ah Service Account hi <b>Viewer</b>-a add a la ngai e:
+                  </p>
+                  {report?.clientEmail && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[11px] font-mono bg-black/40 px-2 py-1 rounded border border-amber-500/40 text-amber-200">
+                        {report.clientEmail}
+                      </span>
+                      <button
+                        onClick={() => handleCopy(report.clientEmail!, 'sa-email')}
+                        className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer transition border border-amber-400/30"
+                      >
+                        {copiedKey === 'sa-email' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedKey === 'sa-email' ? 'Copied!' : 'Copy Email'}</span>
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-amber-200/80">
+                    Step: <b>analytics.google.com</b> &gt; <b>Admin</b> &gt; <b>Property Access Management</b> ah (+) Add user tiin he email hi Viewer-ah thun rawh.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-100/90 mt-1 leading-relaxed">
+                  Tuna graphics leh numbers lang mek te hi <b>Sample Preview Data</b> (demo UI en chhinna) a ni e. Minutes 20 chhung leka tlawhtu dik tak endik tur chuan <b>Google Analytics 4 Property ID</b> leh <b>Service Account JSON Key</b> hi app environment variables (<code>.env</code>) ah thun tur a ni.
+                </p>
+              )}
             </div>
           </div>
           <button

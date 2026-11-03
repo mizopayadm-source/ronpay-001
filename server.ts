@@ -4976,10 +4976,17 @@ app.get('/api/data/events', (req: Request, res: Response) => {
 });
 
 let serverSupabaseBlockedUntil = 0;
+let lastServerSupabaseSync = 0;
 
-async function syncFromSupabase(db: DatabaseSchema): Promise<boolean> {
+async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Promise<boolean> {
   try {
-    if (Date.now() < serverSupabaseBlockedUntil) return false;
+    const now = Date.now();
+    if (now < serverSupabaseBlockedUntil) return false;
+    // Egress Protection: Do not query Supabase if already synced within last 10 minutes, unless explicitly forced or empty
+    const hasTransactions = Array.isArray(db.transactions) && db.transactions.length > 0;
+    if (!force && hasTransactions && (now - lastServerSupabaseSync < 10 * 60 * 1000)) {
+      return false;
+    }
     const sbConfig = (db as any).supabaseConfig || {};
     const sbUrl = sbConfig.url || process.env.VITE_SUPABASE_URL || 'https://aqrplcmpealgruduwnhw.supabase.co';
     const sbKey = sbConfig.anonKey || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable__zS5fiKvBI5u6HYgour64g_g_tJj5WL';
