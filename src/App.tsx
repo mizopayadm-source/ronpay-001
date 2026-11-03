@@ -13,6 +13,7 @@ import {
   PublicPoolStats,
 } from './types';
 import { Language, getCampaignCauseTitle } from './utils/translations';
+import { trackGA4PageView } from './utils/ga4Tracking';
 import { canHardDeleteCampaign } from './utils/campaignSafety';
 import {
   getStoredCampaigns,
@@ -231,6 +232,11 @@ export default function App() {
     // Start automated midnight and weekly backup scheduler engine
     initBackupScheduler();
   }, []);
+
+  // GA4 Route & Pageview tracking for Single Page Navigation
+  useEffect(() => {
+    trackGA4PageView(`/${currentScreen}`, `RonPay - ${currentScreen}`);
+  }, [currentScreen]);
 
   // Modals Visibility
   const [isBackupSyncOpen, setIsBackupSyncOpen] = useState<boolean>(false);
