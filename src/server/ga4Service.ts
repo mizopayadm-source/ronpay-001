@@ -243,11 +243,12 @@ export function generateDemoAnalyticsData(dateRange: string): GA4ReportResponse 
     const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
     const dayOfWeek = d.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const baseVisitors = isWeekend ? 190 : 340;
-    const jitter = Math.floor(Math.sin(i * 1.5) * 50 + (i % 5) * 15);
-    const visitors = Math.max(90, baseVisitors + jitter);
-    const pageviews = Math.floor(visitors * 3.4 + Math.random() * 80);
-    const sessions = Math.floor(visitors * 1.35);
+    // If checking 'today' in demo mode, do not show fake 340 visitors
+    const baseVisitors = dateRange === 'today' ? 0 : (isWeekend ? 45 : 80);
+    const jitter = dateRange === 'today' ? 0 : Math.floor(Math.sin(i * 1.5) * 10);
+    const visitors = Math.max(0, baseVisitors + jitter);
+    const pageviews = Math.floor(visitors * 2.5);
+    const sessions = visitors;
 
     trend.push({
       date: d.toISOString().slice(0, 10).replace(/-/g, ''),
@@ -265,20 +266,20 @@ export function generateDemoAnalyticsData(dateRange: string): GA4ReportResponse 
   return {
     status: 'demo_mode',
     isConfigured: false,
-    errorMessage: 'GA4 Service Account or Property ID is not yet configured in environment variables. Showing simulated analytics preview.',
+    errorMessage: 'GA4 Data API is in Standby. Google Tag (G-XXXXXXXX) leh Service Account credentials in-thlun a nih hunah live data a lang ang.',
     dateRange,
     lastUpdated: new Date().toISOString(),
     data: {
-      realtimeActiveUsers: Math.floor(Math.random() * 8) + 7, // 7-14 active users
+      realtimeActiveUsers: 0,
       summary: {
         totalVisitors,
-        activeUsers: Math.round(totalVisitors * 0.88),
+        activeUsers: totalVisitors,
         pageViews: totalPageviews,
         sessions: totalSessions,
-        newUsers: Math.round(totalVisitors * 0.62),
-        avgSessionDuration: '2m 48s',
-        bounceRate: '28.4%',
-        engagementRate: '71.6%',
+        newUsers: Math.round(totalVisitors * 0.7),
+        avgSessionDuration: totalVisitors > 0 ? '1m 45s' : '0m 00s',
+        bounceRate: totalVisitors > 0 ? '25.0%' : '0.0%',
+        engagementRate: totalVisitors > 0 ? '75.0%' : '0.0%',
       },
       trend,
       deviceBreakdown: [

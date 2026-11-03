@@ -109,6 +109,35 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [showSetupModal, setShowSetupModal] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [measurementIdInput, setMeasurementIdInput] = useState<string>(() => {
+    try {
+      return localStorage.getItem('ronpay_ga_measurement_id') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [isSavedMeasurementId, setIsSavedMeasurementId] = useState<boolean>(false);
+
+  const handleSaveMeasurementId = () => {
+    const clean = measurementIdInput.trim().toUpperCase();
+    if (clean) {
+      localStorage.setItem('ronpay_ga_measurement_id', clean);
+      setIsSavedMeasurementId(true);
+      setTimeout(() => setIsSavedMeasurementId(false), 3000);
+      // Dynamically load Google Tag if not yet present
+      if (typeof window !== 'undefined' && !document.querySelector(`script[src*="${clean}"]`)) {
+        const s = document.createElement('script');
+        s.async = true;
+        s.src = `https://www.googletagmanager.com/gtag/js?id=${clean}`;
+        document.head.appendChild(s);
+        (window as any).dataLayer = (window as any).dataLayer || [];
+        const gtag = (...args: any[]) => { (window as any).dataLayer.push(args); };
+        (window as any).gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', clean, { send_page_view: true });
+      }
+    }
+  };
 
   // Security Check: strictly Admin or Super Admin only
   const isAuthorized = currentRole === 'ADMIN' || currentRole === 'SUPER_ADMIN';
@@ -693,6 +722,37 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
             </div>
 
             <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
+              {/* Step 0 - Measurement ID Web Tracker */}
+              <div className="p-3.5 bg-indigo-50/80 rounded-2xl border border-indigo-200 space-y-2">
+                <div className="font-black text-indigo-950 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] flex items-center justify-center">0</span>
+                    <span>Website Tracking Tag (Measurement ID - Pawimawh Ber):</span>
+                  </div>
+                  <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold">Client Tracker</span>
+                </div>
+                <p className="pl-7 text-indigo-900 leading-relaxed">
+                  Google Analytics-in <b>Web-a rawn luttute a chhinchhiah (track) theih nan</b> GA4 Measurement ID (<code>G-XXXXXXXXXX</code>) hi website-ah a in-thlun a ngai a ni. (analytics.google.com &gt; <b>Admin &gt; Data Streams &gt; Web</b> ah a awm).
+                </p>
+                <div className="pl-7 flex flex-col sm:flex-row items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={measurementIdInput}
+                    onChange={(e) => setMeasurementIdInput(e.target.value)}
+                    placeholder="Entirnan: G-XXXXXXXXXX"
+                    className="w-full sm:w-64 px-3 py-1.5 rounded-xl border border-indigo-300 bg-white text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveMeasurementId}
+                    className="w-full sm:w-auto px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                  >
+                    {isSavedMeasurementId ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>{isSavedMeasurementId ? 'Tracking Tag Saved!' : 'Save & Activate Tracking'}</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Step 1 */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1.5">
                 <div className="font-black text-slate-900 flex items-center gap-2">
