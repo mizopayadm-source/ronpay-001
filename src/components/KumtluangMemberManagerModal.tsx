@@ -44,7 +44,7 @@ import {
 import { KumtluangExpenseManager } from './KumtluangExpenseManager';
 import { AuthorizedPersonsModal } from './AuthorizedPersonsModal';
 import { MemberRecord, MemberDependent, Campaign, Transaction, CreatorProfile } from '../types';
-import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads } from '../utils/storage';
+import { getMembers, saveMembers, addOrUpdateMember, deleteMember, getDeletedMemberIds, saveTransaction, recordUserPaidTxId, isCampaignCreator, isTransactionForCampaign, saveCampaign, getStoredExpenses, getCampaignExpenseHeads, getStoredCampaigns } from '../utils/storage';
 import {
   getStoredGroupMemberships,
   approveMembershipRequest,
@@ -204,7 +204,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return true;
     }).map(c => {
       if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
-        return { ...c, orgCode: 'ZBKEBE' };
+        return { ...c, orgCode: c.orgCode || 'EBEZBK' };
       }
       return c;
     });
@@ -239,6 +239,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       codes.add('EBE');
       codes.add('BCM');
       codes.add('ZBKEBE');
+      codes.add('EBEZBK');
     }
     return codes;
   }, [allowedCampaigns]);
@@ -254,7 +255,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         const prefix = m.id.split('-')[0].toUpperCase();
         if (allowedOrgCodes.has(prefix)) return true;
       }
-      if ((m.orgCode === 'EBE' || m.orgCode === 'BCM' || m.orgCode === 'ZBKEBE' || m.id?.startsWith('ZBKEBE-') || m.id?.startsWith('EBEZBK-') || m.id?.startsWith('BCM-')) && allowedCampaignIds.has('cmp-kumtluang-1')) {
+      if ((m.orgCode === 'EBE' || m.orgCode === 'BCM' || m.orgCode === 'ZBKEBE' || m.orgCode === 'EBEZBK' || m.id?.startsWith('ZBKEBE-') || m.id?.startsWith('EBEZBK-') || m.id?.startsWith('BCM-')) && allowedCampaignIds.has('cmp-kumtluang-1')) {
         return true;
       }
       return false;
@@ -514,20 +515,48 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
   // Fetch fresh members on demand from Supabase & Server when Kumtluang modal opens
   useEffect(() => {
     if (isOpen) {
-      import('../services/supabaseService').then(({ fetchSupabaseMembers, updateSupabaseMember }) => {
+      import('../services/supabaseService').then(({ fetchSupabaseMembers, updateSupabaseMember, deleteSupabaseMember }) => {
         fetchSupabaseMembers('all').then(remoteMembers => {
           if (Array.isArray(remoteMembers) && remoteMembers.length > 0) {
             const currentLocal = getMembers('all');
             const deletedMemIds = getDeletedMemberIds();
             const merged = [...currentLocal];
+            const storedCamps = getStoredCampaigns();
+            const campCodeMap = new Map<string, string>();
+            storedCamps.forEach(c => {
+              if (c.id && c.orgCode) campCodeMap.set(c.id, c.orgCode.toUpperCase());
+            });
+
             remoteMembers.forEach(rm => {
               if (rm && rm.id) {
+                const origRemoteId = rm.id;
+                // Align remote member prefix with canonical campaign orgCode
+                const campOrg = (rm.campaignId && campCodeMap.get(rm.campaignId)) || (rm.campaignId === 'cmp-kumtluang-1' ? 'EBEZBK' : null);
+                if (campOrg && rm.id.includes('-')) {
+                  const parts = rm.id.split('-');
+                  if (parts[0].toUpperCase() !== campOrg) {
+                    rm.id = `${campOrg}-${parts.slice(1).join('-')}`;
+                    rm.orgCode = campOrg;
+                  }
+                }
+
                 const rmClean = rm.id.toLowerCase().trim();
-                const rmBcmClean = rmClean.startsWith('ebe-') ? 'bcm-' + rmClean.substring(4) : (rmClean.startsWith('bcm-') ? 'ebe-' + rmClean.substring(4) : rmClean);
-                if (deletedMemIds.has(rmClean) || deletedMemIds.has(rmBcmClean)) {
+                const origClean = origRemoteId.toLowerCase().trim();
+                if (deletedMemIds.has(rmClean) || deletedMemIds.has(origClean)) {
                   return; // Exclude deleted members from resurrection
                 }
-                const idx = merged.findIndex(m => m.id.toLowerCase() === rm.id.toLowerCase());
+
+                // Match by exact ID or phone suffix within the same campaign
+                const idx = merged.findIndex(m => {
+                  if (m.id.toLowerCase() === rm.id.toLowerCase()) return true;
+                  if (m.campaignId && rm.campaignId && m.campaignId === rm.campaignId) {
+                    const mSuffix = m.phoneLast4 || (m.id.includes('-') ? m.id.split('-').slice(1).join('-') : '');
+                    const rmSuffix = rm.phoneLast4 || (rm.id.includes('-') ? rm.id.split('-').slice(1).join('-') : '');
+                    if (mSuffix && rmSuffix && mSuffix === rmSuffix) return true;
+                  }
+                  return false;
+                });
+
                 if (idx >= 0) {
                   const localItem = merged[idx];
                   const remoteTime = rm.updatedAt ? new Date(rm.updatedAt).getTime() : 0;
@@ -537,6 +566,10 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                   } else {
                     // Local is newer, push to Supabase
                     updateSupabaseMember(localItem).catch(() => {});
+                  }
+                  // Clean up legacy cloud record if ID was updated
+                  if (origRemoteId !== rm.id) {
+                    deleteSupabaseMember(origRemoteId).catch(() => {});
                   }
                 } else {
                   merged.unshift(rm);
@@ -1010,6 +1043,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
                     editingMember.orgCode === 'EBE' || 
                     editingMember.orgCode === 'BCM' || 
                     editingMember.orgCode === 'ZBKEBE' ||
+                    editingMember.orgCode === 'EBEZBK' ||
                     editingMember.id?.startsWith('ZBKEBE-') || 
                     editingMember.id?.startsWith('EBEZBK-') || 
                     editingMember.id?.startsWith('BCM-');
@@ -1018,7 +1052,8 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         ? 'cmp-kumtluang-1' 
         : (editCampaignId || editingMember.campaignId || activeScopedCampaign?.id || selectedCampaignId || 'cmp-kumtluang-1');
 
-      const org = isEbe ? 'EBE' : (editOrgCode.trim().toUpperCase() || editingMember.orgCode || 'EBE');
+      const targetCamp = allowedCampaigns.find(c => c.id === targetCampaignId) || activeScopedCampaign;
+      const org = (targetCamp?.orgCode || (isEbe ? 'EBEZBK' : (editOrgCode.trim().toUpperCase() || editingMember.orgCode || 'MEM'))).toUpperCase();
       const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
       const newId = `${org}-${p4}`;
       const oldId = editingMember.id;

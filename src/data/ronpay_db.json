@@ -1,6 +1,30 @@
 {
   "campaigns": [
     {
+      "id": "ext-1793691818858",
+      "title": "baapshaiphar syiem",
+      "category": "khawlsak",
+      "targetUpiId": "ronpay@upi",
+      "upiId": "ronpay@upi",
+      "status": "active",
+      "createdBy": "system",
+      "openingBalance": 7827,
+      "location": null,
+      "description": null,
+      "isApproved": true,
+      "allowPublicGroupDeposits": true,
+      "createdAt": "2026-11-03T07:44:21.124+00:00",
+      "updatedAt": "2026-11-03T07:44:22.263901+00:00",
+      "subCategories": [],
+      "definedSections": [],
+      "sectionLabel": "Bial / Section",
+      "groupPresets": [],
+      "generalPresets": [],
+      "orgCode": "",
+      "isHidden": false,
+      "metadata": {}
+    },
+    {
       "id": "cmp-1792691263771",
       "title": "Siamhranga Ralna",
       "category": "ralna",
@@ -475,6 +499,48 @@
       }
     },
     {
+      "id": "cmp-custom",
+      "title": "RonPay Community Bawm",
+      "category": "khawlsak",
+      "orgName": "RonPay Community",
+      "targetUpiId": "ronpay.adm@okaxis",
+      "upiId": "ronpay.adm@okaxis",
+      "status": "active",
+      "createdBy": "system",
+      "openingBalance": 0,
+      "location": "Aizawl, Mizoram",
+      "description": null,
+      "isApproved": true,
+      "allowPublicGroupDeposits": true,
+      "createdAt": "2026-08-20T00:00:00+00:00",
+      "updatedAt": "2026-10-22T14:12:26.35+00:00",
+      "subCategories": [],
+      "definedSections": [],
+      "sectionLabel": "Bial / Section",
+      "groupPresets": [],
+      "generalPresets": [],
+      "orgCode": "RON",
+      "validityDate": "2026-11-21T14:12:26.365Z",
+      "expiry_date": "2026-11-21T14:12:26.365Z",
+      "valid_until": "2026-11-21T14:12:26.365Z",
+      "isHidden": false,
+      "metadata": {
+        "orgCode": "RON",
+        "hiddenAt": null,
+        "hiddenBy": null,
+        "isHidden": false,
+        "hideReason": null,
+        "expiry_date": "2026-11-21T14:12:26.365Z",
+        "valid_until": "2026-11-21T14:12:26.365Z",
+        "groupPresets": [],
+        "sectionLabel": "Bial / Section",
+        "validityDate": "2026-11-21T14:12:26.365Z",
+        "subCategories": [],
+        "generalPresets": [],
+        "definedSections": []
+      }
+    },
+    {
       "id": "cmp-1788262396368",
       "title": "Pocket Money",
       "category": "khawlsak",
@@ -512,48 +578,6 @@
         "groupPresets": [],
         "sectionLabel": "Bial / Section",
         "validityDate": "2026-10-23T14:11",
-        "subCategories": [],
-        "generalPresets": [],
-        "definedSections": []
-      }
-    },
-    {
-      "id": "cmp-custom",
-      "title": "RonPay Community Bawm",
-      "category": "khawlsak",
-      "orgName": "RonPay Community",
-      "targetUpiId": "ronpay.adm@okaxis",
-      "upiId": "ronpay.adm@okaxis",
-      "status": "active",
-      "createdBy": "system",
-      "openingBalance": 0,
-      "location": "Aizawl, Mizoram",
-      "description": null,
-      "isApproved": true,
-      "allowPublicGroupDeposits": true,
-      "createdAt": "2026-08-20T00:00:00+00:00",
-      "updatedAt": "2026-10-22T14:12:26.35+00:00",
-      "subCategories": [],
-      "definedSections": [],
-      "sectionLabel": "Bial / Section",
-      "groupPresets": [],
-      "generalPresets": [],
-      "orgCode": "RON",
-      "validityDate": "2026-11-21T14:12:26.365Z",
-      "expiry_date": "2026-11-21T14:12:26.365Z",
-      "valid_until": "2026-11-21T14:12:26.365Z",
-      "isHidden": false,
-      "metadata": {
-        "orgCode": "RON",
-        "hiddenAt": null,
-        "hiddenBy": null,
-        "isHidden": false,
-        "hideReason": null,
-        "expiry_date": "2026-11-21T14:12:26.365Z",
-        "valid_until": "2026-11-21T14:12:26.365Z",
-        "groupPresets": [],
-        "sectionLabel": "Bial / Section",
-        "validityDate": "2026-11-21T14:12:26.365Z",
         "subCategories": [],
         "generalPresets": [],
         "definedSections": []
@@ -921,100 +945,6 @@
       }
     },
     {
-      "id": "cmp-1787771373697",
-      "title": "PCI Sikulpuikawn, Aizawl",
-      "category": "kumtluang",
-      "orgName": "PCI Sikulpuikawn Kohhran",
-      "targetUpiId": "pcisikulpuikawn@sbi",
-      "upiId": "pcisikulpuikawn@sbi",
-      "status": "expired",
-      "createdBy": "9862000001",
-      "openingBalance": 0,
-      "location": "Sikulpuikawn, Aizawl",
-      "description": null,
-      "imageUrl": "https://images.unsplash.com/photo-1543807535-eceef0bc6599?auto=format&fit=crop&w=500&q=80",
-      "isApproved": true,
-      "allowPublicGroupDeposits": true,
-      "createdAt": "2026-07-31T18:30:00+00:00",
-      "updatedAt": "2026-11-01T17:19:30.065+00:00",
-      "subCategories": [
-        "Pathian Ram",
-        "Mission",
-        "Building Fund"
-      ],
-      "definedSections": [
-        "Bial 1 (Vengchhak)",
-        "Bial 2 (Vengthlang)",
-        "Bial 3 (Venglai)",
-        "Bial 4 (Field Veng)",
-        "General / Khawchhung"
-      ],
-      "sectionLabel": "Bial / Section",
-      "groupPresets": [
-        "Group A",
-        "Group B",
-        "Group C",
-        "Group D"
-      ],
-      "generalPresets": [
-        "Pathianni Chawhma Thawhlawm",
-        "Pathianni Chawhnu Thawhlawm",
-        "Pathianni Zan Thawhlawm",
-        "Nilai Zan Thawhlawm",
-        "Buhfaiṭham Thawhlawm",
-        "Inrinni Zan Thawhlawm",
-        "Bial Inkhawmpui Thawhlawm"
-      ],
-      "orgCode": "PCISPK",
-      "validityDate": "2026-11-01T23:59",
-      "expiry_date": "2026-11-01T23:59",
-      "valid_until": "2026-11-01T23:59",
-      "gpsCoords": "23.7271, 92.7176",
-      "kumtluangFeeBearer": "org_paid",
-      "isHidden": false,
-      "metadata": {
-        "orgCode": "PCISPK",
-        "hiddenAt": null,
-        "hiddenBy": null,
-        "isHidden": false,
-        "gpsCoords": "23.7271, 92.7176",
-        "hideReason": null,
-        "groupPresets": [
-          "Group A",
-          "Group B",
-          "Group C",
-          "Group D"
-        ],
-        "sectionLabel": "Bial / Section",
-        "validityDate": "2026-11-01T23:59",
-        "subCategories": [
-          "Pathian Ram",
-          "Mission",
-          "Building Fund"
-        ],
-        "generalPresets": [
-          "Pathianni Chawhma Thawhlawm",
-          "Pathianni Chawhnu Thawhlawm",
-          "Pathianni Zan Thawhlawm",
-          "Nilai Zan Thawhlawm",
-          "Buhfaiṭham Thawhlawm",
-          "Inrinni Zan Thawhlawm",
-          "Bial Inkhawmpui Thawhlawm"
-        ],
-        "allow_online_pg": true,
-        "definedSections": [
-          "Bial 1 (Vengchhak)",
-          "Bial 2 (Vengthlang)",
-          "Bial 3 (Venglai)",
-          "Bial 4 (Field Veng)",
-          "General / Khawchhung"
-        ],
-        "urgencyDeadline": "2026-11-08T23:59",
-        "allow_cash_payment": true,
-        "kumtluangFeeBearer": "org_paid"
-      }
-    },
-    {
       "id": "cmp-1787829303143",
       "title": "YMA Vengthar Br, Zobawk, Lunglei",
       "category": "kumtluang",
@@ -1111,6 +1041,102 @@
             "canRecordExpenses": false
           }
         ],
+        "kumtluangFeeBearer": "org_paid"
+      }
+    },
+    {
+      "id": "cmp-1787771373697",
+      "title": "PCI Sikulpuikawn, Aizawl",
+      "category": "kumtluang",
+      "orgName": "PCI Sikulpuikawn Kohhran",
+      "targetUpiId": "pcisikulpuikawn@sbi",
+      "upiId": "pcisikulpuikawn@sbi",
+      "status": "expired",
+      "createdBy": "9862000001",
+      "openingBalance": 0,
+      "location": "Sikulpuikawn, Aizawl",
+      "description": null,
+      "imageUrl": "https://images.unsplash.com/photo-1543807535-eceef0bc6599?auto=format&fit=crop&w=500&q=80",
+      "isApproved": true,
+      "allowPublicGroupDeposits": true,
+      "createdAt": "2026-07-31T18:30:00+00:00",
+      "updatedAt": "2026-11-01T17:19:30.065+00:00",
+      "subCategories": [
+        "Pathian Ram",
+        "Mission",
+        "Building Fund"
+      ],
+      "definedSections": [
+        "Bial 1 (Vengchhak)",
+        "Bial 2 (Vengthlang)",
+        "Bial 3 (Venglai)",
+        "Bial 4 (Field Veng)",
+        "General / Khawchhung"
+      ],
+      "sectionLabel": "Bial / Section",
+      "groupPresets": [
+        "Group A",
+        "Group B",
+        "Group C",
+        "Group D"
+      ],
+      "generalPresets": [
+        "Pathianni Chawhma Thawhlawm",
+        "Pathianni Chawhnu Thawhlawm",
+        "Pathianni Zan Thawhlawm",
+        "Nilai Zan Thawhlawm",
+        "Buhfaiṭham Thawhlawm",
+        "Inrinni Zan Thawhlawm",
+        "Bial Inkhawmpui Thawhlawm"
+      ],
+      "orgCode": "PCISPK",
+      "validityDate": "2026-11-01T23:59",
+      "expiry_date": "2026-11-01T23:59",
+      "valid_until": "2026-11-01T23:59",
+      "gpsCoords": "23.7271, 92.7176",
+      "kumtluangFeeBearer": "org_paid",
+      "isHidden": false,
+      "metadata": {
+        "orgCode": "PCISPK",
+        "hiddenAt": null,
+        "hiddenBy": null,
+        "isHidden": false,
+        "gpsCoords": "23.7271, 92.7176",
+        "hideReason": null,
+        "expiry_date": "2026-11-01T23:59",
+        "valid_until": "2026-11-01T23:59",
+        "groupPresets": [
+          "Group A",
+          "Group B",
+          "Group C",
+          "Group D"
+        ],
+        "sectionLabel": "Bial / Section",
+        "validityDate": "2026-11-01T23:59",
+        "subCategories": [
+          "Pathian Ram",
+          "Mission",
+          "Building Fund"
+        ],
+        "generalPresets": [
+          "Pathianni Chawhma Thawhlawm",
+          "Pathianni Chawhnu Thawhlawm",
+          "Pathianni Zan Thawhlawm",
+          "Nilai Zan Thawhlawm",
+          "Buhfaiṭham Thawhlawm",
+          "Inrinni Zan Thawhlawm",
+          "Bial Inkhawmpui Thawhlawm"
+        ],
+        "allow_online_pg": true,
+        "definedSections": [
+          "Bial 1 (Vengchhak)",
+          "Bial 2 (Vengthlang)",
+          "Bial 3 (Venglai)",
+          "Bial 4 (Field Veng)",
+          "General / Khawchhung"
+        ],
+        "urgencyDeadline": "2026-11-08T23:59",
+        "allow_cash_payment": true,
         "kumtluangFeeBearer": "org_paid"
       }
     },
@@ -1218,7 +1244,7 @@
       "targetUpiId": "bcm.ebenezer.zobawk@sbi",
       "upiId": "bcm.ebenezer.zobawk@sbi",
       "status": "active",
-      "createdBy": "1234567896",
+      "createdBy": "9862300000",
       "openingBalance": 58500,
       "location": "Zobawk, Lunglei, Mizoram",
       "description": null,
@@ -1226,7 +1252,7 @@
       "isApproved": true,
       "allowPublicGroupDeposits": false,
       "createdAt": "2025-12-31T18:30:00+00:00",
-      "updatedAt": "2026-11-01T17:28:09.31+00:00",
+      "updatedAt": "2026-11-01T18:05:45.264+00:00",
       "subCategories": [
         "Pathian Ram"
       ],
@@ -1250,7 +1276,7 @@
         "Inrinni Zan Thawhlawm",
         "Bial Inkhawmpui Thawhlawm"
       ],
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "validityDate": "2027-10-24T23:59",
       "expiry_date": "2027-10-24T23:59",
       "valid_until": "2027-10-24T23:59",
@@ -1258,7 +1284,7 @@
       "kumtluangFeeBearer": "user_paid",
       "isHidden": false,
       "metadata": {
-        "orgCode": "EBEBCM",
+        "orgCode": "ZBKEBE",
         "hiddenAt": null,
         "hiddenBy": null,
         "isHidden": false,
@@ -1321,8 +1347,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-1718",
@@ -1339,8 +1367,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-1739",
@@ -1357,27 +1387,29 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
-      "section": "Bial 2 (Vengthlang)",
-      "id": "EBEBCM-8622",
+      "section": "Section A",
+      "id": "ZBKEBE-8622",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalduhawma Fanai",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9862358622",
-      "fullPhone": "9862358622",
+      "fullPhone": "",
       "phoneLast4": "8622",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.933754+00:00",
-      "updatedAt": "2026-11-01T17:28:56.972+00:00",
+      "createdAt": "2026-07-12T00:00:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.009Z",
       "metadata": {
-        "section": "Bial 2 (Vengthlang)"
+        "section": "Section A"
       }
     },
     {
@@ -1395,8 +1427,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-27T16:30:50.328+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Khuangchera"
+      }
     },
     {
       "id": "KTLPCI-5510",
@@ -1413,7 +1447,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-27T14:16:29.936+00:00",
-      "updatedAt": "2026-11-01T17:28:56.973+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Bial I (Khatla South)"
       }
@@ -1433,8 +1467,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-27T12:15:33.202+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
+      "metadata": {
+        "section": "Vanapa"
+      }
     },
     {
       "id": "BMPSHL-3902",
@@ -1451,8 +1487,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-02-22T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "PCISPK-4444",
@@ -1467,7 +1505,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-26T19:15:27.048+00:00",
-      "updatedAt": "2026-11-01T17:28:56.973+00:00",
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
       "metadata": {
         "section": "Bial 1 (Vengchhak)"
       }
@@ -1487,7 +1525,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-16T11:40:00+00:00",
-      "updatedAt": "2026-11-01T17:28:56.973+00:00",
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
       "metadata": {
         "section": "Bial II (Khatla North)"
       }
@@ -1505,8 +1543,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:42.731+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-1111",
@@ -1523,8 +1563,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "YMAVT-5859",
@@ -1541,8 +1583,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-28T18:15:24.052+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Section D (Vengthar)"
+      }
     },
     {
       "yearStatus": {
@@ -1570,7 +1614,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-28T16:48:47.307+00:00",
-      "updatedAt": "2026-11-01T17:28:56.973+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Vanapa",
         "yearStatus": {
@@ -1601,8 +1645,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-0562",
@@ -1619,8 +1665,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-0520",
@@ -1637,8 +1685,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-4259",
@@ -1655,8 +1705,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-6368",
@@ -1673,8 +1725,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-30T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-4610",
@@ -1691,8 +1745,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-31T12:01:27.79+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-2079",
@@ -1709,8 +1765,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-8999",
@@ -1727,8 +1785,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-6709",
@@ -1743,8 +1803,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-22T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-7128",
@@ -1761,8 +1823,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-8871",
@@ -1779,8 +1843,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-02-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-3333",
@@ -1797,8 +1863,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-03-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-3106",
@@ -1815,8 +1883,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-02-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-7944",
@@ -1833,8 +1903,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-31T11:35:42.937+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-5482",
@@ -1851,8 +1923,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-02-15T12:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-8223",
@@ -1869,8 +1943,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-15T12:22:47.765+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-0258",
@@ -1887,8 +1963,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-15T12:22:16.438+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-8465",
@@ -1905,8 +1983,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-15T12:20:48.909+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-1133",
@@ -1923,8 +2003,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-15T12:19:17.027+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "YMAVT-3434",
@@ -1941,144 +2023,124 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Section A (Vengthar)"
+      }
     },
     {
       "section": "Section A",
-      "id": "EBEBCM-5544",
+      "id": "ZBKEBE-5544",
       "campaignId": "cmp-kumtluang-1",
       "name": "C. Lalmuanpuia",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "5544",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.96365+00:00",
-      "updatedAt": "2026-11-01T17:28:56.975+00:00",
+      "createdAt": "2026-10-24T00:00:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
         "section": "Section A"
-      },
-      "phone": "9436125544",
-      "fullPhone": "9436125544"
+      }
     },
     {
-      "section": "Bial 1 (Vengchhak)",
-      "id": "EBEBCM-1460",
+      "section": "Section A",
+      "id": "ZBKEBE-1460",
       "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima",
-      "orgCode": "EBEBCM",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
+      "name": "Rammuanpuia Ralte",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
+      "phoneLast4": "1460",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.469378+00:00",
-      "updatedAt": "2026-11-01T17:28:56.975+00:00",
+      "createdAt": "2026-10-24T13:28:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
-        "section": "Bial 1 (Vengchhak)"
+        "section": "Section A"
       }
     },
     {
       "section": "Section A",
-      "id": "EBEBCM-3120",
+      "id": "ZBKEBE-3120",
       "campaignId": "cmp-kumtluang-1",
       "name": "Zonunsanga Hnamte",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "3120",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.456169+00:00",
-      "updatedAt": "2026-11-01T17:28:56.975+00:00",
+      "createdAt": "2026-10-18T00:00:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
         "section": "Section A"
-      },
-      "phone": "8794563120",
-      "fullPhone": "8794563120"
+      }
     },
     {
       "section": "Section A",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEBCM-9912",
+      "id": "ZBKEBE-9912",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalbiakzuala",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "9912",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.46273+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "createdAt": "2026-10-24T00:00:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
-        "section": "Section A",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      },
-      "phone": "9862399912",
-      "fullPhone": "9862399912"
+        "section": "Section A"
+      }
     },
     {
-      "section": "Bial 1 (Vengchhak)",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEBCM-4455",
+      "section": "Section A",
+      "id": "ZBKEBE-4455",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalrosanga Sailo",
-      "orgCode": "EBEBCM",
-      "phone": "9862114455",
-      "fullPhone": "9862114455",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "4455",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.471086+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "createdAt": "2026-10-28T03:42:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
-        "section": "Bial 1 (Vengchhak)",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
+        "section": "Section A"
       }
     },
     {
       "section": "Section A",
-      "id": "EBEBCM-4646",
+      "id": "ZBKEBE-4646",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalnunpuia",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "4646",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.941284+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "createdAt": "2026-08-23T00:00:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
         "section": "Section A"
-      },
-      "phone": "9862464646",
-      "fullPhone": "9862464646"
+      }
     },
     {
       "section": "Bial 3 (Venglai)",
@@ -2086,10 +2148,10 @@
         "2026"
       ],
       "enrollmentYear": "2026",
-      "id": "EBEBCM-2233",
+      "id": "ZBKEBE-2233",
       "campaignId": "cmp-kumtluang-1",
       "name": "C. Lalrinsanga",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "8794332233",
       "fullPhone": "8794332233",
       "phoneLast4": "2233",
@@ -2099,7 +2161,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-11-01T17:28:22.466474+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Bial 3 (Venglai)",
         "activeYears": [
@@ -2114,10 +2176,10 @@
         "2026"
       ],
       "enrollmentYear": "2026",
-      "id": "EBEBCM-6677",
+      "id": "ZBKEBE-6677",
       "campaignId": "cmp-kumtluang-1",
       "name": "H. Lalthansanga",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9615446677",
       "fullPhone": "9615446677",
       "phoneLast4": "6677",
@@ -2127,7 +2189,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-11-01T17:28:22.448156+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Bial 4 (Field Veng)",
         "activeYears": [
@@ -2142,10 +2204,10 @@
         "2026"
       ],
       "enrollmentYear": "2026",
-      "id": "EBEBCM-7788",
+      "id": "ZBKEBE-7788",
       "campaignId": "cmp-kumtluang-1",
       "name": "Vanlalruati Pachuau",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9436227788",
       "fullPhone": "9436227788",
       "phoneLast4": "7788",
@@ -2155,7 +2217,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-11-01T17:28:22.466322+00:00",
-      "updatedAt": "2026-11-01T17:28:56.976+00:00",
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
       "metadata": {
         "section": "Bial 2 (Vengthlang)",
         "activeYears": [
@@ -2166,10 +2228,10 @@
     },
     {
       "section": "General / Khawchhung",
-      "id": "EBEBCM-9988",
+      "id": "ZBKEBE-9988",
       "campaignId": "cmp-kumtluang-1",
       "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "7005559988",
       "fullPhone": "7005559988",
       "phoneLast4": "9988",
@@ -2178,8 +2240,8 @@
       "paidAmount": 0,
       "status": "pending",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.958926+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "createdAt": "2026-01-10T00:00:00+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "General / Khawchhung"
       }
@@ -2199,51 +2261,29 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-31T17:36:09.358+00:00",
-      "updatedAt": "2026-11-01T16:59:42.731+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
-      "section": "Bial No I",
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:40:49.200Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEBCM-8670",
+      "section": "Bial No II",
+      "id": "ZBKEBE-8670",
       "campaignId": "cmp-kumtluang-1",
-      "name": "Tholeha Chhakchhuak",
-      "orgCode": "EBEBCM",
-      "phone": "897408670",
-      "fullPhone": "897408670",
+      "name": "Laltholeha Chhakchhuak",
+      "orgCode": "ZBKEBE",
+      "phone": "8974908670",
+      "fullPhone": "8974908670",
       "phoneLast4": "8670",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
-      "status": "pending",
+      "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.467069+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "createdAt": "2026-10-29T12:08:27.843+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
-        "section": "Bial No I",
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:40:49.200Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
+        "section": "Bial No II"
       }
     },
     {
@@ -2260,10 +2300,10 @@
         "2026"
       ],
       "enrollmentYear": "2026",
-      "id": "EBEBCM-4998",
+      "id": "ZBKEBE-4998",
       "campaignId": "cmp-kumtluang-1",
       "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "6346664998",
       "fullPhone": "6346664998",
       "phoneLast4": "4998",
@@ -2273,7 +2313,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-11-01T17:28:22.461936+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
       "metadata": {
         "section": "Bial No I",
         "yearStatus": {
@@ -2306,8 +2346,10 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-09-17T10:37:55.874+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Taitesena"
+      }
     },
     {
       "section": "Bial No II",
@@ -2323,10 +2365,10 @@
         "2026"
       ],
       "enrollmentYear": "2026",
-      "id": "EBEBCM-2862",
+      "id": "ZBKEBE-2862",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalduhawma Fana",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "4332542862",
       "fullPhone": "4332542862",
       "phoneLast4": "2862",
@@ -2336,7 +2378,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-11-01T17:28:22.457167+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
       "metadata": {
         "section": "Bial No II",
         "yearStatus": {
@@ -2369,7 +2411,7 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-08-22T11:19:07.081+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
       "metadata": {
         "section": "Bial 1 (Vengchhak)",
         "avatarUrl": "data:image/jpeg;base64,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"
@@ -2401,8 +2443,9 @@
       "status": "pending",
       "dependents": [],
       "createdAt": "2026-08-23T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:29:00.585Z",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
+        "section": "Chawngbawla",
         "yearStatus": {
           "2026": {
             "status": "active",
@@ -2431,8 +2474,10 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-26T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Zampuimanga"
+      }
     },
     {
       "id": "YMAVT-3933",
@@ -2449,27 +2494,28 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-08-26T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "updatedAt": "2026-11-03T13:23:53.868+00:00",
+      "metadata": {
+        "section": "Chawngbawla"
+      }
     },
     {
-      "id": "EBEBCM-5634",
+      "section": "Section A",
+      "id": "ZBKEBE-5634",
       "campaignId": "cmp-kumtluang-1",
       "name": "Vanlalpuia",
-      "orgCode": "EBEBCM",
-      "phone": "6453215634",
-      "fullPhone": "6453215634",
+      "orgCode": "ZBKEBE",
+      "fullPhone": "",
       "phoneLast4": "5634",
-      "section": "Bial No II",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
-      "status": "pending",
+      "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.443054+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "createdAt": "2026-10-29T14:47:00+00:00",
+      "updatedAt": "2026-11-03T14:51:26.008Z",
       "metadata": {
-        "section": "Bial No II"
+        "section": "Section A"
       }
     },
     {
@@ -2498,7 +2544,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-11-01T15:28:53.436+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Zampuimanga",
         "yearStatus": {
@@ -2529,27 +2575,27 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-11-01T14:52:15.327+00:00",
-      "updatedAt": "2026-11-01T17:28:56.977+00:00",
+      "updatedAt": "2026-11-03T13:23:53.866+00:00",
       "metadata": {
         "section": "General"
       }
     },
     {
-      "id": "EBEBCM-0000",
+      "section": "General",
+      "id": "ZBKEBE-0000",
       "campaignId": "cmp-kumtluang-1",
       "name": "Lalthianghlima (YMA Secretary)",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9862300000",
       "fullPhone": "9862300000",
       "phoneLast4": "0000",
-      "section": "General",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.462034+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "createdAt": "2026-11-03T05:18:30.28339+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "General"
       }
@@ -2580,7 +2626,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-31T16:18:58.512+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Zampuimanga",
         "yearStatus": {
@@ -2622,7 +2668,7 @@
       "status": "paid",
       "dependents": [],
       "createdAt": "2026-10-31T15:19:15.385+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Vanapa",
         "yearStatus": {
@@ -2639,41 +2685,41 @@
       }
     },
     {
-      "id": "EBEBCM-1122",
+      "section": "Bial 3 (Venglai)",
+      "id": "ZBKEBE-1122",
       "campaignId": "cmp-kumtluang-1",
       "name": "Zoramliana (Mobile QA)",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9862001122",
       "fullPhone": "9862001122",
       "phoneLast4": "1122",
-      "section": "Bial 3 (Venglai)",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:21.839517+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "createdAt": "2026-11-03T05:18:29.870194+00:00",
+      "updatedAt": "2026-11-03T10:00:48.563+00:00",
       "metadata": {
         "section": "Bial 3 (Venglai)"
       }
     },
     {
-      "id": "EBEBCM-5566",
+      "section": "Bial 2 (Vengthlang)",
+      "id": "ZBKEBE-5566",
       "campaignId": "cmp-kumtluang-1",
       "name": "Rohluzuala (Backend Dev)",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9862005566",
       "fullPhone": "9862005566",
       "phoneLast4": "5566",
-      "section": "Bial 2 (Vengthlang)",
       "isFamilyHead": true,
       "pledgeAmount": 0,
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.458101+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "createdAt": "2026-11-03T05:19:25.047568+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
       "metadata": {
         "section": "Bial 2 (Vengthlang)"
       }
@@ -2692,9 +2738,11 @@
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2025-01-04T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "createdAt": "2026-11-01T18:09:12.193316+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "id": "BMPSHL-0001",
@@ -2710,16 +2758,18 @@
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2025-01-03T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
+      "createdAt": "2026-11-01T18:09:12.199436+00:00",
+      "updatedAt": "2026-11-03T13:23:53.867+00:00",
+      "metadata": {
+        "section": "Shillong Unit"
+      }
     },
     {
       "section": "Bial 1 (Vengchhak)",
-      "id": "EBEBCM-0001",
+      "id": "ZBKEBE-0001",
       "campaignId": "cmp-kumtluang-1",
       "name": "Super Admin (Master)",
-      "orgCode": "EBEBCM",
+      "orgCode": "ZBKEBE",
       "phone": "9862000001",
       "fullPhone": "9862000001",
       "phoneLast4": "0001",
@@ -2728,1707 +2778,11 @@
       "paidAmount": 0,
       "status": "paid",
       "dependents": [],
-      "createdAt": "2026-11-01T17:28:22.470755+00:00",
-      "updatedAt": "2026-11-01T17:28:56.978+00:00",
+      "createdAt": "2026-11-03T05:19:25.056379+00:00",
+      "updatedAt": "2026-11-03T10:00:48.563+00:00",
       "metadata": {
         "section": "Bial 1 (Vengchhak)"
       }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-6677",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "H. Lalthansanga",
-      "orgCode": "EBE",
-      "phone": "9615446677",
-      "fullPhone": "9615446677",
-      "phoneLast4": "6677",
-      "section": "Bial 4 (Field Veng)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.743827+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-7788",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalruati Pachuau",
-      "orgCode": "EBE",
-      "phone": "9436227788",
-      "fullPhone": "9436227788",
-      "phoneLast4": "7788",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.741815+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-3120",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zonunsanga Hnamte",
-      "orgCode": "EBE",
-      "phoneLast4": "3120",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.723094+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:40:49.200Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-8670",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Tholeha Chhakchhuak",
-      "orgCode": "EBE",
-      "phone": "897408670",
-      "fullPhone": "897408670",
-      "phoneLast4": "8670",
-      "section": "Bial No I",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.722689+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:40:49.200Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No II",
-          "updatedAt": "2026-10-28T12:54:52.492Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-2862",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fana",
-      "orgCode": "EBE",
-      "phone": "4332542862",
-      "fullPhone": "4332542862",
-      "phoneLast4": "2862",
-      "section": "Bial No II",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.72206+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No II",
-            "updatedAt": "2026-10-28T12:54:52.492Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-1460",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.71447+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "BCMEBE-8622",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fanai",
-      "orgCode": "EBE",
-      "phone": "9862358622",
-      "fullPhone": "9862358622",
-      "phoneLast4": "8622",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.711926+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-2233",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalrinsanga",
-      "orgCode": "EBE",
-      "phone": "8794332233",
-      "fullPhone": "8794332233",
-      "phoneLast4": "2233",
-      "section": "Bial 3 (Venglai)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.710776+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-0001",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Super Admin (Master)",
-      "orgCode": "EBE",
-      "phone": "9862000001",
-      "fullPhone": "9862000001",
-      "phoneLast4": "0001",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.710752+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:55:58.212Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-4998",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "6346664998",
-      "fullPhone": "6346664998",
-      "phoneLast4": "4998",
-      "section": "Bial No I",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.710263+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:55:58.212Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-5544",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalmuanpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "5544",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.706545+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-9912",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalbiakzuala",
-      "orgCode": "EBE",
-      "phoneLast4": "9912",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.701414+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "BCMEBE-4455",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalrosanga Sailo",
-      "orgCode": "EBE",
-      "phone": "9862114455",
-      "fullPhone": "9862114455",
-      "phoneLast4": "4455",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.701074+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-9988",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "7005559988",
-      "fullPhone": "7005559988",
-      "phoneLast4": "9988",
-      "section": "General / Khawchhung",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.695823+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "BCMEBE-4646",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalnunpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "4646",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:25:44.690768+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-3120",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zonunsanga Hnamte",
-      "orgCode": "EBE",
-      "phoneLast4": "3120",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.865434+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-5544",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalmuanpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "5544",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.861011+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:40:49.200Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-8670",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Tholeha Chhakchhuak",
-      "orgCode": "EBE",
-      "phone": "897408670",
-      "fullPhone": "897408670",
-      "phoneLast4": "8670",
-      "section": "Bial No I",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.855525+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:40:49.200Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "EBEZBK-9988",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "7005559988",
-      "fullPhone": "7005559988",
-      "phoneLast4": "9988",
-      "section": "General / Khawchhung",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.84898+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-7788",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalruati Pachuau",
-      "orgCode": "EBE",
-      "phone": "9436227788",
-      "fullPhone": "9436227788",
-      "phoneLast4": "7788",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.841721+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "EBEZBK-4646",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalnunpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "4646",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.838941+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-8622",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fanai",
-      "orgCode": "EBE",
-      "phone": "9862358622",
-      "fullPhone": "9862358622",
-      "phoneLast4": "8622",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.836442+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No II",
-          "updatedAt": "2026-10-28T12:54:52.492Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-2862",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fana",
-      "orgCode": "EBE",
-      "phone": "4332542862",
-      "fullPhone": "4332542862",
-      "phoneLast4": "2862",
-      "section": "Bial No II",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.83371+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No II",
-            "updatedAt": "2026-10-28T12:54:52.492Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-9912",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalbiakzuala",
-      "orgCode": "EBE",
-      "phoneLast4": "9912",
-      "section": "Section A",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.823911+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:55:58.212Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-4998",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "6346664998",
-      "fullPhone": "6346664998",
-      "phoneLast4": "4998",
-      "section": "Bial No I",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.821041+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:55:58.212Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-4455",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalrosanga Sailo",
-      "orgCode": "EBE",
-      "phone": "9862114455",
-      "fullPhone": "9862114455",
-      "phoneLast4": "4455",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.819704+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-6677",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "H. Lalthansanga",
-      "orgCode": "EBE",
-      "phone": "9615446677",
-      "fullPhone": "9615446677",
-      "phoneLast4": "6677",
-      "section": "Bial 4 (Field Veng)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.798919+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBEZBK-2233",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalrinsanga",
-      "orgCode": "EBE",
-      "phone": "8794332233",
-      "fullPhone": "8794332233",
-      "phoneLast4": "2233",
-      "section": "Bial 3 (Venglai)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:16:31.796705+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial 1 (Vengchhak)",
-      "id": "EBE-0001",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Super Admin (Master)",
-      "orgCode": "EBE",
-      "phone": "9862000001",
-      "fullPhone": "9862000001",
-      "phoneLast4": "0001",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T17:08:19.704774+00:00",
-      "updatedAt": "2026-11-01T17:15:29.969+00:00",
-      "metadata": {
-        "section": "Bial 1 (Vengchhak)"
-      }
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "status": "active",
-          "section": "Zampuimanga",
-          "updatedAt": "2026-11-01T15:32:51.718Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "YMA-3456",
-      "campaignId": "cmp-1787829303143",
-      "name": "K. Laldinpuia",
-      "orgCode": "YMA",
-      "phone": "9774123456",
-      "fullPhone": "9774123456",
-      "phoneLast4": "3456",
-      "section": "Zampuimanga",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T15:28:53.436+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "status": "active",
-            "section": "Zampuimanga",
-            "updatedAt": "2026-11-01T15:32:51.718Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "PCI-5667",
-      "campaignId": "cmp-1787771373697",
-      "name": "Lalhmangaihi Sailo",
-      "orgCode": "PCI",
-      "phone": "9436155667",
-      "fullPhone": "9436155667",
-      "phoneLast4": "5667",
-      "section": "General",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-11-01T14:52:15.327+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBE-0000",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima (YMA Secretary)",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "General",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-31T16:57:36.239+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "BCMEBE-0000",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima (YMA Secretary)",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "General",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-31T16:57:36.239+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-0000",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima (YMA Secretary)",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "General",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-31T16:57:36.239+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "status": "active",
-          "section": "Zampuimanga",
-          "updatedAt": "2026-10-31T17:54:06.738Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "YMA-2345",
-      "campaignId": "cmp-1787829303143",
-      "name": "Vanlalruata",
-      "orgCode": "YMA",
-      "phone": "9862012345",
-      "fullPhone": "9862012345",
-      "phoneLast4": "2345",
-      "section": "Zampuimanga",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-31T16:18:58.512+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "status": "active",
-            "section": "Zampuimanga",
-            "updatedAt": "2026-10-31T17:54:06.738Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "status": "active",
-          "section": "Vanapa",
-          "updatedAt": "2026-10-31T17:53:27.541Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "YMA-0000",
-      "campaignId": "cmp-1787829303143",
-      "name": "Lalthianghlima",
-      "orgCode": "YMA",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "Vanapa",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-31T15:19:15.385+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "status": "active",
-            "section": "Vanapa",
-            "updatedAt": "2026-10-31T17:53:27.541Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "BCMEBE-5634",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalpuia",
-      "orgCode": "EBE",
-      "phone": "6453215634",
-      "fullPhone": "6453215634",
-      "phoneLast4": "5634",
-      "section": "Bial No II",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T18:26:11.595+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-5634",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalpuia",
-      "orgCode": "EBE",
-      "phone": "6453215634",
-      "fullPhone": "6453215634",
-      "phoneLast4": "5634",
-      "section": "Bial No II",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T18:26:11.595+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBE-5634",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalpuia",
-      "orgCode": "EBE",
-      "phone": "6453215634",
-      "fullPhone": "6453215634",
-      "phoneLast4": "5634",
-      "section": "Bial No II",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T18:26:11.595+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "section": "Bial No I",
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:55:58.212Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-4998",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "6346664998",
-      "fullPhone": "6346664998",
-      "phoneLast4": "4998",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T12:55:58.212+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial No I",
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:55:58.212Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial No II",
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No II",
-          "updatedAt": "2026-10-28T12:54:52.492Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-2862",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fana",
-      "orgCode": "EBE",
-      "phone": "4332542862",
-      "fullPhone": "4332542862",
-      "phoneLast4": "2862",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T12:54:52.492+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial No II",
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No II",
-            "updatedAt": "2026-10-28T12:54:52.492Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial No I",
-      "yearStatus": {
-        "2026": {
-          "reason": "Initial registration / In-chhiar thar",
-          "status": "active",
-          "section": "Bial No I",
-          "updatedAt": "2026-10-28T12:40:49.200Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-8670",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Tholeha Chhakchhuak",
-      "orgCode": "EBE",
-      "phone": "897408670",
-      "fullPhone": "897408670",
-      "phoneLast4": "8670",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-10-28T12:40:49.2+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial No I",
-        "yearStatus": {
-          "2026": {
-            "reason": "Initial registration / In-chhiar thar",
-            "status": "active",
-            "section": "Bial No I",
-            "updatedAt": "2026-10-28T12:40:49.200Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial 2 (Vengthlang)",
-      "id": "EBE-8622",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalduhawma Fanai",
-      "orgCode": "EBE",
-      "phone": "9862358622",
-      "fullPhone": "9862358622",
-      "phoneLast4": "8622",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-24T17:20:58.455+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial 2 (Vengthlang)"
-      }
-    },
-    {
-      "section": "Section A",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-9912",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalbiakzuala",
-      "orgCode": "EBE",
-      "phoneLast4": "9912",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.974+00:00",
-      "metadata": {
-        "section": "Section A",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Section A",
-      "id": "EBE-5544",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalmuanpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "5544",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.974+00:00",
-      "metadata": {
-        "section": "Section A"
-      }
-    },
-    {
-      "section": "Section A",
-      "id": "EBE-3120",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zonunsanga Hnamte",
-      "orgCode": "EBE",
-      "phoneLast4": "3120",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-10-18T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Section A"
-      }
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "status": "active",
-          "section": "Vanapa",
-          "updatedAt": "2026-10-31T15:02:21.824Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "YMA-7373",
-      "campaignId": "cmp-1787829303143",
-      "name": "Chawnghranga",
-      "orgCode": "YMA",
-      "phone": "9876737373",
-      "fullPhone": "9876737373",
-      "phoneLast4": "7373",
-      "section": "Vanapa",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-28T16:48:47.307+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "status": "active",
-            "section": "Vanapa",
-            "updatedAt": "2026-10-31T15:02:21.824Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "KTL-5510",
-      "campaignId": "cmp-kumtluang-2",
-      "name": "Vanlalhruaia Chhangte",
-      "orgCode": "KTL",
-      "phone": "9862555510",
-      "fullPhone": "9862555510",
-      "phoneLast4": "5510",
-      "section": "Bial I (Khatla South)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-27T14:16:29.936+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "PCIS-4444",
-      "campaignId": "cmp-1787771373697",
-      "name": "Biaka",
-      "orgCode": "PCIS",
-      "phoneLast4": "4444",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-26T19:15:27.048+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "PCI-4444",
-      "campaignId": "cmp-1787771373697",
-      "name": "Biaka",
-      "orgCode": "PCI",
-      "phoneLast4": "4444",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-26T19:15:27.048+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "yearStatus": {
-        "2026": {
-          "status": "active",
-          "section": "Chawngbawla",
-          "updatedAt": "2026-10-31T15:03:01.126Z"
-        }
-      },
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "YMA-5465",
-      "campaignId": "cmp-1787829303143",
-      "name": "Zonunmawia",
-      "orgCode": "YMA",
-      "phone": "9862545465",
-      "fullPhone": "9862545465",
-      "phoneLast4": "5465",
-      "section": "Chawngbawla",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-08-23T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "yearStatus": {
-          "2026": {
-            "status": "active",
-            "section": "Chawngbawla",
-            "updatedAt": "2026-10-31T15:03:01.126Z"
-          }
-        },
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Section A",
-      "id": "EBE-4646",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalnunpuia",
-      "orgCode": "EBE",
-      "phoneLast4": "4646",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-23T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.974+00:00",
-      "metadata": {
-        "section": "Section A"
-      }
-    },
-    {
-      "avatarUrl": "data:image/jpeg;base64,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",
-      "id": "KTL-3120",
-      "campaignId": "cmp-kumtluang-2",
-      "name": "Zonunsanga Hnamte",
-      "orgCode": "KTL",
-      "phone": "8794563120",
-      "fullPhone": "8794563120",
-      "phoneLast4": "3120",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-08-22T11:19:07.081+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {
-        "avatarUrl": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAFAAPgDASIAAhEBAxEB/8QAHAAAAgIDAQEAAAAAAAAAAAAAAAECBQYHCAME/8QAPxAAAQMDAwIEBQEFBgQHAAAAAQACAwQFEQYhMRJBBxNRYSIycYGRFBVCUqGxCCNigsHRFjND8ERykqKywuH/xAAZAQEAAwEBAAAAAAAAAAAAAAAAAQIDBAX/xAAiEQEBAAMAAgICAwEAAAAAAAAAAQIDEQQhEjETQTJRYUL/2gAMAwEAAhEDEQA/AN4oQhSgIQhAHhQCkUkDHKCEYQeECSKal2QRbuhGMFCBjlNLsguAGSgZ4XmeVR1mt9L0FQKepv8AbmT9YYYxUNcWu9HAE9P3VtBWU9VGyWnmZLE/5Xxnqa76EbFTyo69sJoG4ydsbH6oyMZG6lPRhDdigIHKgTQhCgCOQhCBBRKmDlRQRTQhT0CYSIQFAmhIoQNCEIBCEIBCEIApc7JoQLG6ainnZAcFLraG9RIA9SsP1b4j2PScMzKmcyVrWdTKaMZc4nj2Wg9TeLmpr+98MdV+ioy7IigaAT9XfN9s/lWmNR1uHU/jXYLFUSUtLT1VwqGc+XhkY/zHf8Ag+q0/qrxe1JqUPp4p/wBm0R28ilcQXDcfE/5jsdxsPZYE97pHl73FznHJJOST6pdJV+QBOTlTjnmicDFI9jhwWuIKi0ZTwAdlI+mmulwonl1LW1MDycl0Urmkn6grNtKeLmotP1Lv1tVPc6aTHUypmc5zcHlrjk8Z24WBYyQCOfVPy8cn8oOt9J6/s2rfLgpZOitdB5z4HOBI3wQPXGR6c/XGWN5wuNNMX+fTOoKO6wDrNM8kx5+ZpBDh+D+cLrbTmoLdqS0xV9uqGSxuGHgfMx3drhyCqZT+iLhCOUKiQhCECBS7pgpIBCEFAFRUio90EkIQgkhLKMoGhLKMoGhGUFAIQllAH+i174i+J1Bo2M0VOBV3WSPqZE0/DGDkBzj9Rxz9OUeJ3iLBo62S0dK8vvNRF/cMA2iBJHWT7YOB3OPdctTzyVE8k0ry+SRxc555cSckq+OP7Q9a6uqLjWy1lTIXzyuLnu4yT9F8yEwFcGFIEgbflByPVAONiMoG08nn2S6m7pYJ7KbKeWTZrCVHU8qJftjdRLiV7GiqG8xO/C8ixzTgghOllhZKvdM6tuulLg2rtk7o3bNkj5ZI3PDh+d+R2VChSh2PorVdNq7T8Nxh+B5JZJG7lrhyPfsc+/bhZKFz1/Z+q6gXe40zcugEYeQBw4kDP4H8l0IFnlOUhoQhVSWEu6lnCigChCSBpBNIBA0IQgEITwgSE8JIGEblGEIGqnUd8pNN2Kqu1c5wggbkhoySScADcckgfdWp4Wh/HzU/msoLDTOf5YcZp3DYOcNg33xuT9lOM7UVqHUd9qtR36rulXI9753ktDnZ6G/utHsAqpCFqGOVJu5w1Tp6d9TIGMGVnOntLtc5j5G5PO4VM9kwnttq1ZbL6YvQ2CvriDHE7B7lZJSaFmeB5jse62ZbrVHBGGtZjbfZWjKNuMY+q4c/Kyv09DX4eE+2rf8Ag2OJzelrnY5ztlZRbdMUbGNzTt68brKv0DOrPTk4xuvWOmDOAsst2VjfHRhje8UE2mqOWFzGwMGfbCw686FIa408eTzgLa4jBXjPT9Q4UY7c8aZ6defrjnC4WepoZCJI3DBxu3CriCDuFv272qCoafMia4fRas1Pp0UGamBp8r94ei7tPkTL1Xnb/FuE7GReEOrrfpy7PgqoHNfVEME0bOp7jnZvsF01DK2VjXNzg+q4aY50cjXMcWlpyCDghdX+FeopdQaOpZKiQSVEI8qVwbgkjucbenp9O63znfbi+qztCWSgLNY1FSzhRQCRQhIGhCEoEJIQTQhCAUTypKJ5QCEIQBHUCDuD6rlfxqE7fEusZK8lghi8kY2azoGw+/Vx6rqhc9f2hLWYr9a7q1o6Z4DA4+7Dkfyd/JWx+xppMDJSG6yWxWITsFRLvvsFbLL4zq2GFzvIt9NWVrY2ve3LjgrYdtpBGRsFSWyIM6RjCyqmb8C87blbfb19OExnIuKWNpYOF9AjAK+OneQ36r7GvBPKxbXqfQEdP3UhtugblTIp2k1m/AUKhmGqZPovGUux7JSd6qawBzSO6xO90sc1M+J4y1wOVllS0gHZY9cAHZBTXfa+ydntpivozSVskODtkj3C2t4CX+al1BVWRxaYKqIysB5D29h9idvYHbfOC6vjbHVwyD5iCCvr8LZXN8SbN0xtf1SlpBd04HSdx7j078d16uN+WPXhbcfjlY62CM+iaRCoqSE8JIEmmQjCBJISUgQkXAIUj1QhCqBI8pqPKAQn9UHthAsZWrPHm2Gr0PFWgnNFUtcRnbDvg/qQtphYd4qUJuHhpe4xv5cHnYx/AQ8//FTL7HI+cHOMeyz/AEk/zqF2exwsAxutj6dpRRWyPPzOHU77pu/i38f+a/pnBsu3Cyelmi8kZkZvx8QWtq25zNqxDCcNB+LsXH0BK86+S9SSmSBnQzYhgAGPrkALlurv27vzfH6jcdPJCY+vraG+p2XuJ6fgSsJ+q55ferrSu6H1DmE5HSXcfZWlr1BU+Z1yTEnGM5UXx+e+onk/K843wwtdwVI4buVhdlvpqGtzJk/6q3rq8x0jpDnGFhfV5XRJ2dWzq2na7BkaPuvKS40WDmpiyOfiGy1BfLxI58mJjzkYJ/CxZkldLN1CSQFx+ZzHOz/JbY6flO2ufPd8byRvStuFID0+aCd9hyVjdRUxTZMbw4ZxysTt9oqJ4C4XJkjmkF7cEFufvnP4U6mjrrbVCoi+NmfjaBuR7gbf14UzVjL6qfzZ2e4o9aNIqoX/ALpBA+q+3wkgdP4m2fp/ce95+gY5eer4+u3wzY4k/qCr7wHof1Ov3VJBxS0sjge2XYb/AELl16/4PP3/AM7XTWUBATUMgoplJBJIIBRkIDZBwkhAbISQgmhCEAhCEAlhGUAoEvKpgZVUk1PK0OilY5j2nuCMEL15XnUzfpqWWctc4Rsc/pbycDOEHFN4tctmv9bbJgeulqHQknvg4B+4wfutjU7emlY0fwgbLHdempvOpJtQeQ1sVWWl3lkuDOkBoz9gPvnhZVb2iRjPoFGyy49jr0YXHKyqyfFKDM/fp3Hr+VVC5vq3SvFM+r8ppkdAzHQ1o56j3/n9FnNXZIq+DodkZHZU1HZayzzv8iMtY7IyxvI91hjsx/bpz15f8sag1BPUPZTxw27D+kdHly5bk46RwM8HnHv2WRXfSUlrqMVcDImu+SqgH924+hHIP5+q96OxQUszJoLaGyt3bIQQQfbJwFYmgnbIZ5HHzD37j7q2Wyfpnjpy/wCnxaehko61rDuM9lmF43tzsN5GCqi2UwbUNON8rJKqEPo3DGcjhcey9ru148x41mbV1zNIMJlfwZ39LGjPvz9F8Or6V1iroI4q6snglhY+OWnlbG0uz8YAAPbYemxOeFmTqGQ9TY3ODT2BXj+x6lxAPRJg56ZGBw/BXTr2yOXZpt+mG0FLdbhZ6m6xzvkip5g2Jkzup5B9H7HI/Hsrex11RcY3R1Ebi5hwC7n7+/ur8afq5miPpayMDADRgAfRWVNaI6GMdMYBAx1eqrs241bXpuP7YHrClxYpCB8jmn+ay/8As9MpaaK8VEtTCyoqHsgjhdI0PcGgkkDOf3lT6qpHVFqqYmDLnDDR75StVjmsVpgip5AKrzWvlkxkg54b+AtcNsxw9sNvj3PZeOjhwmoNf1sDhwRlPJWzgMlJBQEAhCSARlCCgSEIQeiEIQCEIQLGUAJoQIAAk+q8aqVsNJPJJ8jI3Od9AF7r5LlTOq7XWUzdjNC9gPpkEImfbn6tt/labrjE0EeVL1Bx+u4/HCLd8LW59F909S39nyW9rMOljeRkbnnKq7VO2amhc3hzQufHvK9XLkynGZ25oeASrgU7S3GP5KjtjsgBZBTjIXLlPbpn08f0LOekE+6qbyWQRAnnOMBZHI9kcbnHsN1jDJo7lci+U4jiz0tPb3ST2iXpWyIl4JG/OFkEkZEABHKoY9RWZteymp6yGWUctY8Ej7K8nvFIKZz3FoHOc4wln9nf6UrQI6wNcNicfdXTKZpAPSqOkv8AZby6SCkq4nzt3LQd/qFa26rJJjk39D6hV5/a1svuPuEbWjYBfJUBpaRhfc8jGwP3XwVJw0lRYjH2xC8tHlyD0GfwrueFjaZoaM7tDfsVQX+XopKl2cEMOD9lcWCKW4Ghp5GuDp5WjpJ3a3947e2fwt/jbIpMpjcq2zanufaKJ7vmdAwnPr0hfVlAAGwAA9B2Rjddzw7e0JpICBpIQUCKaEYQJCkAhBJCEIBCEt0DQhCBboPCaEGlL/amsu1zo5nvYGyudG9g3YHbjH2IWCaYlP6URHmNxb+Ctta3t9VHfZKgUlTPBUMb0mnic8lwGOnAB34+ufxqC1QyUV+rqSdjoZGTvaY38tOTss5Pt6EzlmN62LQNw1ruyvoZelvIVLbd4Ok8dl9Uswp43Pe4NDRkknhcWf27sb69rGomD4y31HCw69QwwROlNS+E8fAMrHrv4gSipLKTpEQOM53d/ssZrbjX3SYOkeenORk4C2w0Zfdc+fkY/WK2pq20UszhJGOp5z1tY3q//FcyXW32uRkjp31fmM629Q+FoPssRjs7Kgsa6oYDjnBI+5AX1VNjme5sk1awxBgDBFG8k7YxuNlvccXPMtn6jIqGqoq67fqZHSt6s4aMAY/GcfdbBpDGY2vYQW4yD7LRslI+lkzFUkP7B2c/zVtb9ZXG2dEJeHxsGMErLZp+X8W2vyPj6yjdXWSF8lWSG7lVdgv8d6oBOz4Xj52+isKh3UzY7rjssvK7MbLOxgmr5Sy3T4OCQGjI9Stj6CoGz3KWse1uaeNuMb/E7OMfQAj7rXGpKeSuuNBbYy3rqalkYzwMuAW7tNafdY453TVDZZ5yOvy2dLABnAGeeTuu7Xj6led5GyT5T9rxSGEsJjhdHXAClhPATUCOEYTKAECQhCAQhCCSEIQCChBQLJQU0igXCklhHCAIB5+i5y8Q6d1q8VK6QZLalsdQ33Bb0n+bSujueVpvxyssjY7fqKAOcID+nnAbkBpOWuJ+u33Cme/ScbyyvntNWyemY9h2PI9F91xp21dDLCXOHWwjbkLANOXcjpa52W7YWX/tSMR/N7ADnK4dmFmXp7GvZMsWD0mjW19ZP53miJjyPMad3HfKsItAOjl2Pnx55dI4ED8/6LKaCaMsAjIxjYD+u2ys4i7JAyNla7c4rhpw+2OQaOpGxYe1zHD+Go3H/qC9/wDg2lc1zppqiVpGwMrP/qF8GpRdIZXPpi8h2wDdvz7Kot0+oKl4i65GtJwcbY9VPcrO9TcpL8fitK7QsUzXNiGNuTK5xVdN4e00dIXskm89g/dcSCtg0NPLFSM8xxLi0F+e5wnUSwwRkyloHfPdZ/myl5Frqws7YptL2cWu3AkkyPAL8lWdTUNhicXOAwOVE3CEwktIDcfTCxK9XoeRIWu2BOe/GVWY3PLtW+WOvDke2l4v274nWxpj8yOF7qh+RsGtaSP/AHFq6EC1B4K2V0v67U04/wCaf01Nkb9I+c59CcD/ACrcGNl6EnJI8bZl8srTQkE0UCEimgMZQhIoEhCEAhCEEkIQgEIQgEsBNIcoGlkpoQRyviutspL1bKi3V0Qlpp2Fj2HuP9D3BX3EKKmIrky726fR2qqqy1MnX5Lx0SceYwgFp9tj+VGW5yxxuw/fpwMH8rL/ABVfbdR6rqTbpBJJSsEEz2jYStJyAe+AQPqPZavn8+AuinBz65SyWt8cspiymy6jZSVTXPBdsB7n65W2LdNBWUzJYiNxnAPC5yEzmOBYePRZZp3WM1sPRIS9hG7SVlu0/KdjfR5HxvMm6HiEty5od9sqULYIzlsbGbcgLX8mtIJ2NLXYaBvg7E+3ovin1s79NIInFue49fbv/wB+65/w5fTqvkYNpS1EbIHSOcAxvJPC13qjU0cz5aWF2Gt752Koa7XE81sdTlzgXnYk8hYbLXSzPJ7nO601ePy9rn3eT2cxZVT36ZkJhe4bA4yc524TtVvk1VqCgssEvQKmUCSTH/LZjf8AkD91jFK2aebyqdjnknAKy+Onq9MWd1fRzvhr4yJBOw7tdnt7e31W/McaxlyzxdN2e0UditNNbKCLyqanZ0sbnPuST3JJJJ9SvvC1p4WeJrdYUzrddHRRXmAZ+HDRUM/iaOzh3A27j0GywrVzGhCFARQQMgnsmkUDSJwnjCXKAJSRnKEB3QmAhA0JZOSMJoBCEIBBQkeEDwhLKaBFUerrubDpO63NrgJKeme6Mn+PGG/zIV4QtQ+P17NFpajtMbiH18/U8Z5jjwd/8xb+FOP2itRaNmMj6pryXOLg4k98rILjZIqyIuDd1h+kapkN28t5A81uB9QtsUtIJIx9Fhutxy69Hx5MtfGpq7TtRA5xjGfYhVElLPESHxubjuQt1Vtqa4HLM+6rBaYnHD4g4e4U4+R69oz8WfpqVpeOHYR1vz8xx9Vt+PSdqqXDzKcDPorKLQ1lgj6m0rXHndTfKxn6Vnh5X9tJw0tRUkNiie8+wV/b9H1lS4GYeWz0WzhaKaA4igY3HoF9UFGT22WeXlW/TTDw5PuqCz6eprez+7jBd3cR3XjquEfsCrGOGErNGUgY35VjeqogbPVtx/0nf0WGOy5Zy10565jrsjTlDXVNuroaujnfBUQvD45WHDmn1C6q8N/EKm1xaOmYxw3amaBUQg46h/G0eh9Ox+2eTFYWW811gu1PcrdMYamB/U1w49wR3BHIXqWdeI7cQsU0Frah1tYhVQFsVZFhlVTE7xu9R6tODg/UcgrK1lZxIKXKaAMIAIxhCROECQhCCSEBCAQhCASJ3xhNCASPCahK9kUTpJHNYxg6nOccAAckoJ9ks7rVeq/HCx2bzaays/atYzbzA7pgYd9+rl+/8Ox/iWk9S+IGpNVOkbcbjIKZ236SAmOIDOcFo+bHq7J91aY2joHWHi9p3S3XTxSC517SQYKWQFsZ3GHv3DTkEEDJHcbhc/a81zV67vENbUUrKWOCLyoomPLsDJOST33HbssWcAAoq8x4JRyOikbIx3S5pBBHYrc2i7/Fd6IAkCeMASN/1+i0urCzXaaz3GOrhcR0n4gDyFnu1/PH/W2jb+PL/HRToGSs47Ktlt7mu2AKdhvMF3oGTwu5G7c8FWhaD239V5d7jeV7E5lOxSCKSE5w4Y5OML646tz2BpGfcKxa0Y3GfZSZGwHZoH2VbktMePgZSukOSPyF98NO2Me69gB2Uuyi1MnHjKBjbhYRradtLZKmQkAlhaPcnZZnUv6WrU3iZcS59NQNdjOZHj+Q/wBfwtfHx+WcYeTnMcK12R3A2SU+2EhsvXeIvdJ6quOkL3Fcbc7LgemWIn4Zmd2u/wB+y6301qKh1TYae7W95MMwOWO+aNw2LXe4P+/BXFauLHqi+abm82z3KelJPU5rXZY84x8TDlrvuCouPUu0coytM6Z8fbbUsjg1FQvo5jgOqacGSMnuS35m/bqW17VfLVfaX9RarhTVkYwXGCQOLc8ZHIPscLOywfchCEAEIQookDlCEIBCQTJwgELDdWeJmmtJCSKqrP1Nc3/wdNh7wfR2+Gfcg+gK0Tq/xc1DqjzKaJ/7Otzhg09O49Txj99+xP0GB2wVaY2jcesvGCw6Xc+kpSLpchsYYXgRxn0e/cA+wyfXC0JqnxC1Fq57m3CtcylJy2kgyyIemRy4+7iVixI9UuoDhXmMiDwgkD3US4pKRIuJ2UVLYhRPKBhAO6SBygvtOaiqbDWtex5MBPxM7fVbss96gutIyaJ4PUNwCudicK707qCaz1jfjcIHH4gO3uuffomc7Pt1eP5FwvL9OhW7hSAVLZ6/9ZTMka9r2uGQ4HYq8jjLu68y42fb1pn32YC85ZgwL6fIJHK+ealyOcHsQOFHFu9VlXK4xueT0saCS4rQd/rHV98qZy4uBdhpPoOFujWla22WGRoOHyDG/p3Wh3vL3ueeXHK7/Ex+68zzM/rEkkIXa4AhCEDBGF9NBcK21VTKugq5qaoZ8ssMhY4fcL5MJ742Ujb2lvHi7W/op7/TNuNOMDz48RzNH0+V38ifVbo03rjT2rI2m1XCN85bl1NIeiVv+U8/UZHuuOM4U45XxSNkjc5j2EFrmnBB9QVX4pdzIXLunfGrVVjDIaqWO6Uzduiq+cD2eN8+7upbf014y6WvxbBVTm1Vh5jqyAwnviT5cf8Am6T7Klxo2KhRa9r2BzSC0jIIOxCFUYHrHxXsGk3yUgc+vuTMh1PTuAEZ9Hv3DTzxkj0wtIam8X9U6iL4mVn7Ooj/ANCiJYXD/FJ8x9+AfRYCXFxyUlrMZEJdZ+iDvyVFPKkPCMJA7qQcgWAjAUtkYCDzQpuZ3CiRgIEBlPhIIPKARwhSZu4N9UGx/C+4TONVROPUyMCRmf3c7Ef9+62xSzu2BOy57tVbW2JzqullkY8/A5oaCMf4uRjlbr0teG3i0w1ZAbIfhkaOGuHK8/ytVl+f6el4e6WfC/bKwfhVbd7tR2ehkrK2ZscTBnc7k+gSu98o7Hbn1lXIGMYNvUn0HutA6q1TW6muBlmcWUzD/dQg7NHqfdZatN2X/Gu7fNU/16at1ZU6lrerpMVIw4jizuR6u91je57L1IzSg/wvIP3A/wBl5t5K9THGYzkeVllcr2jJS7p9sqOd1Ko90xujY90YQCAhCAwhGUsoAo6ilypIMp0p4h6h0hIwW6sL6UZ6qOoJfC4H/Dn4T3y0g/0QsV4QnIHt2QnjKMIFsjATwkQgCAlghNCACm0juoIQeh9kEjG6gCpbFSIFvokBvup7oB9VAgQm12CNtwpJEYQZa2PyovPaWy00g/voScbHuFdabv0Wlo6yOd3XTyASwEHOTxj8Y/CrqOop47HDPI74wwZaHfMAMeqxKsqzMQwE+U0noae2VOzGZY/GmvK4ZfKLXU2qKzUlZ5k5LIGZ8qIHYD1PqVRclR6vZRyq44zGci2WVyva+iNzfJmjedyA5v1B/wBiV5YaMjOfoojKYaVKoJHAQAnjCECwEsYUuySAzlLKCEYQBKMIAUkAAEIwgoEhGEKQxymUsYKagHZBGUJoI4SxhemEiEEE8J4QECwjOE8IwgXUnkI6UdKA2SKfSjHug+x1W91rbB1OwD04z2ySvix7BDcnb3VhN+n8kGJ4MRjOWFw6g7Jxgdu2fv7BSK8jO2EBqeBnlSUBdIQhCBJKSEEUd08JIBCEIAJhCMoBRKaEAEJnYIQLsEwk35UwgCmgpIGmkhAIwmOEIBCE+EBlCEkAkmkUAwZx7kp/4e3KcYPwn3KCMKRFzcFJTf8AMkoEU00YQJCChAihNCCOEJ4QgSEIQCYCSkEEXHdCi7lCBsUuFBvK9OyBIPOyEFAJpA+qEEghAOyEAhCEDQhCCJwkU0uyCce3SffhGPuox/OAeMqXbKkD/mSQ/wCZLKgNCEIEmhCBYQml2QCEICATxlJAKAwkdgpZUHHfCCB5QhCAHK9M7LzUmlA+Cmg+qECQhCCQUlBvClyEAhCSB5TSCaBI7JpHhAo/mymQR3UWfMpk7IE/5uUYQ7OUAoBCeySAQhJA0l7wUdVV5NPTTTY58thd/RE1HVU4zPTTRD1ewt/qg8EgmllA+yRQnygWVA8qSggEIQg//9k="
-      }
-    },
-    {
-      "id": "KTL-7234",
-      "campaignId": "cmp-kumtluang-2",
-      "name": "Zodingliana Sailo",
-      "orgCode": "KTL",
-      "phone": "9436127234",
-      "fullPhone": "9436127234",
-      "phoneLast4": "7234",
-      "section": "Bial II (Khatla North)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-08-16T11:40:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "section": "General / Khawchhung",
-      "id": "EBE-9988",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Dr. Zoramthanga Fanai",
-      "orgCode": "EBE",
-      "phone": "7005559988",
-      "fullPhone": "7005559988",
-      "phoneLast4": "9988",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-01-10T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "General / Khawchhung"
-      }
-    },
-    {
-      "section": "Bial 2 (Vengthlang)",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-7788",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Vanlalruati Pachuau",
-      "orgCode": "EBE",
-      "phone": "9436227788",
-      "fullPhone": "9436227788",
-      "phoneLast4": "7788",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-01-08T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.972+00:00",
-      "metadata": {
-        "section": "Bial 2 (Vengthlang)",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial 4 (Field Veng)",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-6677",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "H. Lalthansanga",
-      "orgCode": "EBE",
-      "phone": "9615446677",
-      "fullPhone": "9615446677",
-      "phoneLast4": "6677",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-01-07T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.972+00:00",
-      "metadata": {
-        "section": "Bial 4 (Field Veng)",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial 1 (Vengchhak)",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-4455",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalrosanga Sailo",
-      "orgCode": "EBE",
-      "phone": "9862114455",
-      "fullPhone": "9862114455",
-      "phoneLast4": "4455",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2026-01-04T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial 1 (Vengchhak)",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "section": "Bial 3 (Venglai)",
-      "activeYears": [
-        "2026"
-      ],
-      "enrollmentYear": "2026",
-      "id": "EBE-2233",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "C. Lalrinsanga",
-      "orgCode": "EBE",
-      "phone": "8794332233",
-      "fullPhone": "8794332233",
-      "phoneLast4": "2233",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "pending",
-      "dependents": [],
-      "createdAt": "2026-01-02T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial 3 (Venglai)",
-        "activeYears": [
-          "2026"
-        ],
-        "enrollmentYear": "2026"
-      }
-    },
-    {
-      "id": "EBE-1122",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zoramliana (Mobile QA)",
-      "orgCode": "EBE",
-      "phone": "9862001122",
-      "fullPhone": "9862001122",
-      "phoneLast4": "1122",
-      "section": "Bial 3 (Venglai)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-10T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "BCMEBE-1122",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zoramliana (Mobile QA)",
-      "orgCode": "EBE",
-      "phone": "9862001122",
-      "fullPhone": "9862001122",
-      "phoneLast4": "1122",
-      "section": "Bial 3 (Venglai)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-10T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.226+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-1122",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Zoramliana (Mobile QA)",
-      "orgCode": "EBE",
-      "phone": "9862001122",
-      "fullPhone": "9862001122",
-      "phoneLast4": "1122",
-      "section": "Bial 3 (Venglai)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-10T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBE-5566",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Rohluzuala (Backend Dev)",
-      "orgCode": "EBE",
-      "phone": "9862005566",
-      "fullPhone": "9862005566",
-      "phoneLast4": "5566",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-01T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "BCMEBE-5566",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Rohluzuala (Backend Dev)",
-      "orgCode": "EBE",
-      "phone": "9862005566",
-      "fullPhone": "9862005566",
-      "phoneLast4": "5566",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-01T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-5566",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Rohluzuala (Backend Dev)",
-      "orgCode": "EBE",
-      "phone": "9862005566",
-      "fullPhone": "9862005566",
-      "phoneLast4": "5566",
-      "section": "Bial 2 (Vengthlang)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-02-01T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "section": "Bial 1 (Vengchhak)",
-      "id": "EBE-1460",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-01-02T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:25:12.973+00:00",
-      "metadata": {
-        "section": "Bial 1 (Vengchhak)"
-      }
-    },
-    {
-      "id": "EBEZBK-1460",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Lalthianghlima",
-      "orgCode": "EBE",
-      "phone": "9862300000",
-      "fullPhone": "9862300000",
-      "phoneLast4": "0000",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-01-02T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "EBEZBK-0001",
-      "campaignId": "cmp-kumtluang-1",
-      "name": "Super Admin (Master)",
-      "orgCode": "EBE",
-      "phone": "9862000001",
-      "fullPhone": "9862000001",
-      "phoneLast4": "0001",
-      "section": "Bial 1 (Vengchhak)",
-      "isFamilyHead": true,
-      "pledgeAmount": 0,
-      "paidAmount": 0,
-      "status": "paid",
-      "dependents": [],
-      "createdAt": "2025-01-01T00:00:00+00:00",
-      "updatedAt": "2026-11-01T17:28:30.227+00:00",
-      "metadata": {}
     }
   ],
   "deletedMemberIds": [
@@ -4438,731 +2792,31 @@
   ],
   "transactions": [
     {
-      "id": "RPAY-CASH-695880",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "K Lalfakzuala",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-3106",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "April 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "April",
-      "periodYear": "2026",
-      "periodLabel": "April 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-04-12T00:00:00+00:00",
-      "createdAt": "2026-04-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.188+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-844911",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalruatfela Zadeng",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-0562",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 300,
-      "platformFee": 0,
-      "totalAmount": 300,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "April 2026 | BMP Fund: Rs.300",
-      "periodType": "one_time",
-      "periodMonth": "April",
-      "periodYear": "2026",
-      "periodLabel": "April 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-04-12T00:00:00+00:00",
-      "createdAt": "2026-04-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.188+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792066312185_840",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa R Lalhmachhuana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-4610",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 1500,
-      "platformFee": 0,
-      "totalAmount": 1500,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.1500",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-15T00:00:00+00:00",
-      "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792066492573_254",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Richard L Jongte",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-2079",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 1000,
-      "platformFee": 0,
-      "totalAmount": 1000,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.1000",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-15T00:00:00+00:00",
-      "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792064888839_104",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Eric C Lallawmpuia",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-4259",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "TXN-906065",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "J Lalsangliana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-1718",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-183638",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalkhawmuana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-6709",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792064793617_391",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalzawmliana Sailo",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8526",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 300,
-      "platformFee": 0,
-      "totalAmount": 300,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.300",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-934197",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa Vanlalliana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8871",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-253106",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "K Lalfakzuala",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-3106",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792064661583_956",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalruatfela Zadeng",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-0562",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-267698",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalnuntluanga Vanchhawng",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-7128",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-527580",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa R Lalhmachhuana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-4610",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792064576405_338",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Richard L Jongte",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-2079",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-130114",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalrinawma Hmar",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-0520",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "February 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "February",
-      "periodYear": "2026",
-      "periodLabel": "February 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-02-15T00:00:00+00:00",
-      "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY_TXN_1792064181276_391",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Eric C Lallawmpuia",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-4259",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 150,
-      "platformFee": 0,
-      "totalAmount": 150,
-      "paymentMethod": "upi",
-      "status": "completed",
-      "remark": "January 2026 | BMP Fund: Rs.150",
-      "periodType": "one_time",
-      "periodMonth": "January",
-      "periodYear": "2026",
-      "periodLabel": "January 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-01-15T00:00:00+00:00",
-      "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-603439",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalhruaisanga",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-1111",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-234750",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Lalzawmliana Sailo",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8526",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 500,
-      "platformFee": 0,
-      "totalAmount": 500,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.500",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-141711",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa Vanlalliana",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8871",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-377079",
-      "campaignId": "cmp-kumtluang-1",
-      "campaignTitle": "BCM Ebenezer, Zobawk",
-      "category": "kumtluang",
-      "donorName": "BKHP",
+      "id": "RPAY-CASH-344941",
+      "campaignId": "cmp-khawlsak-3",
+      "campaignTitle": "Kunga Tanpuina",
+      "category": "khawlsak",
+      "donorName": "Anonymous",
       "donorPhone": "",
       "donorVeng": "",
       "memberId": "",
-      "donorType": "group",
-      "isAnonymous": false,
-      "amount": 25000,
-      "platformFee": 0,
-      "totalAmount": 25000,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "Oct-26",
-      "periodType": "one_time",
-      "periodMonth": "October",
-      "periodYear": "2026",
-      "periodLabel": "October 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-10-24T13:03:00+00:00",
-      "createdAt": "2026-10-24T13:03:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-194628",
-      "campaignId": "cmp-1787829303143",
-      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
-      "category": "kumtluang",
-      "donorName": "C. Lalramnghaka",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "YMAVT-3434",
       "donorType": "member",
-      "isAnonymous": false,
+      "isAnonymous": true,
       "amount": 500,
       "platformFee": 0,
       "totalAmount": 500,
       "paymentMethod": "cash",
       "status": "completed",
-      "remark": "May-26",
+      "remark": "",
       "periodType": "one_time",
-      "periodMonth": "May",
-      "periodYear": "2026",
-      "periodLabel": "May 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-10-24T00:00:00+00:00",
-      "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-252134",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa C Lalbiaktluanga",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-7944",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 200,
-      "platformFee": 0,
-      "totalAmount": 200,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.200",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-155979",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa Lalramzauva Sailo",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8465",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 500,
-      "platformFee": 0,
-      "totalAmount": 500,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.500",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-726803",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "K Lalfakzuala",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-3106",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 100,
-      "platformFee": 0,
-      "totalAmount": 100,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.100",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-498102",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Upa B Laltanpuia",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-0258",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 500,
-      "platformFee": 0,
-      "totalAmount": 500,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.500",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
-    },
-    {
-      "id": "RPAY-CASH-517377",
-      "campaignId": "cmp-1788107291420",
-      "campaignTitle": "BMP Shillong",
-      "category": "kumtluang",
-      "donorName": "Jackie Lalrinsanga",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "BMPSHL-8223",
-      "donorType": "member",
-      "isAnonymous": false,
-      "amount": 500,
-      "platformFee": 0,
-      "totalAmount": 500,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "August 2026 | BMP Fund: Rs.500",
-      "periodType": "one_time",
-      "periodMonth": "August",
-      "periodYear": "2026",
-      "periodLabel": "August 2026",
-      "utr": "",
-      "referenceNo": "",
-      "timestamp": "2026-08-16T00:00:00+00:00",
-      "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "periodMonth": "",
+      "periodYear": "",
+      "periodLabel": "",
+      "utr": "UTR599908144546",
+      "referenceNo": "CASH-769828",
+      "timestamp": "2026-11-01T16:25:54.401+00:00",
+      "createdAt": "2026-11-01T16:25:54.402+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5190,7 +2844,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-16T00:00:00+00:00",
       "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5218,7 +2872,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T00:00:00+00:00",
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5246,7 +2900,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T00:00:00+00:00",
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5274,7 +2928,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T00:00:00+00:00",
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5302,7 +2956,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T00:00:00+00:00",
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5330,7 +2984,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-27T17:55:00+00:00",
       "createdAt": "2026-10-27T17:55:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5358,7 +3012,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T00:00:00+00:00",
       "createdAt": "2026-10-24T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5386,7 +3040,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-18T13:01:00+00:00",
       "createdAt": "2026-10-18T13:01:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5414,7 +3068,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-18T00:00:00+00:00",
       "createdAt": "2026-10-18T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5442,7 +3096,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-16T00:00:00+00:00",
       "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5470,7 +3124,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-18T13:02:00+00:00",
       "createdAt": "2026-10-18T13:02:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5498,7 +3152,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-25T18:50:00+00:00",
       "createdAt": "2026-10-25T18:50:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5526,7 +3180,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-25T10:08:00+00:00",
       "createdAt": "2026-10-25T10:08:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5554,40 +3208,12 @@
       "referenceNo": "CASH-679294",
       "timestamp": "2026-10-29T12:08:27.843+00:00",
       "createdAt": "2026-10-29T12:08:27.844+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {
         "subCategoryBreakdown": {
           "Pathian Ram": 7500
         }
       }
-    },
-    {
-      "id": "RPAY-CASH-344941",
-      "campaignId": "cmp-khawlsak-3",
-      "campaignTitle": "Kunga Tanpuina",
-      "category": "khawlsak",
-      "donorName": "Anonymous",
-      "donorPhone": "",
-      "donorVeng": "",
-      "memberId": "",
-      "donorType": "member",
-      "isAnonymous": true,
-      "amount": 500,
-      "platformFee": 0,
-      "totalAmount": 500,
-      "paymentMethod": "cash",
-      "status": "completed",
-      "remark": "",
-      "periodType": "one_time",
-      "periodMonth": "",
-      "periodYear": "",
-      "periodLabel": "",
-      "utr": "UTR599908144546",
-      "referenceNo": "CASH-769828",
-      "timestamp": "2026-11-01T16:25:54.401+00:00",
-      "createdAt": "2026-11-01T16:25:54.402+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
-      "metadata": {}
     },
     {
       "id": "TXN-637186",
@@ -5614,7 +3240,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5642,7 +3268,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5670,7 +3296,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5698,7 +3324,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5726,7 +3352,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5754,7 +3380,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-31T18:11:00+00:00",
       "createdAt": "2026-01-31T18:11:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5782,7 +3408,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-18T00:00:00+00:00",
       "createdAt": "2026-01-18T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5810,7 +3436,7 @@
       "referenceNo": "",
       "timestamp": "2026-03-01T16:39:00+00:00",
       "createdAt": "2026-03-01T16:39:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5838,7 +3464,7 @@
       "referenceNo": "",
       "timestamp": "2026-02-15T00:00:00+00:00",
       "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5866,7 +3492,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-18T00:00:00+00:00",
       "createdAt": "2026-10-18T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5894,7 +3520,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-15T00:00:00+00:00",
       "createdAt": "2026-10-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5922,7 +3548,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-11T13:01:00+00:00",
       "createdAt": "2026-10-11T13:01:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5950,7 +3576,7 @@
       "referenceNo": "",
       "timestamp": "2026-02-15T00:00:00+00:00",
       "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -5978,7 +3604,7 @@
       "referenceNo": "",
       "timestamp": "2026-02-15T00:00:00+00:00",
       "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6006,7 +3632,7 @@
       "referenceNo": "",
       "timestamp": "2026-02-15T00:00:00+00:00",
       "createdAt": "2026-02-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6034,7 +3660,7 @@
       "referenceNo": "",
       "timestamp": "2026-02-08T00:00:00+00:00",
       "createdAt": "2026-02-08T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6062,7 +3688,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6090,7 +3716,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6118,7 +3744,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6146,7 +3772,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-11T13:00:00+00:00",
       "createdAt": "2026-10-11T13:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6174,7 +3800,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-04T13:00:00+00:00",
       "createdAt": "2026-10-04T13:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6202,7 +3828,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-04T12:59:00+00:00",
       "createdAt": "2026-10-04T12:59:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6230,7 +3856,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-03T08:42:00+00:00",
       "createdAt": "2026-10-03T08:42:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6258,7 +3884,7 @@
       "referenceNo": "",
       "timestamp": "2026-09-20T00:00:00+00:00",
       "createdAt": "2026-09-20T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6286,7 +3912,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-23T00:00:00+00:00",
       "createdAt": "2026-08-23T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6314,7 +3940,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6342,7 +3968,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6370,7 +3996,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-12T00:00:00+00:00",
       "createdAt": "2026-04-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6398,7 +4024,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-12T00:00:00+00:00",
       "createdAt": "2026-04-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6426,7 +4052,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T13:28:00+00:00",
       "createdAt": "2026-10-24T13:28:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6454,7 +4080,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-27T16:26:00+00:00",
       "createdAt": "2026-10-27T16:26:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6482,7 +4108,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-27T15:24:00+00:00",
       "createdAt": "2026-10-27T15:24:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6510,7 +4136,7 @@
       "referenceNo": "CASHSTBWGD78",
       "timestamp": "2026-10-29T14:47:00+00:00",
       "createdAt": "2026-10-29T14:47:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6538,7 +4164,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-23T00:00:00+00:00",
       "createdAt": "2026-08-23T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6566,7 +4192,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-16T00:00:00+00:00",
       "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6594,7 +4220,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6622,7 +4248,7 @@
       "referenceNo": "",
       "timestamp": "2026-01-15T00:00:00+00:00",
       "createdAt": "2026-01-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6650,7 +4276,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-16T00:00:00+00:00",
       "createdAt": "2026-08-16T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6678,7 +4304,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6706,7 +4332,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6734,7 +4360,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6762,7 +4388,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6790,7 +4416,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-28T03:42:00+00:00",
       "createdAt": "2026-10-28T03:42:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6818,7 +4444,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-09T00:00:00+00:00",
       "createdAt": "2026-08-09T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6846,7 +4472,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-02T14:23:00+00:00",
       "createdAt": "2026-08-02T14:23:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6874,7 +4500,7 @@
       "referenceNo": "",
       "timestamp": "2026-07-19T14:22:00+00:00",
       "createdAt": "2026-07-19T14:22:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6902,7 +4528,7 @@
       "referenceNo": "",
       "timestamp": "2026-07-12T00:00:00+00:00",
       "createdAt": "2026-07-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6930,7 +4556,7 @@
       "referenceNo": "",
       "timestamp": "2026-07-12T00:00:00+00:00",
       "createdAt": "2026-07-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6958,7 +4584,7 @@
       "referenceNo": "",
       "timestamp": "2026-06-21T14:21:00+00:00",
       "createdAt": "2026-06-21T14:21:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -6986,7 +4612,7 @@
       "referenceNo": "",
       "timestamp": "2026-06-14T00:00:00+00:00",
       "createdAt": "2026-06-14T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7014,7 +4640,7 @@
       "referenceNo": "",
       "timestamp": "2026-06-13T14:21:00+00:00",
       "createdAt": "2026-06-13T14:21:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7042,7 +4668,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-12T00:00:00+00:00",
       "createdAt": "2026-04-12T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7070,7 +4696,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7098,7 +4724,7 @@
       "referenceNo": "",
       "timestamp": "2026-08-15T00:00:00+00:00",
       "createdAt": "2026-08-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7126,7 +4752,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7154,7 +4780,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7182,7 +4808,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7210,7 +4836,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7238,7 +4864,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7266,7 +4892,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-15T00:00:00+00:00",
       "createdAt": "2026-04-15T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7294,7 +4920,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-25T07:50:00+00:00",
       "createdAt": "2026-10-25T07:50:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7322,7 +4948,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T17:20:00+00:00",
       "createdAt": "2026-10-24T17:20:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7350,7 +4976,7 @@
       "referenceNo": "",
       "timestamp": "2026-10-24T13:35:00+00:00",
       "createdAt": "2026-10-24T13:35:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7378,7 +5004,7 @@
       "referenceNo": "",
       "timestamp": "2026-05-03T14:19:00+00:00",
       "createdAt": "2026-05-03T14:19:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7406,7 +5032,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T14:18:00+00:00",
       "createdAt": "2026-04-19T14:18:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7434,7 +5060,7 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
       "metadata": {}
     },
     {
@@ -7462,7 +5088,735 @@
       "referenceNo": "",
       "timestamp": "2026-04-19T00:00:00+00:00",
       "createdAt": "2026-04-19T00:00:00+00:00",
-      "updatedAt": "2026-11-01T16:59:39.187+00:00",
+      "updatedAt": "2026-11-03T07:53:10.597+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792066312185_840",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa R Lalhmachhuana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-4610",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 1500,
+      "platformFee": 0,
+      "totalAmount": 1500,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.1500",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-15T00:00:00+00:00",
+      "createdAt": "2026-08-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792066492573_254",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Richard L Jongte",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-2079",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 1000,
+      "platformFee": 0,
+      "totalAmount": 1000,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.1000",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-15T00:00:00+00:00",
+      "createdAt": "2026-08-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792064888839_104",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Eric C Lallawmpuia",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-4259",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "TXN-906065",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "J Lalsangliana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-1718",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-183638",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalkhawmuana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-6709",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792064793617_391",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalzawmliana Sailo",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8526",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 300,
+      "platformFee": 0,
+      "totalAmount": 300,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.300",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-934197",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa Vanlalliana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8871",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-253106",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "K Lalfakzuala",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-3106",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792064661583_956",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalruatfela Zadeng",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-0562",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-267698",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalnuntluanga Vanchhawng",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-7128",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-527580",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa R Lalhmachhuana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-4610",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792064576405_338",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Richard L Jongte",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-2079",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-130114",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalrinawma Hmar",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-0520",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "February 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "February",
+      "periodYear": "2026",
+      "periodLabel": "February 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-02-15T00:00:00+00:00",
+      "createdAt": "2026-02-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY_TXN_1792064181276_391",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Eric C Lallawmpuia",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-4259",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 150,
+      "platformFee": 0,
+      "totalAmount": 150,
+      "paymentMethod": "upi",
+      "status": "completed",
+      "remark": "January 2026 | BMP Fund: Rs.150",
+      "periodType": "one_time",
+      "periodMonth": "January",
+      "periodYear": "2026",
+      "periodLabel": "January 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-01-15T00:00:00+00:00",
+      "createdAt": "2026-01-15T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-603439",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalhruaisanga",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-1111",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-234750",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalzawmliana Sailo",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8526",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.500",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-141711",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa Vanlalliana",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8871",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-377079",
+      "campaignId": "cmp-kumtluang-1",
+      "campaignTitle": "BCM Ebenezer, Zobawk",
+      "category": "kumtluang",
+      "donorName": "BKHP",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "",
+      "donorType": "group",
+      "isAnonymous": false,
+      "amount": 25000,
+      "platformFee": 0,
+      "totalAmount": 25000,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "Oct-26",
+      "periodType": "one_time",
+      "periodMonth": "October",
+      "periodYear": "2026",
+      "periodLabel": "October 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-10-24T13:03:00+00:00",
+      "createdAt": "2026-10-24T13:03:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-194628",
+      "campaignId": "cmp-1787829303143",
+      "campaignTitle": "YMA Vengthar Br, Zobawk, Lunglei",
+      "category": "kumtluang",
+      "donorName": "C. Lalramnghaka",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "YMAVT-3434",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "May-26",
+      "periodType": "one_time",
+      "periodMonth": "May",
+      "periodYear": "2026",
+      "periodLabel": "May 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-10-24T00:00:00+00:00",
+      "createdAt": "2026-10-24T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-252134",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa C Lalbiaktluanga",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-7944",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-155979",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa Lalramzauva Sailo",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8465",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.500",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-726803",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "K Lalfakzuala",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-3106",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 100,
+      "platformFee": 0,
+      "totalAmount": 100,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.100",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-498102",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Upa B Laltanpuia",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-0258",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.500",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-517377",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Jackie Lalrinsanga",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-8223",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 500,
+      "platformFee": 0,
+      "totalAmount": 500,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "August 2026 | BMP Fund: Rs.500",
+      "periodType": "one_time",
+      "periodMonth": "August",
+      "periodYear": "2026",
+      "periodLabel": "August 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-08-16T00:00:00+00:00",
+      "createdAt": "2026-08-16T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-695880",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "K Lalfakzuala",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-3106",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 200,
+      "platformFee": 0,
+      "totalAmount": 200,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "April 2026 | BMP Fund: Rs.200",
+      "periodType": "one_time",
+      "periodMonth": "April",
+      "periodYear": "2026",
+      "periodLabel": "April 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-04-12T00:00:00+00:00",
+      "createdAt": "2026-04-12T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
+      "metadata": {}
+    },
+    {
+      "id": "RPAY-CASH-844911",
+      "campaignId": "cmp-1788107291420",
+      "campaignTitle": "BMP Shillong",
+      "category": "kumtluang",
+      "donorName": "Lalruatfela Zadeng",
+      "donorPhone": "",
+      "donorVeng": "",
+      "memberId": "BMPSHL-0562",
+      "donorType": "member",
+      "isAnonymous": false,
+      "amount": 300,
+      "platformFee": 0,
+      "totalAmount": 300,
+      "paymentMethod": "cash",
+      "status": "completed",
+      "remark": "April 2026 | BMP Fund: Rs.300",
+      "periodType": "one_time",
+      "periodMonth": "April",
+      "periodYear": "2026",
+      "periodLabel": "April 2026",
+      "utr": "",
+      "referenceNo": "",
+      "timestamp": "2026-04-12T00:00:00+00:00",
+      "createdAt": "2026-04-12T00:00:00+00:00",
+      "updatedAt": "2026-11-03T07:53:10.596+00:00",
       "metadata": {}
     }
   ],
@@ -7805,5 +6159,5 @@
     "exp-1791226950000"
   ],
   "hardPurgeTimestamp": 0,
-  "lastUpdated": "2026-11-01T17:29:01.682Z"
+  "lastUpdated": "2026-11-03T14:51:37.417Z"
 }

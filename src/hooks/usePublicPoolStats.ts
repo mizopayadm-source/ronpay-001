@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseQuotaBlocked } from '../lib/supabase';
 import { PublicPoolStats } from '../types';
 import { getStoredTransactions } from '../utils/storage';
 
@@ -73,7 +73,6 @@ export function usePublicPoolStats(): {
   const refreshFromLocal = useCallback(() => {
     const fallback = getFallbackPoolStats();
     setStats((prev) => {
-      // Don't overwrite higher remote numbers with empty 0s
       if (fallback.totalCount > 0 || prev.totalCount === 0) {
         return fallback;
       }
@@ -84,7 +83,36 @@ export function usePublicPoolStats(): {
   useEffect(() => {
     let isMounted = true;
 
+    // Check circuit breaker first - if quota exceeded, skip network calls to prevent egress penalty
+    if (isSupabaseQuotaBlocked()) {
+      refreshFromLocal();
+      return;
+    }
+
     const fetchLiveStatsFromSupabase = async () => {
+      if (isSupabaseQuotaBlocked()) {
+        if (isMounted) refreshFromLocal();
+        return;
+      }
+
+      // Check if we have recent cached stats (< 5 minutes old) to save Supabase Egress
+      try {
+        const cachedRaw = localStorage.getItem('ronpay_public_pool_stats_v1');
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && cached.lastUpdated) {
+            const ageMs = Date.now() - new Date(cached.lastUpdated).getTime();
+            if (ageMs < 5 * 60 * 1000 && cached.totalCount > 0) {
+              if (isMounted) {
+                setStats(cached);
+                setLoading(false);
+              }
+              return;
+            }
+          }
+        }
+      } catch {}
+
       try {
         const { data, error: supaError, count } = await supabase
           .from('transactions')
@@ -131,8 +159,6 @@ export function usePublicPoolStats(): {
           } catch {}
         }
       } catch (err: any) {
-        // Log gracefully as a notice instead of raising unhandled console.error
-        console.warn('[usePublicPoolStats] Network/offline fallback to local transaction store:', err?.message || err);
         if (isMounted) {
           const fallback = getFallbackPoolStats();
           setStats(fallback);
@@ -156,40 +182,11 @@ export function usePublicPoolStats(): {
     window.addEventListener('ronpay_stats_updated', handleSync);
     window.addEventListener('storage', handleSync);
 
-    // Safe Real-time subscription with unique channel name to prevent callback collision errors
-    let channel: any = null;
-    try {
-      const uniqueChannelName = `public-transactions-${Math.random().toString(36).substring(2, 9)}`;
-      channel = supabase
-        .channel(uniqueChannelName)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'transactions' },
-          () => {
-            if (isMounted) {
-              fetchLiveStatsFromSupabase();
-            }
-          }
-        )
-        .subscribe((status: string) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('[usePublicPoolStats] Supabase Realtime channel state:', status);
-          }
-        });
-    } catch (e) {
-      console.warn('[usePublicPoolStats] Could not initialize realtime channel, relying on local sync:', e);
-    }
-
     return () => {
       isMounted = false;
       window.removeEventListener('ronpay_data_synced', handleSync);
       window.removeEventListener('ronpay_stats_updated', handleSync);
       window.removeEventListener('storage', handleSync);
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch {}
-      }
     };
   }, [refreshFromLocal]);
 

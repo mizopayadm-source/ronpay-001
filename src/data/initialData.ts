@@ -79,7 +79,7 @@ export const INITIAL_CAMPAIGNS: any[] = [
     category: 'kumtluang',
     title: 'BCM Ebenezer Church',
     orgName: 'BCM Ebenezer',
-    orgCode: 'ZBKEBE',
+    orgCode: 'EBEZBK',
     upiId: 'bcm.ebenezer@okaxis',
     imageUrl: '/images/bcm_ebenezer.jpg',
     status: 'active',

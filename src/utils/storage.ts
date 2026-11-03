@@ -511,9 +511,6 @@ export const getStoredCampaigns = (): Campaign[] => {
               updated.category = 'kumtluang';
               const oldCode = updated.orgCode;
               updated.orgCode = 'ZBKEBE';
-              if (oldCode && oldCode.toUpperCase() === 'EBEZBK') {
-                migrateCampaignMembersPrefix('cmp-kumtluang-1', 'EBEZBK', 'ZBKEBE');
-              }
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
@@ -3544,7 +3541,17 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
   const cleanNew = newPrefix.trim().toUpperCase();
   if (cleanOld && cleanOld === cleanNew) return 0;
 
-  const allMembers = getMembers('all');
+  let allMembers: MemberRecord[] = [];
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(MEMBERS_LIST_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) allMembers = parsed;
+    }
+  } catch {}
+  if (allMembers.length === 0) {
+    allMembers = [...INITIAL_DEFAULT_MEMBERS];
+  }
   let migratedCount = 0;
   const oldToNewIdMap: Record<string, string> = {};
 

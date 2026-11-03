@@ -19,6 +19,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- Google tag (gtag.js) for GA4: G-P29J9QMYK6 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-P29J9QMYK6"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+      gtag('config', 'G-P29J9QMYK6', {
+        send_page_view: true,
+        cookie_flags: 'SameSite=None;Secure'
+      });
+    </script>
 
     <script>
       try {
