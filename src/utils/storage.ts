@@ -3271,15 +3271,33 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
     });
 
+    // Ensure strict uniqueness of member IDs across all members to prevent duplicate key errors
+    const uniqueMap = new Map<string, MemberRecord>();
+    const seenIds = new Set<string>();
+    for (let idx = 0; idx < allMembers.length; idx++) {
+      const m = allMembers[idx];
+      if (!m || !m.id) continue;
+      let cleanId = String(m.id).toLowerCase().trim();
+      if (seenIds.has(cleanId)) {
+        const prefix = (m.orgCode || 'MEM').toUpperCase();
+        const suffix = m.phoneLast4 || `${idx + 1}`.padStart(4, '0');
+        m.id = `${prefix}-${suffix}-${idx + 1}`;
+        cleanId = String(m.id).toLowerCase().trim();
+      }
+      seenIds.add(cleanId);
+      uniqueMap.set(cleanId, m);
+    }
+    const uniqueMembers = Array.from(uniqueMap.values());
+
     if (!campaignId || campaignId === 'all') {
-      return allMembers;
+      return uniqueMembers;
     }
 
     // Filter strictly by campaignId, orgCode, or prefix
     const campaigns = getStoredCampaigns();
     const targetCampaign = campaigns.find(c => c.id === campaignId);
 
-    return allMembers.filter(m => {
+    return uniqueMembers.filter(m => {
       // 1. Direct campaignId match
       if (m.campaignId && m.campaignId === campaignId) {
         return true;
