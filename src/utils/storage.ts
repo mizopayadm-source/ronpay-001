@@ -3630,6 +3630,9 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
           deleteSupabaseMember(oldId).catch(() => {});
         }
       });
+      import('../services/supabaseService').then(({ syncAllMembersToSupabase, purgeLegacySupabaseMembers }) => {
+        syncAllMembersToSupabase().then(() => purgeLegacySupabaseMembers()).catch(() => {});
+      }).catch(() => {});
     } catch (supErr) {
       console.warn('Supabase member prefix migration sync note:', supErr);
     }

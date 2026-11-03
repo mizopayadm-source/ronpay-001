@@ -373,6 +373,32 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
     }
   };
 
+  const handleSyncAllMembersToSupabase = async () => {
+    setIsScanning(true);
+    setActionNotice({
+      message: '⏳ Web App-a Member zawng zawng (80 Members) te hi Supabase-ah upload & align mek a ni...',
+      type: 'success'
+    });
+    try {
+      const { syncAllMembersToSupabase, purgeLegacySupabaseMembers } = await import('../services/supabaseService');
+      const res = await syncAllMembersToSupabase();
+      const purgeRes = await purgeLegacySupabaseMembers();
+      setActionNotice({
+        message: `✅ Member ${res.synced} / ${res.total} te Supabase-ah hlawhtling takin sync fel a ni ta! Legacy/duplicate record ${purgeRes.deletedCount} paih fai a ni.`,
+        type: 'success'
+      });
+      if (onRefreshParent) onRefreshParent();
+      await runDiagnosticScan();
+    } catch (err: any) {
+      setActionNotice({
+        message: `❌ Error syncing members: ${err?.message || String(err)}`,
+        type: 'error'
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const handlePurgeLegacyMembers = async () => {
     setIsScanning(true);
     setActionNotice({
@@ -730,6 +756,16 @@ export const AdminSyncDiagnosticView: React.FC<AdminSyncDiagnosticViewProps> = (
             >
               <RefreshCw className={`w-3.5 h-3.5 text-white ${isScanning ? 'animate-spin' : ''}`} />
               <span>Restore Cache to Supabase</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncAllMembersToSupabase}
+              disabled={isScanning}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-white ${isScanning ? 'animate-spin' : ''}`} />
+              <span>Sync All Members to Supabase (80 Members)</span>
             </button>
 
             <button

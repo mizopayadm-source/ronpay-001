@@ -1408,48 +1408,135 @@ export async function deleteSupabaseMember(id: string): Promise<boolean> {
 }
 
 export async function syncAllMembersToSupabase(): Promise<{ total: number; synced: number }> {
+  if (isSupabaseQuotaBlocked()) {
+    const allMems = getMembers('all');
+    return { total: allMems ? allMems.length : 0, synced: 0 };
+  }
   const supabase = getSupabase();
-  if (!supabase) return { total: 0, synced: 0 };
-
-  const allMems = getMembers();
-  if (!allMems || allMems.length === 0) return { total: 0, synced: 0 };
-
-  const rows = allMems.map(member => ({
-    id: member.id,
-    campaign_id: member.campaignId || 'cmp-default',
-    name: member.name || 'Member',
-    father_name: member.fatherName || null,
-    org_code: member.orgCode || null,
-    phone: member.phone || member.fullPhone || null,
-    full_phone: member.fullPhone || member.phone || null,
-    phone_last4: member.phoneLast4 || (member.phone ? member.phone.slice(-4) : null),
-    section: member.section || null,
-    is_family_head: Boolean(member.isFamilyHead),
-    pledge_amount: Number(member.pledgeAmount) || 0,
-    paid_amount: Number(member.paidAmount) || 0,
-    status: member.status || 'pending',
-    dependents: member.dependents || [],
-    created_at: member.createdAt || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    metadata: {
-      notes: member.notes,
-      avatarUrl: member.avatarUrl,
-      enrollmentYear: member.enrollmentYear,
-      activeYears: member.activeYears,
-      yearStatus: member.yearStatus,
-    }
-  }));
-
-  try {
-    const { error } = await supabase.from('members').upsert(rows, { onConflict: 'id' });
-    if (!error) {
-      return { total: allMems.length, synced: allMems.length };
-    }
-  } catch (err: any) {
-    console.warn('[Supabase Member Batch Warning]:', err?.message);
+  if (!supabase) {
+    const allMems = getMembers('all');
+    return { total: allMems ? allMems.length : 0, synced: 0 };
   }
 
-  return { total: allMems.length, synced: 0 };
+  // Load ALL local members across all campaigns
+  const allMems = getMembers('all');
+  if (!allMems || allMems.length === 0) return { total: 0, synced: 0 };
+
+  // Fetch campaigns for orgCode mapping
+  const storedCampaigns = getStoredCampaigns();
+  const campOrgMap = new Map<string, string>();
+  storedCampaigns.forEach(c => {
+    if (c && c.id && c.orgCode) {
+      campOrgMap.set(c.id, String(c.orgCode).trim().toUpperCase());
+    }
+  });
+
+  // Align member IDs and orgCode with campaign settings
+  const validMemberIds = new Set<string>();
+  const alignedMembers: MemberRecord[] = [];
+
+  const rows = allMems.map(member => {
+    let effectiveCode = member.orgCode ? String(member.orgCode).trim().toUpperCase() : 'MEM';
+    if (member.campaignId && campOrgMap.has(member.campaignId)) {
+      effectiveCode = campOrgMap.get(member.campaignId)!;
+    }
+
+    let effectiveId = member.id;
+    if (effectiveId && effectiveId.includes('-')) {
+      const parts = effectiveId.split('-');
+      const currPrefix = parts[0].toUpperCase();
+      if (currPrefix !== effectiveCode) {
+        effectiveId = `${effectiveCode}-${parts.slice(1).join('-')}`;
+      }
+    } else if (effectiveId) {
+      const suffix = member.phoneLast4 || effectiveId.slice(-4);
+      effectiveId = `${effectiveCode}-${suffix}`;
+    }
+
+    const updatedMember: MemberRecord = {
+      ...member,
+      id: effectiveId,
+      orgCode: effectiveCode,
+      updatedAt: new Date().toISOString()
+    };
+    alignedMembers.push(updatedMember);
+
+    validMemberIds.add(effectiveId);
+    validMemberIds.add(effectiveId.toLowerCase());
+
+    return {
+      id: effectiveId,
+      campaign_id: member.campaignId || 'cmp-default',
+      name: member.name || 'Member',
+      father_name: member.fatherName || null,
+      org_code: effectiveCode,
+      phone: member.phone || member.fullPhone || null,
+      full_phone: member.fullPhone || member.phone || null,
+      phone_last4: member.phoneLast4 || (member.phone ? member.phone.slice(-4) : null),
+      section: member.section || null,
+      is_family_head: Boolean(member.isFamilyHead),
+      pledge_amount: Number(member.pledgeAmount) || 0,
+      paid_amount: Number(member.paidAmount) || 0,
+      status: member.status || 'pending',
+      dependents: member.dependents || [],
+      created_at: member.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: {
+        notes: member.notes,
+        avatarUrl: member.avatarUrl,
+        enrollmentYear: member.enrollmentYear,
+        activeYears: member.activeYears,
+        yearStatus: member.yearStatus,
+        section: member.section || null,
+      }
+    };
+  });
+
+  // Save aligned members back to localStorage
+  try {
+    localStorage.setItem('ronpay_kumtluang_members_v1', JSON.stringify(alignedMembers));
+  } catch {}
+
+  try {
+    // 1. Chunked upsert into Supabase (50 records per batch)
+    const chunkSize = 50;
+    let synced = 0;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const batch = rows.slice(i, i + chunkSize);
+      const { error } = await supabase.from('members').upsert(batch, { onConflict: 'id' });
+      if (!error) {
+        synced += batch.length;
+      } else {
+        console.warn('[Supabase Member Chunk Upsert Warning]:', error.message);
+      }
+    }
+
+    // 2. Cleanup orphaned/old prefix member records in Supabase
+    try {
+      const { data: cloudRows } = await supabase.from('members').select('id, campaign_id, org_code');
+      if (cloudRows && cloudRows.length > 0) {
+        for (const cloudRow of cloudRows) {
+          const cloudId = String(cloudRow.id || '').trim();
+          const cloudCampId = cloudRow.campaign_id;
+          const expectedCode = campOrgMap.get(cloudCampId);
+
+          const isWrongPrefix = expectedCode && cloudRow.org_code && String(cloudRow.org_code).toUpperCase() !== expectedCode;
+          const isNotLocallyPresent = !validMemberIds.has(cloudId) && !validMemberIds.has(cloudId.toLowerCase());
+
+          if (isWrongPrefix || isNotLocallyPresent) {
+            await supabase.from('members').delete().eq('id', cloudRow.id);
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('[Supabase Member Cleanup Note]:', cleanErr);
+    }
+
+    return { total: allMems.length, synced };
+  } catch (err: any) {
+    console.warn('[Supabase Member Batch Warning]:', err?.message);
+    return { total: allMems.length, synced: 0 };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1994,15 +2081,22 @@ export async function purgeLegacySupabaseMembers(): Promise<{ deletedCount: numb
     const validIds = new Set(localMembers.map(m => String(m.id || '').toLowerCase().trim()));
     const validPrefixes = new Set(localMembers.map(m => String(m.orgCode || '').toUpperCase().trim()).filter(Boolean));
 
+    const storedCampaigns = getStoredCampaigns();
+    storedCampaigns.forEach(c => {
+      if (c && c.orgCode) validPrefixes.add(String(c.orgCode).trim().toUpperCase());
+    });
+
     let deletedCount = 0;
     for (const row of cloudRows) {
-      const rowId = String(row.id || '').toLowerCase().trim();
+      const rowIdUpper = String(row.id || '').toUpperCase().trim();
+      const rowIdLower = String(row.id || '').toLowerCase().trim();
       const rowOrgCode = String(row.org_code || '').toUpperCase().trim();
-      
-      const isObsoletePrefix = (rowId.startsWith('ebe-') || rowId.startsWith('ebebcm-')) && !rowId.startsWith('ebezbk-');
-      const isOrphaned = !validIds.has(rowId);
+      const rowPrefix = rowIdUpper.includes('-') ? rowIdUpper.split('-')[0] : rowOrgCode;
 
-      if (isObsoletePrefix || (isOrphaned && rowOrgCode && !validPrefixes.has(rowOrgCode))) {
+      const isNotLocallyPresent = !validIds.has(rowIdLower);
+      const isUnmatchedPrefix = Boolean(rowPrefix && !validPrefixes.has(rowPrefix));
+
+      if (isNotLocallyPresent || isUnmatchedPrefix) {
         const { error: delErr } = await supabase.from('members').delete().eq('id', row.id);
         if (!delErr) {
           deletedCount++;
