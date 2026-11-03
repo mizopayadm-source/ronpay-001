@@ -5205,6 +5205,7 @@ async function syncFromSupabase(db: DatabaseSchema, force: boolean = false): Pro
       }
     } catch {}
 
+    lastServerSupabaseSync = Date.now();
     saveDatabase(db);
     return true;
   } catch (err: any) {
