@@ -4560,18 +4560,33 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     });
     if (db.members.length !== beforeLen) changed = true;
     
-    // Normalize legacy BCM or EBE member IDs to current campaign orgCode
+    // Normalize legacy BCM, EBE, or ZBKEBE member IDs to current campaign orgCode
     const ebeCampObj = (db.campaigns || []).find((c: any) => c.id === 'cmp-kumtluang-1');
-    const targetEbeOrg = (ebeCampObj && ebeCampObj.orgCode) ? String(ebeCampObj.orgCode).trim().toUpperCase() : 'EBEZBK';
+    const targetEbeOrg = (ebeCampObj && ebeCampObj.orgCode) ? String(ebeCampObj.orgCode).trim().toUpperCase() : 'ZBKEBE';
 
     db.members.forEach((m: any) => {
       if (!m || !m.id) return;
-      const rawId = String(m.id);
-      if (rawId.toUpperCase().startsWith('BCM-')) {
-        m.id = targetEbeOrg + '-' + rawId.substring(4);
+      const rawId = String(m.id).toUpperCase();
+      const rawOrg = String(m.orgCode || '').toUpperCase();
+      if (
+        m.campaignId === 'cmp-kumtluang-1' ||
+        rawId.startsWith('BCM-') ||
+        rawId.startsWith('ZBKEBE-') ||
+        rawId.startsWith('EBEZBK-') ||
+        rawId.startsWith('EBE-') ||
+        ['BCM', 'ZBKEBE', 'EBEZBK', 'EBE'].includes(rawOrg)
+      ) {
         m.campaignId = 'cmp-kumtluang-1';
-        m.orgCode = targetEbeOrg;
-        changed = true;
+        if (!rawId.startsWith(targetEbeOrg + '-')) {
+          const parts = String(m.id).split('-');
+          const suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
+          m.id = `${targetEbeOrg}-${suffix}`;
+          m.orgCode = targetEbeOrg;
+          changed = true;
+        } else if (m.orgCode !== targetEbeOrg) {
+          m.orgCode = targetEbeOrg;
+          changed = true;
+        }
       }
       if (m.campaignId === 'cmp-1788107291420' || m.orgCode === 'BMPSHL' || String(m.id).startsWith('BMPSHL-')) {
         if (!m.section) {
@@ -4609,12 +4624,12 @@ function autoHealDatabase(db: DatabaseSchema): boolean {
     }
   }
 
-  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) has orgCode default EBEZBK if missing
+  // Ensure BCM Ebenezer, Zobawk (cmp-kumtluang-1) has orgCode default ZBKEBE if missing
   const ebeCamp = (db.campaigns || []).find(c => c.id === 'cmp-kumtluang-1' || (c.title && String(c.title).toLowerCase().includes('bcm ebenezer')));
   if (ebeCamp) {
     if (!ebeCamp.orgCode) {
-      ebeCamp.orgCode = 'EBEZBK';
-      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'EBEZBK';
+      ebeCamp.orgCode = 'ZBKEBE';
+      if (ebeCamp.metadata) ebeCamp.metadata.orgCode = 'ZBKEBE';
       changed = true;
     }
   }
@@ -5623,8 +5638,18 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
     }
     const db = getDatabase();
     const cleanId = String(member.id).toLowerCase().trim();
+    const oldId = String(member.oldId || member._oldId || '').toLowerCase().trim();
+
     member.updatedAt = new Date().toISOString();
-    db.deletedMemberIds = (db.deletedMemberIds || []).filter(id => id !== cleanId);
+
+    // Clean up tombstone deletions
+    db.deletedMemberIds = (db.deletedMemberIds || []).filter(id => id !== cleanId && (!oldId || id !== oldId));
+
+    // Remove old ID record if member ID changed
+    if (oldId && oldId !== cleanId) {
+      db.members = (db.members || []).filter(m => String(m.id).toLowerCase().trim() !== oldId);
+    }
+
     const existingIndex = (db.members || []).findIndex(m => String(m.id).toLowerCase().trim() === cleanId);
     if (existingIndex >= 0) {
       db.members[existingIndex] = { ...db.members[existingIndex], ...member };
@@ -5634,12 +5659,17 @@ const handleUpsertMemberRequest = (req: Request, res: Response) => {
 
     // Propagate section or name changes to matching transactions in db.transactions
     if (member.section || member.name) {
-      const altCleanId = cleanId.startsWith('ebe-') ? 'bcm-' + cleanId.slice(4) : (cleanId.startsWith('bcm-') ? 'ebe-' + cleanId.slice(4) : cleanId);
+      const matchSet = new Set<string>([cleanId]);
+      if (oldId) matchSet.add(oldId);
+      if (cleanId.startsWith('ebe-')) matchSet.add('bcm-' + cleanId.slice(4));
+      if (cleanId.startsWith('bcm-')) matchSet.add('ebe-' + cleanId.slice(4));
+
       db.transactions = (db.transactions || []).map((t: any) => {
         const tMid = String(t.memberId || '').toLowerCase().trim();
-        if (tMid === cleanId || tMid === altCleanId) {
+        if (matchSet.has(tMid)) {
           return {
             ...t,
+            memberId: member.id,
             donorName: member.name || t.donorName,
             donorVeng: member.section || t.donorVeng,
             section: member.section || t.section,

@@ -1377,6 +1377,21 @@ export async function updateSupabaseMember(member: MemberRecord, oldId?: string)
       await supabase.from('members').delete().eq('id', oldId);
     }
 
+    // Propagate member name & section update to Supabase transactions
+    try {
+      const matchIds = [member.id];
+      if (oldId && oldId !== member.id) matchIds.push(oldId);
+      await supabase
+        .from('transactions')
+        .update({
+          donor_name: member.name || 'Member',
+          donor_veng: member.section || null,
+          member_id: member.id,
+          updated_at: new Date().toISOString()
+        })
+        .in('member_id', matchIds);
+    } catch {}
+
     return success;
   } catch (err: any) {
     console.warn('[Supabase] Member persistence error:', err?.message);

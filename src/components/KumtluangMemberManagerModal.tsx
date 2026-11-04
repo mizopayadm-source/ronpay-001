@@ -204,7 +204,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
       return true;
     }).map(c => {
       if (c.id === 'cmp-kumtluang-1' || String(c.title || '').toLowerCase().includes('ebenezer')) {
-        return { ...c, orgCode: c.orgCode || 'EBEZBK' };
+        return { ...c, orgCode: c.orgCode || 'ZBKEBE' };
       }
       return c;
     });
@@ -531,11 +531,12 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
               if (rm && rm.id) {
                 const origRemoteId = rm.id;
                 // Align remote member prefix with canonical campaign orgCode
-                const campOrg = (rm.campaignId && campCodeMap.get(rm.campaignId)) || (rm.campaignId === 'cmp-kumtluang-1' ? 'EBEZBK' : null);
+                const campOrg = (rm.campaignId && campCodeMap.get(rm.campaignId)) || (rm.campaignId === 'cmp-kumtluang-1' ? (campCodeMap.get('cmp-kumtluang-1') || 'ZBKEBE') : null);
                 if (campOrg && rm.id.includes('-')) {
                   const parts = rm.id.split('-');
                   if (parts[0].toUpperCase() !== campOrg) {
-                    rm.id = `${campOrg}-${parts.slice(1).join('-')}`;
+                    const suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
+                    rm.id = `${campOrg}-${suffix}`;
                     rm.orgCode = campOrg;
                   }
                 }
@@ -1053,7 +1054,7 @@ export const KumtluangMemberManagerModal: React.FC<KumtluangMemberManagerModalPr
         : (editCampaignId || editingMember.campaignId || activeScopedCampaign?.id || selectedCampaignId || 'cmp-kumtluang-1');
 
       const targetCamp = allowedCampaigns.find(c => c.id === targetCampaignId) || activeScopedCampaign;
-      const org = (targetCamp?.orgCode || (isEbe ? 'EBEZBK' : (editOrgCode.trim().toUpperCase() || editingMember.orgCode || 'MEM'))).toUpperCase();
+      const org = (targetCamp?.orgCode || (editOrgCode.trim().toUpperCase() || editingMember.orgCode || (isEbe ? 'ZBKEBE' : 'MEM'))).toUpperCase();
       const p4 = editPhone4.slice(-4) || editingMember.phoneLast4;
       const newId = `${org}-${p4}`;
       const oldId = editingMember.id;

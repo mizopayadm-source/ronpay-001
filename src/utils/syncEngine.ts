@@ -318,7 +318,7 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
             memMap.set(String(sm.id).toLowerCase().trim(), sm);
           }
 
-          // Merge local members only if not forceAuthoritative or if genuine offline pending
+          // Merge local members intelligently preserving user edits
           for (const lm of localMembers) {
             const k = String(lm.id).toLowerCase().trim();
             if (!memMap.has(k)) {
@@ -327,8 +327,18 @@ export async function syncAllWithServer(forceAuthoritative: boolean = false): Pr
               const existing = memMap.get(k);
               const localTime = new Date(lm.updatedAt || lm.createdAt || 0).getTime();
               const serverTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
-              if (localTime > serverTime) {
+              if (localTime >= serverTime) {
                 memMap.set(k, { ...existing, ...lm });
+              } else {
+                // Keep server record, but if local record has edited name/section, preserve local user edits
+                memMap.set(k, {
+                  ...existing,
+                  name: (lm.updatedAt && lm.name) ? lm.name : existing.name,
+                  section: (lm.updatedAt && lm.section) ? lm.section : existing.section,
+                  fullPhone: lm.fullPhone || existing.fullPhone,
+                  dependents: (lm.dependents && lm.dependents.length > 0) ? lm.dependents : existing.dependents,
+                  updatedAt: lm.updatedAt || existing.updatedAt
+                });
               }
             }
           }

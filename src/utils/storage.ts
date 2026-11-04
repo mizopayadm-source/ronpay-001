@@ -509,8 +509,9 @@ export const getStoredCampaigns = (): Campaign[] => {
             }
             if (updated.id === 'cmp-kumtluang-1' || String(updated.title).toLowerCase().includes('bcm ebenezer')) {
               updated.category = 'kumtluang';
-              const oldCode = updated.orgCode;
-              updated.orgCode = 'ZBKEBE';
+              if (!updated.orgCode) {
+                updated.orgCode = 'ZBKEBE';
+              }
               // If missing, or set to broken 404 unsplash URL, heal with authoritative church photo
               if (!updated.imageUrl || updated.imageUrl.includes('unsplash.com') || updated.imageUrl.includes('photo-1548625361-195feee10fce')) {
                 updated.imageUrl = BCM_EBENEZER_DEFAULT_LOGO;
@@ -3412,7 +3413,7 @@ export const getMembers = (campaignId?: string): MemberRecord[] => {
       }
 
       // 4. Backward compatibility & direct campaign mappings
-      if (m.orgCode === 'EBE' && campaignId === 'cmp-kumtluang-1') return true;
+      if (['EBE', 'ZBKEBE', 'EBEZBK', 'BCM'].includes(m.orgCode || '') && campaignId === 'cmp-kumtluang-1') return true;
       if (m.orgCode === 'KTL' && campaignId === 'cmp-kumtluang-2') return true;
       if (m.orgCode === 'BMPSHL' && (campaignId === 'cmp-1788107291420' || campaignId.toLowerCase().includes('bmp'))) return true;
       if (m.orgCode === 'YMAVT' && (campaignId === 'cmp-kumtluang-ymavt' || campaignId === 'cmp-1787829303143' || campaignId.includes('ymavt') || campaignId.includes('yma-vengthar'))) return true;
@@ -3505,11 +3506,34 @@ export const addBatchMembers = (newMembers: MemberRecord[], overwriteExisting = 
 };
 
 export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): Promise<boolean> => {
-  const isEbe = (member.orgCode === 'EBE' || member.orgCode === 'BCM' || member.orgCode === 'ZBKEBE' || member.id?.startsWith('ZBKEBE-') || member.id?.startsWith('EBEZBK-') || member.id?.startsWith('BCM-'));
+  const campaigns = getStoredCampaigns();
+  const ebeCamp = campaigns.find(c => c.id === 'cmp-kumtluang-1' || String(c.title).toLowerCase().includes('bcm ebenezer'));
+  const currentEbeOrg = (ebeCamp && ebeCamp.orgCode) ? ebeCamp.orgCode.trim().toUpperCase() : 'ZBKEBE';
+
+  const isEbe = (
+    member.campaignId === 'cmp-kumtluang-1' ||
+    member.orgCode === currentEbeOrg ||
+    member.orgCode === 'EBE' ||
+    member.orgCode === 'BCM' ||
+    member.orgCode === 'ZBKEBE' ||
+    member.orgCode === 'EBEZBK' ||
+    (member.id && (
+      member.id.toUpperCase().startsWith(currentEbeOrg + '-') ||
+      member.id.toUpperCase().startsWith('ZBKEBE-') ||
+      member.id.toUpperCase().startsWith('EBEZBK-') ||
+      member.id.toUpperCase().startsWith('BCM-') ||
+      member.id.toUpperCase().startsWith('EBE-')
+    ))
+  );
+
+  const targetCampaignId = isEbe ? 'cmp-kumtluang-1' : (member.campaignId || 'cmp-kumtluang-1');
+  const matchedCamp = campaigns.find(c => c.id === targetCampaignId);
+  const targetOrg = member.orgCode || (isEbe ? currentEbeOrg : (matchedCamp?.orgCode || 'ZBKEBE'));
+
   const stamped: MemberRecord = {
     ...member,
-    campaignId: isEbe ? 'cmp-kumtluang-1' : (member.campaignId || 'cmp-kumtluang-1'),
-    orgCode: isEbe ? 'ZBKEBE' : (member.orgCode || 'ZBKEBE'),
+    campaignId: targetCampaignId,
+    orgCode: targetOrg,
     createdAt: member.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -3559,13 +3583,13 @@ export const addOrUpdateMember = async (member: MemberRecord, oldId?: string): P
   safeApiFetch('/api/members', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(stamped)
+    body: JSON.stringify({ ...stamped, oldId, _oldId: oldId })
   }).catch(() => {});
 
   safeApiFetch('/api/data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ members: [stamped] })
+    body: JSON.stringify({ members: [{ ...stamped, oldId, _oldId: oldId }] })
   }).catch(() => {});
 
   // 3. Propagate updated member name / section to local transactions
@@ -3686,13 +3710,18 @@ export function migrateCampaignMembersPrefix(campaignId: string, oldPrefix: stri
       m.campaignId === campaignId ||
       (!m.campaignId && cleanOld && (mOrgUpper === cleanOld || mIdUpper.startsWith(cleanOld + '-'))) ||
       (cleanOld && mOrgUpper === cleanOld) ||
-      (cleanOld && mIdUpper.startsWith(cleanOld + '-'));
+      (cleanOld && mIdUpper.startsWith(cleanOld + '-')) ||
+      (campaignId === 'cmp-kumtluang-1' && (
+        ['ZBKEBE', 'EBEZBK', 'BCM', 'EBE'].includes(mOrgUpper) ||
+        ['ZBKEBE-', 'EBEZBK-', 'BCM-', 'EBE-'].some(pfx => mIdUpper.startsWith(pfx))
+      ));
 
     if (isThisCampaign) {
       const oldId = m.id;
       let suffix = '';
       if (m.id && m.id.includes('-')) {
-        suffix = m.id.split('-').slice(1).join('-');
+        const parts = m.id.split('-');
+        suffix = parts.length > 2 ? parts[1] : parts.slice(1).join('-');
       } else if (m.phoneLast4) {
         suffix = m.phoneLast4;
       } else if (m.id) {
