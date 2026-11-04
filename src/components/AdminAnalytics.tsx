@@ -40,6 +40,7 @@ import {
 } from 'recharts';
 import { UserRole, CreatorProfile } from '../types';
 import { resolveApiUrl } from '../utils/apiConfig';
+import { fetchGA4AnalyticsHybrid } from '../services/clientGa4Service';
 
 interface AdminAnalyticsProps {
   currentRole: UserRole;
@@ -113,9 +114,9 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [measurementIdInput, setMeasurementIdInput] = useState<string>(() => {
     try {
-      return localStorage.getItem('ronpay_ga_measurement_id') || '';
+      return localStorage.getItem('ronpay_ga_measurement_id') || 'G-P29J9QMYK6';
     } catch {
-      return '';
+      return 'G-P29J9QMYK6';
     }
   });
   const [isSavedMeasurementId, setIsSavedMeasurementId] = useState<boolean>(false);
@@ -149,19 +150,9 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     else setIsRefreshing(true);
 
     try {
-      const url = resolveApiUrl(`/api/analytics/ga4?range=${range}&_t=${Date.now()}`);
-      const res = await fetch(url, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
-      });
-      if (res.ok) {
-        const json: GA4DataPayload = await res.json();
-        setReport(json);
-      } else {
-        throw new Error(`Server returned HTTP ${res.status}`);
+      const data = await fetchGA4AnalyticsHybrid(range);
+      if (data) {
+        setReport(data);
       }
     } catch (err: any) {
       console.warn('[AdminAnalytics] Fetch notice:', err);

@@ -11,9 +11,17 @@ export function trackGA4PageView(pagePath: string, pageTitle?: string) {
   try {
     const gtag = (window as any).gtag;
     if (typeof gtag === 'function') {
+      const measurementId = localStorage.getItem('ronpay_ga_measurement_id') || 'G-P29J9QMYK6';
+      gtag('config', measurementId, {
+        page_path: pagePath,
+        page_title: title,
+        page_location: window.location.href,
+      });
       gtag('event', 'page_view', {
         page_path: pagePath,
         page_title: title,
+        page_location: window.location.href,
+        send_to: measurementId,
       });
     }
   } catch {
