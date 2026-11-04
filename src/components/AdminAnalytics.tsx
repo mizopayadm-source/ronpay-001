@@ -39,6 +39,7 @@ import {
   Legend 
 } from 'recharts';
 import { UserRole, CreatorProfile } from '../types';
+import { resolveApiUrl } from '../utils/apiConfig';
 
 interface AdminAnalyticsProps {
   currentRole: UserRole;
@@ -148,7 +149,14 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     else setIsRefreshing(true);
 
     try {
-      const res = await fetch(`/api/analytics/ga4?range=${range}`);
+      const url = resolveApiUrl(`/api/analytics/ga4?range=${range}&_t=${Date.now()}`);
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (res.ok) {
         const json: GA4DataPayload = await res.json();
         setReport(json);
@@ -163,8 +171,13 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
     }
   }, []);
 
+  // Fetch on mount & date range change, and auto-refresh every 20s while open
   useEffect(() => {
     fetchAnalytics(dateRange);
+    const interval = setInterval(() => {
+      fetchAnalytics(dateRange, true);
+    }, 20000);
+    return () => clearInterval(interval);
   }, [dateRange, fetchAnalytics]);
 
   // Copy helper

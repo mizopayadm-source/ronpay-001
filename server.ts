@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
-import { fetchGA4AnalyticsReport, getGA4Status } from './src/server/ga4Service';
+import { fetchGA4AnalyticsReport, getGA4Status, recordLiveHit } from './src/server/ga4Service';
 
 // Initialize Gemini Client Lazily
 let genAIClient: GoogleGenAI | null = null;
@@ -58,6 +58,9 @@ app.get('/healthz', (req: Request, res: Response) => {
 // Zero Supabase database egress usage
 // -------------------------------------------------------------
 app.get('/api/analytics/ga4', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const range = (req.query.range as string) || '30d';
     const report = await fetchGA4AnalyticsReport(range);
@@ -73,11 +76,25 @@ app.get('/api/analytics/ga4', async (req: Request, res: Response) => {
 });
 
 app.get('/api/analytics/ga4/status', (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const status = getGA4Status();
     res.json(status);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Error checking GA4 status' });
+  }
+});
+
+app.post('/api/analytics/hit', (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  try {
+    const { path: pagePath, title: pageTitle } = req.body || {};
+    const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const activeCount = recordLiveHit(pagePath, pageTitle, clientIp, userAgent);
+    res.status(200).json({ ok: true, activeVisitors: activeCount });
+  } catch {
+    res.status(200).json({ ok: true });
   }
 });
 

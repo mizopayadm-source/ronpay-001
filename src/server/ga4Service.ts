@@ -946,7 +946,7 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
       dateRange,
       lastUpdated: new Date().toISOString(),
       data: {
-        realtimeActiveUsers: Math.max(realtimeActiveUsers, 1),
+        realtimeActiveUsers: Math.max(realtimeActiveUsers, getActiveVisitorsCount(), 1),
         summary: {
           totalVisitors: Math.max(totalVisitors, 1),
           activeUsers: Math.max(totalVisitors, 1),
@@ -1024,3 +1024,52 @@ export function getGA4Status() {
     serverTimestamp: new Date().toISOString(),
   };
 }
+
+/**
+ * In-memory buffer for immediate first-party visitor hit tracking.
+ * Guarantees real-time visitor stats even if adblockers block gtag.js or GA4 API has propagation delays.
+ */
+interface LiveHit {
+  id: string;
+  path: string;
+  title: string;
+  visitorHash: string;
+  timestamp: number;
+}
+
+const liveHitStore: LiveHit[] = [];
+
+export function recordLiveHit(path: string, title?: string, clientIp?: string, userAgent?: string): number {
+  const now = Date.now();
+  const hash = crypto.createHash('md5').update(`${clientIp || '127.0.0.1'}-${userAgent || 'unknown'}`).digest('hex');
+  const cleanPath = path || '/';
+  const cleanTitle = title || 'RonPay App';
+
+  liveHitStore.push({
+    id: `${now}-${Math.random().toString(36).substring(2, 7)}`,
+    path: cleanPath,
+    title: cleanTitle,
+    visitorHash: hash,
+    timestamp: now,
+  });
+
+  // Prune hits older than 15 minutes
+  const fifteenMinsAgo = now - 15 * 60 * 1000;
+  while (liveHitStore.length > 0 && liveHitStore[0].timestamp < fifteenMinsAgo) {
+    liveHitStore.shift();
+  }
+
+  // Count unique visitors in last 15 mins
+  const activeVisitors = new Set(liveHitStore.map(h => h.visitorHash)).size;
+  return activeVisitors;
+}
+
+export function getActiveVisitorsCount(): number {
+  const now = Date.now();
+  const fifteenMinsAgo = now - 15 * 60 * 1000;
+  const activeHashes = new Set(
+    liveHitStore.filter(h => h.timestamp >= fifteenMinsAgo).map(h => h.visitorHash)
+  );
+  return activeHashes.size;
+}
+
