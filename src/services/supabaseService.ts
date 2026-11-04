@@ -1511,6 +1511,7 @@ export async function syncAllMembersToSupabase(): Promise<{ total: number; synce
   } catch {}
 
   try {
+    if (isSupabaseQuotaBlocked()) return { total: allMems.length, synced: 0 };
     // 1. Chunked upsert into Supabase (50 records per batch)
     const chunkSize = 50;
     let synced = 0;

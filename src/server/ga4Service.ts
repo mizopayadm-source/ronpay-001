@@ -40,15 +40,15 @@ function formatPemPrivateKey(rawKey: string): string {
 
     if (beginIndex !== -1 && endIndex > beginIndex) {
       const rawBody = key.slice(beginIndex + beginHeader.length, endIndex);
-      // Clean base64 body: remove all whitespace/newlines
-      const cleanBase64 = rawBody.replace(/[\s\r\n]+/g, '');
+      // Clean base64 body: remove all whitespace/newlines and accidental backslashes
+      const cleanBase64 = rawBody.replace(/\\/g, '').replace(/[\s\r\n]+/g, '');
       const chunked = cleanBase64.match(/.{1,64}/g)?.join('\n') || cleanBase64;
       return `${beginHeader}\n${chunked}\n${endFooter}\n`;
     }
   }
 
   // If markers are missing, treat as raw base64 and wrap in standard PKCS#8
-  const cleanBase64 = key.replace(/[\s\r\n]+/g, '');
+  const cleanBase64 = key.replace(/\\/g, '').replace(/[\s\r\n]+/g, '');
   if (!cleanBase64) return '';
   const chunked = cleanBase64.match(/.{1,64}/g)?.join('\n') || cleanBase64;
   return `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----\n`;
@@ -172,8 +172,51 @@ function safeParseGA4CredentialsJson(raw: string): any {
   return credentials;
 }
 
+export const DEFAULT_GA4_PROPERTY_ID = '551685547';
+export const DEFAULT_GA4_CLIENT_EMAIL = 'ronpay-ga4-reader@gen-lang-client-0112822721.iam.gserviceaccount.com';
+export const DEFAULT_GA4_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCd9FaOYl5yBgZq
+Hsu/vE2xR8GpoXuo6dDXbrVXZJnptgvwGi3urqTVv4YfTS+uM02c3ry8p8Fu7wJu
+ag32K4RfbShkEF4hoXG5qdNU3hU/FRVy9tybS0LZITRripirmtL/0c9votmQRjdL
+Rq7QAdWdiAejqliL5/RZMjVzVridDQvufYstXz9fzQTXtOZPqCLhc0Q8FEuhopIU
+nYmvPHszfpbQdZ/DokCeSLzbisuSJUltefS2xvuCmnAp7PzrMqj5yYNK14yTra7Z
+cnLrPLheCeHHw0Xheiazzeupop90PAcaAD2g2M2ou2idY3dO/saUyaJ4KSM+Wv6g
+TQ/QRZ05AgMBAAECggEAFHbLPwO2FkI7EwUd4x+nliwEhnBeN85hKQQWGPY27Z1R
+EyClKkr0np/DZetHXeOWLth5rdxzFmb/UuRJHkdZjU50YPBw7Zz/wazjrRdfu85E
+uuIKR1FbHgvsAXHRoUv8AbpCTIWV99ftAoLsE5VlQlVVHgpsEeYxlVvIqoKGBQyv
+T5xfFGOtyn3ZbmOC0VJXizQxqiscuMNI2FtAuahMkSQm3tCpLKhHlXPs7qkmuFEE
+yTUrkmdDQ2QOGb3h61NOAr/tPqNK2BCIN2Py7JanIAqWhW/GDHNa9O5xeG8ZB2VI
+lurL9T9eOybXZApIl9B5dfg9TtF7M105SJM2cF6XjQKBgQDKRQzmYfzlW60CRetq
+3WsJwItUY12ez4W3Rbzirszz4kCc+fvd5oKEg58JUTVXL57DFBbRaqxg4avHswuZ
+eZqWRYKtOjB8f63+08lP9arItzsFG4b4RSOvUSrcUfwcMsL9FHkMRHA01c2pvMHS
+qXukLgrgbOkRW5pu3Q5+bpchhQKBgQDH6bcdW7jB5PXW461rxebAVYTYBjejskvX
+SKb8tQN4WXWDQc2CDkkhslePU7qTSFM4gFuo4G0yOHOJ9z0tOhhp1l8IN+hJTOtG
+WNsb5yX1/g6bEI1krTPJ4Dd0tkDDefcg+aEvr7B73SPVkbreFnYbzsAqq/0c17Jg
+/YSPz69BJQKBgH/CW6KNFAL/A+lipo8qafiP8LGNzc2IwKoBV4xK4tPM/gjo8Ui4
+14nB5UsqSynVv07yunLuERFkmW8azWHUaGswXpjyHzwUHZ/Ov+JMhuIesh3IxFi+
+uwp6lzrwYfChs33NV6QC+mi0/yGOQ1K/kIQkPOSChjhbhtEtuYDsc3NNAoGAYZ/c
+cFXOT8GD3ECq+6pVGS+qA+RlX2c+ag9snJO48hidrk+AEDbxt6bj43Y78pirKzhj
+ioCuUowGwCUglul76pNpLRZANSt+6YeS2Hl0rEA42bink7aRR9BaxIAL+GmjKVM+
+R49AW/yN90mHO9U0MDgy16PNozwiPAMRrTj6mJECgYEAj8YahRiGJS02L5StE5oR
+iSap6c+zQ2bX5/vkV6QCrra5j9ytEVWQj0Yqn7eGj1+h/bi9XmuvdogMyJu2UyQa
+uepARiP0SLoza7cwPUf0qbEqtko9fe27TdVaPAK5lkJCT7ozLtPakcqfWHTGek4n
+1vS3D9ckiUH84wfEgYkjrRk=
+-----END PRIVATE KEY-----`;
+
+export function getActiveGA4PropertyId(): string {
+  return (process.env.GA4_PROPERTY_ID || process.env.GOOGLE_ANALYTICS_PROPERTY_ID || DEFAULT_GA4_PROPERTY_ID).trim();
+}
+
+export function getActiveGA4ClientEmail(): string {
+  return (process.env.GA4_CLIENT_EMAIL || DEFAULT_GA4_CLIENT_EMAIL).trim();
+}
+
+export function getActiveGA4PrivateKey(): string {
+  return (process.env.GA4_PRIVATE_KEY || DEFAULT_GA4_PRIVATE_KEY).trim();
+}
+
 export function getGA4Client(): { client: BetaAnalyticsDataClient; propertyId: string } | null {
-  const propertyId = (process.env.GA4_PROPERTY_ID || process.env.GOOGLE_ANALYTICS_PROPERTY_ID || '').trim();
+  const propertyId = getActiveGA4PropertyId();
   if (!propertyId) {
     return null;
   }
@@ -184,19 +227,19 @@ export function getGA4Client(): { client: BetaAnalyticsDataClient; propertyId: s
 
   try {
     // 1. Direct Service Account Email + Private Key (Prioritized)
-    if (process.env.GA4_CLIENT_EMAIL && process.env.GA4_PRIVATE_KEY) {
-      const privateKey = formatPemPrivateKey(process.env.GA4_PRIVATE_KEY);
+    const clientEmail = getActiveGA4ClientEmail();
+    const rawPrivateKey = getActiveGA4PrivateKey();
+    if (clientEmail && rawPrivateKey) {
+      const privateKey = formatPemPrivateKey(rawPrivateKey);
       if (isValidPemPrivateKey(privateKey)) {
         cachedClient = new BetaAnalyticsDataClient({
           credentials: {
-            client_email: process.env.GA4_CLIENT_EMAIL.trim(),
+            client_email: clientEmail,
             private_key: privateKey,
           },
         });
         cachedPropertyId = propertyId;
         return { client: cachedClient, propertyId };
-      } else {
-        console.warn('[GA4] GA4_PRIVATE_KEY is not a valid PEM RSA key.');
       }
     }
 
@@ -234,8 +277,8 @@ function base64url(buf: Buffer | string): string {
 }
 
 export async function getGA4AccessToken(): Promise<string | null> {
-  const email = (process.env.GA4_CLIENT_EMAIL || '').trim();
-  const rawKey = process.env.GA4_PRIVATE_KEY || '';
+  const email = getActiveGA4ClientEmail();
+  const rawKey = getActiveGA4PrivateKey();
   if (!email || !rawKey) return null;
 
   if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt - 60000) {
@@ -294,7 +337,7 @@ export async function getGA4AccessToken(): Promise<string | null> {
 }
 
 export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promise<GA4ReportResponse | null> {
-  const propertyId = (process.env.GA4_PROPERTY_ID || process.env.GOOGLE_ANALYTICS_PROPERTY_ID || '').trim();
+  const propertyId = getActiveGA4PropertyId();
   if (!propertyId) return null;
 
   const token = await getGA4AccessToken();
@@ -362,8 +405,8 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
         fallback.status = 'demo_mode';
         fallback.isConfigured = true;
         fallback.propertyId = propertyId;
-        fallback.clientEmail = process.env.GA4_CLIENT_EMAIL || undefined;
-        fallback.errorMessage = `Google Analytics Property ID (${propertyId}) ah hian Service Account (${process.env.GA4_CLIENT_EMAIL || 'client_email'}) hi Viewer-a la thun a ni lo. analytics.google.com > Admin > Property Access Management ah (+) Add user tiin thun rawh.`;
+        fallback.clientEmail = getActiveGA4ClientEmail() || undefined;
+        fallback.errorMessage = `Google Analytics Property ID (${propertyId}) ah hian Service Account (${getActiveGA4ClientEmail() || 'client_email'}) hi Viewer-a la thun a ni lo. analytics.google.com > Admin > Property Access Management ah (+) Add user tiin thun rawh.`;
         return fallback;
       }
       return null;
@@ -549,7 +592,7 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
       status: 'live',
       isConfigured: true,
       propertyId,
-      clientEmail: process.env.GA4_CLIENT_EMAIL,
+      clientEmail: getActiveGA4ClientEmail(),
       dateRange,
       lastUpdated: new Date().toISOString(),
       data: {
@@ -690,11 +733,11 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
 
   if (!gaSetup) {
     const fallback = generateDemoAnalyticsData(dateRange);
-    fallback.isConfigured = Boolean(
-      process.env.GA4_PROPERTY_ID && (process.env.GA4_CLIENT_EMAIL || process.env.GA4_CREDENTIALS_JSON)
-    );
-    fallback.propertyId = process.env.GA4_PROPERTY_ID;
-    fallback.clientEmail = process.env.GA4_CLIENT_EMAIL;
+    const pid = getActiveGA4PropertyId();
+    const email = getActiveGA4ClientEmail();
+    fallback.isConfigured = Boolean(pid && email);
+    fallback.propertyId = pid;
+    fallback.clientEmail = email;
     return fallback;
   }
 
@@ -940,11 +983,11 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
     const fallback = generateDemoAnalyticsData(dateRange);
     fallback.status = 'demo_mode';
     fallback.isConfigured = true;
-    fallback.propertyId = propertyId;
-    fallback.clientEmail = process.env.GA4_CLIENT_EMAIL || undefined;
+    const activeEmail = getActiveGA4ClientEmail();
+    fallback.clientEmail = activeEmail || undefined;
 
     if (isPermissionDenied) {
-      fallback.errorMessage = `Google Analytics Property ID (${propertyId}) ah hian Service Account (${process.env.GA4_CLIENT_EMAIL || 'client_email'}) hi Viewer-a la thun a ni lo. analytics.google.com > Admin > Property Access Management ah (+) Add user tiin thun rawh.`;
+      fallback.errorMessage = `Google Analytics Property ID (${propertyId}) ah hian Service Account (${activeEmail || 'client_email'}) hi Viewer-a la thun a ni lo. analytics.google.com > Admin > Property Access Management ah (+) Add user tiin thun rawh.`;
     } else if (isPemError) {
       fallback.errorMessage =
         'GA4 Service Account Private Key format is invalid. Please ensure GA4_PRIVATE_KEY is a valid PEM RSA private key string.';
@@ -961,9 +1004,11 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
  * Returns the current configuration status of GA4
  */
 export function getGA4Status() {
-  const propertyId = (process.env.GA4_PROPERTY_ID || process.env.GOOGLE_ANALYTICS_PROPERTY_ID || '').trim();
-  const hasClientEmail = Boolean(process.env.GA4_CLIENT_EMAIL);
-  const hasPrivateKey = Boolean(process.env.GA4_PRIVATE_KEY);
+  const propertyId = getActiveGA4PropertyId();
+  const clientEmail = getActiveGA4ClientEmail();
+  const privateKey = getActiveGA4PrivateKey();
+  const hasClientEmail = Boolean(clientEmail);
+  const hasPrivateKey = Boolean(privateKey);
   const hasCredentialsJson = Boolean(process.env.GA4_CREDENTIALS_JSON);
   const hasKeyFile = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
 

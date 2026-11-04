@@ -17,33 +17,70 @@ import {
 } from '../utils/storage';
 
 // =========================================================================
-// Real-time Listener Integration
+// Real-time Listener Integration (Multiplexed shared channels per table to prevent egress waste)
 // =========================================================================
+const tableCacheMap = new Map<string, { data: any[]; timestamp: number }>();
+const activeSharedChannels = new Map<string, any>();
+const sharedTableListeners = new Map<string, Set<(payload: any) => void>>();
+
 export const subscribeToTable = (
   table: string, 
   onUpdate: (payload: any) => void
 ) => {
-  const channelName = `${table}-sync-${Math.random().toString(36).substring(2, 9)}`;
-  const channel = supabase.channel(channelName);
-  try {
-    channel
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table },
-        (payload) => {
-          console.log(`[SupabaseSync] Change detected in ${table}:`, payload);
-          onUpdate(payload);
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || err) {
-          console.debug(`[SupabaseSync] Realtime WebSocket fallback active for ${table}:`, status);
-        }
-      });
-  } catch (e) {
-    console.error(`[SupabaseSync] Failed to subscribe to ${table}:`, e);
+  if (!sharedTableListeners.has(table)) {
+    sharedTableListeners.set(table, new Set());
   }
-  return channel;
+  sharedTableListeners.get(table)!.add(onUpdate);
+
+  if (!activeSharedChannels.has(table)) {
+    const channelName = `ronpay-shared-sync-${table}`;
+    const channel = supabase.channel(channelName);
+    try {
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table },
+          (payload) => {
+            // Invalidate cache for this table
+            for (const key of tableCacheMap.keys()) {
+              if (key.startsWith(`${table}_`)) {
+                tableCacheMap.delete(key);
+              }
+            }
+            const listeners = sharedTableListeners.get(table);
+            if (listeners) {
+              listeners.forEach(fn => {
+                try { fn(payload); } catch {}
+              });
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR' || err) {
+            console.debug(`[SupabaseSync] Realtime WebSocket fallback active for ${table}:`, status);
+          }
+        });
+      activeSharedChannels.set(table, channel);
+    } catch (e) {
+      console.warn(`[SupabaseSync] Failed to subscribe to ${table}:`, e);
+    }
+  }
+
+  return {
+    unsubscribe: () => {
+      const listeners = sharedTableListeners.get(table);
+      if (listeners) {
+        listeners.delete(onUpdate);
+        if (listeners.size === 0) {
+          const ch = activeSharedChannels.get(table);
+          if (ch) {
+            try { supabase.removeChannel(ch); } catch {}
+            activeSharedChannels.delete(table);
+          }
+        }
+      }
+    }
+  };
 };
 
 // =========================================================================
@@ -403,7 +440,11 @@ export interface FetchDataFilterOptions {
   forceAll?: boolean;
 }
 
-const tableCacheMap = new Map<string, { data: any[]; timestamp: number }>();
+const setTableCache = (key: string, data: any[]) => {
+  if (Array.isArray(data) && data.length > 0) {
+    tableCacheMap.set(key, { data, timestamp: Date.now() });
+  }
+};
 
 export const fetchTableData = async <T>(table: string, options?: FetchDataFilterOptions): Promise<T[]> => {
   // Circuit breaker: If Supabase quota was exceeded (402 Payment Required), serve local storage immediately
@@ -426,10 +467,12 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
     }
   }
 
-  // 10-second memory cache to deduplicate rapid component queries and realtime refetches
-  const cacheKey = `${table}_${options?.campaignId || 'all'}_${options?.forceAll ? 'force' : 'std'}`;
+  // 60-second memory cache to deduplicate rapid component queries and eliminate egress waste
+  const cacheKey = `${table}_${options?.campaignId || 'all'}`;
   const cached = tableCacheMap.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < 10000) && !options?.forceAll) {
+  const now = Date.now();
+  const minInterval = options?.forceAll ? 15000 : 60000;
+  if (cached && (now - cached.timestamp < minInterval)) {
     return cached.data as unknown as T[];
   }
 
@@ -456,7 +499,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
           if (valid.length > 0) {
             unpurgeTransactionIds(valid.map(r => String(r.id)));
           }
-          return valid.map(normalizeTransaction) as unknown as T[];
+          const mapped = valid.map(normalizeTransaction) as unknown as T[];
+          setTableCache(cacheKey, mapped as any);
+          return mapped;
         }
       }
 
@@ -497,7 +542,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
 
         const valid = rows.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
         if (valid.length > 0) {
-          return valid.map(normalizeTransaction) as unknown as T[];
+          const mapped = valid.map(normalizeTransaction) as unknown as T[];
+          setTableCache(cacheKey, mapped as any);
+          return mapped;
         }
       }
 
@@ -506,7 +553,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
       if (!error && Array.isArray(data) && data.length > 0) {
         const valid = data.filter((r: any) => r && r.id && String(r.status || '').toLowerCase().trim() !== 'deleted');
         if (valid.length > 0) {
-          return valid.map(normalizeTransaction) as unknown as T[];
+          const mapped = valid.map(normalizeTransaction) as unknown as T[];
+          setTableCache(cacheKey, mapped as any);
+          return mapped;
         }
       }
 
@@ -541,7 +590,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
       if (table === 'campaigns') {
-        return data.map(normalizeCampaign) as unknown as T[];
+        const mapped = data.map(normalizeCampaign) as unknown as T[];
+        setTableCache(cacheKey, mapped as any);
+        return mapped;
       }
       if (table === 'expenses') {
         const validRows = data.filter((row: any) => {
@@ -550,7 +601,9 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
           if (k === 'exp-1791226950000') return false;
           return true;
         });
-        return validRows.map(normalizeExpense) as unknown as T[];
+        const mapped = validRows.map(normalizeExpense) as unknown as T[];
+        setTableCache(cacheKey, mapped as any);
+        return mapped;
       }
       if (table === 'members') {
         let query = supabase.from('members').select('*').range(0, 9999);
@@ -559,12 +612,17 @@ export const fetchTableData = async <T>(table: string, options?: FetchDataFilter
         }
         const { data, error } = await query;
         if (!error && Array.isArray(data) && data.length > 0) {
-          return data.map(normalizeMember) as unknown as T[];
+          const mapped = data.map(normalizeMember) as unknown as T[];
+          setTableCache(cacheKey, mapped as any);
+          return mapped;
         }
       }
       if (table === 'wallet_transactions') {
-        return data.map(normalizeWalletTx) as unknown as T[];
+        const mapped = data.map(normalizeWalletTx) as unknown as T[];
+        setTableCache(cacheKey, mapped as any);
+        return mapped;
       }
+      setTableCache(cacheKey, data as any);
       return data as T[];
     }
     if (error) {

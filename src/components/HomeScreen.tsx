@@ -65,7 +65,7 @@ import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } f
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, getCampaignListTitle } from '../utils/translations';
 import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
-import { subscribeToTable, fetchTableData } from '../services/SupabaseSync';
+import { fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
 
@@ -175,29 +175,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   }, []);
 
   useEffect(() => {
-    const txChannel = subscribeToTable('transactions', async () => {
-      const fresh = await fetchTableData<Transaction>('transactions');
-      setTransactions(fresh);
-    });
-
-    const campChannel = subscribeToTable('campaigns', async () => {
-      const fresh = await fetchTableData<Campaign>('campaigns');
-      setCampaigns(fresh);
-    });
-
     const handleSync = () => {
       refreshCampaignsFromDB();
     };
     window.addEventListener('ronpay_campaigns_updated', handleSync);
     window.addEventListener('ronpay_trigger_sync', handleSync);
-    window.addEventListener('focus', handleSync);
 
     return () => {
-      txChannel.unsubscribe();
-      campChannel.unsubscribe();
       window.removeEventListener('ronpay_campaigns_updated', handleSync);
       window.removeEventListener('ronpay_trigger_sync', handleSync);
-      window.removeEventListener('focus', handleSync);
     };
   }, [refreshCampaignsFromDB]);
 

@@ -360,12 +360,12 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     return () => {
       if (expChannel) {
         try {
-          supabase.removeChannel(expChannel);
+          expChannel.unsubscribe();
         } catch {}
       }
       if (campChannel) {
         try {
-          supabase.removeChannel(campChannel);
+          campChannel.unsubscribe();
         } catch {}
       }
     };
