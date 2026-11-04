@@ -176,6 +176,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   const [supabaseTxns, setSupabaseTxns] = useState<Transaction[]>([]);
   useEffect(() => {
+    if (!isOpen) return;
     let isMounted = true;
     const load = async () => {
       try {
@@ -191,17 +192,17 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     load();
     const unsub = subscribeToTable('transactions', load);
     return () => { isMounted = false; unsub.unsubscribe(); };
-  }, [creatorProfile, safeUserPaidIds]);
+  }, [isOpen, creatorProfile, safeUserPaidIds]);
 
-  // Defensive array checks - uses Supabase transactions exclusively when loaded, with local storage fallback
+  // Defensive array checks - uses in-memory transactions immediately for instant 0ms rendering
   const safeTransactions = useMemo(() => {
-    const combined = supabaseTxns.length > 0
-      ? supabaseTxns
-      : ((Array.isArray(transactions) && transactions.length > 0)
-          ? transactions
-          : getStoredTransactions());
+    if (!isOpen) return [];
 
-    const valid = combined.filter(t => {
+    const baseList = (Array.isArray(transactions) && transactions.length > 0)
+      ? transactions
+      : (supabaseTxns.length > 0 ? supabaseTxns : getStoredTransactions());
+
+    const valid = baseList.filter(t => {
       if (!t || !t.id) return false;
       if (isSuperAdminUser) return true;
       if (isModeratorUser) {
@@ -232,7 +233,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     });
 
     return valid;
-  }, [supabaseTxns, transactions, deletedTxIds, isOpen, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds, isSuperAdminUser, isModeratorUser, isGuestUser]);
+  }, [isOpen, transactions, supabaseTxns, deletedTxIds, creatorProfile, safeCampaigns, userPaidIds, safeUserPaidIds, isSuperAdminUser, isModeratorUser, isGuestUser]);
 
   // Identify campaigns owned by active profile ("Ama Siam chauh" for creator, or all for Super Admin)
   // Identify campaigns managed by active profile (Creator, Treasurer, Accountant, or Super Admin)
@@ -299,8 +300,16 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     return tx.campaignTitle || 'RonPay Bawm';
   };
 
+  const profilePhoneClean = useMemo(() => {
+    return creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
+  }, [creatorProfile?.phone]);
+
+  const userPaidSet = useMemo(() => {
+    return new Set(safeUserPaidIds);
+  }, [safeUserPaidIds]);
+
   // Helper to determine if transaction is received in creator's bawm or sent as donor
-  const getTxDirection = (tx?: Transaction | null): 'received' | 'sent' => {
+  const getTxDirection = useCallback((tx?: Transaction | null): 'received' | 'sent' => {
     if (!tx) return 'sent';
 
     const campId = tx.campaignId ? String(tx.campaignId) : '';
@@ -309,10 +318,9 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     const isOwned = (campId && ownedCampaignIds.has(campId)) || 
       (campTitle ? ownedCampaignTitles.has(campTitle) : false);
 
-    const profilePhone = creatorProfile?.phone ? String(creatorProfile.phone).replace(/\D/g, '').slice(-10) : '';
     const txPhone = tx.donorPhone ? String(tx.donorPhone).replace(/\D/g, '').slice(-10) : '';
-    const isDonorPhone = Boolean(profilePhone && txPhone && profilePhone === txPhone);
-    const isPaidOnDevice = safeUserPaidIds.includes(tx.id);
+    const isDonorPhone = Boolean(profilePhoneClean && txPhone && profilePhoneClean === txPhone);
+    const isPaidOnDevice = userPaidSet.has(tx.id);
 
     // If owned by active creator or super admin:
     if (isOwned || isSuperAdminUser) {
@@ -330,7 +338,7 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
     }
 
     return 'sent';
-  };
+  }, [ownedCampaignIds, ownedCampaignTitles, profilePhoneClean, userPaidSet, isSuperAdminUser]);
 
   const receivedCount = useMemo(() => {
     return safeTransactions.filter(t => getTxDirection(t) === 'received').length;
@@ -802,6 +810,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
 
   const currentUserName = creatorProfile?.name || 'RonPay User';
   const currentUserPhone = creatorProfile?.phone ? `+91 ${creatorProfile.phone}` : null;
+
+  if (!isOpen) return null;
 
   return (
     <div 
