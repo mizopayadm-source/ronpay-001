@@ -5148,18 +5148,34 @@ export const checkAuditorAccessForCampaign = (
   const now = Date.now();
 
   const activeGrant = grants.find(g => {
-    const gPhone = String(g.auditorPhone || '').replace(/\D/g, '').slice(-10);
-    const expTime = new Date(g.expiresAt).getTime();
+    const gPhone = String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10);
+    const expTime = new Date(g.expiresAt || g.expires_at || 0).getTime();
     return gPhone === cleanPhone && g.status === 'active' && expTime > now;
   });
 
   if (activeGrant) {
-    const remainingMs = new Date(activeGrant.expiresAt).getTime() - now;
+    const expTime = new Date(activeGrant.expiresAt || activeGrant.expires_at || 0).getTime();
+    const remainingMs = expTime - now;
     const remainingHours = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60)));
     return { hasAccess: true, grant: activeGrant, remainingHours };
   }
 
   return { hasAccess: false };
+};
+
+export const getActiveAuditorGrantsForUser = (userPhone?: string | null): AuditorAccessGrant[] => {
+  if (!userPhone) return [];
+  const cleanPhone = String(userPhone).replace(/\D/g, '').slice(-10);
+  if (!cleanPhone) return [];
+
+  const grants = getStoredAuditorGrants();
+  const now = Date.now();
+
+  return grants.filter(g => {
+    const gPhone = String(g.auditorPhone || g.auditor_phone || '').replace(/\D/g, '').slice(-10);
+    const expTime = new Date(g.expiresAt || g.expires_at || 0).getTime();
+    return gPhone === cleanPhone && g.status === 'active' && expTime > now;
+  });
 };
 
 export const getStoredModificationRequests = (campaignId?: string): ModificationRequest[] => {
