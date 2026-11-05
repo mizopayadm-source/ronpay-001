@@ -244,6 +244,13 @@ export interface Transaction {
   approved_by?: string;
   approvedBy?: string;
   approvedAt?: string;
+  is_locked?: boolean;
+  audit_date?: string;
+  locked_by?: string;
+  audit_period?: string;
+  audit_notes?: string;
+  unlock_expires_at?: string;
+  donorComment?: string;
 }
 
 export interface KumtluangExpense {
@@ -266,6 +273,85 @@ export interface KumtluangExpense {
   updatedAt?: string;
   notes?: string;
   status?: 'approved' | 'pending' | 'verified' | string;
+  is_locked?: boolean;
+  audit_date?: string;
+  locked_by?: string;
+  audit_period?: string;
+  audit_notes?: string;
+  unlock_expires_at?: string;
+  expenseHead?: string;
+  payeeName?: string;
+  description?: string;
+  date?: string;
+}
+
+export interface AuditorAccessGrant {
+  id: string;
+  campaignId: string;
+  campaign_id?: string;
+  campaignTitle?: string;
+  campaign_title?: string;
+  auditorPhone: string;
+  auditor_phone?: string;
+  auditorName: string;
+  auditor_name?: string;
+  grantedBy: string;
+  granted_by?: string;
+  grantedByName?: string;
+  grantedAt: string;
+  granted_at?: string;
+  expiresAt: string;
+  expires_at?: string;
+  status: 'active' | 'expired' | 'revoked';
+  notes?: string;
+  permissions?: string[];
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+}
+
+export interface ModificationRequest {
+  id: string;
+  recordId: string;
+  record_id?: string;
+  recordType: 'transaction' | 'expense' | 'TRANSACTION' | 'EXPENSE';
+  record_type?: 'transaction' | 'expense' | 'TRANSACTION' | 'EXPENSE';
+  campaignId: string;
+  campaign_id?: string;
+  campaignTitle?: string;
+  campaign_title?: string;
+  requestedBy: string;
+  requested_by?: string;
+  requestedByName?: string;
+  requested_by_phone?: string;
+  requestedAction?: 'EDIT' | 'DELETE';
+  requested_action?: 'EDIT' | 'DELETE';
+  reasonNote: string;
+  reason_note?: string;
+  currentValues?: Record<string, any>;
+  proposedChanges?: Record<string, any>;
+  record_summary?: {
+    amount?: number;
+    title?: string;
+    audit_period?: string;
+  };
+  status: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approved_by?: string;
+  approvedByName?: string;
+  reviewedBy?: string;
+  reviewed_by?: string;
+  reviewedAt?: string;
+  reviewed_at?: string;
+  reviewNotes?: string;
+  admin_notes?: string;
+  unlockExpiresAt?: string;
+  unlock_expires_at?: string;
+  createdAt: string;
+  created_at?: string;
+  updatedAt: string;
+  updated_at?: string;
 }
 
 export interface KumtluangExpenseHead {
@@ -290,6 +376,7 @@ export interface CategoryRequest {
 export interface CreatorProfile {
   id?: string;
   phone: string;
+  phoneNumber?: string;
   name: string;
   email?: string;
   designation?: string;
@@ -405,19 +492,22 @@ export interface AuditLog {
   id: string;
   action: string;
   details: string;
-  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement' | 'staff' | 'report' | 'expense';
+  targetType: 'system' | 'creator' | 'campaign' | 'transaction' | 'member' | 'pricing' | 'announcement' | 'staff' | 'report' | 'expense' | 'audit_grant' | 'modification_request';
   targetId?: string;
   performedBy: string;
   timestamp: string;
 }
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'CREATOR' | 'MEMBER' | 'GUEST';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'CREATOR' | 'MEMBER' | 'GUEST' | 'AUDITOR';
 
 export type PermissionKey =
   | 'MANAGE_STAFF_ACCOUNTS'
   | 'MANAGE_PLATFORM_CONFIGS'
   | 'MANAGE_PAYOUT_RATES'
   | 'VIEW_FINANCIAL_REPORTS'
+  | 'AUDIT_FINANCIAL_REPORTS'
+  | 'MANAGE_AUDITOR_GRANTS'
+  | 'REVIEW_MODIFICATION_REQUESTS'
   | 'HANDLE_DISPUTES'
   | 'APPROVE_CAMPAIGNS'
   | 'DELETE_ANY_CAMPAIGN'

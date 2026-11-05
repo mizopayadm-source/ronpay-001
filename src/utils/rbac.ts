@@ -7,6 +7,7 @@ import { UserRole, PermissionKey, StaffAccount, Campaign, CreatorProfile } from 
 export const ROLE_RANKS: Record<UserRole, number> = {
   SUPER_ADMIN: 6,
   ADMIN: 5,
+  AUDITOR: 4,
   MODERATOR: 4,
   CREATOR: 3,
   MEMBER: 2,
@@ -59,6 +60,21 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleMetadata> = {
     accentColor: '#2563eb',
     iconName: 'ShieldCheck',
     summaryMizo: 'Operations, Finance report, Campaign verify leh buaina (Dispute) chinfelna.',
+  },
+  AUDITOR: {
+    role: 'AUDITOR',
+    title: 'Financial Auditor',
+    shortTitle: 'Auditor',
+    mizoTitle: 'Sum Endiktu (Auditor)',
+    description: 'Authorized independent auditor with time-bound verification clearance, audit sign-off, and locking power.',
+    badgeBg: 'bg-teal-900',
+    badgeText: 'text-teal-200',
+    badgeBorder: 'border-teal-700',
+    badgeColor: 'bg-teal-900 text-teal-200 border-teal-700',
+    badge: '⚖️ AUDITOR',
+    accentColor: '#0d9488',
+    iconName: 'FileCheck',
+    summaryMizo: 'Kohhran/NGO sum dinhmun endiktu, audit sign-off leh record lock tu.',
   },
   MODERATOR: {
     role: 'MODERATOR',
@@ -133,6 +149,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
     'MANAGE_PLATFORM_CONFIGS',
     'MANAGE_PAYOUT_RATES',
     'VIEW_FINANCIAL_REPORTS',
+    'AUDIT_FINANCIAL_REPORTS',
+    'MANAGE_AUDITOR_GRANTS',
+    'REVIEW_MODIFICATION_REQUESTS',
     'HANDLE_DISPUTES',
     'APPROVE_CAMPAIGNS',
     'DELETE_ANY_CAMPAIGN',
@@ -149,6 +168,9 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
   ],
   ADMIN: [
     'VIEW_FINANCIAL_REPORTS',
+    'AUDIT_FINANCIAL_REPORTS',
+    'MANAGE_AUDITOR_GRANTS',
+    'REVIEW_MODIFICATION_REQUESTS',
     'HANDLE_DISPUTES',
     'APPROVE_CAMPAIGNS',
     'DELETE_ANY_CAMPAIGN',
@@ -162,6 +184,12 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
     'MAKE_DONATIONS',
     'VIEW_OWN_HISTORY',
   ],
+  AUDITOR: [
+    'VIEW_FINANCIAL_REPORTS',
+    'AUDIT_FINANCIAL_REPORTS',
+    'VIEW_EXPENSES',
+    'VIEW_OWN_HISTORY',
+  ],
   MODERATOR: [
     'VERIFY_CREATOR_KYC',
     'MODERATE_CONTENT',
@@ -172,6 +200,7 @@ export const ROLE_PERMISSIONS_MAP: Record<UserRole, PermissionKey[]> = {
   ],
   CREATOR: [
     'CREATE_CAMPAIGNS',
+    'MANAGE_AUDITOR_GRANTS',
     'MANAGE_MEMBER_ROLLS',
     'MANAGE_EXPENSES',
     'VIEW_EXPENSES',
@@ -253,13 +282,13 @@ export function hasMinimumRole(currentRole: UserRole = 'GUEST', requiredRole: Us
 export function getUserRole(profileOrRole?: any): UserRole {
   if (!profileOrRole) return 'GUEST';
   if (typeof profileOrRole === 'string') {
-    if (['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole)) {
+    if (['SUPER_ADMIN', 'ADMIN', 'AUDITOR', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole)) {
       return profileOrRole as UserRole;
     }
     return 'GUEST';
   }
   if (typeof profileOrRole === 'object') {
-    if (profileOrRole.role && ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole.role)) {
+    if (profileOrRole.role && ['SUPER_ADMIN', 'ADMIN', 'AUDITOR', 'MODERATOR', 'CREATOR', 'MEMBER', 'GUEST'].includes(profileOrRole.role)) {
       return profileOrRole.role as UserRole;
     }
     if (profileOrRole.isAdmin) return 'ADMIN';
@@ -380,6 +409,7 @@ export function normalizeUserRole(rawRole?: string): UserRole {
   const upper = rawRole.toUpperCase();
   if (upper === 'SUPER_ADMIN' || upper === 'SUPERADMIN' || upper === 'ROOT') return 'SUPER_ADMIN';
   if (upper === 'ADMIN' || upper === 'ADMINISTRATOR') return 'ADMIN';
+  if (upper === 'AUDITOR' || upper === 'AUDIT' || upper === 'FINANCIAL_AUDITOR') return 'AUDITOR';
   if (upper === 'MODERATOR' || upper === 'MOD' || upper === 'KYC_MOD') return 'MODERATOR';
   if (upper === 'CREATOR' || upper === 'MERCHANT' || upper === 'PASTOR' || upper === 'SECRETARY') return 'CREATOR';
   if (upper === 'MEMBER' || upper === 'USER' || upper === 'DONOR') return 'MEMBER';

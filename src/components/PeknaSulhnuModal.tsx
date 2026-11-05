@@ -23,9 +23,11 @@ import {
   AlertCircle,
   Trash2,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Lock
 } from 'lucide-react';
 import { Transaction, Campaign, BawmCategory, CreatorProfile } from '../types';
+import { RequestModificationModal, LockedRecordInfo } from './RequestModificationModal';
 import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY, formatTimeOnlyIST } from '../utils/date';
 import { printHtmlSafely } from '../utils/export';
 import { 
@@ -122,6 +124,8 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [deletedTxIds, setDeletedTxIds] = useState<Set<string>>(() => getDeletedTransactionIds());
   const [showConfirmClearAll, setShowConfirmClearAll] = useState<boolean>(false);
+  const [lockedRecordForMod, setLockedRecordForMod] = useState<LockedRecordInfo | null>(null);
+  const [isModModalOpen, setIsModModalOpen] = useState<boolean>(false);
 
   // Automatically refresh local data and set appropriate direction filter when opened
   useEffect(() => {
@@ -589,6 +593,23 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
   const handleDeletePendingTx = (txId: string) => {
     if (!txId) return;
     const cleanId = String(txId).trim();
+    const target = transactions.find(t => String(t.id).toLowerCase() === cleanId.toLowerCase());
+    if (target?.is_locked) {
+      setLockedRecordForMod({
+        recordId: target.id,
+        recordType: 'TRANSACTION',
+        campaignId: target.campaignId,
+        campaignTitle: resolveTxCampaignTitle(target),
+        amount: Number(target.amount || 0),
+        title: target.donorName || 'Transaction Entry',
+        isLocked: true,
+        lockedBy: target.locked_by,
+        auditDate: target.audit_date,
+        auditPeriod: target.audit_period
+      });
+      setIsModModalOpen(true);
+      return;
+    }
     // 1. Instant local removal so it vanishes right away
     setDeletedTxIds(prev => new Set(prev).add(cleanId.toLowerCase()));
 
@@ -1409,6 +1430,12 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
                       <span className="text-[10px] text-slate-400 font-mono font-medium">
                         {tx.id}
                       </span>
+                      {tx.is_locked && (
+                        <span className="text-[8.5px] font-black uppercase px-2 py-0.5 rounded-md border bg-amber-100 text-amber-900 border-amber-300 flex items-center gap-1 shadow-2xs">
+                          <Lock className="w-2.5 h-2.5 text-amber-700" />
+                          <span>AUDITED & LOCKED</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-right">
@@ -1769,6 +1796,21 @@ export const PeknaSulhnuModal: React.FC<PeknaSulhnuModalProps> = ({
             <span>{actionToast}</span>
           </div>
         )}
+
+        {/* Maker-Checker Request Modification Modal for Locked Transactions */}
+        <RequestModificationModal
+          isOpen={isModModalOpen}
+          record={lockedRecordForMod}
+          creatorProfile={creatorProfile}
+          onClose={() => {
+            setIsModModalOpen(false);
+            setLockedRecordForMod(null);
+          }}
+          onSubmitted={() => {
+            setActionToast('Modification request Admin hnenah thehluh fel a ni e.');
+            setTimeout(() => setActionToast(null), 3500);
+          }}
+        />
       </div>
     </div>
   );

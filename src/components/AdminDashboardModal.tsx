@@ -98,7 +98,9 @@ import {
   UserRole, 
   StaffAccount, 
   FeeOptionMode,
-  SectionQuickPreset
+  SectionQuickPreset,
+  ModificationRequest,
+  AuditorAccessGrant
 } from '../types';
 import { SectionPresetManagerModal } from './SectionPresetManagerModal';
 import { formatDateDDMMYYYY, isCampaignExpired, getTodayDateTimeLocal } from '../utils/date';
@@ -128,7 +130,11 @@ import {
   saveTransaction,
   getStoredSectionPresets,
   saveStoredSectionPresets,
-  DEFAULT_SECTION_PRESETS
+  DEFAULT_SECTION_PRESETS,
+  getStoredModificationRequests,
+  reviewModificationRequest,
+  getStoredAuditorGrants,
+  revokeAuditorGrant
 } from '../utils/storage';
 import { 
   ROLE_DEFINITIONS, 
@@ -294,6 +300,33 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   });
   const [auditFilter, setAuditFilter] = useState<string>('all');
   const [isRefreshingLogs, setIsRefreshingLogs] = useState<boolean>(false);
+
+  // Maker-Checker & Auditor Approval Console state
+  const [auditConsoleSubTab, setAuditConsoleSubTab] = useState<'requests' | 'grants' | 'logs'>('requests');
+  const [modRequestsList, setModRequestsList] = useState<ModificationRequest[]>(() => getStoredModificationRequests());
+  const [allAuditorGrantsList, setAllAuditorGrantsList] = useState<AuditorAccessGrant[]>(() => getStoredAuditorGrants());
+  const [selectedModRequest, setSelectedModRequest] = useState<ModificationRequest | null>(null);
+  const [modReviewActionNotes, setModReviewActionNotes] = useState<string>('');
+  const [unlockDurationOption, setUnlockDurationOption] = useState<number>(120); // 2 hours
+  const [modConsoleTick, setModConsoleTick] = useState<number>(0);
+
+  useEffect(() => {
+    setModRequestsList(getStoredModificationRequests());
+    setAllAuditorGrantsList(getStoredAuditorGrants());
+  }, [modConsoleTick]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setModRequestsList(getStoredModificationRequests());
+      setAllAuditorGrantsList(getStoredAuditorGrants());
+    };
+    window.addEventListener('ronpay_auditor_grants_updated', handleSync);
+    window.addEventListener('ronpay_modification_requests_updated', handleSync);
+    return () => {
+      window.removeEventListener('ronpay_auditor_grants_updated', handleSync);
+      window.removeEventListener('ronpay_modification_requests_updated', handleSync);
+    };
+  }, []);
 
   // Full Screen / Expanded Display Mode for Desktop & Web Browsers
   const [isFullScreen, setIsFullScreen] = useState<boolean>(() => {
@@ -1514,8 +1547,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 },
                 { 
                   id: 'audit' as const, 
-                  label: 'Audit & Activity Log', 
+                  label: 'Audit & Maker-Checker', 
                   icon: History,
+                  badge: modRequestsList.filter(r => r.status === 'pending').length > 0 
+                    ? `${modRequestsList.filter(r => r.status === 'pending').length} Req` 
+                    : undefined,
+                  badgeColor: 'bg-amber-600 text-white font-bold',
                   minRole: 'ADMIN' as UserRole
                 },
                 { 
@@ -3608,15 +3645,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               {/* ========================================================= */}
               {/* TAB 4: AUDIT & ACTIVITY LOG (Request 2)                   */}
               {/* ========================================================= */}
+              {/* ========================================================= */}
+              {/* TAB 4: AUDIT & MAKER-CHECKER APPROVAL CONSOLE             */}
+              {/* ========================================================= */}
               {activeTab === 'audit' && (
                 <div className="space-y-4">
+                  {/* Console Header */}
                   <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
                     <div className="space-y-0.5">
                       <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                         <History className="w-4 h-4 text-indigo-600" />
-                        System Audit & Moderation Activity Log
+                        Financial Audit & Maker-Checker Approval Console
                       </h3>
-                      <p className="text-xs text-slate-500">Chronological history of approvals, changes, and admin operations.</p>
+                      <p className="text-xs text-slate-500">
+                        Pending modification requests, time-bound auditor grants, and system audit trails.
+                      </p>
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -3627,6 +3670,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             await syncAllWithServer(true);
                           } catch {}
                           setLogsList(getStoredAuditLogs());
+                          setModRequestsList(getStoredModificationRequests());
+                          setAllAuditorGrantsList(getStoredAuditorGrants());
                           setIsRefreshingLogs(false);
                         }}
                         disabled={isRefreshingLogs}
@@ -3637,37 +3682,299 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Logs list */}
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 divide-y divide-slate-200/80 max-h-[500px] overflow-y-auto space-y-2">
-                    {logsList.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400 text-xs font-bold">
-                        No audit logs recorded yet.
-                      </div>
-                    ) : (
-                      logsList.map(log => (
-                        <div key={log.id} className="pt-2 first:pt-0 space-y-1">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-black text-slate-900 flex items-center gap-1.5">
-                              <span className={`w-2 h-2 rounded-full ${
-                                log.targetType === 'creator' ? 'bg-indigo-500' :
-                                log.targetType === 'campaign' ? 'bg-emerald-500' :
-                                log.targetType === 'pricing' ? 'bg-amber-500' : 'bg-purple-500'
-                              }`} />
-                              {log.action}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {formatDateDDMMYYYY(log.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-600 leading-relaxed">{log.details}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                            <span>By: <strong className="text-slate-600">{log.performedBy}</strong></span>
-                            {log.targetId && <span>• Target: <code className="bg-slate-200/60 px-1 py-0.2 rounded text-slate-700">{log.targetId}</code></span>}
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  {/* Sub-tabs */}
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setAuditConsoleSubTab('requests')}
+                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                        auditConsoleSubTab === 'requests'
+                          ? 'bg-amber-600 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Modification Requests</span>
+                      {modRequestsList.filter(r => r.status === 'pending').length > 0 && (
+                        <span className="bg-white text-amber-800 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                          {modRequestsList.filter(r => r.status === 'pending').length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuditConsoleSubTab('grants')}
+                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                        auditConsoleSubTab === 'grants'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Auditor Grants ({allAuditorGrantsList.filter(g => g.status === 'active').length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuditConsoleSubTab('logs')}
+                      className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                        auditConsoleSubTab === 'logs'
+                          ? 'bg-slate-800 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Activity Log ({logsList.length})</span>
+                    </button>
                   </div>
+
+                  {/* SUBTAB 1: MAKER-CHECKER MODIFICATION REQUESTS */}
+                  {auditConsoleSubTab === 'requests' && (
+                    <div className="space-y-3">
+                      {modRequestsList.length === 0 ? (
+                        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-bold">
+                          <CheckCircle2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          Pending modification request a awm rih lo.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {modRequestsList.map(req => {
+                            const isPending = req.status === 'pending';
+                            const isApproved = req.status === 'approved';
+
+                            return (
+                              <div
+                                key={req.id}
+                                className={`p-4 rounded-2xl border transition space-y-3 ${
+                                  isPending
+                                    ? 'bg-amber-50/70 border-amber-300 shadow-2xs'
+                                    : isApproved
+                                      ? 'bg-emerald-50/40 border-emerald-200'
+                                      : 'bg-slate-50 border-slate-200 opacity-80'
+                                }`}
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                        req.requested_action === 'DELETE'
+                                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                          : 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      }`}>
+                                        {req.requested_action}
+                                      </span>
+                                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-700">
+                                        {req.record_type}
+                                      </span>
+                                      <span className="font-mono text-xs font-bold text-slate-800">
+                                        {req.record_id}
+                                      </span>
+                                    </div>
+                                    <h4 className="font-extrabold text-sm text-slate-900">
+                                      {req.record_summary?.title || req.campaign_title || 'Record Item'}
+                                    </h4>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <div className="font-black text-sm sm:text-base text-slate-900">
+                                      ₹{Number(req.record_summary?.amount || 0).toLocaleString('en-IN')}
+                                    </div>
+                                    <div>
+                                      {isPending ? (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-300 inline-block">
+                                          ⏳ PENDING APPROVAL
+                                        </span>
+                                      ) : isApproved ? (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-emerald-200 text-emerald-900 border border-emerald-300 inline-block">
+                                          ✅ APPROVED & UNLOCKED
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-rose-200 text-rose-900 border border-rose-300 inline-block">
+                                          ❌ REJECTED
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Reason Note box */}
+                                <div className="bg-white/80 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                                    Tih Danglam Chhan (Reason Note):
+                                  </div>
+                                  <p className="text-slate-800 italic">
+                                    "{req.reason_note}"
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                                  <div>
+                                    <span>Diltu: <strong className="text-slate-700">{req.requested_by}</strong> ({req.requested_by_phone || 'N/A'})</span>
+                                    <span className="text-slate-300 mx-1.5">•</span>
+                                    <span>Date: {formatDateDDMMYYYY(req.created_at)}</span>
+                                  </div>
+
+                                  {isPending && (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const reason = prompt('Hnawl chhan ziak lut rawh:');
+                                          if (reason !== null) {
+                                            const adminName = currentProfile?.name || 'Admin';
+                                            reviewModificationRequest(req.id, 'rejected', adminName, 0, reason.trim() || undefined);
+                                            setModConsoleTick(t => t + 1);
+                                            setCampaignActionToast(`❌ Request ${req.id} hnawl a ni.`);
+                                            setTimeout(() => setCampaignActionToast(null), 3000);
+                                          }
+                                        }}
+                                        className="py-1.5 px-3 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition cursor-pointer"
+                                      >
+                                        Hnawl Rawh (Reject)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const adminName = currentProfile?.name || 'Admin';
+                                          reviewModificationRequest(req.id, 'approved', adminName, 120, 'Approved by Admin for 2 hours edit window');
+                                          setModConsoleTick(t => t + 1);
+                                          setCampaignActionToast(`✅ Request ${req.id} pawm a ni ta. Record hi 2 hours chhung temporary unlock a ni.`);
+                                          setTimeout(() => setCampaignActionToast(null), 3500);
+                                        }}
+                                        className="py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer flex items-center gap-1"
+                                      >
+                                        <Unlock className="w-3.5 h-3.5" />
+                                        <span>Pawm La Unlock Rawh (2h)</span>
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {!isPending && req.reviewed_by && (
+                                    <div className="text-[10px] text-slate-500">
+                                      Reviewed by: <strong className="text-slate-700">{req.reviewed_by}</strong> on {formatDateDDMMYYYY(req.reviewed_at || '')}
+                                      {req.admin_notes && <span className="italic block text-slate-400">"{req.admin_notes}"</span>}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SUBTAB 2: AUDITOR GRANTS ACROSS ALL BAWMS */}
+                  {auditConsoleSubTab === 'grants' && (
+                    <div className="space-y-3">
+                      {allAuditorGrantsList.length === 0 ? (
+                        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-bold">
+                          Auditor access grant a awm rih lo.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {allAuditorGrantsList.map(grant => {
+                            const isExpired = new Date(grant.expires_at).getTime() <= Date.now();
+                            const isActive = grant.status === 'active' && !isExpired;
+                            const remainingMs = Math.max(0, new Date(grant.expires_at).getTime() - Date.now());
+                            const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+
+                            return (
+                              <div
+                                key={grant.id}
+                                className={`p-4 rounded-2xl border space-y-2.5 ${
+                                  isActive
+                                    ? 'bg-amber-50/50 border-amber-200'
+                                    : 'bg-slate-50 border-slate-200 opacity-80'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <h4 className="font-extrabold text-sm text-slate-900">
+                                      {grant.auditor_name}
+                                    </h4>
+                                    <div className="text-[11px] text-slate-500 font-mono">
+                                      +91 {grant.auditor_phone}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    {isActive ? (
+                                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        ACTIVE ({remainingHours}h)
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-600">
+                                        EXPIRED
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="text-xs text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200 space-y-0.5">
+                                  <div><span className="text-slate-400">Bawm:</span> <strong>{grant.campaign_title || grant.campaign_id}</strong></div>
+                                  <div><span className="text-slate-400">Ruattu:</span> {grant.granted_by}</div>
+                                  <div><span className="text-slate-400">Expires:</span> {formatDateDDMMYYYY(grant.expires_at)}</div>
+                                </div>
+
+                                {isActive && (
+                                  <div className="text-right pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const adminName = currentProfile?.name || 'Admin';
+                                        revokeAuditorGrant(grant.id, adminName);
+                                        setModConsoleTick(t => t + 1);
+                                        setCampaignActionToast('Auditor access revoked.');
+                                        setTimeout(() => setCampaignActionToast(null), 3000);
+                                      }}
+                                      className="py-1 px-3 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-[11px] font-bold transition"
+                                    >
+                                      Revoke Access
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SUBTAB 3: SYSTEM AUDIT LOG */}
+                  {auditConsoleSubTab === 'logs' && (
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 divide-y divide-slate-200/80 max-h-[500px] overflow-y-auto space-y-2">
+                      {logsList.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400 text-xs font-bold">
+                          No audit logs recorded yet.
+                        </div>
+                      ) : (
+                        logsList.map(log => (
+                          <div key={log.id} className="pt-2 first:pt-0 space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-black text-slate-900 flex items-center gap-1.5">
+                                <span className={`w-2 h-2 rounded-full ${
+                                  log.targetType === 'creator' ? 'bg-indigo-500' :
+                                  log.targetType === 'campaign' ? 'bg-emerald-500' :
+                                  log.targetType === 'pricing' ? 'bg-amber-500' : 
+                                  log.targetType === 'modification_request' ? 'bg-orange-500' :
+                                  log.targetType === 'audit_grant' ? 'bg-teal-500' : 'bg-purple-500'
+                                }`} />
+                                {log.action}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {formatDateDDMMYYYY(log.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 leading-relaxed">{log.details}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                              <span>By: <strong className="text-slate-600">{log.performedBy}</strong></span>
+                              {log.targetId && <span>• Target: <code className="bg-slate-200/60 px-1 py-0.2 rounded text-slate-700">{log.targetId}</code></span>}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

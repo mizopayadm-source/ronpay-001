@@ -43,6 +43,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { Campaign, CreatorProfile, KumtluangExpense, Transaction } from '../types';
+import { RequestModificationModal, LockedRecordInfo } from './RequestModificationModal';
 import { 
   getStoredExpenses, 
   saveStoredExpenses, 
@@ -221,6 +222,10 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   const [editFormError, setEditFormError] = useState<string>('');
   const [editFormSuccess, setEditFormSuccess] = useState<string>('');
   const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Maker-Checker Request Modification state
+  const [lockedRecordForMod, setLockedRecordForMod] = useState<LockedRecordInfo | null>(null);
+  const [isRequestModOpen, setIsRequestModOpen] = useState<boolean>(false);
 
   // Authorized Officers management state
   const [officerName, setOfficerName] = useState<string>('');
@@ -1179,6 +1184,23 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
 
   // Open Edit Expense Modal
   const handleOpenEditExpense = (expense: KumtluangExpense) => {
+    if (expense.is_locked) {
+      setLockedRecordForMod({
+        recordId: expense.id,
+        recordType: 'EXPENSE',
+        campaignId: campaign.id,
+        campaignTitle: campaign.title,
+        amount: Number(expense.amount || 0),
+        title: expense.head || expense.purpose || 'Expense Voucher',
+        isLocked: true,
+        lockedBy: expense.locked_by,
+        auditDate: expense.audit_date,
+        auditPeriod: expense.audit_period
+      });
+      setIsRequestModOpen(true);
+      return;
+    }
+
     setEditingExpense(expense);
     setEditAmountInput(String(expense.amount || ''));
     setEditHeadInput(expense.head || expenseHeads[0] || 'Thil Dang / Miscellaneous');
@@ -1249,6 +1271,22 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
   const handleDeleteExpense = (id: string) => {
     const target = expenseList.find(e => e.id === id);
     if (target) {
+      if (target.is_locked) {
+        setLockedRecordForMod({
+          recordId: target.id,
+          recordType: 'EXPENSE',
+          campaignId: campaign.id,
+          campaignTitle: campaign.title,
+          amount: Number(target.amount || 0),
+          title: target.head || target.purpose || 'Expense Voucher',
+          isLocked: true,
+          lockedBy: target.locked_by,
+          auditDate: target.audit_date,
+          auditPeriod: target.audit_period
+        });
+        setIsRequestModOpen(true);
+        return;
+      }
       setVoucherToDelete(target);
     }
   };
@@ -4337,6 +4375,20 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
           </div>
         </div>
       )}
+
+      {/* Maker-Checker Request Modification Modal for Locked Expenses */}
+      <RequestModificationModal
+        isOpen={isRequestModOpen}
+        record={lockedRecordForMod}
+        creatorProfile={creatorProfile}
+        onClose={() => {
+          setIsRequestModOpen(false);
+          setLockedRecordForMod(null);
+        }}
+        onSubmitted={() => {
+          showToast('Modification request Admin hnenah thehluh fel a ni e.', 'info');
+        }}
+      />
     </div>
   );
 };

@@ -588,6 +588,18 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
     const secs = avgSeconds % 60;
     const avgDurationStr = `${mins}m ${secs}s`;
 
+    if (dateRange === 'today') {
+      const liveStats = getTodayLiveStats();
+      totalVisitors = Math.max(totalVisitors, liveStats.uniqueVisitors, realtimeActiveUsers);
+      totalPageviews = Math.max(totalPageviews, liveStats.totalHits);
+      totalSessions = Math.max(totalSessions, liveStats.uniqueVisitors);
+      if (trend.length > 0) {
+        trend[0].visitors = totalVisitors;
+        trend[0].pageviews = totalPageviews;
+        trend[0].sessions = totalSessions;
+      }
+    }
+
     return {
       status: 'live',
       isConfigured: true,
@@ -596,12 +608,12 @@ export async function fetchGA4DirectRestReport(dateRange: string = '30d'): Promi
       dateRange,
       lastUpdated: new Date().toISOString(),
       data: {
-        realtimeActiveUsers,
+        realtimeActiveUsers: Math.max(realtimeActiveUsers, getActiveVisitorsCount()),
         summary: {
-          totalVisitors,
-          activeUsers: totalVisitors,
-          pageViews: totalPageviews,
-          sessions: totalSessions,
+          totalVisitors: Math.max(totalVisitors, 1),
+          activeUsers: Math.max(totalVisitors, 1),
+          pageViews: Math.max(totalPageviews, 1),
+          sessions: Math.max(totalSessions, 1),
           newUsers: totalNewUsers,
           avgSessionDuration: avgDurationStr,
           bounceRate: totalSessions > 0 ? '24.2%' : '0.0%',
@@ -938,6 +950,18 @@ export async function fetchGA4AnalyticsReport(dateRange: string = '30d'): Promis
     const secs = avgSeconds % 60;
     const avgDurationStr = `${mins}m ${secs}s`;
 
+    if (dateRange === 'today') {
+      const liveStats = getTodayLiveStats();
+      totalVisitors = Math.max(totalVisitors, liveStats.uniqueVisitors, realtimeActiveUsers);
+      totalPageviews = Math.max(totalPageviews, liveStats.totalHits);
+      totalSessions = Math.max(totalSessions, liveStats.uniqueVisitors);
+      if (trend.length > 0) {
+        trend[0].visitors = totalVisitors;
+        trend[0].pageviews = totalPageviews;
+        trend[0].sessions = totalSessions;
+      }
+    }
+
     return {
       status: 'live',
       isConfigured: true,
@@ -1039,9 +1063,10 @@ interface LiveHit {
 
 const liveHitStore: LiveHit[] = [];
 
-export function recordLiveHit(path: string, title?: string, clientIp?: string, userAgent?: string): number {
+export function recordLiveHit(path: string, title?: string, clientIp?: string, userAgent?: string, visitorId?: string): number {
   const now = Date.now();
-  const hash = crypto.createHash('md5').update(`${clientIp || '127.0.0.1'}-${userAgent || 'unknown'}`).digest('hex');
+  const rawId = visitorId || `${clientIp || '127.0.0.1'}-${userAgent || 'unknown'}`;
+  const hash = crypto.createHash('md5').update(rawId).digest('hex');
   const cleanPath = path || '/';
   const cleanTitle = title || 'RonPay App';
 
@@ -1053,15 +1078,14 @@ export function recordLiveHit(path: string, title?: string, clientIp?: string, u
     timestamp: now,
   });
 
-  // Prune hits older than 15 minutes
-  const fifteenMinsAgo = now - 15 * 60 * 1000;
-  while (liveHitStore.length > 0 && liveHitStore[0].timestamp < fifteenMinsAgo) {
+  // Keep hits up to 24 hours for accurate daily calculation
+  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+  while (liveHitStore.length > 0 && liveHitStore[0].timestamp < twentyFourHoursAgo) {
     liveHitStore.shift();
   }
 
-  // Count unique visitors in last 15 mins
-  const activeVisitors = new Set(liveHitStore.map(h => h.visitorHash)).size;
-  return activeVisitors;
+  // Count active visitors in last 15 mins
+  return getActiveVisitorsCount();
 }
 
 export function getActiveVisitorsCount(): number {
@@ -1071,5 +1095,19 @@ export function getActiveVisitorsCount(): number {
     liveHitStore.filter(h => h.timestamp >= fifteenMinsAgo).map(h => h.visitorHash)
   );
   return activeHashes.size;
+}
+
+export function getTodayLiveStats(): { uniqueVisitors: number; totalHits: number } {
+  const now = Date.now();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayTimestamp = startOfToday.getTime();
+
+  const todayHits = liveHitStore.filter(h => h.timestamp >= todayTimestamp);
+  const uniqueVisitors = new Set(todayHits.map(h => h.visitorHash)).size;
+  return {
+    uniqueVisitors: Math.max(1, uniqueVisitors),
+    totalHits: Math.max(1, todayHits.length)
+  };
 }
 

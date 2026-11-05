@@ -1,4 +1,4 @@
-import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense } from '../types';
+import { Campaign, Transaction, CreatorProfile, BawmCategory, SystemPricingConfig, SectionQuickPreset, AuditLog, AnnouncementBanner, AnnouncementItem, MemberRecord, RonPayWallet, WalletTransaction, StaffAccount, PaymentGatewayConfig, KumtluangExpense, AuditorAccessGrant, ModificationRequest } from '../types';
 import { INITIAL_CAMPAIGNS, INITIAL_TRANSACTIONS, INITIAL_EXPENSES, DEFAULT_PRICING_CONFIG, INITIAL_REGISTERED_CREATORS, BMP_SHILLONG_DEFAULT_LOGO, YMA_DEFAULT_LOGO, BCM_EBENEZER_DEFAULT_LOGO } from '../data/initialData';
 import { compressDataUrl } from './imageCompressor';
 import {
@@ -4044,6 +4044,15 @@ export const saveTransaction = (tx: Transaction): void => {
 
   tx.isSynced = false;
   const current = getStoredTransactions();
+  const existingTx = current.find(t => String(t.id).toLowerCase().trim() === cleanTxId);
+  if (existingTx && existingTx.is_locked) {
+    const isUnlocked = existingTx.unlock_expires_at && new Date(existingTx.unlock_expires_at).getTime() > Date.now();
+    if (!isUnlocked && !tx.is_locked && !tx.unlock_expires_at) {
+      console.warn(`[Audit Lock] Transaction ${tx.id} is locked by ${existingTx.locked_by || 'Auditor'}. Modification blocked.`);
+      return;
+    }
+  }
+
   const updated = [tx, ...current.filter(t => String(t.id).toLowerCase().trim() !== cleanTxId)];
   saveStoredTransactions(updated, false);
   recordUserPaidTxId(tx.id);
@@ -4291,6 +4300,13 @@ export const deleteStoredTransaction = (transactionId: string): void => {
   const cleanId = String(transactionId).trim();
   const current = getStoredTransactions();
   const targetTx = current.find(t => String(t.id).toLowerCase().trim() === cleanId.toLowerCase());
+  if (targetTx && targetTx.is_locked) {
+    const isUnlocked = targetTx.unlock_expires_at && new Date(targetTx.unlock_expires_at).getTime() > Date.now();
+    if (!isUnlocked) {
+      console.warn(`[Audit Lock] Cannot delete locked transaction ${transactionId}. Maker-Checker approval required.`);
+      return;
+    }
+  }
 
   markTransactionAsDeleted(cleanId, false);
   
@@ -4784,8 +4800,17 @@ export const saveExpense = (expense: KumtluangExpense): void => {
 };
 
 export const deleteStoredExpense = (expenseId: string): void => {
-  markExpenseAsDeleted(expenseId);
   const current = getStoredExpenses();
+  const target = current.find(e => String(e.id).toLowerCase().trim() === String(expenseId).toLowerCase().trim());
+  if (target && target.is_locked) {
+    const isUnlocked = target.unlock_expires_at && new Date(target.unlock_expires_at).getTime() > Date.now();
+    if (!isUnlocked) {
+      console.warn(`[Audit Lock] Cannot delete locked expense ${expenseId}. Maker-Checker approval required.`);
+      return;
+    }
+  }
+
+  markExpenseAsDeleted(expenseId);
   const updated = current.filter(e => String(e.id).toLowerCase().trim() !== String(expenseId).toLowerCase().trim());
   saveStoredExpenses(updated);
 
@@ -4818,6 +4843,15 @@ export const deleteAllCampaignExpenses = (campaignId: string): void => {
 export const updateStoredExpense = (expense: KumtluangExpense): void => {
   const current = getStoredExpenses();
   const cleanId = String(expense.id).toLowerCase().trim();
+  const existingExp = current.find(e => String(e.id).toLowerCase().trim() === cleanId);
+  if (existingExp && existingExp.is_locked) {
+    const isUnlocked = existingExp.unlock_expires_at && new Date(existingExp.unlock_expires_at).getTime() > Date.now();
+    if (!isUnlocked && !expense.is_locked && !expense.unlock_expires_at) {
+      console.warn(`[Audit Lock] Expense ${expense.id} is locked by ${existingExp.locked_by || 'Auditor'}. Modification blocked.`);
+      return;
+    }
+  }
+
   const idx = current.findIndex(e => String(e.id).toLowerCase().trim() === cleanId);
   let updated: KumtluangExpense[];
   const stamp = new Date().toISOString();
@@ -5000,4 +5034,417 @@ export const clearRonpayLocalStorage = (): void => {
   if (typeof localStorage === 'undefined') return;
   const keysToRemove = Object.keys(localStorage).filter(key => key.startsWith('ronpay_'));
   keysToRemove.forEach(key => localStorage.removeItem(key));
+};
+
+// ============================================================================
+// FINANCIAL AUDIT LOCK, AUDITOR ACCESS GRANTS & MAKER-CHECKER WORKFLOW
+// ============================================================================
+
+export const AUDITOR_GRANTS_KEY = 'ronpay_auditor_grants_v1';
+export const MODIFICATION_REQUESTS_KEY = 'ronpay_modification_requests_v1';
+
+export const getStoredAuditorGrants = (campaignId?: string): AuditorAccessGrant[] => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(AUDITOR_GRANTS_KEY) : null;
+    let list: AuditorAccessGrant[] = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) list = [];
+
+    const now = Date.now();
+    let changed = false;
+    // Auto-evaluate expired grants
+    const updated = list.map(g => {
+      if (g.status === 'active' && new Date(g.expiresAt).getTime() <= now) {
+        changed = true;
+        return { ...g, status: 'expired' as const, updatedAt: new Date().toISOString() };
+      }
+      return g;
+    });
+
+    if (changed && typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
+    }
+
+    if (campaignId) {
+      const cleanId = String(campaignId).toLowerCase().trim();
+      return updated.filter(g => String(g.campaignId).toLowerCase().trim() === cleanId);
+    }
+    return updated;
+  } catch (e) {
+    console.error('Failed to get stored auditor grants:', e);
+    return [];
+  }
+};
+
+export const saveAuditorGrant = (grant: AuditorAccessGrant): void => {
+  try {
+    const current = getStoredAuditorGrants();
+    const cleanId = String(grant.id).trim();
+    const idx = current.findIndex(g => g.id === cleanId);
+    let updated: AuditorAccessGrant[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = { ...grant, updatedAt: new Date().toISOString() };
+    } else {
+      updated = [{ ...grant, createdAt: grant.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, ...current];
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_auditor_grants_updated', { detail: updated }));
+    }
+
+    recordAuditLog(
+      'Auditor Access Granted',
+      `Auditor ${grant.auditorName} (${grant.auditorPhone}) granted access to campaign ${grant.campaignTitle || grant.campaignId} until ${grant.expiresAt}.`,
+      'audit_grant',
+      grant.id,
+      grant.grantedByName || grant.grantedBy
+    );
+  } catch (e) {
+    console.error('Failed to save auditor grant:', e);
+  }
+};
+
+export const revokeAuditorGrant = (grantId: string, revokedBy: string = 'Creator'): void => {
+  try {
+    const current = getStoredAuditorGrants();
+    const updated = current.map(g => {
+      if (g.id === grantId) {
+        return { ...g, status: 'revoked' as const, updatedAt: new Date().toISOString() };
+      }
+      return g;
+    });
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(AUDITOR_GRANTS_KEY, JSON.stringify(updated));
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_auditor_grants_updated', { detail: updated }));
+    }
+
+    recordAuditLog(
+      'Auditor Access Revoked',
+      `Auditor grant ${grantId} manually revoked by ${revokedBy}.`,
+      'audit_grant',
+      grantId,
+      revokedBy
+    );
+  } catch (e) {
+    console.error('Failed to revoke auditor grant:', e);
+  }
+};
+
+export const checkAuditorAccessForCampaign = (
+  userPhone?: string | null,
+  campaignId?: string | null
+): { hasAccess: boolean; grant?: AuditorAccessGrant; remainingHours?: number } => {
+  if (!userPhone || !campaignId) return { hasAccess: false };
+  const cleanPhone = String(userPhone).replace(/\D/g, '').slice(-10);
+  if (!cleanPhone) return { hasAccess: false };
+
+  const grants = getStoredAuditorGrants(campaignId);
+  const now = Date.now();
+
+  const activeGrant = grants.find(g => {
+    const gPhone = String(g.auditorPhone || '').replace(/\D/g, '').slice(-10);
+    const expTime = new Date(g.expiresAt).getTime();
+    return gPhone === cleanPhone && g.status === 'active' && expTime > now;
+  });
+
+  if (activeGrant) {
+    const remainingMs = new Date(activeGrant.expiresAt).getTime() - now;
+    const remainingHours = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60)));
+    return { hasAccess: true, grant: activeGrant, remainingHours };
+  }
+
+  return { hasAccess: false };
+};
+
+export const getStoredModificationRequests = (campaignId?: string): ModificationRequest[] => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(MODIFICATION_REQUESTS_KEY) : null;
+    let list: ModificationRequest[] = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) list = [];
+
+    if (campaignId) {
+      const cleanId = String(campaignId).toLowerCase().trim();
+      return list.filter(r => String(r.campaignId).toLowerCase().trim() === cleanId);
+    }
+    return list;
+  } catch (e) {
+    console.error('Failed to get stored modification requests:', e);
+    return [];
+  }
+};
+
+export const saveModificationRequest = (req: ModificationRequest): void => {
+  try {
+    const current = getStoredModificationRequests();
+    const cleanId = String(req.id).trim();
+    const idx = current.findIndex(r => r.id === cleanId);
+    let updated: ModificationRequest[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = { ...req, updatedAt: new Date().toISOString() };
+    } else {
+      updated = [{ ...req, createdAt: req.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, ...current];
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(updated));
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: updated }));
+    }
+
+    recordAuditLog(
+      'Modification Requested',
+      `Modification requested for ${req.recordType} ${req.recordId} by ${req.requestedByName || req.requestedBy}. Reason: "${req.reasonNote}".`,
+      'modification_request',
+      req.id,
+      req.requestedByName || req.requestedBy
+    );
+  } catch (e) {
+    console.error('Failed to save modification request:', e);
+  }
+};
+
+export const reviewModificationRequest = (
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  reviewer: string | { name: string; phone?: string; notes?: string },
+  unlockDurationMinutes: number = 120,
+  adminNotes?: string
+): boolean => {
+  try {
+    const reviewerName = typeof reviewer === 'string' ? reviewer : (reviewer?.name || 'Admin');
+    const reviewerNote = adminNotes || (typeof reviewer === 'object' ? reviewer?.notes : '') || '';
+
+    const requests = getStoredModificationRequests();
+    const target = requests.find(r => r.id === requestId);
+    if (!target) return false;
+
+    const now = new Date();
+    const unlockExpiresAt = decision === 'approved' 
+      ? new Date(now.getTime() + unlockDurationMinutes * 60 * 1000).toISOString()
+      : undefined;
+
+    const updatedRequests = requests.map(r => {
+      if (r.id === requestId) {
+        return {
+          ...r,
+          status: decision,
+          approvedBy: reviewerName,
+          approvedByName: reviewerName,
+          reviewedBy: reviewerName,
+          reviewed_by: reviewerName,
+          reviewedAt: now.toISOString(),
+          reviewed_at: now.toISOString(),
+          reviewNotes: reviewerNote,
+          admin_notes: reviewerNote,
+          unlockExpiresAt,
+          unlock_expires_at: unlockExpiresAt,
+          updatedAt: now.toISOString(),
+          updated_at: now.toISOString()
+        };
+      }
+      return r;
+    });
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MODIFICATION_REQUESTS_KEY, JSON.stringify(updatedRequests));
+    }
+
+    // If approved, temporarily unlock the transaction or expense
+    if (decision === 'approved' && unlockExpiresAt) {
+      const recId = target.recordId || target.record_id || '';
+      const recType = String(target.recordType || target.record_type || '').toLowerCase();
+
+      if (recType === 'transaction') {
+        const txs = getStoredTransactions();
+        const patchedTxs = txs.map(t => {
+          if (String(t.id).toLowerCase().trim() === String(recId).toLowerCase().trim()) {
+            return {
+              ...t,
+              unlock_expires_at: unlockExpiresAt,
+              updatedAt: now.toISOString()
+            };
+          }
+          return t;
+        });
+        saveStoredTransactions(patchedTxs, false);
+      } else {
+        const exps = getStoredExpenses();
+        const patchedExps = exps.map(e => {
+          if (String(e.id).toLowerCase().trim() === String(recId).toLowerCase().trim()) {
+            return {
+              ...e,
+              unlock_expires_at: unlockExpiresAt,
+              updatedAt: now.toISOString()
+            };
+          }
+          return e;
+        });
+        saveStoredExpenses(patchedExps, false);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ronpay_modification_requests_updated', { detail: updatedRequests }));
+    }
+
+    recordAuditLog(
+      decision === 'approved' ? 'Modification Approved' : 'Modification Rejected',
+      `Request ${requestId} for ${target.recordType || target.record_type} ${target.recordId || target.record_id} was ${decision} by ${reviewerName}. Unlock window: ${unlockDurationMinutes}m. Notes: ${reviewerNote || 'None'}.`,
+      'modification_request',
+      requestId,
+      reviewerName
+    );
+
+    return true;
+  } catch (e) {
+    console.error('Failed to review modification request:', e);
+    return false;
+  }
+};
+
+export const lockCampaignAuditPeriod = (
+  campaignId: string,
+  auditor: string | { name: string; phone?: string },
+  periodLabel: string,
+  notes?: string
+): { lockedCount: number; lockedTransactionsCount: number; lockedExpensesCount: number } => {
+  let txCount = 0;
+  let expCount = 0;
+  const nowIso = new Date().toISOString();
+  const cleanCampId = String(campaignId).toLowerCase().trim();
+  const auditorName = typeof auditor === 'string' ? auditor : auditor.name;
+  const auditorPhone = typeof auditor === 'string' ? 'N/A' : (auditor.phone || 'N/A');
+
+  // 1. Lock matching transactions
+  try {
+    const txs = getStoredTransactions();
+    let txChanged = false;
+    const updatedTxs = txs.map(t => {
+      if (String(t.campaignId).toLowerCase().trim() === cleanCampId) {
+        txCount++;
+        txChanged = true;
+        return {
+          ...t,
+          is_locked: true,
+          audit_date: nowIso,
+          locked_by: auditorName,
+          audit_period: periodLabel,
+          audit_notes: notes || t.audit_notes,
+          unlock_expires_at: undefined,
+          updatedAt: nowIso
+        };
+      }
+      return t;
+    });
+    if (txChanged) {
+      saveStoredTransactions(updatedTxs, false);
+    }
+  } catch (e) {
+    console.error('Failed to lock transactions for audit:', e);
+  }
+
+  // 2. Lock matching expenses
+  try {
+    const exps = getStoredExpenses();
+    let expChanged = false;
+    const updatedExps = exps.map(e => {
+      if (String(e.campaignId).toLowerCase().trim() === cleanCampId) {
+        expCount++;
+        expChanged = true;
+        return {
+          ...e,
+          is_locked: true,
+          audit_date: nowIso,
+          locked_by: auditorName,
+          audit_period: periodLabel,
+          audit_notes: notes || e.audit_notes,
+          unlock_expires_at: undefined,
+          updatedAt: nowIso
+        };
+      }
+      return e;
+    });
+    if (expChanged) {
+      saveStoredExpenses(updatedExps, false);
+    }
+  } catch (e) {
+    console.error('Failed to lock expenses for audit:', e);
+  }
+
+  // 3. Record immutable audit log
+  recordAuditLog(
+    'Financial Audit Signed & Locked',
+    `Auditor ${auditorName} (${auditorPhone}) signed off and locked ${txCount + expCount} financial records for period [${periodLabel}] in campaign ${campaignId}. Notes: ${notes || 'None'}.`,
+    'campaign',
+    campaignId,
+    auditorName
+  );
+
+  return { 
+    lockedCount: txCount + expCount,
+    lockedTransactionsCount: txCount,
+    lockedExpensesCount: expCount 
+  };
+};
+
+export const unlockSingleRecord = (
+  recordId: string,
+  recordType: 'transaction' | 'expense',
+  unlockedBy: string,
+  reason: string
+): boolean => {
+  const nowIso = new Date().toISOString();
+  const cleanId = String(recordId).toLowerCase().trim();
+
+  try {
+    if (recordType === 'transaction') {
+      const txs = getStoredTransactions();
+      const updated = txs.map(t => {
+        if (String(t.id).toLowerCase().trim() === cleanId) {
+          return {
+            ...t,
+            is_locked: false,
+            unlock_expires_at: undefined,
+            updatedAt: nowIso
+          };
+        }
+        return t;
+      });
+      saveStoredTransactions(updated, false);
+    } else {
+      const exps = getStoredExpenses();
+      const updated = exps.map(e => {
+        if (String(e.id).toLowerCase().trim() === cleanId) {
+          return {
+            ...e,
+            is_locked: false,
+            unlock_expires_at: undefined,
+            updatedAt: nowIso
+          };
+        }
+        return e;
+      });
+      saveStoredExpenses(updated, false);
+    }
+
+    recordAuditLog(
+      'Record Unlocked',
+      `Record ${recordType} ${recordId} was unlocked by ${unlockedBy}. Reason: "${reason}".`,
+      recordType === 'transaction' ? 'transaction' : 'expense',
+      recordId,
+      unlockedBy
+    );
+    return true;
+  } catch (e) {
+    console.error('Failed to unlock record:', e);
+    return false;
+  }
 };

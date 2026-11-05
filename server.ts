@@ -88,10 +88,10 @@ app.get('/api/analytics/ga4/status', (req: Request, res: Response) => {
 app.post('/api/analytics/hit', (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
-    const { path: pagePath, title: pageTitle } = req.body || {};
+    const { path: pagePath, title: pageTitle, visitorId } = req.body || {};
     const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
     const userAgent = req.headers['user-agent'] || 'unknown';
-    const activeCount = recordLiveHit(pagePath, pageTitle, clientIp, userAgent);
+    const activeCount = recordLiveHit(pagePath, pageTitle, clientIp, userAgent, visitorId);
     res.status(200).json({ ok: true, activeVisitors: activeCount });
   } catch {
     res.status(200).json({ ok: true });
