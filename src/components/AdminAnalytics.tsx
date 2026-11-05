@@ -106,7 +106,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
   currentRole,
   onClose,
 }) => {
-  const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | '90d'>('30d');
+  const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | '90d'>('today');
   const [report, setReport] = useState<GA4DataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -219,7 +219,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({
 
   const summary = report?.data?.summary;
   const realtime = report?.data?.realtimeActiveUsers ?? 0;
-  const isDemo = report?.status === 'demo_mode' || report?.status === 'error' || !report?.isConfigured;
+  const isDemo = !isLoading && report !== null && (report?.status === 'demo_mode' || report?.status === 'error' || report?.isConfigured === false);
   const isPermissionPending = Boolean(report?.errorMessage && (report.errorMessage.includes('Property Access Management') || report.errorMessage.includes('Viewer')));
 
   return (

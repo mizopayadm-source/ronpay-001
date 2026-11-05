@@ -208,7 +208,7 @@ async function getClientGA4AccessToken(): Promise<string | null> {
   }
 }
 
-export async function fetchGA4DirectClientReport(dateRange: string = '30d'): Promise<GA4ReportPayload | null> {
+export async function fetchGA4DirectClientReport(dateRange: string = 'today'): Promise<GA4ReportPayload | null> {
   const propertyId = DEFAULT_GA4_PROPERTY_ID;
   const token = await getClientGA4AccessToken();
   if (!token) return null;
@@ -480,7 +480,7 @@ export async function fetchGA4DirectClientReport(dateRange: string = '30d'): Pro
  * 2. If backend is not available, fails, or returns HTML (e.g. GitHub Pages / Cloudflare static),
  *    automatically queries GA4 directly via WebCrypto in browser!
  */
-export async function fetchGA4AnalyticsHybrid(dateRange: string = '30d'): Promise<GA4ReportPayload | null> {
+export async function fetchGA4AnalyticsHybrid(dateRange: string = 'today'): Promise<GA4ReportPayload | null> {
   // 1. Try Backend API first
   try {
     const url = resolveApiUrl(`/api/analytics/ga4?range=${dateRange}&_t=${Date.now()}`);
