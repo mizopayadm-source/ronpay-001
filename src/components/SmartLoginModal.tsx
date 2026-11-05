@@ -157,6 +157,22 @@ export const DEMO_ACCOUNTS: {
     isAdmin: false,
     avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
     description: 'Standard Member: Scan & Pay any QR, RonPay Wallet top-up, Sulhnu statements.'
+  },
+  {
+    id: 'demo-auditor',
+    roleTitle: 'Sum Endiktu (Auditor)',
+    roleBadge: '⚖️ AUDITOR (TIER 4)',
+    role: 'AUDITOR',
+    badgeColor: 'bg-amber-100 text-amber-900 border-amber-300',
+    name: 'C. Lalrammawia (Auditor)',
+    orgName: 'Financial Audit Desk',
+    designation: 'Senior Sum Endiktu',
+    phone: '9862300000',
+    userId: 'auditor_demo',
+    mpin: '1234',
+    isAdmin: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80',
+    description: 'Time-bound Sum Endiktu Access: Online accounts review, period sign & locking, and printable audit certificate.'
   }
 ];
 
