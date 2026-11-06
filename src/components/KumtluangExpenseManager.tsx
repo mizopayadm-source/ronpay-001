@@ -279,7 +279,7 @@ export const KumtluangExpenseManager: React.FC<KumtluangExpenseManagerProps> = (
     if (!heads.includes(selectedHead)) {
       setSelectedHead(heads[0] || 'Thil Dang / Miscellaneous');
     }
-  }, [campaign.id, campaign.expenseHeads]);
+  }, [campaign.id, (campaign.expenseHeads || []).join(',')]);
 
   // Cloud sync state
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);

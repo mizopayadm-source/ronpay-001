@@ -245,8 +245,8 @@ export const AuthorizedPersonsModal: React.FC<AuthorizedPersonsModalProps> = ({
   // Auto-lock individual collector view if assigned officer only
   useEffect(() => {
     if (isAssignedOfficerOnly && currentOfficerPhone) {
-      setSelectedCollectorPhone(currentOfficerPhone);
-      setActiveTab('analytics');
+      setSelectedCollectorPhone(prev => prev || currentOfficerPhone);
+      setActiveTab(prev => prev === 'analytics' ? prev : 'analytics');
     }
   }, [isAssignedOfficerOnly, currentOfficerPhone]);
 

@@ -32,7 +32,8 @@ import {
   recordAuditLog, 
   saveAdminAuthState, 
   loginCreator,
-  logoutCreator 
+  logoutCreator,
+  getActiveAuditorGrantsForUser
 } from '../utils/storage';
 
 export interface SmartLoginModalProps {
@@ -749,6 +750,19 @@ export const SmartLoginModal: React.FC<SmartLoginModalProps> = ({
                     required
                   />
                 </div>
+                
+                {/* Active Auditor Access Detection Card */}
+                {userInput.trim().length >= 8 && getActiveAuditorGrantsForUser(userInput).length > 0 && (
+                  <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-2 text-xs font-bold text-amber-950 animate-fadeIn">
+                    <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="font-black">⚖️ Active Auditor Grant Found!</span>
+                      <p className="text-[10px] text-amber-900/80 font-normal">
+                        He phone number ({userInput}) tana time-bound Auditor access hi active a ni e. Sign-in rawh le!
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sub Mode Switch: 4-Digit Security MPIN vs SMS OTP */}

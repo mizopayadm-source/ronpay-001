@@ -130,6 +130,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { RonPayWebsite } from './components/RonPayWebsite';
 import { BackupSyncSettingsModal } from './components/BackupSyncSettingsModal';
 import { MyMembershipsModal } from './components/MyMembershipsModal';
+import { AuditorPortalModal } from './components/AuditorPortalModal';
 import { initBackupScheduler } from './services/backupService';
 import { 
   getUrlRoute, 
@@ -292,6 +293,15 @@ export default function App() {
   const [isCreatorStudioUnlocked, setIsCreatorStudioUnlocked] = useState<boolean>(false);
   const [isExternalUPIOpen, setIsExternalUPIOpen] = useState<boolean>(false);
   const [externalUPICampaign, setExternalUPICampaign] = useState<Campaign | null>(null);
+  const [isAuditorPortalOpen, setIsAuditorPortalOpen] = useState<boolean>(false);
+  const [auditorPortalCampaign, setAuditorPortalCampaign] = useState<Campaign | null>(null);
+
+  const handleOpenAuditorPortal = useCallback((targetCampaign?: Campaign | null) => {
+    const camp = targetCampaign || selectedCampaign || campaignsRef.current[0] || null;
+    setAuditorPortalCampaign(camp);
+    setIsAuditorPortalOpen(true);
+  }, [selectedCampaign]);
+
   const [imagePreviewData, setImagePreviewData] = useState<{
     url: string | null;
     title?: string;
@@ -1719,6 +1729,7 @@ export default function App() {
             creatorProfile={creatorProfile}
             onSwitchToWebsite={handleSwitchToWebsite}
             onOpenBackupSync={() => setIsBackupSyncOpen(true)}
+            onOpenAuditorPortal={() => handleOpenAuditorPortal()}
           />
         )}
 
@@ -1762,6 +1773,7 @@ export default function App() {
               }}
               onOpenMemberships={() => setIsMyMembershipsOpen(true)}
               onOpenWebsite={handleSwitchToWebsite}
+              onOpenAuditorPortal={handleOpenAuditorPortal}
             />
           )}
 
@@ -2513,6 +2525,15 @@ export default function App() {
             language={language}
           />
         )}
+
+        {/* Auditor Portal Modal (Online Financial Audit & Time-Bound Access) */}
+        <AuditorPortalModal
+          isOpen={isAuditorPortalOpen}
+          campaign={auditorPortalCampaign || campaigns[0] || null}
+          creatorProfile={creatorProfile}
+          onClose={() => setIsAuditorPortalOpen(false)}
+          onRecordsUpdated={reloadLocalData}
+        />
 
         {/* Backup and Sync Settings Modal (HDD Storage, Midnight Auto, Optional Email & WhatsApp) */}
         <BackupSyncSettingsModal

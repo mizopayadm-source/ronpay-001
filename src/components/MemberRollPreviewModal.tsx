@@ -102,13 +102,13 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
       if (initialCampaignId && (initialCampaignId === 'all' ? (isPrivilegedUser || allowedCampaigns.length > 1) : allowedCampaignIds.has(initialCampaignId))) {
         setSelectedCampaignId(initialCampaignId);
       } else if (allowedCampaigns.length > 0) {
-        setSelectedCampaignId(allowedCampaigns[0].id);
+        setSelectedCampaignId(prev => prev || allowedCampaigns[0].id);
       } else {
         setSelectedCampaignId('');
       }
       if (initialMemberId) setSelectedMemberId(initialMemberId);
     }
-  }, [isOpen, initialFormat, initialCampaignId, initialMemberId, allowedCampaigns, allowedCampaignIds, isPrivilegedUser]);
+  }, [isOpen, initialFormat, initialCampaignId, initialMemberId, isPrivilegedUser]);
 
   // Scoped campaign
   const activeCampaign = useMemo(() => {
@@ -183,12 +183,11 @@ export const MemberRollPreviewModal: React.FC<MemberRollPreviewModalProps> = ({
     });
   }, [scopedMembers, selectedSectionFilter, searchQuery]);
 
-  // If member selector is needed, ensure valid ID
   React.useEffect(() => {
     if (!selectedMemberId && filteredMembers.length > 0) {
       setSelectedMemberId(filteredMembers[0].id);
     }
-  }, [filteredMembers, selectedMemberId]);
+  }, [filteredMembers.length, selectedMemberId]);
 
   const activeMember = useMemo(() => {
     return scopedMembers.find(m => m.id === selectedMemberId) || scopedMembers[0];

@@ -59,6 +59,36 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
   const [isLocking, setIsLocking] = useState<boolean>(false);
   const [lockToast, setLockToast] = useState<string | null>(null);
 
+  // Interactive Audit Checklist state
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({
+    bank_reconciliation: true,
+    vouchers_receipts: true,
+    member_giving_roll: true,
+    cash_in_hand: true,
+    discrepancy_check: true
+  });
+
+  // Interactive Item Verification Markers (ID -> 'verified' | 'flagged')
+  const [itemMarks, setItemMarks] = useState<Record<string, 'verified' | 'flagged'>>({});
+
+  const toggleChecklistItem = (key: string) => {
+    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleItemMark = (id: string, status: 'verified' | 'flagged') => {
+    setItemMarks(prev => {
+      if (prev[id] === status) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: status };
+    });
+  };
+
+  const checkedCount = useMemo(() => Object.values(checklist).filter(Boolean).length, [checklist]);
+  const checklistPercent = useMemo(() => Math.round((checkedCount / 5) * 100), [checkedCount]);
+
   // Local refresh tick
   const [tick, setTick] = useState<number>(0);
 
@@ -113,6 +143,53 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
       totalUnlocked: unlockedTxCount + unlockedExpCount
     };
   }, [allTransactions, allExpenses]);
+
+  // Download Audited Ledger CSV
+  const handleExportAuditedLedgerCSV = () => {
+    if (!campaign) return;
+    const headers = ['Type', 'Record ID', 'Date', 'Name / Head', 'Details / Payee', 'Amount (INR)', 'Payment Method', 'Audit Period', 'Lock Status', 'Auditor Marker'];
+    const rows: string[][] = [];
+
+    allTransactions.forEach(tx => {
+      rows.push([
+        'INFLOW',
+        tx.id || '',
+        formatDateDDMMYYYY(tx.timestamp),
+        tx.donorName || 'Anonymous',
+        tx.donorComment || tx.subCategory || tx.donorVeng || '',
+        String(tx.amount || 0),
+        tx.paymentMethod || 'UPI',
+        tx.audit_period || 'N/A',
+        tx.is_locked ? 'LOCKED' : 'UNLOCKED',
+        itemMarks[tx.id] === 'verified' ? 'VERIFIED_OK' : itemMarks[tx.id] === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED'
+      ]);
+    });
+
+    allExpenses.forEach(exp => {
+      rows.push([
+        'OUTFLOW',
+        exp.voucherNo || exp.id || '',
+        formatDateDDMMYYYY(exp.spentDate || exp.date || exp.createdAt || ''),
+        exp.head || exp.expenseHead || 'Expense',
+        exp.paidTo || exp.payeeName || exp.purpose || '',
+        String(exp.amount || 0),
+        'CASH / BANK',
+        exp.audit_period || 'N/A',
+        exp.is_locked ? 'LOCKED' : 'UNLOCKED',
+        itemMarks[exp.id] === 'verified' ? 'VERIFIED_OK' : itemMarks[exp.id] === 'flagged' ? 'FLAGGED_DISCREPANCY' : 'UNCHECKED'
+      ]);
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Audited_Ledger_${campaign.title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
@@ -476,12 +553,75 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={handleExportAuditedLedgerCSV}
+                    className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Audited Ledger (CSV)</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('certificate')}
                     className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-2xs transition flex items-center gap-1.5"
                   >
                     <Award className="w-3.5 h-3.5" />
                     <span>Print Audit Certificate</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Interactive Audit Verification Checklist */}
+              <div className="bg-white border border-indigo-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      <span>Audit Verification Checklist (Interactive Tracker)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Checklist hi ziak felin audit nemnghehna neih nan hmang rawh
+                    </p>
+                  </div>
+                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {checkedCount} / 5 Verified ({checklistPercent}%)
+                  </span>
+                </div>
+
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-indigo-600 h-full transition-all duration-300"
+                    style={{ width: `${checklistPercent}%` }}
+                  />
+                </div>
+
+                <div className="space-y-2 text-xs pt-1">
+                  {[
+                    { key: 'bank_reconciliation', label: 'Bank Passbook & e-Statement Reconciled with Inflow / Outflow' },
+                    { key: 'vouchers_receipts', label: 'Physical Vouchers & Online Payment Receipts Verified' },
+                    { key: 'member_giving_roll', label: 'Member Roll Monthly Giving & Donation Receipts Cross-Checked' },
+                    { key: 'cash_in_hand', label: 'Physical Cash Balance in Hand & Bank Balance Confirmed' },
+                    { key: 'discrepancy_check', label: 'Zero Unauthorized Alterations or Discrepancies Detected' },
+                  ].map(item => (
+                    <label 
+                      key={item.key} 
+                      className={`flex items-center gap-3 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                        checklist[item.key]
+                          ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950 font-bold'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'
+                      }`}
+                    >
+                      <input 
+                        type="checkbox"
+                        checked={Boolean(checklist[item.key])}
+                        onChange={() => toggleChecklistItem(item.key)}
+                        className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                      />
+                      <span className="flex-1">{item.label}</span>
+                      {checklist[item.key] && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -733,9 +873,34 @@ export const AuditorPortalModal: React.FC<AuditorPortalModalProps> = ({
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Audit Financial Period *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Audit Financial Period *
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setAuditPeriod(`FY ${new Date().getFullYear() - 1}-${new Date().getFullYear()}`)}
+                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                      >
+                        FY {new Date().getFullYear() - 1}-{new Date().getFullYear()}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuditPeriod(`${new Date().toLocaleString('default', { month: 'short' })} ${new Date().getFullYear()}`)}
+                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                      >
+                        Thla Bi ({new Date().toLocaleString('default', { month: 'short' })})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuditPeriod(`All Time (${new Date().getFullYear()})`)}
+                        className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                      >
+                        All Time
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={auditPeriod}

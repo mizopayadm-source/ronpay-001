@@ -24,6 +24,7 @@ import {
   Lock,
   LogIn,
   UserCheck,
+  ShieldCheck,
   Sparkles,
   Layers,
   MapPin,
@@ -64,7 +65,7 @@ import { calculateHaversineKm, getCampaignCoordinates, formatDistance } from '..
 import { BILL_SERVICES, BCM_EBENEZER_DEFAULT_LOGO, BMP_SHILLONG_DEFAULT_LOGO } from '../data/initialData';
 import { formatDateDDMMYYYY, getCreatorExpiryStatus, isCampaignExpired } from '../utils/date';
 import { Language, TRANSLATIONS, translateDynamicText, getCampaignListTitle } from '../utils/translations';
-import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS } from '../utils/storage';
+import { isCampaignCreator, isConfirmedTransaction, isTransactionForCampaign, getDeletedTransactionIds, DEFAULT_ANNOUNCEMENT_ITEMS, getActiveAuditorGrantsForUser } from '../utils/storage';
 import { fetchTableData } from '../services/SupabaseSync';
 import { canManageCampaignExpenses } from '../utils/rbac';
 import { Megaphone, X as CloseIcon } from 'lucide-react';
@@ -97,6 +98,7 @@ interface HomeScreenProps {
   onOpenWebsite?: () => void;
   onPreviewImage?: (url: string, title?: string) => void;
   publicPoolStats?: PublicPoolStats;
+  onOpenAuditorPortal?: (campaign?: Campaign) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -125,6 +127,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenAdminDashboard,
   onOpenSyncDiagnostic,
   onOpenWebsite,
+  onOpenAuditorPortal,
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>(propTransactions);
   const [campaignsList, setCampaigns] = useState<Campaign[]>(campaigns);
@@ -143,58 +146,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (url) window.open(url, '_blank');
   };
 
-  useEffect(() => {
-    if (Array.isArray(campaigns) && campaigns.length > 0) {
-      setCampaigns(prev => (prev === campaigns ? prev : campaigns));
-    }
-  }, [campaigns]);
-
-  useEffect(() => {
-    if (Array.isArray(propTransactions) && propTransactions.length > 0) {
-      setTransactions(prev => (prev === propTransactions ? prev : propTransactions));
-    }
-  }, [propTransactions]);
-
-  const refreshCampaignsFromDB = React.useCallback(async () => {
-    try {
-      const fresh = await fetchTableData<Campaign>('campaigns');
-      if (Array.isArray(fresh) && fresh.length > 0) {
-        setCampaigns(fresh);
-        return;
-      }
-      const res = await fetch('/api/campaigns');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.campaigns) && data.campaigns.length > 0) {
-          setCampaigns(data.campaigns);
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleSync = () => {
-      refreshCampaignsFromDB();
-    };
-    window.addEventListener('ronpay_campaigns_updated', handleSync);
-    window.addEventListener('ronpay_trigger_sync', handleSync);
-
-    return () => {
-      window.removeEventListener('ronpay_campaigns_updated', handleSync);
-      window.removeEventListener('ronpay_trigger_sync', handleSync);
-    };
-  }, [refreshCampaignsFromDB]);
-
-
-
+  // Safe fallback to props or fetched DB campaigns
+  const safeCampaigns = useMemo(() => {
+    if (Array.isArray(campaigns) && campaigns.length > 0) return campaigns;
+    if (Array.isArray(campaignsList) && campaignsList.length > 0) return campaignsList;
+    return [];
+  }, [campaigns, campaignsList]);
 
   const safeTransactions = useMemo(() => {
-    return Array.isArray(transactions) ? transactions.filter(Boolean) : [];
-  }, [transactions]);
-
-  const safeCampaigns = Array.isArray(campaignsList) ? campaignsList : [];
+    if (Array.isArray(propTransactions) && propTransactions.length > 0) return propTransactions.filter(Boolean);
+    if (Array.isArray(transactions) && transactions.length > 0) return transactions.filter(Boolean);
+    return [];
+  }, [propTransactions, transactions]);
 
   // Ground truth confirmed transactions from safeTransactions (matches ReportsScreen 100%)
   const confirmedTxns = useMemo(() => {
@@ -678,7 +641,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       )}
 
-
+      {/* Active Auditor Grant Access Banner */}
+      {(creatorProfile?.role === 'AUDITOR' || (creatorProfile?.phone && getActiveAuditorGrantsForUser(creatorProfile.phone).length > 0)) && onOpenAuditorPortal && (
+        <div 
+          onClick={() => onOpenAuditorPortal()}
+          className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 p-3 rounded-2xl border border-amber-400 text-slate-950 flex items-center justify-between shadow-md cursor-pointer hover:brightness-105 transition group active:scale-[0.99] animate-fadeIn"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-bold shadow-inner shrink-0">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-xs sm:text-sm text-slate-950">
+                  ⚖️ Online Sum Endiktu (Auditor Portal Active)
+                </span>
+                <span className="text-[9px] font-black uppercase bg-slate-950 text-amber-300 px-2 py-0.5 rounded-full border border-slate-900">
+                  TIME-BOUND ACCESS
+                </span>
+              </div>
+              <p className="text-[10.5px] text-slate-950/80 font-medium truncate mt-0.5">
+                Bawm financial records audit, period lock, leh printable certificate siam rawh le
+              </p>
+            </div>
+          </div>
+          <div className="px-3.5 py-2 bg-slate-950 group-hover:bg-slate-900 text-amber-300 text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 ml-2">
+            <span>Hawng Rawh</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+      )}
 
       {/* 1. Money Transfer, Quick Actions & UPI */}
       <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-indigo-100/80">

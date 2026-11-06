@@ -22,11 +22,12 @@ import {
   LogIn,
   KeyRound,
   Globe,
-  HardDrive
+  HardDrive,
+  ShieldCheck
 } from 'lucide-react';
 import { ScreenId, CreatorProfile } from '../types';
 import { Language } from '../utils/translations';
-import { isGuestUser } from '../utils/storage';
+import { isGuestUser, getActiveAuditorGrantsForUser } from '../utils/storage';
 
 interface HeaderProps {
   currentScreen: ScreenId;
@@ -46,6 +47,7 @@ interface HeaderProps {
   creatorProfile?: CreatorProfile;
   onSwitchToWebsite?: () => void;
   onOpenBackupSync?: () => void;
+  onOpenAuditorPortal?: () => void;
 }
 
 
@@ -165,7 +167,10 @@ export const Header: React.FC<HeaderProps> = ({
   creatorProfile,
   onSwitchToWebsite,
   onOpenBackupSync,
+  onOpenAuditorPortal,
 }) => {
+
+  const hasActiveAuditorGrant = creatorProfile?.role === 'AUDITOR' || (creatorProfile?.phone && getActiveAuditorGrantsForUser(creatorProfile.phone).length > 0);
 
   const [userLocation, setUserLocation] = useState<string>(() => {
     const saved = localStorage.getItem('kut_app_user_location');
@@ -563,6 +568,20 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-slate-950 animate-pulse" />
               )}
             </button>
+
+            {/* Auditor Portal Button (When active grant is detected) */}
+            {hasActiveAuditorGrant && onOpenAuditorPortal && (
+              <button
+                type="button"
+                id="header-auditor-portal-btn"
+                onClick={onOpenAuditorPortal}
+                title="Online Sum Endiktu (Auditor Portal)"
+                className="w-7 h-7 sm:w-auto sm:h-8 px-0 sm:px-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-lg flex items-center justify-center gap-1 font-black text-[10px] transition shadow-xs cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-950 animate-pulse" />
+                <span className="tracking-tight font-black hidden sm:inline">Auditor Portal</span>
+              </button>
+            )}
 
             {/* AI Hriatpui Button */}
             {onOpenAIHriatpui && (
